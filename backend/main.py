@@ -1,16 +1,31 @@
 import asyncio
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from zoneinfo import ZoneInfo
+
+_BRT = ZoneInfo("America/Sao_Paulo")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
+from database import Base, engine
+import models  # noqa: F401
 from routers import health, teams, matches, auth, admin, tournament, bets, groups, sync, live
+from routers import config as config_router
+from routers import analytics as analytics_router
+from routers import user_groups as user_groups_router
 from routers.sync import _run_sync, _sync_status
+from routers.sync import _scheduler_status
 
 
 async def _auto_sync_loop():
     interval = settings.auto_sync_interval_hours * 3600
+    now = datetime.now(_BRT)
+    _scheduler_status["scheduler_started_at"] = now.isoformat()
+    _scheduler_status["next_auto_run_at"] = (
+        now + timedelta(seconds=_scheduler_status.get("startup_delay_seconds", 30))
+    ).isoformat()
     print(f"[auto-sync] agendado a cada {settings.auto_sync_interval_hours}h — aguardando 30s no startup", flush=True)
     await asyncio.sleep(30)
     while True:
@@ -26,6 +41,7 @@ async def _auto_sync_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
     task = asyncio.create_task(_auto_sync_loop())
     yield
     task.cancel()
@@ -63,6 +79,9 @@ app.include_router(bets.router,        prefix="/api")
 app.include_router(groups.router,      prefix="/api")
 app.include_router(sync.router,        prefix="/api")
 app.include_router(live.router,        prefix="/api")
+app.include_router(config_router.router,    prefix="/api")
+app.include_router(analytics_router.router, prefix="/api")
+app.include_router(user_groups_router.router, prefix="/api")
 
 
 @app.get("/api")

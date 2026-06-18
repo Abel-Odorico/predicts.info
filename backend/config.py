@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     odds_api_key: str = ""
     odds_enabled: bool = False
     fg_sports_url: str = "https://fg.peepstreaming.com/copa-do-mundo-2026"
-    auto_sync_interval_hours: int = 6
+    auto_sync_interval_hours: float = 6
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

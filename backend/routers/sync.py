@@ -4,7 +4,14 @@ POST /admin/sync-elo  — sincroniza Copa 2026 real:
 - convocados
 - Elo + forma recente
 """
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+_BRT = ZoneInfo("America/Sao_Paulo")
+
+
+def _now() -> datetime:
+    return datetime.now(_BRT)
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
@@ -35,6 +42,15 @@ _sync_status = {
 
 # Histórico dos últimos 10 runs (completed only)
 _sync_history: list[dict] = []
+_scheduler_status = {
+    "server_started_at": _now().isoformat(),
+    "scheduler_started_at": None,
+    "startup_delay_seconds": 30,
+    "last_auto_started_at": None,
+    "last_auto_finished_at": None,
+    "last_auto_ok": None,
+    "next_auto_run_at": None,
+}
 
 
 def _append_log(message: str) -> None:
@@ -42,11 +58,14 @@ def _append_log(message: str) -> None:
 
 
 def _run_sync(db_url: str, trigger: str = "manual"):
-    global _sync_status, _sync_history
+    global _sync_status, _sync_history, _scheduler_status
+    if trigger == "auto":
+        _scheduler_status["last_auto_started_at"] = _now().isoformat()
+        _scheduler_status["next_auto_run_at"] = None
     _sync_status.update(
         {
             "running": True,
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": _now().isoformat(),
             "finished_at": None,
             "updated": 0,
             "errors": [],
@@ -76,7 +95,13 @@ def _run_sync(db_url: str, trigger: str = "manual"):
         errors.append("sync_failed")
         _append_log(f"✗ Falha geral: {exc}")
     finally:
-        finished_at = datetime.utcnow().isoformat()
+        finished_at = _now().isoformat()
+        if trigger == "auto":
+            _scheduler_status["last_auto_finished_at"] = finished_at
+            _scheduler_status["last_auto_ok"] = len(errors) == 0
+            _scheduler_status["next_auto_run_at"] = (
+                _now() + timedelta(hours=settings.auto_sync_interval_hours)
+            ).isoformat()
         _sync_status.update(
             {
                 "running": False,
@@ -119,4 +144,5 @@ def sync_status(_: User = Depends(require_admin)):
         **_sync_status,
         "auto_sync_interval_hours": settings.auto_sync_interval_hours,
         "history": list(reversed(_sync_history)),
+        "scheduler": _scheduler_status,
     }

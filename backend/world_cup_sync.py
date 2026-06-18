@@ -100,7 +100,7 @@ ELO_SLUG_ALIASES = {
     "COD": ["DR_Congo", "Democratic_Republic_of_the_Congo"],
     "CPV": ["Cape_Verde", "Cape_Verde_Islands"],
     "CUW": ["Curacao"],
-    "CZE": ["Czech_Republic"],
+    "CZE": ["Czechia", "Czech_Republic"],
     "ENG": ["England"],
     "HAI": ["Haiti"],
     "KOR": ["South_Korea"],
@@ -432,41 +432,27 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
             }
             for team in db.query(Team).all()
         }
-        preserved_bets = []
-        existing_bets = (
-            db.query(Bet)
-            .options(
-                joinedload(Bet.match).joinedload(Match.team_a),
-                joinedload(Bet.match).joinedload(Match.team_b),
-            )
-            .all()
-        )
-        for bet in existing_bets:
-            match = bet.match
-            if not match or not match.team_a or not match.team_b:
-                continue
-            preserved_bets.append(
-                {
-                    "user_id": bet.user_id,
-                    "score_a": bet.score_a,
-                    "score_b": bet.score_b,
-                    "created_at": bet.created_at,
-                    "match_key": _bet_match_key(
-                        match.phase.value if match.phase else None,
-                        match.group_name,
-                        match.team_a.code,
-                        match.team_b.code,
-                    ),
-                }
-            )
 
+        # Build lookup of existing matches by stable key — used for upsert.
+        # Bets reference match_id, so updating matches in-place keeps bets valid.
+        existing_matches_by_key: dict[tuple, Match] = {}
+        for m in db.query(Match).options(
+            joinedload(Match.team_a), joinedload(Match.team_b)
+        ).all():
+            if m.team_a and m.team_b:
+                key = _bet_match_key(
+                    m.phase.value if m.phase else None,
+                    m.group_name,
+                    m.team_a.code,
+                    m.team_b.code,
+                )
+                existing_matches_by_key[key] = m
+
+        # Safe deletes: cache, simulations, results (NOT bets, NOT matches, NOT ranking)
         db.query(SimulationCache).delete()
         db.query(TournamentSimulation).delete()
         db.query(MatchResult).delete()
-        db.query(Bet).delete()
-        db.query(Match).delete()
         db.query(Player).delete()
-        db.query(Ranking).delete()
 
         current_codes = {team["code"] for team in snapshot["teams"]}
         for stale in db.query(Team).filter(~Team.code.in_(current_codes)).all():
@@ -527,30 +513,48 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 item["section"],
             ),
         )
+
         finished_count = 0
-        match_by_key: dict[tuple[str, str | None, str, str], Match] = {}
-        result_by_key: dict[tuple[str, str | None, str, str], tuple[int, int]] = {}
+        new_matches = 0
+        result_by_match_id: dict[int, tuple[int, int]] = {}
+
         for match_number, item in enumerate(match_rows, start=1):
-            match = Match(
-                phase=MatchPhase.group,
-                team_a_id=team_by_code[item["team_a_code"]].id,
-                team_b_id=team_by_code[item["team_b_code"]].id,
-                group_name=item["group_name"],
-                match_date=item["match_date"],
-                venue=item["venue"],
-                city=item["city"],
-                is_neutral=True,
-                status=MatchStatus.finished if item["score_a"] is not None else MatchStatus.scheduled,
-                match_number=match_number,
+            key = _bet_match_key(
+                MatchPhase.group.value,
+                item["group_name"],
+                item["team_a_code"],
+                item["team_b_code"],
             )
-            db.add(match)
-            db.flush()
-            match_by_key[_bet_match_key(match.phase.value, match.group_name, item["team_a_code"], item["team_b_code"])] = match
-            if item["score_a"] is not None and item["score_b"] is not None:
-                result_by_key[_bet_match_key(match.phase.value, match.group_name, item["team_a_code"], item["team_b_code"])] = (
-                    item["score_a"],
-                    item["score_b"],
+            new_status = MatchStatus.finished if item["score_a"] is not None else MatchStatus.scheduled
+            existing = existing_matches_by_key.get(key)
+
+            if existing:
+                # Update in place — match.id stays the same, bets remain valid
+                existing.match_date = item["match_date"]
+                existing.venue = item["venue"]
+                existing.city = item["city"]
+                existing.status = new_status
+                existing.match_number = match_number
+                match = existing
+            else:
+                match = Match(
+                    phase=MatchPhase.group,
+                    team_a_id=team_by_code[item["team_a_code"]].id,
+                    team_b_id=team_by_code[item["team_b_code"]].id,
+                    group_name=item["group_name"],
+                    match_date=item["match_date"],
+                    venue=item["venue"],
+                    city=item["city"],
+                    is_neutral=True,
+                    status=new_status,
+                    match_number=match_number,
                 )
+                db.add(match)
+                db.flush()
+                new_matches += 1
+
+            if item["score_a"] is not None and item["score_b"] is not None:
+                result_by_match_id[match.id] = (item["score_a"], item["score_b"])
                 db.add(
                     MatchResult(
                         match_id=match.id,
@@ -565,53 +569,37 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 )
                 finished_count += 1
 
-        restored_bets = 0
-        skipped_bets = 0
+        db.flush()
+
+        # Re-evaluate all existing bets against updated results.
+        # Rebuild ranking from scratch based on current bets.
+        db.query(Ranking).delete()
+        db.flush()
+
         ranking_totals: dict[int, dict[str, int]] = {}
-        for bet_data in preserved_bets:
-            match = match_by_key.get(bet_data["match_key"])
-            if not match:
-                skipped_bets += 1
-                continue
-
-            points_earned = 0
-            evaluated_at = None
-            exact = False
-            correct_result = False
-            result_scores = result_by_key.get(bet_data["match_key"])
+        evaluated_count = 0
+        for bet in db.query(Bet).all():
+            result_scores = result_by_match_id.get(bet.match_id)
             if result_scores is not None:
-                points_earned, exact, correct_result = _score_points(
-                    bet_data["score_a"],
-                    bet_data["score_b"],
-                    result_scores[0],
-                    result_scores[1],
+                points, exact, correct_result = _score_points(
+                    bet.score_a, bet.score_b, result_scores[0], result_scores[1]
                 )
-                evaluated_at = datetime.utcnow()
-
-            db.add(
-                Bet(
-                    user_id=bet_data["user_id"],
-                    match_id=match.id,
-                    score_a=bet_data["score_a"],
-                    score_b=bet_data["score_b"],
-                    points_earned=points_earned,
-                    locked_at=match.match_date,
-                    evaluated_at=evaluated_at,
-                    created_at=bet_data["created_at"],
-                )
-            )
-            restored_bets += 1
-
-            if evaluated_at is not None:
+                bet.points_earned = points
+                bet.evaluated_at = datetime.utcnow()
+                evaluated_count += 1
                 stats = ranking_totals.setdefault(
-                    bet_data["user_id"],
+                    bet.user_id,
                     {"total_points": 0, "exact_scores": 0, "correct_results": 0},
                 )
-                stats["total_points"] += points_earned
+                stats["total_points"] += points
                 if exact:
                     stats["exact_scores"] += 1
                 elif correct_result:
                     stats["correct_results"] += 1
+            else:
+                # Match not yet played — keep bet but clear stale evaluation
+                bet.points_earned = 0
+                bet.evaluated_at = None
 
         for user_id, stats in ranking_totals.items():
             db.add(
@@ -629,17 +617,16 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         log,
         f"✓ Copa real aplicada: {len(snapshot['teams'])} seleções, {len(match_rows)} jogos, {player_count} convocados",
     )
-    if preserved_bets:
-        _log(log, f"✓ Apostas preservadas: {restored_bets} restauradas")
-    if skipped_bets:
-        _log(log, f"⚠ Apostas não restauradas: {skipped_bets}")
+    _log(log, f"✓ Apostas avaliadas: {evaluated_count} (bets nunca apagadas)")
+    if new_matches:
+        _log(log, f"✓ Novas partidas criadas: {new_matches}")
     return {
         "teams": len(snapshot["teams"]),
         "matches": len(match_rows),
         "players": player_count,
         "finished_matches": finished_count,
-        "restored_bets": restored_bets,
-        "skipped_bets": skipped_bets,
+        "new_matches": new_matches,
+        "evaluated_bets": evaluated_count,
     }
 
 
