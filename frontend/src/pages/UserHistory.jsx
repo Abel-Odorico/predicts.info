@@ -121,66 +121,180 @@ function ActivityRings({ exact, correct, evaluated, totalBets }) {
   )
 }
 
-// ── Sparkline SVG — pontos acumulados ─────────────────────────────────────────
-function Sparkline({ bets }) {
+// ── Gráfico de pontos acumulados com filtro de agrupamento ───────────────────
+const GROUP_MODES = [
+  { id: 'jogo',  label: 'Por jogo'  },
+  { id: 'dia',   label: 'Por dia'   },
+  { id: 'semana',label: 'Por semana'},
+  { id: 'mes',   label: 'Por mês'   },
+]
+
+function dateKey(dateStr, mode) {
+  const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z')
+  if (isNaN(d)) return '?'
+  if (mode === 'dia')    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+  if (mode === 'semana') {
+    const monday = new Date(d)
+    const day = monday.getDay() || 7
+    monday.setDate(monday.getDate() - day + 1)
+    return monday.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+  }
+  if (mode === 'mes')    return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'America/Sao_Paulo' })
+  return null // jogo = por aposta individual
+}
+
+function PointsChart({ bets }) {
+  const [mode, setMode] = useState('jogo')
+  const [tooltip, setTooltip] = useState(null) // {x, y, label, pts, cum}
+
   const evaluated = useMemo(() =>
     [...bets]
       .filter(b => b.result != null)
       .sort((a, b) => new Date(a.match_date || a.created_at) - new Date(b.match_date || b.created_at)),
     [bets]
   )
-  if (evaluated.length < 2) return null
 
-  const cumulative = evaluated.reduce((acc, b, i) => {
-    acc.push((acc[i - 1] ?? 0) + (b.points_earned ?? 0))
-    return acc
-  }, [])
+  const points = useMemo(() => {
+    if (mode === 'jogo') {
+      let cum = 0
+      return evaluated.map(b => {
+        cum += b.points_earned ?? 0
+        return { label: `${b.team_a_code}×${b.team_b_code}`, pts: b.points_earned ?? 0, cum }
+      })
+    }
+    const map = new Map()
+    for (const b of evaluated) {
+      const k = dateKey(b.match_date || b.created_at, mode)
+      if (!map.has(k)) map.set(k, 0)
+      map.set(k, map.get(k) + (b.points_earned ?? 0))
+    }
+    let cum = 0
+    return [...map.entries()].map(([label, pts]) => {
+      cum += pts
+      return { label, pts, cum }
+    })
+  }, [evaluated, mode])
 
-  const W = 320, H = 72, PAD = 8
-  const maxPts = Math.max(...cumulative, 1)
-  const pts = cumulative.map((v, i) => {
-    const x = PAD + (i / (cumulative.length - 1)) * (W - PAD * 2)
-    const y = H - PAD - (v / maxPts) * (H - PAD * 2)
+  if (points.length < 1) return null
+
+  const W = 400, H = 110, PADX = 8, PADY = 18
+  const maxCum = Math.max(...points.map(p => p.cum), 1)
+  const coords = points.map((p, i) => {
+    const x = PADX + (points.length === 1 ? (W - PADX * 2) / 2 : (i / (points.length - 1)) * (W - PADX * 2))
+    const y = PADY + ((1 - p.cum / maxCum) * (H - PADY * 2))
     return [x, y]
   })
-  const polyline = pts.map(([x, y]) => `${x},${y}`).join(' ')
-  const area = `M${pts[0][0]},${H - PAD} ` + pts.map(([x, y]) => `L${x},${y}`).join(' ') + ` L${pts[pts.length - 1][0]},${H - PAD} Z`
-  const last = pts[pts.length - 1]
-  const totalPts = cumulative[cumulative.length - 1]
+  const polyline = coords.map(([x, y]) => `${x},${y}`).join(' ')
+  const area = `M${coords[0][0]},${H} ` + coords.map(([x, y]) => `L${x},${y}`).join(' ') + ` L${coords[coords.length - 1][0]},${H} Z`
+  const totalPts = points[points.length - 1].cum
+
+  // Y axis labels
+  const yLabels = [0, Math.round(maxCum / 2), maxCum].map(v => ({
+    v,
+    y: PADY + ((1 - v / maxCum) * (H - PADY * 2)),
+  }))
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 'var(--s2)' }}>
-        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Pontos acumulados
-        </span>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>
-          {totalPts} pts
-        </span>
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--r3)', padding: 'var(--s5)', marginTop: 'var(--s4)' }}>
+      {/* header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 'var(--s4)' }}>
+        <div>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Pontos acumulados
+          </span>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 900, color: 'var(--accent)', marginLeft: 'var(--s3)' }}>
+            {totalPts} pts
+          </span>
+        </div>
+        {/* mode pills */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {GROUP_MODES.map(m => (
+            <button key={m.id} onClick={() => setMode(m.id)} style={{
+              fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+              padding: '3px 10px', borderRadius: 20, border: '1px solid', cursor: 'pointer',
+              background: mode === m.id ? 'var(--accent)' : 'transparent',
+              borderColor: mode === m.id ? 'var(--accent)' : 'var(--border)',
+              color: mode === m.id ? '#000' : 'var(--text-3)',
+              transition: 'all 120ms',
+            }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block', overflow: 'visible' }} preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={area} fill="url(#spark-fill)" />
-        <polyline points={polyline} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        {pts.map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r={i === pts.length - 1 ? 4 : 2.5}
-            fill={i === pts.length - 1 ? 'var(--accent)' : 'var(--bg-surface)'}
-            stroke="var(--accent)" strokeWidth="1.5"
-          />
-        ))}
-        <text x={last[0]} y={last[1] - 8} textAnchor="middle"
-          style={{ fontFamily: 'var(--font-data)', fontSize: 10, fill: 'var(--accent)', fontWeight: 700 }}>
-          {totalPts}
-        </text>
-        <text x={PAD} y={H - 2} style={{ fontFamily: 'var(--font-data)', fontSize: 9, fill: 'var(--text-4)' }}>
-          #{evaluated[0].team_a_code}×{evaluated[0].team_b_code}
-        </text>
-      </svg>
+
+      {/* SVG chart */}
+      <div style={{ position: 'relative', overflow: 'hidden' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }}
+          onMouseLeave={() => setTooltip(null)}>
+          <defs>
+            <linearGradient id="pts-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {/* grid lines */}
+          {yLabels.map(({ v, y }) => (
+            <g key={v}>
+              <line x1={PADX} y1={y} x2={W - PADX} y2={y}
+                stroke="rgba(255,255,255,0.06)" strokeWidth="1" strokeDasharray="3,4" />
+              <text x={PADX} y={y - 3}
+                style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'rgba(255,255,255,0.25)' }}>
+                {v}
+              </text>
+            </g>
+          ))}
+          {/* area fill */}
+          <path d={area} fill="url(#pts-fill)" />
+          {/* line */}
+          <polyline points={polyline} fill="none" stroke="var(--accent)" strokeWidth="2"
+            strokeLinejoin="round" strokeLinecap="round" />
+          {/* dots + hover targets */}
+          {coords.map(([x, y], i) => (
+            <g key={i}
+              onMouseEnter={() => setTooltip({ x, y, ...points[i] })}
+              style={{ cursor: 'crosshair' }}
+            >
+              <circle cx={x} cy={y} r={10} fill="transparent" />
+              <circle cx={x} cy={y} r={tooltip?.label === points[i].label ? 5 : 3}
+                fill={tooltip?.label === points[i].label ? 'var(--accent)' : '#111'}
+                stroke="var(--accent)" strokeWidth="1.5"
+                style={{ transition: 'r 100ms' }}
+              />
+            </g>
+          ))}
+        </svg>
+
+        {/* tooltip */}
+        {tooltip && (
+          <div style={{
+            position: 'absolute',
+            left: `${(tooltip.x / W) * 100}%`,
+            top: `${(tooltip.y / H) * 100}%`,
+            transform: 'translate(-50%, -110%)',
+            background: '#1a1a1a',
+            border: '1px solid var(--accent)',
+            borderRadius: 'var(--r2)',
+            padding: '4px 10px',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            zIndex: 10,
+          }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>{tooltip.label}</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 900, color: 'var(--accent)' }}>
+              {tooltip.cum} pts <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>+{tooltip.pts}</span>
+            </div>
+          </div>
+        )}
+
+        {/* X axis labels — apenas primeiro e último */}
+        {points.length >= 2 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, padding: `0 ${PADX}px` }}>
+            <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{points[0].label}</span>
+            <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{points[points.length - 1].label}</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -406,9 +520,13 @@ export default function UserHistory() {
             exact={exact.length} correct={correct.length}
             evaluated={evaluated.length} totalBets={bets.length}
           />
-          <div style={{ flex: 1, minWidth: 180, minWidth: 0, overflow: 'hidden' }}>
-            <Sparkline bets={bets} />
-          </div>
+        </div>
+      )}
+
+      {/* Gráfico de pontos */}
+      {evaluated.length > 0 && (
+        <div className="fade-in-3">
+          <PointsChart bets={bets} />
         </div>
       )}
 
