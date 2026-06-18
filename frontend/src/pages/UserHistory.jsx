@@ -20,46 +20,100 @@ function fmtDate(value) {
   }).format(d)
 }
 
-// ── Anel de distribuição (CSS conic-gradient) ─────────────────────────────────
-function DonutRing({ exact, correct, wrong, pending, total }) {
-  if (total === 0) return null
-  const pct = n => Math.round((n / total) * 100)
-  const e = pct(exact), c = pct(correct), w = pct(wrong)
-  const gradient = `conic-gradient(
-    var(--accent) 0% ${e}%,
-    var(--win)    ${e}% ${e + c}%,
-    var(--lose)   ${e + c}% ${e + c + w}%,
-    var(--text-4) ${e + c + w}% 100%
-  )`
-  const accuracy = total > 0 ? Math.round(((exact + correct) / total) * 100) : 0
+// ── Apple Activity Rings ──────────────────────────────────────────────────────
+const RINGS = [
+  { key: 'accuracy', label: 'Acerto',  color: '#FF375F', track: '#3D0011' },
+  { key: 'exact',    label: 'Exatos',  color: '#FFD60A', track: '#2D2600' },
+  { key: 'correct',  label: 'Certos',  color: '#30D158', track: '#002D0F' },
+]
+const SIZE = 160, CX = SIZE / 2, STROKE = 14, GAP = 6
+const radii = [
+  CX - STROKE / 2,
+  CX - STROKE / 2 - STROKE - GAP,
+  CX - STROKE / 2 - (STROKE + GAP) * 2,
+]
+
+function ActivityRings({ exact, correct, evaluated, totalBets }) {
+  if (totalBets === 0) return null
+  const accuracy = evaluated > 0 ? (exact + correct) / evaluated : 0
+  const exactPct  = evaluated > 0 ? exact   / evaluated : 0
+  const correctPct = evaluated > 0 ? correct / evaluated : 0
+  const values = [accuracy, exactPct, correctPct]
+  const labels = [
+    { value: Math.round(accuracy * 100),  suffix: '%',  sub: 'Acerto'  },
+    { value: exact,                        suffix: '',   sub: 'Exatos'  },
+    { value: correct,                      suffix: '',   sub: 'Certos'  },
+  ]
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s8)', flexWrap: 'wrap' }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
-        <div style={{ width: 100, height: 100, borderRadius: '50%', background: gradient }} />
-        <div style={{
-          position: 'absolute', inset: 14, borderRadius: '50%',
-          background: 'var(--bg-surface)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900, color: 'var(--accent)', lineHeight: 1 }}>
-            {accuracy}%
-          </span>
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
-            acerto
-          </span>
-        </div>
+        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+          {RINGS.map((ring, i) => {
+            const r = radii[i]
+            const circ = 2 * Math.PI * r
+            const progress = Math.min(values[i], 1)
+            const offset = circ * (1 - progress)
+            // glow filter id
+            return (
+              <g key={ring.key}>
+                {/* track */}
+                <circle cx={CX} cy={CX} r={r} fill="none"
+                  stroke={ring.track} strokeWidth={STROKE} />
+                {/* progress arc */}
+                <circle cx={CX} cy={CX} r={r} fill="none"
+                  stroke={ring.color} strokeWidth={STROKE}
+                  strokeDasharray={circ}
+                  strokeDashoffset={offset}
+                  strokeLinecap="round"
+                  style={{ transform: `rotate(-90deg)`, transformOrigin: `${CX}px ${CX}px`, transition: 'stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1)' }}
+                />
+                {/* cap glow dot at tip (when progress > 0) */}
+                {progress > 0.02 && (() => {
+                  const angle = (progress * 360 - 90) * (Math.PI / 180)
+                  const x = CX + r * Math.cos(angle)
+                  const y = CX + r * Math.sin(angle)
+                  return (
+                    <circle cx={x} cy={y} r={STROKE / 2 - 1} fill={ring.color}
+                      style={{ filter: `drop-shadow(0 0 4px ${ring.color})` }} />
+                  )
+                })()}
+              </g>
+            )
+          })}
+          {/* center text */}
+          <text x={CX} y={CX - 8} textAnchor="middle"
+            style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 900, fill: RINGS[0].color }}>
+            {Math.round(accuracy * 100)}%
+          </text>
+          <text x={CX} y={CX + 10} textAnchor="middle"
+            style={{ fontFamily: 'var(--font-cond)', fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', fill: 'rgba(255,255,255,0.4)' }}>
+            ACERTO
+          </text>
+        </svg>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
-        {[
-          { label: 'Exato',    count: exact,   color: 'var(--accent)' },
-          { label: 'Certo',    count: correct, color: 'var(--win)'    },
-          { label: 'Erro',     count: wrong,   color: 'var(--lose)'   },
-          { label: 'Pendente', count: pending, color: 'var(--text-4)' },
-        ].map(item => (
-          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', minWidth: 52 }}>{item.label}</span>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 900, color: item.color }}>{item.count}</span>
+
+      {/* legend */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+        {RINGS.map((ring, i) => (
+          <div key={ring.key} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
+            <svg width={20} height={20} viewBox="0 0 20 20" style={{ flexShrink: 0 }}>
+              <circle cx={10} cy={10} r={8} fill="none" stroke={ring.track} strokeWidth={4} />
+              <circle cx={10} cy={10} r={8} fill="none" stroke={ring.color} strokeWidth={4}
+                strokeDasharray={2 * Math.PI * 8}
+                strokeDashoffset={2 * Math.PI * 8 * (1 - Math.min(values[i], 1))}
+                strokeLinecap="round"
+                style={{ transform: 'rotate(-90deg)', transformOrigin: '10px 10px' }}
+              />
+            </svg>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 900, color: ring.color, lineHeight: 1 }}>
+                {labels[i].value}{labels[i].suffix}
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {ring.label}
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -344,16 +398,15 @@ export default function UserHistory() {
       {evaluated.length > 0 && (
         <div className="fade-in-2" style={{
           display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--s6)',
-          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          background: '#111', border: '1px solid #222',
           borderRadius: 'var(--r3)', padding: 'var(--s6)', marginTop: 'var(--s4)',
           alignItems: 'center',
         }}>
-          <DonutRing
+          <ActivityRings
             exact={exact.length} correct={correct.length}
-            wrong={wrong.length} pending={pending.length}
-            total={bets.length}
+            evaluated={evaluated.length} totalBets={bets.length}
           />
-          <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 'var(--s6)', minWidth: 0 }}>
+          <div style={{ borderLeft: '1px solid #222', paddingLeft: 'var(--s6)', minWidth: 0 }}>
             <Sparkline bets={bets} />
           </div>
         </div>
