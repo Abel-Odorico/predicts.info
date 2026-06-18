@@ -88,8 +88,15 @@ export default function Profile() {
             <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--accent)', marginTop: 2 }}>@{user.username}</div>
           )}
         </div>
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--s2)' }}>
           <span className={`badge ${user?.role === 'admin' ? 'badge-live' : 'badge-group'}`}>{user?.role}</span>
+          <Link
+            to={`/usuarios/${user?.id}/historico`}
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 11, whiteSpace: 'nowrap' }}
+          >
+            🏅 Meu Histórico
+          </Link>
         </div>
       </div>
 
