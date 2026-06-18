@@ -1,20 +1,62 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import Spinner from '../components/Spinner'
 
-export default function Ranking() {
-  const [data, setData] = useState([])
-  const [loading, setLoad] = useState(true)
+const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L']
 
-  useEffect(() => {
-    api.get('/ranking')
+const PERIODS = [
+  { id: 'all',   label: 'Geral' },
+  { id: '7d',    label: 'Últimos 7d' },
+  { id: '30d',   label: 'Últimos 30d' },
+  { id: 'today', label: 'Hoje' },
+  { id: 'custom',label: 'Período' },
+]
+
+function maskEmail(email) {
+  if (!email) return ''
+  const [local, domain] = email.split('@')
+  return `${local.slice(0, 3)}***@${domain}`
+}
+
+function periodToDates(period) {
+  const now = new Date()
+  const pad  = n => String(n).padStart(2, '0')
+  const fmt  = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+  const today = fmt(now)
+  if (period === 'today') return { date_from: today, date_to: today }
+  if (period === '7d')    { const d = new Date(now); d.setDate(d.getDate()-7);  return { date_from: fmt(d), date_to: today } }
+  if (period === '30d')   { const d = new Date(now); d.setDate(d.getDate()-30); return { date_from: fmt(d), date_to: today } }
+  return {}
+}
+
+export default function Ranking() {
+  const [data,    setData]    = useState([])
+  const [loading, setLoad]    = useState(true)
+  const [group,   setGroup]   = useState('')
+  const [period,  setPeriod]  = useState('all')
+  const [dateFrom,setDateFrom]= useState('')
+  const [dateTo,  setDateTo]  = useState('')
+
+  const load = useCallback(() => {
+    setLoad(true)
+    const params = new URLSearchParams()
+    if (group) params.set('group', group)
+    const { date_from, date_to } = period === 'custom'
+      ? { date_from: dateFrom, date_to: dateTo }
+      : periodToDates(period)
+    if (date_from) params.set('date_from', date_from)
+    if (date_to)   params.set('date_to',   date_to)
+    const qs = params.toString()
+    api.get(`/ranking${qs ? `?${qs}` : ''}`)
       .then(setData)
       .catch(console.error)
       .finally(() => setLoad(false))
-  }, [])
+  }, [group, period, dateFrom, dateTo])
 
-  if (loading) return <Spinner text="Carregando ranking..." />
+  useEffect(() => { load() }, [load])
+
+  const isFiltered = group || period !== 'all'
 
   return (
     <div className="page">
@@ -23,19 +65,118 @@ export default function Ranking() {
         <p className="page-subtitle">Placar exato = 3 pts · Resultado correto = 1 pt</p>
       </div>
 
-      <div className="card mt-8 fade-in-2">
+      {/* ── Filtros ── */}
+      <div className="card mt-6 fade-in-2" style={{ padding: 'var(--s12) var(--s16)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s10)' }}>
+
+          {/* Período */}
+          <div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>
+              Período
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {PERIODS.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setPeriod(p.id)}
+                  style={{
+                    fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600,
+                    padding: '4px 12px', borderRadius: 20, border: '1px solid',
+                    cursor: 'pointer',
+                    background: period === p.id ? 'var(--accent)' : 'transparent',
+                    borderColor: period === p.id ? 'var(--accent)' : 'var(--border)',
+                    color: period === p.id ? '#000' : 'var(--text-2)',
+                    transition: 'all .15s',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {period === 'custom' && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                  style={{ fontFamily: 'var(--font-data)', fontSize: 13, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-1)' }}
+                />
+                <span style={{ color: 'var(--text-3)', fontSize: 12 }}>até</span>
+                <input
+                  type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                  style={{ fontFamily: 'var(--font-data)', fontSize: 13, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-1)' }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Grupo */}
+          <div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>
+              Grupo
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <button
+                onClick={() => setGroup('')}
+                style={{
+                  fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600,
+                  padding: '4px 12px', borderRadius: 20, border: '1px solid',
+                  cursor: 'pointer',
+                  background: !group ? 'var(--accent)' : 'transparent',
+                  borderColor: !group ? 'var(--accent)' : 'var(--border)',
+                  color: !group ? '#000' : 'var(--text-2)',
+                  transition: 'all .15s',
+                }}
+              >
+                Todos
+              </button>
+              {GROUPS.map(g => (
+                <button
+                  key={g}
+                  onClick={() => setGroup(group === g ? '' : g)}
+                  style={{
+                    fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700,
+                    width: 34, height: 28, borderRadius: 20, border: '1px solid',
+                    cursor: 'pointer',
+                    background: group === g ? 'var(--accent)' : 'transparent',
+                    borderColor: group === g ? 'var(--accent)' : 'var(--border)',
+                    color: group === g ? '#000' : 'var(--text-2)',
+                    transition: 'all .15s',
+                  }}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isFiltered && (
+            <button
+              onClick={() => { setGroup(''); setPeriod('all'); setDateFrom(''); setDateTo('') }}
+              style={{ alignSelf: 'flex-start', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Tabela ── */}
+      <div className="card mt-4 fade-in-3">
         <div className="card__header">
           <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-            Classificação Geral
+            {group ? `Grupo ${group}` : period !== 'all' ? PERIODS.find(p=>p.id===period)?.label : 'Classificação Geral'}
           </span>
-          <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>
-            {data.length} participantes
-          </span>
+          {!loading && (
+            <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>
+              {data.length} participante{data.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
-        {data.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: 'var(--s24)', textAlign: 'center' }}><Spinner text="" /></div>
+        ) : data.length === 0 ? (
           <div style={{ padding: 'var(--s16)', textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
-            Sem apostas ainda. Seja o primeiro!
+            {isFiltered ? 'Nenhuma aposta nos critérios selecionados.' : 'Sem apostas ainda. Seja o primeiro!'}
           </div>
         ) : (
           <div>
@@ -44,13 +185,12 @@ export default function Ranking() {
                 <span key={h} style={{
                   fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
                   letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)',
-                  textAlign: h === '#' ? 'center' : h === 'Pontos' ? 'right' : h === 'Exatos' ? 'right' : h === 'Apostas' ? 'right' : 'left'
+                  textAlign: h === '#' ? 'center' : ['Pontos','Exatos','Apostas'].includes(h) ? 'right' : 'left'
                 }}>
                   {h}
                 </span>
               ))}
             </div>
-
             {data.map((r, i) => (
               <Link
                 key={r.user_id}
@@ -66,7 +206,7 @@ export default function Ranking() {
                     {r.name}
                   </div>
                   <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
-                    {r.email}
+                    {maskEmail(r.email)}
                   </div>
                 </div>
                 <span className="ranking-row__pts">{r.total_points}</span>
@@ -78,7 +218,8 @@ export default function Ranking() {
         )}
       </div>
 
-      <div className="card mt-6 fade-in-3">
+      {/* ── Sistema de Pontuação ── */}
+      <div className="card mt-6 fade-in-4">
         <div className="card__header">
           <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
             Sistema de Pontuação
@@ -86,9 +227,9 @@ export default function Ranking() {
         </div>
         <div className="card__body rules-list">
           {[
-            { pts: 3, label: 'Placar exato', desc: 'Acertou o placar completo (ex: 2×1)' },
+            { pts: 3, label: 'Placar exato',      desc: 'Acertou o placar completo (ex: 2×1)' },
             { pts: 1, label: 'Resultado correto', desc: 'Acertou vitória/empate/derrota' },
-            { pts: 0, label: 'Erro', desc: 'Resultado errado' },
+            { pts: 0, label: 'Erro',               desc: 'Resultado errado' },
           ].map(rule => (
             <div key={rule.pts} className="rule-item">
               <span style={{
@@ -99,12 +240,8 @@ export default function Ranking() {
                 {rule.pts}
               </span>
               <div>
-                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14 }}>
-                  {rule.label}
-                </div>
-                <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>
-                  {rule.desc}
-                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14 }}>{rule.label}</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>{rule.desc}</div>
               </div>
             </div>
           ))}

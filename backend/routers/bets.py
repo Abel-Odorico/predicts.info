@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, func, or_
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from auth_utils import get_current_user
@@ -20,8 +20,9 @@ def _match_now(match_date: datetime | None) -> datetime:
 def _is_open(match: Match) -> bool:
     if match.status != MatchStatus.scheduled:
         return False
-    if match.match_date:
-        return _match_now(match.match_date) < match.match_date
+    deadline = match.bet_deadline or match.match_date
+    if deadline:
+        return _match_now(deadline) < deadline
     return True
 
 
@@ -185,37 +186,89 @@ def user_bets_history(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/ranking")
-def ranking(limit: int = Query(default=50, le=100), db: Session = Depends(get_db)):
-    bet_counts = (
-        db.query(
-            Bet.user_id.label("user_id"),
-            func.count(Bet.id).label("total_bets"),
+def ranking(
+    limit: int = Query(default=50, le=100),
+    group: str | None = Query(default=None, description="Grupo A-L"),
+    date_from: str | None = Query(default=None, description="YYYY-MM-DD"),
+    date_to: str | None = Query(default=None, description="YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    filtered = bool(group or date_from or date_to)
+
+    if filtered:
+        match_q = db.query(Match.id)
+        if group:
+            match_q = match_q.filter(Match.group_name == group.upper())
+        if date_from:
+            match_q = match_q.filter(Match.match_date >= date_from)
+        if date_to:
+            match_q = match_q.filter(Match.match_date <= f"{date_to} 23:59:59")
+        match_ids = [r[0] for r in match_q.all()]
+
+        agg = (
+            db.query(
+                Bet.user_id.label("user_id"),
+                func.coalesce(func.sum(Bet.points_earned), 0).label("total_points"),
+                func.sum(case((Bet.points_earned == 3, 1), else_=0)).label("exact_scores"),
+                func.sum(case((Bet.points_earned == 1, 1), else_=0)).label("correct_results"),
+                func.count(Bet.id).label("total_bets"),
+            )
+            .filter(Bet.match_id.in_(match_ids))
+            .group_by(Bet.user_id)
+            .subquery()
         )
-        .group_by(Bet.user_id)
-        .subquery()
-    )
-    rows = (
-        db.query(
-            User.id.label("user_id"),
-            User.name.label("name"),
-            User.email.label("email"),
-            func.coalesce(Ranking.total_points, 0).label("total_points"),
-            func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
-            func.coalesce(Ranking.correct_results, 0).label("correct_results"),
-            func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                User.name.label("name"),
+                User.email.label("email"),
+                func.coalesce(agg.c.total_points, 0).label("total_points"),
+                func.coalesce(agg.c.exact_scores, 0).label("exact_scores"),
+                func.coalesce(agg.c.correct_results, 0).label("correct_results"),
+                func.coalesce(agg.c.total_bets, 0).label("total_bets"),
+            )
+            .join(agg, User.id == agg.c.user_id)
+            .order_by(
+                desc(func.coalesce(agg.c.total_points, 0)),
+                desc(func.coalesce(agg.c.exact_scores, 0)),
+                desc(func.coalesce(agg.c.total_bets, 0)),
+                User.name.asc(),
+            )
+            .limit(limit)
+            .all()
         )
-        .outerjoin(Ranking, User.id == Ranking.user_id)
-        .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
-        .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
-        .order_by(
-            desc(func.coalesce(Ranking.total_points, 0)),
-            desc(func.coalesce(Ranking.exact_scores, 0)),
-            desc(func.coalesce(bet_counts.c.total_bets, 0)),
-            User.name.asc(),
+    else:
+        bet_counts = (
+            db.query(
+                Bet.user_id.label("user_id"),
+                func.count(Bet.id).label("total_bets"),
+            )
+            .group_by(Bet.user_id)
+            .subquery()
         )
-        .limit(limit)
-        .all()
-    )
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                User.name.label("name"),
+                User.email.label("email"),
+                func.coalesce(Ranking.total_points, 0).label("total_points"),
+                func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
+                func.coalesce(Ranking.correct_results, 0).label("correct_results"),
+                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+            )
+            .outerjoin(Ranking, User.id == Ranking.user_id)
+            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+            .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
+            .order_by(
+                desc(func.coalesce(Ranking.total_points, 0)),
+                desc(func.coalesce(Ranking.exact_scores, 0)),
+                desc(func.coalesce(bet_counts.c.total_bets, 0)),
+                User.name.asc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
     return [
         {
             "position": i + 1,
