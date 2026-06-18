@@ -46,8 +46,8 @@ function ActivityRings({ exact, correct, evaluated, totalBets }) {
   ]
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s8)', flexWrap: 'wrap' }}>
-      <div style={{ position: 'relative', flexShrink: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap', minWidth: 0, width: '100%' }}>
+      <div style={{ position: 'relative', flexShrink: 0, margin: '0 auto' }}>
         <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
           {RINGS.map((ring, i) => {
             const r = radii[i]
@@ -94,7 +94,7 @@ function ActivityRings({ exact, correct, evaluated, totalBets }) {
       </div>
 
       {/* legend */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)', flex: 1, minWidth: 0 }}>
         {RINGS.map((ring, i) => (
           <div key={ring.key} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
             <svg width={20} height={20} viewBox="0 0 20 20" style={{ flexShrink: 0 }}>
@@ -158,7 +158,7 @@ function Sparkline({ bets }) {
           {totalPts} pts
         </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block', overflow: 'visible' }} preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25" />
@@ -368,7 +368,7 @@ export default function UserHistory() {
 
       {/* KPI strip */}
       <div className="fade-in-2" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
         gap: 'var(--s3)', marginTop: 'var(--s6)',
       }}>
         {[
@@ -394,19 +394,19 @@ export default function UserHistory() {
         ))}
       </div>
 
-      {/* Donut + Sparkline */}
+      {/* Activity Rings + Sparkline */}
       {evaluated.length > 0 && (
         <div className="fade-in-2" style={{
-          display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--s6)',
+          display: 'flex', flexWrap: 'wrap', gap: 'var(--s6)',
           background: '#111', border: '1px solid #222',
           borderRadius: 'var(--r3)', padding: 'var(--s6)', marginTop: 'var(--s4)',
-          alignItems: 'center',
+          alignItems: 'center', overflow: 'hidden',
         }}>
           <ActivityRings
             exact={exact.length} correct={correct.length}
             evaluated={evaluated.length} totalBets={bets.length}
           />
-          <div style={{ borderLeft: '1px solid #222', paddingLeft: 'var(--s6)', minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 180, minWidth: 0, overflow: 'hidden' }}>
             <Sparkline bets={bets} />
           </div>
         </div>
