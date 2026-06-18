@@ -39,6 +39,12 @@ class UserRole(str, enum.Enum):
     admin = "admin"
 
 
+class GroupInviteStatus(str, enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    rejected = "rejected"
+
+
 class Team(Base):
     __tablename__ = "teams"
 
@@ -99,6 +105,7 @@ class Match(Base):
     is_neutral = Column(Boolean, default=True)
     status = Column(Enum(MatchStatus), default=MatchStatus.scheduled)
     match_number = Column(Integer)
+    bet_deadline = Column(DateTime)
 
     team_a = relationship("Team", foreign_keys=[team_a_id], back_populates="home_matches")
     team_b = relationship("Team", foreign_keys=[team_b_id], back_populates="away_matches")
@@ -167,6 +174,10 @@ class User(Base):
 
     bets = relationship("Bet", back_populates="user")
     ranking = relationship("Ranking", back_populates="user", uselist=False)
+    owned_groups = relationship("UserGroup", back_populates="owner", foreign_keys="UserGroup.owner_user_id")
+    group_memberships = relationship("UserGroupMember", back_populates="user")
+    sent_group_invites = relationship("UserGroupInvite", back_populates="inviter", foreign_keys="UserGroupInvite.inviter_user_id")
+    received_group_invites = relationship("UserGroupInvite", back_populates="invitee", foreign_keys="UserGroupInvite.invitee_user_id")
 
 
 class Bet(Base):
@@ -198,3 +209,72 @@ class Ranking(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="ranking")
+
+
+class UserGroup(Base):
+    __tablename__ = "user_groups"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    invite_token = Column(String(64), unique=True, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="owned_groups", foreign_keys=[owner_user_id])
+    members = relationship("UserGroupMember", back_populates="group", cascade="all, delete-orphan")
+    invites = relationship("UserGroupInvite", back_populates="group", cascade="all, delete-orphan")
+
+
+class UserGroupMember(Base):
+    __tablename__ = "user_group_members"
+    __table_args__ = (UniqueConstraint("group_id", "user_id", name="uq_user_group_member"),)
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_owner = Column(Boolean, default=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    group = relationship("UserGroup", back_populates="members")
+    user = relationship("User", back_populates="group_memberships")
+
+
+class UserGroupInvite(Base):
+    __tablename__ = "user_group_invites"
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    inviter_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    invitee_user_id = Column(Integer, ForeignKey("users.id"))
+    invitee_email = Column(String(255), nullable=False)
+    status = Column(Enum(GroupInviteStatus), default=GroupInviteStatus.pending, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    responded_at = Column(DateTime)
+
+    group = relationship("UserGroup", back_populates="invites")
+    inviter = relationship("User", back_populates="sent_group_invites", foreign_keys=[inviter_user_id])
+    invitee = relationship("User", back_populates="received_group_invites", foreign_keys=[invitee_user_id])
+
+
+class SiteConfig(Base):
+    __tablename__ = "site_config"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=False, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PageView(Base):
+    __tablename__ = "page_views"
+
+    id         = Column(Integer, primary_key=True)
+    path       = Column(String(300), nullable=False, default="/")
+    ip         = Column(String(45))
+    country    = Column(String(2))
+    country_name = Column(String(80))
+    city       = Column(String(100))
+    device     = Column(String(20))   # mobile / tablet / desktop
+    browser    = Column(String(40))
+    os         = Column(String(40))
+    referrer   = Column(String(500))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
