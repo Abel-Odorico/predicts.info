@@ -1,0 +1,116 @@
+# Predicts.info
+
+Plataforma web para simulacao da Copa do Mundo 2026 com previsoes estatisticas, apostas por placar, ranking de usuarios, grupos privados, analytics e painel administrativo.
+
+## Stack
+
+- Frontend: React + Vite
+- Backend: FastAPI
+- Banco: PostgreSQL
+- Cache: Redis
+- Proxy web: Nginx
+- Deploy local do projeto: Docker Compose
+
+## Estrutura
+
+- `frontend/`: app React, landing publica, assets gerados em `dist/`
+- `backend/`: API FastAPI, modelos, rotas, engine de simulacao
+- `scripts/`: utilitarios do projeto
+- `docker-compose.yml`: sobe API, PostgreSQL e Redis
+
+## Principais features
+
+- Simulacao de partidas por rota `/partida/:id`
+- Simulacao de torneio e bracket oficial
+- Grupos da Copa, resultados, ranking e painel de dashboard
+- Apostas por placar com bloqueio automatico no inicio do jogo
+- Ranking por acertos
+- Analytics com filtros de periodo
+- Configuracoes de site, SEO e AdSense via admin
+- Paginas institucionais editaveis no admin
+- Credito publico "Desenvolvido por" editavel no admin
+- Grupos privados de usuarios com convite e aceite
+- Painel admin para cobertura de apostas por jogo
+
+## Rotas principais do frontend
+
+- `/`: landing publica
+- `/dashboard`: painel principal
+- `/partida/:id`: simulacao individual de partida
+- `/torneio`: simulacao do torneio
+- `/grupos`: grupos da Copa
+- `/resultados`: resultados
+- `/apostas`: apostas do usuario
+- `/ranking`: ranking geral
+- `/meus-grupos`: grupos privados do usuario
+- `/admin`: painel administrativo
+- `/admin/options`: configuracoes do site
+- `/admin/analytics`: analytics
+- `/privacidade`, `/termos`, `/sobre`, `/contato`: paginas institucionais publicas
+
+## Backend e servicos
+
+- API publicada atras do Nginx em `/api`
+- Nginx serve o frontend estatico a partir de `frontend/dist`
+- Docker Compose expoe a API localmente na porta `8130`
+
+## Comandos uteis
+
+Na raiz do projeto:
+
+```bash
+docker compose up -d
+docker compose restart api
+docker compose logs -f api
+```
+
+No frontend:
+
+```bash
+npm install
+npm run build
+```
+
+## Deploy atual
+
+- O frontend precisa ser rebuildado para publicar mudancas do app React:
+  - `cd /opt/predicts/frontend && npm run build`
+- A landing publica usa `frontend/public/index-landing.html` e deve ser sincronizada para:
+  - `frontend/dist/landing.html`
+  - `frontend/dist/index-landing.html`
+- Mudancas de backend exigem restart da API:
+  - `cd /opt/predicts && docker compose restart api`
+
+## AdSense
+
+Implementacao atual:
+
+- snippet do AdSense no HTML publico
+- metatag `google-adsense-account`
+- `ads.txt` publicado na raiz do dominio
+- configuracao do publisher e opcoes no painel admin
+
+## Grupos privados de usuarios
+
+O sistema possui dois conceitos diferentes:
+
+1. `Grupos da Copa`
+   - rota `/grupos`
+   - representa os grupos oficiais do torneio
+
+2. `Meus Grupos`
+   - rota `/meus-grupos`
+   - grupos privados de usuarios do bolao
+   - dono cria grupo
+   - convida por busca de usuario ou email
+   - convidado precisa aceitar
+
+## Observacoes tecnicas
+
+- As tabelas novas de grupos privados sao criadas no startup da API via `Base.metadata.create_all(bind=engine)`.
+- Endpoints autenticados retornam `401` sem token, o que ajuda a validar rapidamente se a rota esta registrada.
+- O frontend usa persistencia local para auth e tema visual.
+
+## Documentacao complementar
+
+- [Guia Admin](./docs/ADMIN_GUIDE.md)

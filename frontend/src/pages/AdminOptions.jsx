@@ -1,0 +1,576 @@
+import { useState, useEffect } from 'react'
+import { api } from '../api'
+import { useAuth } from '../stores/authStore'
+import Spinner from '../components/Spinner'
+
+const LEGAL_PAGES = [
+  {
+    slug: 'privacy',
+    titleKey: 'privacy_title',
+    introKey: 'privacy_intro',
+    contentKey: 'privacy_content',
+    label: 'Politica de Privacidade',
+    path: '/privacidade',
+  },
+  {
+    slug: 'terms',
+    titleKey: 'terms_title',
+    introKey: 'terms_intro',
+    contentKey: 'terms_content',
+    label: 'Termos de Uso',
+    path: '/termos',
+  },
+  {
+    slug: 'about',
+    titleKey: 'about_title',
+    introKey: 'about_intro',
+    contentKey: 'about_content',
+    label: 'Sobre',
+    path: '/sobre',
+  },
+  {
+    slug: 'contact',
+    titleKey: 'contact_title',
+    introKey: 'contact_intro',
+    contentKey: 'contact_content',
+    label: 'Contato',
+    path: '/contato',
+  },
+]
+
+const CONFIG_GROUPS = [
+  {
+    group: 'Identidade do Site',
+    icon: '🏷',
+    keys: [
+      { key: 'site_title',    label: 'Título do site', hint: 'Exibido no header e sidebar' },
+      { key: 'site_subtitle', label: 'Subtítulo',      hint: 'Linha abaixo do título no sidebar' },
+    ],
+  },
+  {
+    group: 'Banner de Destaque',
+    icon: '📢',
+    keys: [
+      { key: 'banner_enabled', label: 'Banner ativo', hint: '"true" ou "false"', type: 'select', options: ['false', 'true'] },
+      { key: 'banner_text',    label: 'Texto do banner', hint: 'Mensagem exibida no topo da página, ex: "🔴 Copa ao vivo agora!"' },
+    ],
+  },
+  {
+    group: 'Landing Page',
+    icon: '🌐',
+    keys: [
+      { key: 'hero_headline',    label: 'Headline principal', hint: 'Título grande do hero' },
+      { key: 'hero_subheadline', label: 'Subheadline',        hint: 'Parágrafo abaixo do título' },
+      { key: 'hero_cta',         label: 'Texto do botão CTA', hint: 'Ex: "Simular agora →"' },
+      { key: 'footer_text',      label: 'Texto do rodapé',    hint: 'Texto abaixo dos links' },
+      { key: 'developer_credit', label: 'Desenvolvido por',   hint: 'Exibido no rodapé público do site' },
+    ],
+  },
+  {
+    group: 'SEO / Google',
+    icon: '🔍',
+    keys: [
+      { key: 'meta_title',       label: 'Title tag',       hint: 'Tag <title> da página (ideal: 50–60 chars)' },
+      { key: 'meta_description', label: 'Meta description', hint: 'Descrição para Google (ideal: 150–160 chars)', type: 'textarea' },
+      { key: 'meta_keywords',    label: 'Meta keywords',    hint: 'Palavras-chave separadas por vírgula', type: 'textarea' },
+    ],
+  },
+  {
+    group: 'Paginas Institucionais',
+    icon: '📄',
+    keys: [
+      { key: 'privacy_title',  label: 'Privacidade — titulo', hint: 'Titulo da pagina de privacidade' },
+      { key: 'privacy_intro',  label: 'Privacidade — introducao', hint: 'Texto curto abaixo do titulo', type: 'textarea' },
+      { key: 'privacy_content', label: 'Privacidade — conteudo', hint: 'Use "## Titulo da secao" e separe paragrafos por linha em branco', type: 'textarea', rows: 14 },
+      { key: 'terms_title',    label: 'Termos — titulo', hint: 'Titulo da pagina de termos' },
+      { key: 'terms_intro',    label: 'Termos — introducao', hint: 'Texto curto abaixo do titulo', type: 'textarea' },
+      { key: 'terms_content',  label: 'Termos — conteudo', hint: 'Use "## Titulo da secao" e separe paragrafos por linha em branco', type: 'textarea', rows: 14 },
+      { key: 'about_title',    label: 'Sobre — titulo', hint: 'Titulo da pagina sobre' },
+      { key: 'about_intro',    label: 'Sobre — introducao', hint: 'Texto curto abaixo do titulo', type: 'textarea' },
+      { key: 'about_content',  label: 'Sobre — conteudo', hint: 'Use "## Titulo da secao" e separe paragrafos por linha em branco', type: 'textarea', rows: 12 },
+      { key: 'contact_title',  label: 'Contato — titulo', hint: 'Titulo da pagina de contato' },
+      { key: 'contact_intro',  label: 'Contato — introducao', hint: 'Texto curto abaixo do titulo', type: 'textarea' },
+      { key: 'contact_content', label: 'Contato — conteudo', hint: 'Use "## Titulo da secao" e separe paragrafos por linha em branco', type: 'textarea', rows: 10 },
+      { key: 'contact_email',  label: 'Email geral', hint: 'Canal publico principal exibido na pagina de contato' },
+      { key: 'privacy_email',  label: 'Email de privacidade', hint: 'Canal para LGPD, remocao e dados pessoais' },
+    ],
+  },
+  {
+    group: 'Google AdSense',
+    icon: '💰',
+    keys: [
+      { key: 'adsense_enabled',      label: 'AdSense ativo',      hint: 'Ativa/desativa a injeção dos anúncios no site', type: 'select', options: ['false', 'true'] },
+      { key: 'adsense_publisher_id', label: 'Publisher ID',        hint: 'Formato: ca-pub-XXXXXXXXXXXXXXXX (encontrado no painel do AdSense em Conta → Informações da conta)' },
+      { key: 'adsense_auto_ads',     label: 'Auto Ads',            hint: 'true = Google escolhe onde colocar os anúncios automaticamente (recomendado para começar)', type: 'select', options: ['true', 'false'] },
+      { key: 'adsense_slot_header',  label: 'Slot ID — Topo',      hint: 'ID do bloco de anúncio para o topo da página (Anúncios → Por bloco de anúncios → criar → exibição)' },
+      { key: 'adsense_slot_content', label: 'Slot ID — Conteúdo',  hint: 'ID do bloco de anúncio no meio do conteúdo' },
+      { key: 'adsense_slot_footer',  label: 'Slot ID — Rodapé',    hint: 'ID do bloco de anúncio no rodapé da página' },
+    ],
+  },
+]
+
+const ADSENSE_STEPS = [
+  {
+    step: 1,
+    title: 'Criar conta no AdSense',
+    desc: 'Acesse adsense.google.com e faça login com sua conta Google. Clique em "Começar" e preencha as informações do seu site.',
+    url: 'https://adsense.google.com',
+    tag: 'Obrigatório',
+  },
+  {
+    step: 2,
+    title: 'Adicionar o site predicts.info',
+    desc: 'No painel do AdSense vá em Sites → Adicionar site. Digite predicts.info e clique em Salvar.',
+    tag: 'Obrigatório',
+  },
+  {
+    step: 3,
+    title: 'Copiar o Publisher ID',
+    desc: 'Vá em Conta → Informações da conta. Copie o Publisher ID no formato ca-pub-XXXXXXXXXXXXXXXX e cole no campo acima.',
+    tag: 'Obrigatório',
+  },
+  {
+    step: 4,
+    title: 'Verificar propriedade do site',
+    desc: 'O AdSense pedirá que você adicione um snippet de código no <head> do site. O snippet que o site já injeta automaticamente com o Publisher ID serve como verificação. Ative o AdSense e aguarde o Google rastrear o site (pode levar até 24h).',
+    tag: 'Automático',
+  },
+  {
+    step: 5,
+    title: 'Habilitar Auto Ads (recomendado)',
+    desc: 'Deixe "Auto Ads" como "true" nas configurações acima. O Google escolhe automaticamente os melhores lugares para os anúncios. Não precisa criar slots manualmente para começar.',
+    tag: 'Recomendado',
+  },
+  {
+    step: 6,
+    title: 'Aguardar aprovação',
+    desc: 'Após a configuração, o AdSense revisa o site (geralmente 1–3 dias, até 2 semanas em casos extremos). O site precisa ter conteúdo relevante, HTTPS ativo e política de privacidade.',
+    tag: 'Aguardar',
+  },
+  {
+    step: 7,
+    title: 'Criar blocos de anúncio manuais (opcional)',
+    desc: 'Se quiser controle sobre onde os anúncios aparecem: Anúncios → Por bloco de anúncio → Criar anúncio. Copie o "Slot ID" (número de 10 dígitos) e cole nos campos de Slot acima.',
+    tag: 'Opcional',
+  },
+  {
+    step: 8,
+    title: 'Pré-requisitos para aprovação',
+    desc: '✅ HTTPS ativo (predicts.info precisa do SSL)\n✅ Conteúdo original e relevante\n✅ Pelo menos 20–30 páginas com conteúdo\n✅ Política de privacidade acessível\n✅ Sem conteúdo proibido (apostas por dinheiro real, adulto, etc.)\n✅ Tráfego real de usuários humanos',
+    tag: 'Checklist',
+  },
+]
+
+const TAG_COLOR = {
+  'Obrigatório': '#ef4444',
+  'Automático':  '#22c55e',
+  'Recomendado': '#f59e0b',
+  'Aguardar':    '#a855f7',
+  'Opcional':    '#64748b',
+  'Checklist':   '#0ea5e9',
+}
+
+export default function AdminOptions() {
+  const { token } = useAuth()
+  const [config, setConfig]   = useState({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]   = useState(false)
+  const [msg, setMsg]         = useState(null)
+  const [dirty, setDirty]     = useState({})
+
+  useEffect(() => {
+    api.get('/site-config/all', token)
+      .then(d => setConfig(d))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [token])
+
+  function handleChange(key, value) {
+    setConfig(c => ({ ...c, [key]: value }))
+    setDirty(d => ({ ...d, [key]: true }))
+    setMsg(null)
+  }
+
+  function isFieldDirty(key) {
+    return Boolean(dirty[key])
+  }
+
+  async function saveAll() {
+    setSaving(true)
+    setMsg(null)
+    try {
+      const updates = Object.fromEntries(
+        Object.entries(dirty).filter(([, v]) => v).map(([k]) => [k, config[k]])
+      )
+      if (Object.keys(updates).length === 0) {
+        setMsg({ type: 'info', text: 'Sem alterações para salvar.' })
+        return
+      }
+      await api.post('/site-config/bulk', { updates }, token)
+      setDirty({})
+      setMsg({ type: 'ok', text: `${Object.keys(updates).length} configuração(ões) salva(s).` })
+    } catch (e) {
+      setMsg({ type: 'err', text: e.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveKey(key) {
+    setSaving(true)
+    try {
+      await api.put(`/site-config/${key}`, { value: config[key] }, token)
+      setDirty(d => ({ ...d, [key]: false }))
+      setMsg({ type: 'ok', text: `"${key}" salvo.` })
+    } catch (e) {
+      setMsg({ type: 'err', text: e.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <Spinner text="Carregando configurações..." />
+
+  const dirtyCount = Object.values(dirty).filter(Boolean).length
+  const legalDirtyCount = LEGAL_PAGES.reduce((sum, page) => {
+    return sum + [page.titleKey, page.introKey, page.contentKey].filter(isFieldDirty).length
+  }, 0) + ['contact_email', 'privacy_email'].filter(isFieldDirty).length
+  const brandingDirty = ['site_title', 'site_subtitle', 'developer_credit'].filter(isFieldDirty).length
+
+  return (
+    <div className="page">
+      <div className="fade-in-1">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--s3)' }}>
+          <div>
+            <h1 className="page-title">CONFIGURAÇÕES DO SITE</h1>
+            <p className="page-subtitle">Alterações textuais, páginas públicas, crédito, SEO e AdSense</p>
+          </div>
+          <button
+            onClick={saveAll}
+            disabled={saving || dirtyCount === 0}
+            className="btn btn-primary"
+          >
+            {saving ? '⏳ Salvando...' : dirtyCount > 0 ? `💾 Salvar ${dirtyCount} alterar${dirtyCount > 1 ? 'ações' : 'ação'}` : '✓ Tudo salvo'}
+          </button>
+        </div>
+      </div>
+
+      <div className="admin-options-quick mt-6 fade-in-1">
+        <a href="#branding-card" className="admin-options-quick__card">
+          <span className="admin-options-quick__label">Identidade</span>
+          <strong className="admin-options-quick__value">{config.site_title || 'Predicts.info'}</strong>
+          <span className="admin-options-quick__meta">{brandingDirty > 0 ? `${brandingDirty} alteracao(oes)` : 'Sem alteracoes pendentes'}</span>
+        </a>
+        <a href="#legal-pages-card" className="admin-options-quick__card admin-options-quick__card--accent">
+          <span className="admin-options-quick__label">Paginas Publicas</span>
+          <strong className="admin-options-quick__value">Privacidade, Termos, Sobre e Contato</strong>
+          <span className="admin-options-quick__meta">{legalDirtyCount > 0 ? `${legalDirtyCount} alteracao(oes)` : 'Editor pronto no admin'}</span>
+        </a>
+        <a href="#adsense-card" className="admin-options-quick__card">
+          <span className="admin-options-quick__label">AdSense</span>
+          <strong className="admin-options-quick__value">{config.adsense_publisher_id || 'Nao configurado'}</strong>
+          <span className="admin-options-quick__meta">{config.adsense_enabled === 'true' ? 'Ativo' : 'Desativado'}</span>
+        </a>
+      </div>
+
+      {msg && (
+        <div style={{
+          marginTop: 'var(--s4)',
+          padding: 'var(--s3) var(--s4)',
+          borderRadius: 'var(--r2)',
+          background: msg.type === 'ok' ? 'color-mix(in srgb, var(--win) 12%, transparent)' :
+                      msg.type === 'err' ? 'color-mix(in srgb, var(--lose) 12%, transparent)' :
+                      'var(--bg-overlay)',
+          border: `1px solid ${msg.type === 'ok' ? 'var(--win)' : msg.type === 'err' ? 'var(--lose)' : 'var(--border)'}`,
+          fontFamily: 'var(--font-cond)',
+          fontSize: 13,
+          color: msg.type === 'ok' ? 'var(--win)' : msg.type === 'err' ? 'var(--lose)' : 'var(--text-2)',
+        }}>
+          {msg.text}
+        </div>
+      )}
+
+      <div id="branding-card" className="card card--accent fade-in-2" style={{ marginTop: 'var(--s6)' }}>
+        <div className="card__header">
+          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+            ✍️ Credito Publico e Identidade
+          </span>
+        </div>
+        <div className="card__body">
+          <div className="admin-options-highlight">
+            <div className="admin-options-highlight__preview">
+              <div className="admin-options-highlight__kicker">Aparece publicamente no site</div>
+              <div className="admin-options-highlight__title">Desenvolvido por</div>
+              <div className="admin-options-highlight__value">{config.developer_credit || 'PeepConnect - By Abel Odorico'}</div>
+            </div>
+            <div className="stack gap-4" style={{ flex: 1 }}>
+              {[
+                { key: 'site_title', label: 'Titulo do site', hint: 'Exibido no header e sidebar' },
+                { key: 'site_subtitle', label: 'Subtitulo', hint: 'Linha abaixo do titulo no sidebar' },
+                { key: 'developer_credit', label: 'Desenvolvido por', hint: 'Exibido na landing e no app' },
+              ].map(field => (
+                <div key={field.key} className="options-field">
+                  <div className="options-field__label">
+                    <span>{field.label}</span>
+                    {isFieldDirty(field.key) && <span className="options-field__changed">● ALTERADO</span>}
+                  </div>
+                  <div className="options-field__hint">{field.hint}</div>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={config[field.key] ?? ''}
+                    onChange={e => handleChange(field.key, e.target.value)}
+                    style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="legal-pages-card" className="card fade-in-2" style={{ marginTop: 'var(--s6)' }}>
+        <div className="card__header">
+          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+            📄 Paginas Publicas Editaveis
+          </span>
+          <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
+            /privacidade · /termos · /sobre · /contato
+          </span>
+        </div>
+        <div className="card__body">
+          <div className="admin-options-help">
+            Edite aqui o conteudo visivel dessas paginas. Para criar secoes, use <code>## Titulo da secao</code>. Separe paragrafos com uma linha em branco.
+          </div>
+
+          <div className="admin-legal-grid">
+            {LEGAL_PAGES.map(page => (
+              <section key={page.slug} className="admin-legal-card">
+                <div className="admin-legal-card__head">
+                  <div>
+                    <div className="admin-legal-card__title">{page.label}</div>
+                    <div className="admin-legal-card__path">{page.path}</div>
+                  </div>
+                  <a href={page.path} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+                    Abrir pagina
+                  </a>
+                </div>
+
+                <div className="stack gap-4">
+                  <div className="options-field">
+                    <div className="options-field__label">
+                      <span>Titulo</span>
+                      {isFieldDirty(page.titleKey) && <span className="options-field__changed">● ALTERADO</span>}
+                    </div>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={config[page.titleKey] ?? ''}
+                      onChange={e => handleChange(page.titleKey, e.target.value)}
+                      style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+                    />
+                  </div>
+
+                  <div className="options-field">
+                    <div className="options-field__label">
+                      <span>Introducao</span>
+                      {isFieldDirty(page.introKey) && <span className="options-field__changed">● ALTERADO</span>}
+                    </div>
+                    <textarea
+                      className="form-input"
+                      rows={4}
+                      value={config[page.introKey] ?? ''}
+                      onChange={e => handleChange(page.introKey, e.target.value)}
+                      style={{ resize: 'vertical', fontFamily: 'var(--font-data)', fontSize: 13 }}
+                    />
+                  </div>
+
+                  <div className="options-field">
+                    <div className="options-field__label">
+                      <span>Conteudo</span>
+                      {isFieldDirty(page.contentKey) && <span className="options-field__changed">● ALTERADO</span>}
+                    </div>
+                    <textarea
+                      className="form-input"
+                      rows={12}
+                      value={config[page.contentKey] ?? ''}
+                      onChange={e => handleChange(page.contentKey, e.target.value)}
+                      style={{ resize: 'vertical', fontFamily: 'var(--font-data)', fontSize: 13 }}
+                    />
+                  </div>
+                </div>
+              </section>
+            ))}
+          </div>
+
+          <div className="admin-legal-emails">
+            <div className="options-field">
+              <div className="options-field__label">
+                <span>Email geral</span>
+                {isFieldDirty('contact_email') && <span className="options-field__changed">● ALTERADO</span>}
+              </div>
+              <div className="options-field__hint">Canal publico principal exibido na pagina de contato</div>
+              <input
+                type="text"
+                className="form-input"
+                value={config.contact_email ?? ''}
+                onChange={e => handleChange('contact_email', e.target.value)}
+                style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+              />
+            </div>
+
+            <div className="options-field">
+              <div className="options-field__label">
+                <span>Email de privacidade</span>
+                {isFieldDirty('privacy_email') && <span className="options-field__changed">● ALTERADO</span>}
+              </div>
+              <div className="options-field__hint">Canal para LGPD, remocao de dados e solicitacoes de privacidade</div>
+              <input
+                type="text"
+                className="form-input"
+                value={config.privacy_email ?? ''}
+                onChange={e => handleChange('privacy_email', e.target.value)}
+                style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="stack mt-6 fade-in-2">
+        {CONFIG_GROUPS.filter(group => !['Landing Page', 'Paginas Institucionais'].includes(group.group)).map(group => (
+          <div key={group.group} className="card" id={group.group === 'Google AdSense' ? 'adsense-card' : undefined}>
+            <div className="card__header">
+              <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+                {group.icon} {group.group}
+              </span>
+            </div>
+            <div className="card__body">
+              <div className="stack gap-4">
+                {group.keys.map(field => (
+                  <div key={field.key} className="options-field">
+                    <div className="options-field__label">
+                      <span>{field.label}</span>
+                      {dirty[field.key] && (
+                        <span className="options-field__changed">● ALTERADO</span>
+                      )}
+                    </div>
+                    <div className="options-field__hint">{field.hint}</div>
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        className="form-input"
+                        rows={field.rows || 3}
+                        value={config[field.key] ?? ''}
+                        onChange={e => handleChange(field.key, e.target.value)}
+                        style={{ resize: 'vertical', fontFamily: 'var(--font-data)', fontSize: 13 }}
+                      />
+                    ) : field.type === 'select' ? (
+                      <select
+                        className="form-input"
+                        value={config[field.key] ?? 'false'}
+                        onChange={e => handleChange(field.key, e.target.value)}
+                        style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+                      >
+                        {field.options.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={config[field.key] ?? ''}
+                        onChange={e => handleChange(field.key, e.target.value)}
+                        style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+                      />
+                    )}
+                    {dirty[field.key] && (
+                      <button
+                        onClick={() => saveKey(field.key)}
+                        className="btn btn-ghost btn-sm"
+                        style={{ marginTop: 'var(--s2)', alignSelf: 'flex-start' }}
+                        disabled={saving}
+                      >
+                        Salvar apenas este
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* AdSense Manual */}
+      <div className="card fade-in-3" style={{ marginTop: 'var(--s6)' }}>
+        <div className="card__header">
+          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+            📋 Manual — Como configurar o Google AdSense
+          </span>
+        </div>
+        <div className="card__body">
+          <div className="stack gap-4">
+            {ADSENSE_STEPS.map(s => (
+              <div key={s.step} style={{
+                display: 'grid',
+                gridTemplateColumns: '36px 1fr',
+                gap: 'var(--s4)',
+                padding: 'var(--s4)',
+                background: 'var(--bg-overlay)',
+                borderRadius: 'var(--r2)',
+                border: '1px solid var(--border)',
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                  background: `color-mix(in srgb, ${TAG_COLOR[s.tag]} 15%, transparent)`,
+                  border: `1px solid color-mix(in srgb, ${TAG_COLOR[s.tag]} 40%, transparent)`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 14,
+                  color: TAG_COLOR[s.tag],
+                }}>
+                  {s.step}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', marginBottom: 'var(--s2)', flexWrap: 'wrap' }}>
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text-1)' }}>
+                      {s.title}
+                    </span>
+                    <span style={{
+                      fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700,
+                      letterSpacing: '0.1em', textTransform: 'uppercase', padding: '2px 7px',
+                      borderRadius: 100, border: `1px solid ${TAG_COLOR[s.tag]}`,
+                      color: TAG_COLOR[s.tag],
+                      background: `color-mix(in srgb, ${TAG_COLOR[s.tag]} 12%, transparent)`,
+                    }}>
+                      {s.tag}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{s.desc}</p>
+                  {s.url && (
+                    <a href={s.url} target="_blank" rel="noopener noreferrer" style={{
+                      display: 'inline-block', marginTop: 'var(--s2)',
+                      fontSize: 11, color: 'var(--accent2)', fontFamily: 'var(--font-data)',
+                    }}>
+                      {s.url} ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            marginTop: 'var(--s6)', padding: 'var(--s4)',
+            background: 'color-mix(in srgb, var(--win) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--win) 30%, transparent)',
+            borderRadius: 'var(--r2)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7,
+          }}>
+            <strong style={{ color: 'var(--win)', fontFamily: 'var(--font-cond)', letterSpacing: '0.06em' }}>💡 COMO FUNCIONA A INTEGRAÇÃO</strong><br />
+            Ao salvar o Publisher ID e ativar o AdSense, a landing page (<code style={{ background: 'var(--bg-overlay)', padding: '1px 5px', borderRadius: 3 }}>predicts.info/</code>) e o simulador passarão a injetar automaticamente o script do AdSense no <code style={{ background: 'var(--bg-overlay)', padding: '1px 5px', borderRadius: 3 }}>&lt;head&gt;</code>.
+            Com Auto Ads ativo, o Google coloca os anúncios nos melhores lugares sem configuração manual de slots.
+            Os slots manuais (Topo, Conteúdo, Rodapé) são opcionais e permitem controle fino da posição.
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -9,11 +9,6 @@ from schemas import HealthResponse
 router = APIRouter()
 
 
-@router.get("/config/public", tags=["system"])
-def public_config():
-    return {"auto_sync_interval_hours": settings.auto_sync_interval_hours}
-
-
 @router.get("/health", response_model=HealthResponse, tags=["system"])
 def health_check(db: Session = Depends(get_db)):
     db_status = "ok"

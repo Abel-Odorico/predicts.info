@@ -142,6 +142,10 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AdminUserUpdate(BaseModel):
+    role: str
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str

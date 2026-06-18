@@ -21,6 +21,7 @@ async function req(method, path, body, token) {
 export const api = {
   get:   (path, token)        => req('GET',   path, null, token),
   post:  (path, body, token)  => req('POST',  path, body, token),
+  put:   (path, body, token)  => req('PUT',   path, body, token),
   patch: (path, body, token)  => req('PATCH', path, body, token),
 
   // Auth (form-encoded for OAuth2PasswordRequestForm)

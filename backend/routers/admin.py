@@ -3,12 +3,14 @@ Admin endpoints — require admin JWT.
 POST /admin/results        insert real match result, recalculate Elo, evaluate bets
 PATCH /admin/players/{id}  mark injury/suspension
 POST /admin/recalculate    force tournament simulation refresh
-POST /admin/promote/{email} promote user to admin role
+GET  /admin/users          list users with admin metrics
+PATCH /admin/users/{id}    update user role
 """
 
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 import redis as redis_lib
 import json
 
@@ -19,7 +21,7 @@ from models import (
     Match, MatchResult, MatchStatus, Team, Player,
     Bet, Ranking, TournamentSimulation, User, UserRole
 )
-from schemas import ResultCreate, InjuryUpdate
+from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate
 from engine.elo import update_ratings
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -55,13 +57,11 @@ def _evaluate_bets(match: Match, result: MatchResult, db: Session) -> None:
 
         ranking = db.query(Ranking).filter(Ranking.user_id == bet.user_id).first()
         if not ranking:
-            ranking = Ranking(user_id=bet.user_id)
+            ranking = Ranking(user_id=bet.user_id, total_points=0, exact_scores=0, correct_results=0)
             db.add(ranking)
-        ranking.total_points += bet.points_earned
-        if exact:
-            ranking.exact_scores += 1
-        elif correct_result:
-            ranking.correct_results += 1
+        ranking.total_points   = (ranking.total_points   or 0) + bet.points_earned
+        ranking.exact_scores   = (ranking.exact_scores   or 0) + (1 if exact else 0)
+        ranking.correct_results = (ranking.correct_results or 0) + (1 if correct_result and not exact else 0)
 
 
 @router.post("/results", status_code=201)
@@ -165,18 +165,64 @@ def force_recalculate(
     return {"status": "cache_cleared", "keys_removed": cleared, "message": "Next /tournament/simulate call will recompute from scratch"}
 
 
-@router.post("/promote/{email}")
-def promote_user(
-    email: str,
+@router.get("/users")
+def list_users(
+    q: str | None = Query(default=None),
+    limit: int = Query(default=100, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    user = db.query(User).filter(User.email == email).first()
+    query = (
+        db.query(
+            User,
+            func.count(Bet.id).label("bets_count"),
+            func.coalesce(func.sum(Bet.points_earned), 0).label("bets_points"),
+        )
+        .outerjoin(Bet, Bet.user_id == User.id)
+        .group_by(User.id)
+        .order_by(User.created_at.desc())
+    )
+
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter((User.name.ilike(like)) | (User.email.ilike(like)))
+
+    rows = query.limit(limit).all()
+    return [
+        {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role.value if user.role else UserRole.user.value,
+            "created_at": user.created_at,
+            "bets_count": int(bets_count or 0),
+            "bets_points": int(bets_points or 0),
+        }
+        for user, bets_count, bets_points in rows
+    ]
+
+
+@router.patch("/users/{user_id}")
+def update_user_role(
+    user_id: int,
+    payload: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    try:
+        new_role = UserRole(payload.role)
+    except ValueError:
+        raise HTTPException(400, "Invalid role")
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-    user.role = UserRole.admin
+    if user.id == admin_user.id and new_role != UserRole.admin:
+        raise HTTPException(400, "You cannot remove your own admin role")
+
+    user.role = new_role
     db.commit()
-    return {"user_id": user.id, "email": user.email, "role": "admin"}
+    return {"user_id": user.id, "email": user.email, "role": user.role.value}
 
 
 @router.get("/bets/all")
@@ -217,3 +263,63 @@ def all_bets(
         }
         for b in bets
     ]
+
+
+@router.get("/bets/coverage")
+def bets_coverage(
+    status: str | None = Query(default="scheduled"),
+    limit: int = Query(default=50, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    users = db.query(User).order_by(User.name.asc()).all()
+
+    match_query = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.bets).joinedload(Bet.user))
+        .order_by(Match.match_date.asc().nullslast(), Match.id.asc())
+    )
+    if status and status != "all":
+        match_query = match_query.filter(Match.status == MatchStatus(status))
+    matches = match_query.limit(limit).all()
+
+    coverage = []
+    for match in matches:
+        bettors = []
+        bettor_ids = set()
+        for bet in match.bets:
+            if not bet.user:
+                continue
+            bettor_ids.add(bet.user_id)
+            bettors.append({
+                "user_id": bet.user_id,
+                "name": bet.user.name,
+                "email": bet.user.email,
+                "score_a": bet.score_a,
+                "score_b": bet.score_b,
+                "created_at": bet.created_at,
+            })
+
+        missing = [
+            {"user_id": user.id, "name": user.name, "email": user.email}
+            for user in users
+            if user.id not in bettor_ids
+        ]
+
+        coverage.append({
+            "match_id": match.id,
+            "group_name": match.group_name,
+            "status": match.status.value if match.status else None,
+            "match_date": match.match_date,
+            "team_a_code": match.team_a.code if match.team_a else None,
+            "team_b_code": match.team_b.code if match.team_b else None,
+            "bettors_count": len(bettors),
+            "missing_count": len(missing),
+            "bettors": bettors,
+            "missing_users": missing,
+        })
+
+    return {
+        "total_users": len(users),
+        "matches": coverage,
+    }

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 import json, hashlib, time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import redis as redis_lib
 
 from database import get_db
@@ -32,6 +32,16 @@ def _build_live_lookup() -> tuple[dict, dict]:
         return {"games": []}, {}
 
 
+def _is_bet_open(match: Match) -> bool:
+    if match.status != MatchStatus.scheduled:
+        return False
+    deadline = match.bet_deadline or match.match_date
+    if not deadline:
+        return True
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return now < deadline
+
+
 def _match_payload(match: Match, live: dict | None = None) -> dict:
     return {
         "id": match.id,
@@ -43,6 +53,7 @@ def _match_payload(match: Match, live: dict | None = None) -> dict:
         "venue": match.venue,
         "city": match.city,
         "match_date": match.match_date,
+        "is_open": _is_bet_open(match),
         "team_a": {
             "id": match.team_a.id,
             "code": match.team_a.code,

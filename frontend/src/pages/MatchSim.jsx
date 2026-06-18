@@ -23,8 +23,9 @@ export default function MatchSim() {
   const [sim, setSim]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [simRunning, setSimRunning] = useState(false)
-  const [betScore, setBetScore] = useState({ a: '', b: '' })
+  const [betScore, setBetScore] = useState({ a: 0, b: 0 })
   const [betMsg, setBetMsg] = useState('')
+  const [existingBet, setExistingBet] = useState(null)
   const [n, setN] = useState(1000000)
 
   useEffect(() => { fetchAll() }, [id])
@@ -32,9 +33,17 @@ export default function MatchSim() {
   async function fetchAll() {
     setLoading(true)
     try {
-      const m = await api.get(`/matches/${id}`)
+      const reqs = [api.get(`/matches/${id}`), runSim(n, false)]
+      if (token) reqs.push(api.get('/bets', token))
+      const [m, , betsData] = await Promise.all(reqs)
       setMatch(m)
-      await runSim(n, false)
+      if (betsData) {
+        const found = betsData.find(b => b.match_id === Number(id))
+        if (found) {
+          setExistingBet(found)
+          setBetScore({ a: String(found.score_a), b: String(found.score_b) })
+        }
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -59,10 +68,11 @@ export default function MatchSim() {
     if (!token) { setBetMsg('Faça login para apostar'); return }
     const sa = parseInt(betScore.a)
     const sb = parseInt(betScore.b)
-    if (isNaN(sa) || isNaN(sb)) { setBetMsg('Preencha o placar'); return }
+    if (isNaN(sa) || isNaN(sb) || sa < 0 || sb < 0) { setBetMsg('Preencha o placar'); return }
     try {
-      await api.post('/bets', { match_id: Number(id), score_a: sa, score_b: sb }, token)
-      setBetMsg(`✓ Aposta ${sa}×${sb} registrada!`)
+      const data = await api.post('/bets', { match_id: Number(id), score_a: sa, score_b: sb }, token)
+      setExistingBet(data)
+      setBetMsg(`✓ Aposta ${sa}×${sb} ${data.updated ? 'atualizada' : 'registrada'}!`)
     } catch (e) {
       setBetMsg(e.message)
     }
@@ -181,18 +191,18 @@ export default function MatchSim() {
                 ) : !bettingOpen ? (
                   <div style={{ textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-                      Apostas encerradas. O jogo ja comecou.
+                      Apostas encerradas — partida iniciou.
                     </p>
                   </div>
                 ) : (
                   <div>
-                    <button onClick={placeBet} className="btn btn-primary w-full">
-                      Registrar Aposta
-                    </button>
-                    <div className="bet-form mt-4">
-                      <div className="bet-form__team-label">
-                        {match.team_a.code}
+                    {existingBet && (
+                      <div style={{ textAlign: 'center', marginBottom: 'var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--win)' }}>
+                        ✓ Aposta atual: {existingBet.score_a} × {existingBet.score_b} — altere abaixo
                       </div>
+                    )}
+                    <div className="bet-form">
+                      <div className="bet-form__team-label">{match.team_a.code}</div>
                       <div className="bet-form__score">
                         <input
                           type="number" min="0" max="20"
@@ -210,16 +220,13 @@ export default function MatchSim() {
                           placeholder="0"
                         />
                       </div>
-                      <div className="bet-form__team-label">
-                        {match.team_b.code}
-                      </div>
+                      <div className="bet-form__team-label">{match.team_b.code}</div>
                     </div>
+                    <button onClick={placeBet} className="btn btn-primary w-full" style={{ marginTop: 'var(--s3)' }}>
+                      {existingBet ? 'Atualizar Aposta' : 'Confirmar Aposta'}
+                    </button>
                     {betMsg && (
-                      <p style={{
-                        marginTop: 'var(--s3)', textAlign: 'center',
-                        fontFamily: 'var(--font-cond)', fontSize: 13,
-                        color: betMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)'
-                      }}>
+                      <p style={{ marginTop: 'var(--s3)', textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 13, color: betMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
                         {betMsg}
                       </p>
                     )}
@@ -254,6 +261,7 @@ export default function MatchSim() {
 
 function isBettingOpen(match) {
   if (!match) return false
+  if (match.is_open !== undefined) return match.is_open
   if (match.status !== 'scheduled') return false
   if (!match.match_date) return true
   return parseUtcMatchDate(match.match_date).getTime() > Date.now()

@@ -79,8 +79,15 @@ export default function Dashboard() {
   return (
     <div className="page">
       <div className="fade-in-1">
-        <h1 className="page-title">COPA DO MUNDO 2026</h1>
-        <p className="page-subtitle">Motor Elo · xG · Poisson · Monte Carlo</p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap' }}>
+          <div>
+            <h1 className="page-title">COPA DO MUNDO 2026</h1>
+            <p className="page-subtitle">Motor Elo · xG · Poisson · Monte Carlo</p>
+          </div>
+          <a href="/" className="btn btn-ghost btn-sm" style={{ flexShrink: 0, fontSize: 12 }}>
+            🌐 Página Inicial
+          </a>
+        </div>
       </div>
 
       <div className="card fade-in-1 mt-6">
