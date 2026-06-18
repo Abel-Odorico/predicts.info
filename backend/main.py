@@ -1,0 +1,74 @@
+import asyncio
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from config import settings
+from routers import health, teams, matches, auth, admin, tournament, bets, groups, sync, live
+from routers.sync import _run_sync, _sync_status
+
+
+async def _auto_sync_loop():
+    interval = settings.auto_sync_interval_hours * 3600
+    print(f"[auto-sync] agendado a cada {settings.auto_sync_interval_hours}h — aguardando 30s no startup", flush=True)
+    await asyncio.sleep(30)
+    while True:
+        if not _sync_status["running"]:
+            print("[auto-sync] iniciando sincronização agendada", flush=True)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _run_sync, settings.database_url, "auto")
+            print(f"[auto-sync] concluído — próxima em {settings.auto_sync_interval_hours}h", flush=True)
+        else:
+            print("[auto-sync] sync já em andamento, pulando", flush=True)
+        await asyncio.sleep(interval)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_auto_sync_loop())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(
+    title="Predicts.info — World Cup 2026 Simulator",
+    description="Poisson + Elo + Monte Carlo (1M simulações) + xG + Apostas",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health.router,      prefix="/api")
+app.include_router(teams.router,       prefix="/api")
+app.include_router(matches.router,     prefix="/api")
+app.include_router(auth.router,        prefix="/api")
+app.include_router(admin.router,       prefix="/api")
+app.include_router(tournament.router,  prefix="/api")
+app.include_router(bets.router,        prefix="/api")
+app.include_router(groups.router,      prefix="/api")
+app.include_router(sync.router,        prefix="/api")
+app.include_router(live.router,        prefix="/api")
+
+
+@app.get("/api")
+def root():
+    return {
+        "project": "Predicts.info",
+        "version": "1.1.0",
+        "docs": "/api/docs",
+    }
