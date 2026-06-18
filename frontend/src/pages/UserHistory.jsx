@@ -1,31 +1,242 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import Spinner from '../components/Spinner'
 
-const RESULT_META = {
-  exact:   { label: 'Exato',    color: 'var(--accent)' },
-  correct: { label: 'Certo',    color: 'var(--win)'    },
-  wrong:   { label: 'Erro',     color: 'var(--lose)'   },
+const FLAG = code => code ? `https://flagcdn.com/24x18/${code.toLowerCase()}.png` : null
+
+const RESULT = {
+  exact:   { label: 'Exato',    color: 'var(--accent)'  },
+  correct: { label: 'Certo',    color: 'var(--win)'     },
+  wrong:   { label: 'Erro',     color: 'var(--lose)'    },
 }
 
-function formatDate(value) {
+function fmtDate(value) {
   if (!value) return '—'
   const d = new Date(value.endsWith('Z') ? value : `${value}Z`)
-  if (Number.isNaN(d.getTime())) return '—'
-  return new Intl.DateTimeFormat('pt-BR', {
+  return isNaN(d) ? '—' : new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     timeZone: 'America/Sao_Paulo',
   }).format(d)
 }
 
+// ── Anel de distribuição (CSS conic-gradient) ─────────────────────────────────
+function DonutRing({ exact, correct, wrong, pending, total }) {
+  if (total === 0) return null
+  const pct = n => Math.round((n / total) * 100)
+  const e = pct(exact), c = pct(correct), w = pct(wrong)
+  const gradient = `conic-gradient(
+    var(--accent) 0% ${e}%,
+    var(--win)    ${e}% ${e + c}%,
+    var(--lose)   ${e + c}% ${e + c + w}%,
+    var(--text-4) ${e + c + w}% 100%
+  )`
+  const accuracy = total > 0 ? Math.round(((exact + correct) / total) * 100) : 0
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap' }}>
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <div style={{ width: 100, height: 100, borderRadius: '50%', background: gradient }} />
+        <div style={{
+          position: 'absolute', inset: 14, borderRadius: '50%',
+          background: 'var(--bg-surface)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900, color: 'var(--accent)', lineHeight: 1 }}>
+            {accuracy}%
+          </span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
+            acerto
+          </span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
+        {[
+          { label: 'Exato',    count: exact,   color: 'var(--accent)' },
+          { label: 'Certo',    count: correct, color: 'var(--win)'    },
+          { label: 'Erro',     count: wrong,   color: 'var(--lose)'   },
+          { label: 'Pendente', count: pending, color: 'var(--text-4)' },
+        ].map(item => (
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', minWidth: 52 }}>{item.label}</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 900, color: item.color }}>{item.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Sparkline SVG — pontos acumulados ─────────────────────────────────────────
+function Sparkline({ bets }) {
+  const evaluated = useMemo(() =>
+    [...bets]
+      .filter(b => b.result != null)
+      .sort((a, b) => new Date(a.match_date || a.created_at) - new Date(b.match_date || b.created_at)),
+    [bets]
+  )
+  if (evaluated.length < 2) return null
+
+  const cumulative = evaluated.reduce((acc, b, i) => {
+    acc.push((acc[i - 1] ?? 0) + (b.points_earned ?? 0))
+    return acc
+  }, [])
+
+  const W = 320, H = 72, PAD = 8
+  const maxPts = Math.max(...cumulative, 1)
+  const pts = cumulative.map((v, i) => {
+    const x = PAD + (i / (cumulative.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - (v / maxPts) * (H - PAD * 2)
+    return [x, y]
+  })
+  const polyline = pts.map(([x, y]) => `${x},${y}`).join(' ')
+  const area = `M${pts[0][0]},${H - PAD} ` + pts.map(([x, y]) => `L${x},${y}`).join(' ') + ` L${pts[pts.length - 1][0]},${H - PAD} Z`
+  const last = pts[pts.length - 1]
+  const totalPts = cumulative[cumulative.length - 1]
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 'var(--s2)' }}>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Pontos acumulados
+        </span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>
+          {totalPts} pts
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }}>
+        <defs>
+          <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#spark-fill)" />
+        <polyline points={polyline} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r={i === pts.length - 1 ? 4 : 2.5}
+            fill={i === pts.length - 1 ? 'var(--accent)' : 'var(--bg-surface)'}
+            stroke="var(--accent)" strokeWidth="1.5"
+          />
+        ))}
+        <text x={last[0]} y={last[1] - 8} textAnchor="middle"
+          style={{ fontFamily: 'var(--font-data)', fontSize: 10, fill: 'var(--accent)', fontWeight: 700 }}>
+          {totalPts}
+        </text>
+        <text x={PAD} y={H - 2} style={{ fontFamily: 'var(--font-data)', fontSize: 9, fill: 'var(--text-4)' }}>
+          #{evaluated[0].team_a_code}×{evaluated[0].team_b_code}
+        </text>
+      </svg>
+    </div>
+  )
+}
+
+// ── Card individual de aposta ─────────────────────────────────────────────────
+function BetCard({ bet, idx }) {
+  const meta = RESULT[bet.result]
+  const pending = bet.result == null
+  const hasOfficial = bet.official_score_a != null && bet.official_score_b != null
+
+  return (
+    <div
+      className="fade-in"
+      style={{
+        animationDelay: `${idx * 20}ms`,
+        background: 'var(--bg-surface)',
+        border: `1px solid ${meta ? meta.color + '44' : 'var(--border)'}`,
+        borderLeft: `3px solid ${meta ? meta.color : 'var(--border)'}`,
+        borderRadius: 'var(--r3)',
+        padding: 'var(--s4) var(--s5)',
+        display: 'flex', flexDirection: 'column', gap: 'var(--s3)',
+      }}
+    >
+      {/* top row: grupo + data + badge */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-3)', textTransform: 'uppercase' }}>
+          Grupo {bet.group_name}
+        </span>
+        <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
+          {pending ? (
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', fontStyle: 'italic' }}>Pendente</span>
+          ) : (
+            <span style={{
+              fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+              padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase',
+              background: meta.color + '22', color: meta.color, border: `1px solid ${meta.color}44`,
+            }}>
+              {meta.label} · +{bet.points_earned ?? 0}
+            </span>
+          )}
+          <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>
+            {fmtDate(bet.match_date)}
+          </span>
+        </div>
+      </div>
+
+      {/* match row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 'var(--s3)' }}>
+        {/* team A */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+          {FLAG(bet.team_a_code) && (
+            <img src={FLAG(bet.team_a_code)} alt={bet.team_a_code}
+              style={{ width: 24, height: 18, borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
+          )}
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>
+            {bet.team_a_code}
+          </span>
+        </div>
+
+        {/* scores */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900,
+              color: meta ? meta.color : 'var(--text-2)', lineHeight: 1,
+              minWidth: 22, textAlign: 'right',
+            }}>{bet.score_a}</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>–</span>
+            <span style={{
+              fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900,
+              color: meta ? meta.color : 'var(--text-2)', lineHeight: 1,
+              minWidth: 22, textAlign: 'left',
+            }}>{bet.score_b}</span>
+          </div>
+          {hasOfficial ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
+                {bet.official_score_a}–{bet.official_score_b}
+              </span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.06em' }}>OFICIAL</span>
+            </div>
+          ) : (
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.06em' }}>
+              {pending ? 'AGUARDANDO' : 'SEM DADO'}
+            </span>
+          )}
+        </div>
+
+        {/* team B */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', justifyContent: 'flex-end' }}>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>
+            {bet.team_b_code}
+          </span>
+          {FLAG(bet.team_b_code) && (
+            <img src={FLAG(bet.team_b_code)} alt={bet.team_b_code}
+              style={{ width: 24, height: 18, borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Página principal ──────────────────────────────────────────────────────────
 export default function UserHistory() {
   const { userId } = useParams()
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
-  const [showAll, setShowAll] = useState(false)
-  const [filterResult, setFilterResult] = useState('all')
+  const [filter,  setFilter]  = useState('all')
 
   useEffect(() => {
     setLoading(true)
@@ -37,182 +248,148 @@ export default function UserHistory() {
   }, [userId])
 
   if (loading) return <Spinner text="Carregando histórico..." />
-
-  if (error) {
-    return (
-      <div className="page">
-        <div className="card fade-in-1">
-          <div className="card__body">
-            <p className="page-subtitle" style={{ margin: 0 }}>{error}</p>
-            <Link to="/ranking" className="btn btn-primary btn-sm mt-4">Voltar ao ranking</Link>
-          </div>
+  if (error) return (
+    <div className="page">
+      <div className="card fade-in-1">
+        <div className="card__body">
+          <p className="page-subtitle" style={{ margin: 0 }}>{error}</p>
+          <Link to="/ranking" className="btn btn-primary btn-sm mt-4">Voltar ao ranking</Link>
         </div>
       </div>
-    )
-  }
+    </div>
+  )
 
-  const bets  = data?.bets  ?? []
-  const stats = data?.stats ?? {}
-  const user  = data?.user
+  const bets      = data?.bets  ?? []
+  const stats     = data?.stats ?? {}
+  const user      = data?.user
 
   const evaluated = bets.filter(b => b.result != null)
   const pending   = bets.filter(b => b.result == null)
+  const exact     = evaluated.filter(b => b.result === 'exact')
+  const correct   = evaluated.filter(b => b.result === 'correct')
+  const wrong     = evaluated.filter(b => b.result === 'wrong')
+  const accuracy  = evaluated.length > 0 ? Math.round(((exact.length + correct.length) / evaluated.length) * 100) : 0
 
-  const filtered = filterResult === 'all'
-    ? evaluated
-    : evaluated.filter(b => b.result === filterResult)
+  const FILTERS = [
+    { id: 'all',     label: 'Todas',     count: bets.length      },
+    { id: 'exact',   label: 'Exatos',    count: exact.length     },
+    { id: 'correct', label: 'Certos',    count: correct.length   },
+    { id: 'wrong',   label: 'Erros',     count: wrong.length     },
+    { id: 'pending', label: 'Pendentes', count: pending.length   },
+  ]
 
-  const SHOW = 15
-  const visible = showAll ? filtered : filtered.slice(0, SHOW)
+  const visible = filter === 'all'     ? bets
+                : filter === 'exact'   ? exact
+                : filter === 'correct' ? correct
+                : filter === 'wrong'   ? wrong
+                : pending
+
+  const initials = user?.name
+    ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : '?'
 
   return (
     <div className="page">
+      {/* Header */}
       <div className="fade-in-1">
-        <Link to="/ranking" className="match-breadcrumb__link">‹ Voltar ao ranking</Link>
-        <h1 className="page-title" style={{ marginTop: 'var(--s4)' }}>
-          {user?.name}
-        </h1>
-        <p className="page-subtitle">
-          {bets.length} aposta{bets.length !== 1 ? 's' : ''} · {evaluated.length} avaliada{evaluated.length !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div className="bet-summary-grid mt-6 fade-in-2">
-        <SummaryCard label="Pontos"           value={stats.total_points   ?? 0} tone="accent" />
-        <SummaryCard label="Placares Exatos"  value={stats.exact_scores   ?? 0} />
-        <SummaryCard label="Resultados Certos" value={stats.correct_results ?? 0} tone="win" />
-      </div>
-
-      {/* Pendentes — compacto */}
-      {pending.length > 0 && (
-        <div className="card mt-6 fade-in-3">
-          <div className="card__header">
-            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-              Aguardando resultado
-            </span>
-            <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>
-              {pending.length} jogo{pending.length !== 1 ? 's' : ''}
-            </span>
+        <Link to="/ranking" className="match-breadcrumb__link">‹ Ranking</Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s4)', marginTop: 'var(--s4)', flexWrap: 'wrap' }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
+            background: 'color-mix(in srgb, var(--accent) 20%, var(--bg-overlay))',
+            border: '2px solid var(--accent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 900, color: 'var(--accent)',
+          }}>
+            {initials}
           </div>
-          <BetTable bets={pending} showResult={false} />
+          <div>
+            <h1 className="page-title" style={{ margin: 0 }}>{user?.name}</h1>
+            <p className="page-subtitle" style={{ margin: 0 }}>
+              {bets.length} apostas · {evaluated.length} avaliadas · {accuracy}% de acerto
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI strip */}
+      <div className="fade-in-2" style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+        gap: 'var(--s3)', marginTop: 'var(--s6)',
+      }}>
+        {[
+          { label: 'Pontos',    value: stats.total_points ?? 0, color: 'var(--accent)' },
+          { label: '% Acerto',  value: `${accuracy}%`,          color: 'var(--win)'    },
+          { label: 'Exatos',    value: exact.length,            color: 'var(--accent)' },
+          { label: 'Certos',    value: correct.length,          color: 'var(--win)'    },
+          { label: 'Erros',     value: wrong.length,            color: 'var(--lose)'   },
+          { label: 'Pendentes', value: pending.length,          color: 'var(--text-3)' },
+        ].map(k => (
+          <div key={k.label} style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            borderTop: `2px solid ${k.color}`,
+            borderRadius: 'var(--r3)', padding: 'var(--s4)',
+          }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 'var(--s1)' }}>
+              {k.label}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 900, color: k.color, lineHeight: 1 }}>
+              {k.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Donut + Sparkline */}
+      {evaluated.length > 0 && (
+        <div className="fade-in-2" style={{
+          display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 'var(--s6)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--r3)', padding: 'var(--s6)', marginTop: 'var(--s4)',
+          alignItems: 'center',
+        }}>
+          <DonutRing
+            exact={exact.length} correct={correct.length}
+            wrong={wrong.length} pending={pending.length}
+            total={bets.length}
+          />
+          <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 'var(--s6)', minWidth: 0 }}>
+            <Sparkline bets={bets} />
+          </div>
         </div>
       )}
 
-      {/* Avaliadas */}
-      {evaluated.length === 0 ? (
-        <div className="bet-empty fade-in-3" style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', marginTop: 'var(--s16)' }}>
-          Nenhuma aposta avaliada ainda.
+      {/* Filtros + cards */}
+      <div className="fade-in-3" style={{ marginTop: 'var(--s6)' }}>
+        <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', marginBottom: 'var(--s4)' }}>
+          {FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              style={{
+                fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600,
+                padding: '4px 14px', borderRadius: 20, border: '1px solid', cursor: 'pointer',
+                background: filter === f.id ? 'var(--accent)' : 'transparent',
+                borderColor: filter === f.id ? 'var(--accent)' : 'var(--border)',
+                color: filter === f.id ? 'var(--on-accent, #000)' : 'var(--text-2)',
+                transition: 'all 150ms',
+              }}
+            >
+              {f.label} <span style={{ opacity: 0.7 }}>({f.count})</span>
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="card mt-4 fade-in-3">
-          <div className="card__header" style={{ flexWrap: 'wrap', gap: 8 }}>
-            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-              Apostas avaliadas
-            </span>
-            {/* Filtro resultado */}
-            <div style={{ display: 'flex', gap: 6 }}>
-              {[
-                { id: 'all',     label: 'Todas' },
-                { id: 'exact',   label: 'Exato' },
-                { id: 'correct', label: 'Certo' },
-                { id: 'wrong',   label: 'Erro'  },
-              ].map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => { setFilterResult(f.id); setShowAll(false) }}
-                  style={{
-                    fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 600,
-                    padding: '3px 10px', borderRadius: 20, border: '1px solid', cursor: 'pointer',
-                    background: filterResult === f.id ? 'var(--accent)' : 'transparent',
-                    borderColor: filterResult === f.id ? 'var(--accent)' : 'var(--border)',
-                    color: filterResult === f.id ? '#000' : 'var(--text-2)',
-                  }}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+
+        {visible.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 'var(--s16)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
+            Nenhuma aposta neste filtro.
           </div>
-
-          <BetTable bets={visible} showResult />
-
-          {filtered.length > SHOW && (
-            <div style={{ padding: 'var(--s12)', textAlign: 'center' }}>
-              <button
-                onClick={() => setShowAll(v => !v)}
-                style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-              >
-                {showAll ? 'Mostrar menos' : `Ver mais ${filtered.length - SHOW} apostas`}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function BetTable({ bets, showResult }) {
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-data)', fontSize: 13 }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            {['Data', 'Jogo', 'Palpite', 'Oficial', showResult ? 'Pts' : 'Status'].map(h => (
-              <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {bets.map((bet, i) => {
-            const meta = RESULT_META[bet.result]
-            const official = bet.official_score_a != null
-              ? `${bet.official_score_a}–${bet.official_score_b}`
-              : '—'
-            const rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)'
-            return (
-              <tr key={bet.id} style={{ background: rowBg, borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '8px 12px', color: 'var(--text-3)', fontSize: 11, whiteSpace: 'nowrap' }}>
-                  {formatDate(bet.match_date)}
-                </td>
-                <td style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  {bet.team_a_code} × {bet.team_b_code}
-                  <span style={{ marginLeft: 6, fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>
-                    G{bet.group_name}
-                  </span>
-                </td>
-                <td style={{ padding: '8px 12px', color: meta ? meta.color : 'var(--text-1)', fontWeight: 600 }}>
-                  {bet.score_a}–{bet.score_b}
-                </td>
-                <td style={{ padding: '8px 12px', color: 'var(--text-2)' }}>
-                  {official}
-                </td>
-                <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                  {showResult ? (
-                    meta
-                      ? <span style={{ color: meta.color, fontWeight: 700 }}>{bet.points_earned ?? 0} — {meta.label}</span>
-                      : <span style={{ color: 'var(--text-3)' }}>—</span>
-                  ) : (
-                    <span style={{ color: 'var(--text-3)', fontStyle: 'italic', fontSize: 11 }}>Pendente</span>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function SummaryCard({ label, value, tone }) {
-  return (
-    <div className={`bet-summary-card${tone ? ` bet-summary-card--${tone}` : ''}`}>
-      <span className="bet-summary-card__label">{label}</span>
-      <span className="bet-summary-card__value">{value}</span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+            {visible.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
