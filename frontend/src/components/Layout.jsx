@@ -235,6 +235,15 @@ export default function Layout() {
             <span className="mobile-bottom-nav__label">{n.label}</span>
           </NavLink>
         ))}
+        {user && (
+          <NavLink
+            to="/perfil"
+            className={({ isActive }) => `mobile-bottom-nav__item${isActive ? ' active' : ''}`}
+          >
+            <span className="mobile-bottom-nav__icon">⚙️</span>
+            <span className="mobile-bottom-nav__label">Perfil</span>
+          </NavLink>
+        )}
         {user?.role === 'admin' && (
           <button
             onClick={() => setAdminOpen(o => !o)}

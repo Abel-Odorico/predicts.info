@@ -64,6 +64,15 @@ function DayChart({ data }) {
 
 const FLAG = code => code ? `https://flagcdn.com/16x12/${code.toLowerCase()}.png` : null
 
+const ACTION_LABEL = {
+  'profile.update':          '✏️ Perfil editado',
+  'profile.password_change': '🔑 Senha alterada',
+  'group.rename':            '📝 Grupo renomeado',
+  'group.delete':            '🗑 Grupo excluído',
+  'group.remove_member':     '👤 Membro removido',
+  'group.join':              '➕ Entrou no grupo',
+}
+
 export default function Analytics() {
   const { token } = useAuth()
   const [stats, setStats]   = useState(null)
@@ -71,6 +80,10 @@ export default function Analytics() {
   const [days, setDays]     = useState(7)
   const [loading, setLoading] = useState(true)
   const [tab, setTab]       = useState('overview')
+
+  const [auditLogs, setAuditLogs]       = useState(null)
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditFilter, setAuditFilter]   = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -82,6 +95,20 @@ export default function Analytics() {
       setRecent(r)
     }).catch(console.error).finally(() => setLoading(false))
   }, [days, token])
+
+  useEffect(() => {
+    if (tab !== 'audit') return
+    loadAudit()
+  }, [tab, token])
+
+  function loadAudit(action = auditFilter) {
+    setAuditLoading(true)
+    const qs = action ? `?action=${encodeURIComponent(action)}&limit=200` : '?limit=200'
+    api.get(`/audit/logs${qs}`, token)
+      .then(d => setAuditLogs(d))
+      .catch(console.error)
+      .finally(() => setAuditLoading(false))
+  }
 
   if (loading) return <Spinner text="Carregando analytics..." />
   if (!stats) return <div className="page"><p style={{ color: 'var(--text-3)' }}>Sem dados.</p></div>
@@ -98,6 +125,7 @@ export default function Analytics() {
     { id: 'geo',       label: '🌍 Localidade' },
     { id: 'tech',      label: '💻 Tecnologia' },
     { id: 'recent',    label: '🕐 Recentes' },
+    { id: 'audit',     label: '🔐 Auditoria' },
   ]
 
   return (
@@ -337,6 +365,83 @@ export default function Analytics() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit tab */}
+      {tab === 'audit' && (
+        <div className="card fade-in-1" style={{ marginTop: 'var(--s4)' }}>
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🔐 Logs de Auditoria</span>
+            <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
+              {auditLogs && <span className="badge badge-group">{auditLogs.total} total</span>}
+              <button className="btn btn-ghost btn-sm" onClick={() => loadAudit(auditFilter)} disabled={auditLoading}>
+                {auditLoading ? '⏳' : '↻'}
+              </button>
+            </div>
+          </div>
+          <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+            <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap' }}>
+              {['', 'profile', 'group'].map(f => (
+                <button
+                  key={f || 'all'}
+                  className={`btn btn-sm ${auditFilter === f ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => { setAuditFilter(f); loadAudit(f) }}
+                >
+                  {f === '' ? 'Todos' : f === 'profile' ? 'Perfil' : 'Grupos'}
+                </button>
+              ))}
+            </div>
+            {auditLoading && <p style={{ color: 'var(--text-3)', fontSize: 12, fontFamily: 'var(--font-cond)' }}>Carregando...</p>}
+            {!auditLoading && auditLogs?.logs?.length === 0 && (
+              <p style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>
+                Nenhum log ainda — ações de usuários aparecerão aqui.
+              </p>
+            )}
+            {!auditLoading && auditLogs?.logs?.length > 0 && (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'var(--font-data)' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      {['Quando', 'Usuário', 'Ação', 'Detalhes', 'IP'].map(h => (
+                        <th key={h} style={{ padding: 'var(--s2) var(--s3)', textAlign: 'left', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.logs.map(log => (
+                      <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}>
+                        <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                          {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+                        <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-1)', whiteSpace: 'nowrap' }}>
+                          <div>{log.user_name || '—'}</div>
+                          {log.user_email && <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{log.user_email}</div>}
+                        </td>
+                        <td style={{ padding: 'var(--s2) var(--s3)', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12 }}>
+                            {ACTION_LABEL[log.action] || log.action}
+                          </span>
+                        </td>
+                        <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-2)', maxWidth: 260 }}>
+                          {log.details ? (
+                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
+                              {Object.entries(log.details).map(([k, v]) =>
+                                `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`
+                              ).join(' · ')}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{log.ip || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

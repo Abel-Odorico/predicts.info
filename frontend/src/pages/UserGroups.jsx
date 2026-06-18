@@ -163,6 +163,9 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
   const [searching, setSearching] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [newName, setNewName] = useState(group.name)
+  const [savingName, setSavingName] = useState(false)
 
   async function deleteGroup() {
     if (!window.confirm(`Excluir o grupo "${group.name}"? Esta ação não pode ser desfeita.`)) return
@@ -173,6 +176,21 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
     } catch (e) {
       setMsg(`✗ ${e.message}`)
       setDeleting(false)
+    }
+  }
+
+  async function saveRename(e) {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setSavingName(true)
+    try {
+      await api.put(`/user-groups/${group.id}`, { name: newName.trim() }, token)
+      setRenaming(false)
+      onRefresh()
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+    } finally {
+      setSavingName(false)
     }
   }
 
@@ -237,10 +255,30 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
   return (
     <div className="card">
       <div className="card__header">
-        <div>
-          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-            {group.name}
-          </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {renaming ? (
+            <form onSubmit={saveRename} style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                className="form-input"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                maxLength={120}
+                autoFocus
+                style={{ minWidth: 160 }}
+              />
+              <button type="submit" className="btn btn-primary btn-sm" disabled={savingName}>
+                {savingName ? '...' : 'Salvar'}
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRenaming(false); setNewName(group.name) }}>
+                Cancelar
+              </button>
+            </form>
+          ) : (
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+              {group.name}
+            </span>
+          )}
           <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-data)' }}>
             {group.members.length} membro(s) · {group.pending_invites.length} convite(s) pendente(s)
           </div>
@@ -248,7 +286,17 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isOwner && <span className="badge badge-win">Dono</span>}
           <Link to={`/meus-grupos/${group.id}`} className="btn btn-primary btn-sm">🏆 Ranking</Link>
-          {isOwner && (
+          {isOwner && !renaming && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: 11 }}
+              onClick={() => setRenaming(true)}
+            >
+              ✏️ Editar
+            </button>
+          )}
+          {isOwner && !renaming && (
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -256,7 +304,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
               onClick={deleteGroup}
               disabled={deleting}
             >
-              {deleting ? '...' : '🗑 Excluir'}
+              {deleting ? '...' : '🗑'}
             </button>
           )}
         </div>
