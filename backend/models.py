@@ -167,6 +167,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     email = Column(String(255), nullable=False, unique=True)
+    username = Column(String(60), unique=True, nullable=True)
     name = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.user)
@@ -254,6 +255,19 @@ class UserGroupInvite(Base):
     group = relationship("UserGroup", back_populates="invites")
     inviter = relationship("User", back_populates="sent_group_invites", foreign_keys=[inviter_user_id])
     invitee = relationship("User", back_populates="received_group_invites", foreign_keys=[invitee_user_id])
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id         = Column(Integer, primary_key=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action     = Column(String(100), nullable=False)
+    details    = Column(Text)
+    ip         = Column(String(45))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User")
 
 
 class SiteConfig(Base):

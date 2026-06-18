@@ -135,11 +135,22 @@ class UserCreate(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: str
+    username: str | None = None
     name: str
     role: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProfileUpdate(BaseModel):
+    name: str | None = None
+    username: str | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class AdminUserUpdate(BaseModel):

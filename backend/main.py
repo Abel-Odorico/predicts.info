@@ -15,6 +15,7 @@ from routers import health, teams, matches, auth, admin, tournament, bets, group
 from routers import config as config_router
 from routers import analytics as analytics_router
 from routers import user_groups as user_groups_router
+from routers import audit as audit_router
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
 
@@ -39,9 +40,23 @@ async def _auto_sync_loop():
         await asyncio.sleep(interval)
 
 
+def _run_migrations():
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for ddl in [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(60) UNIQUE",
+        ]:
+            try:
+                conn.execute(text(ddl))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
     task = asyncio.create_task(_auto_sync_loop())
     yield
     task.cancel()
@@ -82,6 +97,7 @@ app.include_router(live.router,        prefix="/api")
 app.include_router(config_router.router,    prefix="/api")
 app.include_router(analytics_router.router, prefix="/api")
 app.include_router(user_groups_router.router, prefix="/api")
+app.include_router(audit_router.router,       prefix="/api")
 
 
 @app.get("/api")

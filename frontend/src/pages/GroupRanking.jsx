@@ -15,6 +15,15 @@ export default function GroupRanking() {
   const [linkLoading, setLinkLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // rename state
+  const [renaming, setRenaming]     = useState(false)
+  const [newName, setNewName]       = useState('')
+  const [renameMsg, setRenameMsg]   = useState('')
+  const [savingName, setSavingName] = useState(false)
+
+  // remove member
+  const [removingId, setRemovingId] = useState(null)
+
   const load = useCallback(() => {
     if (!token) return
     setLoading(true)
@@ -64,6 +73,36 @@ export default function GroupRanking() {
     }
   }
 
+  async function saveRename(e) {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setSavingName(true)
+    setRenameMsg('')
+    try {
+      const res = await api.put(`/user-groups/${groupId}`, { name: newName.trim() }, token)
+      setData(d => ({ ...d, group_name: res.name }))
+      setRenaming(false)
+      setRenameMsg('')
+    } catch (err) {
+      setRenameMsg(`✗ ${err.message}`)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  async function removeMember(userId) {
+    if (!window.confirm('Remover este membro do grupo?')) return
+    setRemovingId(userId)
+    try {
+      await api.delete(`/user-groups/${groupId}/members/${userId}`, token)
+      setData(d => ({ ...d, ranking: d.ranking.filter(r => r.user_id !== userId) }))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
   if (!token) {
     return (
       <div className="page">
@@ -91,18 +130,48 @@ export default function GroupRanking() {
   }
 
   const ranking = data?.ranking ?? []
-  const isOwner = ranking.find(r => r.is_me)?.position !== undefined &&
-    data?.ranking?.[0] !== undefined &&
-    ranking.some(r => r.is_me)
-
-  const amOwner = ranking.some(r => r.is_me) && data?.is_owner
+  const amOwner = data?.is_owner === true
 
   return (
     <div className="page">
       <div className="fade-in-1">
         <Link to="/meus-grupos" className="match-breadcrumb__link">‹ Meus Grupos</Link>
-        <h1 className="page-title" style={{ marginTop: 'var(--s4)' }}>{data?.group_name}</h1>
-        <p className="page-subtitle">{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap', marginTop: 'var(--s4)' }}>
+          <div>
+            {renaming ? (
+              <form onSubmit={saveRename} style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  maxLength={120}
+                  autoFocus
+                  style={{ minWidth: 180 }}
+                />
+                <button type="submit" className="btn btn-primary btn-sm" disabled={savingName}>
+                  {savingName ? 'Salvando...' : 'Salvar'}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRenaming(false); setRenameMsg('') }}>
+                  Cancelar
+                </button>
+                {renameMsg && <span style={{ fontSize: 12, color: 'var(--lose)' }}>{renameMsg}</span>}
+              </form>
+            ) : (
+              <h1 className="page-title">{data?.group_name}</h1>
+            )}
+            <p className="page-subtitle">{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</p>
+          </div>
+          {amOwner && !renaming && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => { setNewName(data?.group_name ?? ''); setRenaming(true) }}
+            >
+              ✏️ Renomear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Invite link */}
@@ -165,29 +234,41 @@ export default function GroupRanking() {
               ))}
             </div>
             {ranking.map((r, i) => (
-              <Link
+              <div
                 key={r.user_id}
-                to={`/usuarios/${r.user_id}/historico`}
                 className="ranking-row fade-in"
                 style={{
                   animationDelay: `${i * 30}ms`,
                   background: r.is_me ? 'rgba(0, 200, 83, 0.06)' : undefined,
                   borderLeft: r.is_me ? '3px solid var(--accent)' : '3px solid transparent',
+                  textDecoration: 'none',
                 }}
               >
                 <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
                   {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                 </span>
-                <div className="ranking-row__meta">
+                <Link to={`/usuarios/${r.user_id}/historico`} className="ranking-row__meta" style={{ textDecoration: 'none', flex: 1 }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {r.name}
                     {r.is_me && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.08em' }}>VOCÊ</span>}
+                    {r.is_owner && !r.is_me && <span style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em' }}>DONO</span>}
                   </div>
-                </div>
+                </Link>
                 <span className="ranking-row__pts">{r.total_points}</span>
                 <span className="ranking-row__stats ranking-row__sub">{r.exact_scores ?? 0}</span>
                 <span className="ranking-row__stats ranking-row__sub">{r.total_bets ?? 0}</span>
-              </Link>
+                {amOwner && !r.is_me && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 11, padding: '2px 8px', color: 'var(--lose)' }}
+                    disabled={removingId === r.user_id}
+                    onClick={() => removeMember(r.user_id)}
+                  >
+                    {removingId === r.user_id ? '...' : '✕'}
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         )}

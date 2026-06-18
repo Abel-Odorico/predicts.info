@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from auth_utils import get_current_user
 from database import get_db
 from models import Bet, GroupInviteStatus, Ranking, User, UserGroup, UserGroupInvite, UserGroupMember
+from routers.audit import log_action
 
 router = APIRouter(prefix="/user-groups", tags=["user-groups"])
 
@@ -326,6 +327,7 @@ def group_ranking(
     return {
         "group_id": group.id,
         "group_name": group.name,
+        "is_owner": group.owner_user_id == user.id,
         "ranking": [
             {
                 "position": i + 1,
@@ -336,6 +338,7 @@ def group_ranking(
                 "correct_results": r.correct_results,
                 "total_bets": r.total_bets,
                 "is_me": r.user_id == user.id,
+                "is_owner": r.user_id == group.owner_user_id,
             }
             for i, r in enumerate(rows)
         ],
@@ -407,5 +410,90 @@ def join_group_by_token(
     if existing:
         raise HTTPException(409, "Você já faz parte deste grupo")
     db.add(UserGroupMember(group_id=group.id, user_id=user.id, is_owner=False))
+    log_action(db, user.id, "group.join", {"group_id": group.id, "group_name": group.name})
     db.commit()
     return {"status": "joined", "group_id": group.id, "group_name": group.name}
+
+
+# ── Rename group ──────────────────────────────────────────────────────────────
+
+class GroupRename(BaseModel):
+    name: str
+
+
+@router.put("/{group_id}")
+def rename_group(
+    group_id: int,
+    payload: GroupRename,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    if group.owner_user_id != user.id:
+        raise HTTPException(403, "Apenas o dono pode renomear o grupo")
+    name = payload.name.strip()
+    if len(name) < 3:
+        raise HTTPException(400, "Nome deve ter ao menos 3 caracteres")
+    old_name = group.name
+    group.name = name[:120]
+    log_action(db, user.id, "group.rename", {"group_id": group.id, "from": old_name, "to": name},
+               request.client.host if request.client else None)
+    db.commit()
+    return {"id": group.id, "name": group.name}
+
+
+# ── Delete group ──────────────────────────────────────────────────────────────
+
+@router.delete("/{group_id}")
+def delete_group(
+    group_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    if group.owner_user_id != user.id:
+        raise HTTPException(403, "Apenas o dono pode excluir o grupo")
+    log_action(db, user.id, "group.delete", {"group_id": group.id, "group_name": group.name},
+               request.client.host if request.client else None)
+    db.delete(group)
+    db.commit()
+    return {"status": "deleted", "group_id": group_id}
+
+
+# ── Remove member ─────────────────────────────────────────────────────────────
+
+@router.delete("/{group_id}/members/{target_user_id}")
+def remove_member(
+    group_id: int,
+    target_user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    if group.owner_user_id != user.id:
+        raise HTTPException(403, "Apenas o dono pode remover membros")
+    if target_user_id == user.id:
+        raise HTTPException(400, "O dono não pode se remover do grupo")
+    member = db.query(UserGroupMember).filter(
+        UserGroupMember.group_id == group_id,
+        UserGroupMember.user_id == target_user_id,
+    ).first()
+    if not member:
+        raise HTTPException(404, "Membro não encontrado")
+    target = db.query(User).filter(User.id == target_user_id).first()
+    log_action(db, user.id, "group.remove_member",
+               {"group_id": group_id, "removed_user_id": target_user_id,
+                "removed_user_name": target.name if target else None},
+               request.client.host if request.client else None)
+    db.delete(member)
+    db.commit()
+    return {"status": "removed", "user_id": target_user_id}

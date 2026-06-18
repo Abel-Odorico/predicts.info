@@ -162,6 +162,19 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
   const [msg, setMsg] = useState('')
   const [searching, setSearching] = useState(false)
   const [inviting, setInviting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function deleteGroup() {
+    if (!window.confirm(`Excluir o grupo "${group.name}"? Esta ação não pode ser desfeita.`)) return
+    setDeleting(true)
+    try {
+      await api.delete(`/user-groups/${group.id}`, token)
+      onRefresh()
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     if (!isOwner || query.trim().length < 2) {
@@ -232,9 +245,20 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
             {group.members.length} membro(s) · {group.pending_invites.length} convite(s) pendente(s)
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isOwner && <span className="badge badge-win">Dono</span>}
           <Link to={`/meus-grupos/${group.id}`} className="btn btn-primary btn-sm">🏆 Ranking</Link>
+          {isOwner && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ color: 'var(--lose)', fontSize: 11 }}
+              onClick={deleteGroup}
+              disabled={deleting}
+            >
+              {deleting ? '...' : '🗑 Excluir'}
+            </button>
+          )}
         </div>
       </div>
       <div className="card__body" style={{ display: 'grid', gap: 'var(--s5)' }}>
