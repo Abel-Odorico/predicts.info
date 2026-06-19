@@ -4,7 +4,7 @@ GET  /api/analytics/stats  — aggregated stats (admin)
 GET  /api/analytics/recent — recent raw visits (admin)
 """
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter
 
 import httpx
@@ -96,16 +96,17 @@ async def track(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    # X-Real-IP is set by nginx from $remote_addr (trusted).
+    # X-Forwarded-For first entry is client-controlled and spoofable.
     ip = (
-        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or request.headers.get("X-Real-IP", "")
+        request.headers.get("X-Real-IP", "").strip()
         or (request.client.host if request.client else "unknown")
     )
     ua = request.headers.get("User-Agent", "")
 
     # Rate limit: same ip+path within N seconds = skip
     key = f"{ip}:{payload.path}"
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     if key in _rate and (now - _rate[key]).total_seconds() < _RATE_SEC:
         return
     _rate[key] = now
@@ -140,7 +141,7 @@ def stats(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     rows = db.query(PageView).filter(PageView.created_at >= since).all()
 
     total_views   = len(rows)
@@ -207,7 +208,7 @@ def recent(
 ):
     query = db.query(PageView)
     if days and days > 0:
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
         query = query.filter(PageView.created_at >= since)
     rows = query.order_by(PageView.created_at.desc()).limit(limit).all()
     return [

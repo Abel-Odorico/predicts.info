@@ -4,7 +4,7 @@ GET  /api/site-config/all      — all config keys (admin)
 PUT  /api/site-config/{key}    — update a config key (admin)
 POST /api/site-config/bulk     — update multiple keys at once (admin)
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -23,6 +23,12 @@ DEFAULTS: dict[str, str] = {
     "hero_cta":          "Start Simulating",
     "banner_text":       "",
     "banner_enabled":    "false",
+    "user_notice_enabled":      "true",
+    "user_notice_title":        "Complete seu perfil",
+    "user_notice_text":         "Agora você pode {itens} para deixar sua conta mais fácil de encontrar nos bolões.",
+    "user_notice_button":       "Atualizar perfil",
+    "user_notice_url":          "/perfil",
+    "user_notice_profile_only": "true",
     "meta_title":        "Predicts.info — World Cup 2026 Statistical Simulator",
     "meta_description":  "AI-powered World Cup 2026 predictions. Poisson + Elo + Monte Carlo simulations. Live scores, group standings, bracket projections and betting.",
     "meta_keywords":     "world cup 2026 predictions, FIFA 2026 simulator, football predictions, copa 2026",
@@ -55,6 +61,8 @@ DEFAULTS: dict[str, str] = {
 PUBLIC_KEYS = {
     "site_title", "site_subtitle", "hero_headline", "hero_subheadline",
     "hero_cta", "banner_text", "banner_enabled",
+    "user_notice_enabled", "user_notice_title", "user_notice_text",
+    "user_notice_button", "user_notice_url", "user_notice_profile_only",
     "meta_title", "meta_description", "meta_keywords", "footer_text", "developer_credit",
     "privacy_title", "privacy_intro", "privacy_content",
     "terms_title", "terms_intro", "terms_content",
@@ -106,7 +114,7 @@ def update_config(
     row = db.query(SiteConfig).filter(SiteConfig.key == key).first()
     if row:
         row.value = payload.value
-        row.updated_at = datetime.utcnow()
+        row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     else:
         db.add(SiteConfig(key=key, value=payload.value))
     db.commit()
@@ -125,7 +133,7 @@ def bulk_update(
         row = db.query(SiteConfig).filter(SiteConfig.key == key).first()
         if row:
             row.value = value
-            row.updated_at = datetime.utcnow()
+            row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             db.add(SiteConfig(key=key, value=value))
     db.commit()

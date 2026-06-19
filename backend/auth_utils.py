@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -24,7 +24,7 @@ def create_token(user_id: int, role: str) -> str:
     payload = {
         "sub": str(user_id),  # JWT spec: sub must be string
         "role": role,
-        "exp": datetime.utcnow() + timedelta(days=settings.jwt_expire_days),
+        "exp": datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=settings.jwt_expire_days),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 

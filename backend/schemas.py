@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Any
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class TeamBase(BaseModel):
@@ -129,13 +129,16 @@ class InjuryUpdate(BaseModel):
 class UserCreate(BaseModel):
     email: EmailStr
     name: str
-    password: str
+    password: str = Field(min_length=6)
+    username: str | None = None
+    phone: str | None = None
 
 
 class UserResponse(BaseModel):
     id: int
     email: str
     username: str | None = None
+    phone: str | None = None
     name: str
     role: str
     created_at: datetime
@@ -146,6 +149,7 @@ class UserResponse(BaseModel):
 class ProfileUpdate(BaseModel):
     name: str | None = None
     username: str | None = None
+    phone: str | None = None
 
 
 class PasswordChange(BaseModel):

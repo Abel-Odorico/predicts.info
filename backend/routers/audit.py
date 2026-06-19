@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,7 @@ def log_action(db: Session, user_id: int | None, action: str, details: dict | No
         action=action,
         details=json.dumps(details, default=str) if details else None,
         ip=ip,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     ))
     db.flush()
 

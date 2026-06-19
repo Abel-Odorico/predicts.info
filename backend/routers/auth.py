@@ -1,6 +1,8 @@
 import re
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User, UserRole, Ranking
@@ -10,16 +12,125 @@ from routers.audit import log_action
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Rate limit: max 10 login attempts per IP per 60s
+_login_attempts: dict[str, list[datetime]] = {}
+_LOGIN_WINDOW_SEC = 60
+_LOGIN_MAX = 10
+
+
+def _check_login_rate(ip: str) -> None:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now - timedelta(seconds=_LOGIN_WINDOW_SEC)
+    attempts = [t for t in _login_attempts.get(ip, []) if t > cutoff]
+    if len(attempts) >= _LOGIN_MAX:
+        raise HTTPException(429, "Too many login attempts — try again in 60 seconds")
+    attempts.append(now)
+    _login_attempts[ip] = attempts
+    # Trim dict to avoid unbounded growth
+    if len(_login_attempts) > 10000:
+        _login_attempts.clear()
+
 _USERNAME_RE = re.compile(r'^[a-zA-Z0-9_.-]{3,30}$')
+_PHONE_RE = re.compile(r'^[0-9+() .-]{10,20}$')
+
+
+def _normalize_username(value: str | None) -> str | None:
+    if value is None:
+        return None
+    username = value.strip().lower().lstrip('@')
+    return username or None
+
+
+def _normalize_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    phone = value.strip()
+    return phone or None
+
+
+def _validate_username(username: str) -> None:
+    if not _USERNAME_RE.match(username):
+        raise HTTPException(400, "Usuário inválido — use letras, números, _ . - (3–30 chars)")
+
+
+def _validate_phone(phone: str | None) -> None:
+    if phone and not _PHONE_RE.match(phone):
+        raise HTTPException(400, "Celular inválido")
+
+
+def _username_exists(db: Session, username: str, exclude_user_id: int | None = None) -> bool:
+    query = db.query(User).filter(func.lower(User.username) == username.lower())
+    if exclude_user_id is not None:
+        query = query.filter(User.id != exclude_user_id)
+    return query.first() is not None
+
+
+def _username_suggestions(db: Session, username: str, exclude_user_id: int | None = None) -> list[str]:
+    base = re.sub(r'[^a-z0-9_.-]', '', username.lower()).strip('._-') or 'usuario'
+    base = base[:20]
+    candidates = []
+    suffixes = ['2026', 'br', 'bolao', 'copa', '10', '7', 'fc', 'pro']
+    for suffix in suffixes:
+        candidates.append(f"{base}{suffix}")
+        candidates.append(f"{base}_{suffix}")
+    suggestions = []
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate[:30].strip('._-')
+        if candidate in seen or len(candidate) < 3 or not _USERNAME_RE.match(candidate):
+            continue
+        seen.add(candidate)
+        if not _username_exists(db, candidate, exclude_user_id):
+            suggestions.append(candidate)
+        if len(suggestions) >= 4:
+            break
+    return suggestions
+
+
+@router.get("/username/check")
+def check_username(
+    username: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+):
+    normalized = _normalize_username(username)
+    if not normalized:
+        raise HTTPException(400, "Informe um usuário")
+    _validate_username(normalized)
+    available = not _username_exists(db, normalized)
+    return {
+        "username": normalized,
+        "available": available,
+        "suggestions": [] if available else _username_suggestions(db, normalized),
+    }
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(409, "Email already registered")
+
+    name = payload.name.strip()
+    if len(name) < 2:
+        raise HTTPException(400, "Nome deve ter ao menos 2 caracteres")
+
+    username = _normalize_username(payload.username)
+    if username:
+        _validate_username(username)
+        if _username_exists(db, username):
+            raise HTTPException(409, {
+                "message": "Usuário já está em uso",
+                "username": username,
+                "suggestions": _username_suggestions(db, username),
+            })
+
+    phone = _normalize_phone(payload.phone)
+    _validate_phone(phone)
+
     user = User(
         email=payload.email,
-        name=payload.name,
+        username=username,
+        phone=phone,
+        name=name,
         password_hash=hash_password(payload.password),
         role=UserRole.user,
     )
@@ -32,7 +143,12 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    ip = (
+        request.headers.get("X-Real-IP", "").strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    _check_login_rate(ip)
     user = db.query(User).filter(User.email == form.username).first()
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(401, "Invalid credentials")
@@ -61,17 +177,26 @@ def update_profile(
         user.name = name
 
     if payload.username is not None:
-        uname = payload.username.strip()
-        if uname == "":
+        uname = _normalize_username(payload.username)
+        if uname is None:
+            changes["username"] = {"from": user.username, "to": None}
             user.username = None
         else:
-            if not _USERNAME_RE.match(uname):
-                raise HTTPException(400, "Username inválido — use letras, números, _ . - (3–30 chars)")
-            conflict = db.query(User).filter(User.username == uname, User.id != user.id).first()
-            if conflict:
-                raise HTTPException(409, "Username já em uso")
+            _validate_username(uname)
+            if _username_exists(db, uname, user.id):
+                raise HTTPException(409, {
+                    "message": "Usuário já está em uso",
+                    "username": uname,
+                    "suggestions": _username_suggestions(db, uname, user.id),
+                })
             changes["username"] = {"from": user.username, "to": uname}
             user.username = uname
+
+    if payload.phone is not None:
+        phone = _normalize_phone(payload.phone)
+        _validate_phone(phone)
+        changes["phone"] = {"from": user.phone, "to": phone}
+        user.phone = phone
 
     if not changes:
         return user

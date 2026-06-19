@@ -7,7 +7,7 @@ GET  /admin/users          list users with admin metrics
 PATCH /admin/users/{id}    update user role
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -53,7 +53,7 @@ def _evaluate_bets(match: Match, result: MatchResult, db: Session) -> None:
             (bet.score_a == bet.score_b) == (result.score_a == result.score_b)
         )
         bet.points_earned = 3 if exact else (1 if correct_result else 0)
-        bet.evaluated_at = datetime.utcnow()
+        bet.evaluated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         ranking = db.query(Ranking).filter(Ranking.user_id == bet.user_id).first()
         if not ranking:
@@ -269,10 +269,11 @@ def all_bets(
 def bets_coverage(
     status: str | None = Query(default="scheduled"),
     limit: int = Query(default=50, le=200),
+    user_limit: int = Query(default=200, le=1000),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    users = db.query(User).order_by(User.name.asc()).all()
+    users = db.query(User).order_by(User.name.asc()).limit(user_limit).all()
 
     match_query = (
         db.query(Match)

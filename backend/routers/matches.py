@@ -317,8 +317,8 @@ def simulate_match_endpoint(
     cache_obj.top_scores = sim["top_scores"]
     cache_obj.model_weights = weights_used
     cache_obj.simulations_count = simulations
-    cache_obj.computed_at = datetime.utcnow()
-    cache_obj.expires_at = datetime.utcnow() + timedelta(hours=6)
+    cache_obj.computed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    cache_obj.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
     if not existing:
         db.add(cache_obj)
     db.commit()

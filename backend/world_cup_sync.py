@@ -585,7 +585,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                     bet.score_a, bet.score_b, result_scores[0], result_scores[1]
                 )
                 bet.points_earned = points
-                bet.evaluated_at = datetime.utcnow()
+                bet.evaluated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 evaluated_count += 1
                 stats = ranking_totals.setdefault(
                     bet.user_id,

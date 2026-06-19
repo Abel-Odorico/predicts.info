@@ -6,7 +6,7 @@ Results cached in Redis (invalidated when a real result is inserted).
 import json
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 import redis as redis_lib
@@ -123,7 +123,7 @@ def simulate(
     response = {
         "simulations": n,
         "elapsed_ms": round(elapsed * 1000),
-        "computed_at": datetime.utcnow().isoformat(),
+        "computed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "teams": sorted_teams,
         "top_finals": [_enrich_final(e) for e in top_finals_raw],
         "top_sf": [_enrich_sf(e) for e in top_sf_raw],
@@ -217,7 +217,7 @@ def official_bracket(db: Session = Depends(get_db)):
         )
 
     return {
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "qualified_picture": {
             "winners": table["winners"],
             "runners_up": table["runners_up"],

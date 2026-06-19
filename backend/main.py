@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 
@@ -20,6 +20,19 @@ from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
 
 
+def _purge_old_page_views(retention_days: int = 90) -> int:
+    from sqlalchemy import text
+    from database import engine
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=retention_days)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("DELETE FROM page_views WHERE created_at < :cutoff"),
+            {"cutoff": cutoff},
+        )
+        conn.commit()
+        return result.rowcount
+
+
 async def _auto_sync_loop():
     interval = settings.auto_sync_interval_hours * 3600
     now = datetime.now(_BRT)
@@ -35,6 +48,9 @@ async def _auto_sync_loop():
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, _run_sync, settings.database_url, "auto")
             print(f"[auto-sync] concluído — próxima em {settings.auto_sync_interval_hours}h", flush=True)
+            deleted = await loop.run_in_executor(None, _purge_old_page_views)
+            if deleted:
+                print(f"[auto-sync] page_views: {deleted} registros antigos removidos (>90d)", flush=True)
         else:
             print("[auto-sync] sync já em andamento, pulando", flush=True)
         await asyncio.sleep(interval)
@@ -45,6 +61,7 @@ def _run_migrations():
     with engine.connect() as conn:
         for ddl in [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(60) UNIQUE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)",
         ]:
             try:
                 conn.execute(text(ddl))
@@ -79,7 +96,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

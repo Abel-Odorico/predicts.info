@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum, ForeignKey,
     Integer, Numeric, String, Text, BigInteger, UniqueConstraint
@@ -7,6 +7,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from database import Base
 import enum
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Confederation(str, enum.Enum):
@@ -69,7 +73,7 @@ class Team(Base):
     form_20 = Column(Numeric(4, 3), default=0.500)
 
     flag_url = Column(String(200))
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     players = relationship("Player", back_populates="team", lazy="dynamic")
     home_matches = relationship("Match", foreign_keys="Match.team_a_id", back_populates="team_a")
@@ -124,7 +128,7 @@ class MatchResult(Base):
     xg_a = Column(Numeric(4, 2))
     xg_b = Column(Numeric(4, 2))
     result = Column(Enum("a", "draw", "b", name="match_outcome"), nullable=False)
-    recorded_at = Column(DateTime, default=datetime.utcnow)
+    recorded_at = Column(DateTime, default=_utcnow)
 
     match = relationship("Match", back_populates="result")
 
@@ -146,7 +150,7 @@ class SimulationCache(Base):
     top_scores = Column(JSONB)
     model_weights = Column(JSONB)
     simulations_count = Column(Integer, default=1_000_000)
-    computed_at = Column(DateTime, default=datetime.utcnow)
+    computed_at = Column(DateTime, default=_utcnow)
     expires_at = Column(DateTime)
 
     match = relationship("Match", back_populates="simulation")
@@ -156,7 +160,7 @@ class TournamentSimulation(Base):
     __tablename__ = "tournament_simulations"
 
     id = Column(Integer, primary_key=True)
-    computed_at = Column(DateTime, default=datetime.utcnow)
+    computed_at = Column(DateTime, default=_utcnow)
     simulations_count = Column(Integer, default=1_000_000)
     results = Column(JSONB, nullable=False)
     round_number = Column(Integer, default=0)
@@ -168,10 +172,11 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String(255), nullable=False, unique=True)
     username = Column(String(60), unique=True, nullable=True)
+    phone = Column(String(30), nullable=True)
     name = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.user)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     bets = relationship("Bet", back_populates="user")
     ranking = relationship("Ranking", back_populates="user", uselist=False)
@@ -193,7 +198,7 @@ class Bet(Base):
     points_earned = Column(Integer, default=0)
     locked_at = Column(DateTime)
     evaluated_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     user = relationship("User", back_populates="bets")
     match = relationship("Match", back_populates="bets")
@@ -207,7 +212,7 @@ class Ranking(Base):
     total_points = Column(Integer, default=0)
     exact_scores = Column(Integer, default=0)
     correct_results = Column(Integer, default=0)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="ranking")
 
@@ -219,7 +224,7 @@ class UserGroup(Base):
     name = Column(String(120), nullable=False)
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     invite_token = Column(String(64), unique=True, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     owner = relationship("User", back_populates="owned_groups", foreign_keys=[owner_user_id])
     members = relationship("UserGroupMember", back_populates="group", cascade="all, delete-orphan")
@@ -234,7 +239,7 @@ class UserGroupMember(Base):
     group_id = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_owner = Column(Boolean, default=False)
-    joined_at = Column(DateTime, default=datetime.utcnow)
+    joined_at = Column(DateTime, default=_utcnow)
 
     group = relationship("UserGroup", back_populates="members")
     user = relationship("User", back_populates="group_memberships")
@@ -249,7 +254,7 @@ class UserGroupInvite(Base):
     invitee_user_id = Column(Integer, ForeignKey("users.id"))
     invitee_email = Column(String(255), nullable=False)
     status = Column(Enum(GroupInviteStatus), default=GroupInviteStatus.pending, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     responded_at = Column(DateTime)
 
     group = relationship("UserGroup", back_populates="invites")
@@ -265,7 +270,7 @@ class AuditLog(Base):
     action     = Column(String(100), nullable=False)
     details    = Column(Text)
     ip         = Column(String(45))
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
 
     user = relationship("User")
 
@@ -275,7 +280,7 @@ class SiteConfig(Base):
 
     key = Column(String(100), primary_key=True)
     value = Column(Text, nullable=False, default="")
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
 class PageView(Base):
@@ -291,4 +296,4 @@ class PageView(Base):
     browser    = Column(String(40))
     os         = Column(String(40))
     referrer   = Column(String(500))
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)

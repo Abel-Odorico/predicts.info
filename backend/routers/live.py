@@ -140,11 +140,11 @@ def fetch_world_cup_live_games() -> dict:
         games_raw = data.get("jogos") if isinstance(data, dict) else []
         if not isinstance(games_raw, list):
             games_raw = []
-        updated_at = data.get("updated_at") if isinstance(data, dict) else datetime.utcnow().isoformat()
+        updated_at = data.get("updated_at") if isinstance(data, dict) else datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         fetch_ok = True
     except Exception:
         games_raw = []
-        updated_at = datetime.utcnow().isoformat()
+        updated_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         fetch_ok = False
 
     # Build from API response

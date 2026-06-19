@@ -59,12 +59,11 @@ def _bet_dict(b: Bet) -> dict:
     }
 
 
-def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None) -> dict:
+def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranking_position: int | None = None, total_users: int | None = None) -> dict:
     return {
         "user": {
             "id": user.id,
             "name": user.name,
-            "email": user.email,
         },
         "stats": {
             "total_points": ranking.total_points if ranking else 0,
@@ -72,6 +71,8 @@ def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None) -> di
             "correct_results": ranking.correct_results if ranking else 0,
             "total_bets": len(bets),
         },
+        "ranking_position": ranking_position,
+        "total_users": total_users,
         "bets": [_bet_dict(b) for b in bets],
     }
 
@@ -182,7 +183,25 @@ def user_bets_history(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
     ranking = db.query(Ranking).filter(Ranking.user_id == user.id).first()
-    return _history_payload(user, bets, ranking)
+
+    # compute ranking position
+    ranked_users = (
+        db.query(User.id)
+        .outerjoin(Ranking, User.id == Ranking.user_id)
+        .filter(or_(Ranking.user_id.isnot(None), User.id.in_(
+            db.query(Bet.user_id).distinct()
+        )))
+        .order_by(
+            desc(func.coalesce(Ranking.total_points, 0)),
+            desc(func.coalesce(Ranking.exact_scores, 0)),
+            User.name.asc(),
+        )
+        .all()
+    )
+    total_users = len(ranked_users)
+    ranking_position = next((i + 1 for i, r in enumerate(ranked_users) if r[0] == user_id), None)
+
+    return _history_payload(user, bets, ranking, ranking_position, total_users)
 
 
 @router.get("/ranking")
@@ -221,7 +240,6 @@ def ranking(
             db.query(
                 User.id.label("user_id"),
                 User.name.label("name"),
-                User.email.label("email"),
                 func.coalesce(agg.c.total_points, 0).label("total_points"),
                 func.coalesce(agg.c.exact_scores, 0).label("exact_scores"),
                 func.coalesce(agg.c.correct_results, 0).label("correct_results"),
@@ -250,7 +268,6 @@ def ranking(
             db.query(
                 User.id.label("user_id"),
                 User.name.label("name"),
-                User.email.label("email"),
                 func.coalesce(Ranking.total_points, 0).label("total_points"),
                 func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
                 func.coalesce(Ranking.correct_results, 0).label("correct_results"),
@@ -274,7 +291,6 @@ def ranking(
             "position": i + 1,
             "user_id": r.user_id,
             "name": r.name,
-            "email": r.email,
             "total_points": r.total_points,
             "exact_scores": r.exact_scores,
             "correct_results": r.correct_results,

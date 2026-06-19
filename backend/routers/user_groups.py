@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr
@@ -252,7 +252,7 @@ def accept_group_invite(
         db.add(UserGroupMember(group_id=invite.group_id, user_id=user.id, is_owner=False))
     invite.invitee_user_id = user.id
     invite.status = GroupInviteStatus.accepted
-    invite.responded_at = datetime.utcnow()
+    invite.responded_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     group = _load_group(invite.group_id, db)
     return _group_payload(group)
@@ -274,7 +274,7 @@ def reject_group_invite(
 
     invite.invitee_user_id = user.id
     invite.status = GroupInviteStatus.rejected
-    invite.responded_at = datetime.utcnow()
+    invite.responded_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return {"status": "rejected", "invite_id": invite.id}
 
@@ -497,3 +497,31 @@ def remove_member(
     db.delete(member)
     db.commit()
     return {"status": "removed", "user_id": target_user_id}
+
+
+# ── Cancel pending invite (owner only) ───────────────────────────────────────
+
+@router.delete("/{group_id}/invites/{invite_id}")
+def cancel_invite(
+    group_id: int,
+    invite_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    if group.owner_user_id != user.id:
+        raise HTTPException(403, "Apenas o dono pode cancelar convites")
+    invite = db.query(UserGroupInvite).filter(
+        UserGroupInvite.id == invite_id,
+        UserGroupInvite.group_id == group_id,
+        UserGroupInvite.status == GroupInviteStatus.pending,
+    ).first()
+    if not invite:
+        raise HTTPException(404, "Convite pendente não encontrado")
+    log_action(db, user.id, "group.cancel_invite",
+               {"group_id": group_id, "invite_id": invite_id, "invitee_email": invite.invitee_email})
+    db.delete(invite)
+    db.commit()
+    return {"status": "cancelled", "invite_id": invite_id}
