@@ -153,7 +153,7 @@ export default function Dashboard() {
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
                 {liveNow.map((game, index) => (
-                  <div key={`live-${game.team_a}-${game.team_b}-${index}`} className="now-playing-card" style={index > 0 ? { marginTop: 'var(--s3)', paddingTop: 'var(--s3)', borderTop: '1px solid var(--border)' } : {}}>
+                  <div key={`live-${game.team_a}-${game.team_b}-${index}`} className="now-playing-card" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={{ ...(index > 0 ? { marginTop: 'var(--s3)', paddingTop: 'var(--s3)', borderTop: '1px solid var(--border)' } : {}), ...(game.match_id ? { cursor: 'pointer' } : {}) }}>
                     <div className="now-playing-card__team">
                       <span>{game.team_a}</span>
                     </div>
@@ -182,7 +182,7 @@ export default function Dashboard() {
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
                 {todaysGames.map((game, index) => (
-                  <div key={`${game.team_a}-${game.team_b}-today-${index}`} className="live-score-row">
+                  <div key={`${game.team_a}-${game.team_b}-today-${index}`} className="live-score-row" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
                     <div>
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_a}</div>
                       <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.time_label}</div>
@@ -228,7 +228,7 @@ export default function Dashboard() {
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
                 {liveGames.map((game, index) => (
-                  <div key={`${game.team_a}-${game.team_b}-${index}`} className="live-score-row">
+                  <div key={`${game.team_a}-${game.team_b}-${index}`} className="live-score-row" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
                     <div>
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_a}</div>
                       <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.date_label} · {game.time_label}</div>
@@ -260,7 +260,7 @@ export default function Dashboard() {
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
                 {highlightedGames.map((game, index) => (
-                  <div key={`${game.team_a}-${game.team_b}-highlight-${index}`} className="highlight-row">
+                  <div key={`${game.team_a}-${game.team_b}-highlight-${index}`} className="highlight-row" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
                     <div>
                       <div className="highlight-row__teams">{game.team_a} vs {game.team_b}</div>
                       <div className="highlight-row__meta">{game.time_label} · {game.channels?.map(c => c.nome).filter(Boolean).join(' · ')}</div>

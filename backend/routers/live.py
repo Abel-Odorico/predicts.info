@@ -7,9 +7,12 @@ _BRT = ZoneInfo("America/Sao_Paulo")
 
 import httpx
 import redis as redis_lib
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from config import settings
+from database import get_db
+from models import Match
 
 router = APIRouter(prefix="/live", tags=["live"])
 
@@ -23,6 +26,7 @@ TEAM_NAME_ALIASES = {
     "suica": "switzerland",
     "bosnia e herzegovina": "bosnia and herzegovina",
     "coreia do sul": "south korea",
+    "corea do sul": "south korea",
     "catar": "qatar",
     "estados unidos": "united states",
     "eua": "united states",
@@ -30,8 +34,52 @@ TEAM_NAME_ALIASES = {
     "cabo verde": "cape verde",
     "costa do marfim": "ivory coast",
     "holanda": "netherlands",
+    "paises baixos": "netherlands",
     "marrocos": "morocco",
     "turquia": "turkey",
+    # PT names missing aliases
+    "brasil": "brazil",
+    "escocia": "scotland",
+    "alemanha": "germany",
+    "espanha": "spain",
+    "franca": "france",
+    "belgica": "belgium",
+    "suecia": "sweden",
+    "japao": "japan",
+    "jordania": "jordan",
+    "uruguai": "uruguay",
+    "equador": "ecuador",
+    "croacia": "croatia",
+    "nova zelandia": "new zealand",
+    "nova zelândia": "new zealand",
+    "uzbequistao": "uzbekistan",
+    "uzbesquistao": "uzbekistan",
+    "tunisia": "tunisia",
+    "tunessia": "tunisia",
+    "curacao": "curaçao",
+    "rd congo": "dr congo",
+    "republica democratica do congo": "dr congo",
+    "rd do congo": "dr congo",
+    "paraguai": "paraguay",
+    "arabia": "saudi arabia",
+    "iraque": "iraq",
+    "ira": "iran",
+    "egito": "egypt",
+    "gana": "ghana",
+    "colômbia": "colombia",
+    "colombia": "colombia",
+    "haiti": "haiti",
+    "panama": "panama",
+    "mexico": "mexico",
+    "noruega": "norway",
+    "austria": "austria",
+    "irlanda do norte": "northern ireland",
+    "portugal": "portugal",
+    "senegal": "senegal",
+    "australia": "australia",
+    "canada": "canada",
+    "argentina": "argentina",
+    "argelia": "algeria",
 }
 
 
@@ -184,5 +232,23 @@ def fetch_world_cup_live_games() -> dict:
 
 
 @router.get("/world-cup")
-def world_cup_live_feed():
-    return fetch_world_cup_live_games()
+def world_cup_live_feed(db: Session = Depends(get_db)):
+    from sqlalchemy.orm import joinedload
+    data = fetch_world_cup_live_games()
+
+    db_matches = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .all()
+    )
+    match_lookup = {
+        (_normalize_team_name(m.team_a.name), _normalize_team_name(m.team_b.name)): m.id
+        for m in db_matches
+        if m.team_a and m.team_b
+    }
+
+    for game in data.get("games", []):
+        key = (game.get("team_a_key") or "", game.get("team_b_key") or "")
+        game["match_id"] = match_lookup.get(key)
+
+    return data
