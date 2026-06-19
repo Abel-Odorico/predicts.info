@@ -4,6 +4,7 @@ import { useAuth } from '../stores/authStore'
 import { useTrack } from '../hooks/useTrack'
 import { useAdSense } from '../hooks/useAdSense'
 import { api } from '../api'
+import ShareModal from './ShareModal'
 
 const THEMES = ['light', 'dark', 'system']
 const THEME_META = {
@@ -43,7 +44,8 @@ export default function Layout() {
   const { user, logout, setUser } = useAuth()
   const navigate = useNavigate()
   const [developerCredit, setDeveloperCredit] = useState('PeepConnect - By Abel Odorico')
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen]   = useState(false)
+  const [shareOpen,  setShareOpen]    = useState(false)
 
   const [theme, setThemeState] = useState(() => {
     return localStorage.getItem('predicts_theme') || 'system'
@@ -175,6 +177,14 @@ export default function Layout() {
             <span className="sidebar__credit-value">{developerCredit}</span>
           </div>
           <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            className="btn btn-sm w-full"
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700, marginBottom: 6 }}
+          >
+            🔗 Compartilhar
+          </button>
+          <button
             type="button" onClick={cycleTheme}
             className="btn btn-ghost btn-sm w-full theme-toggle theme-toggle--sidebar"
           >
@@ -248,7 +258,14 @@ export default function Layout() {
           </>
         )}
 
-        <div className="mobile-drawer__footer">
+        <div className="mobile-drawer__footer" style={{ flexDirection: 'column', gap: 8 }}>
+          <button
+            onClick={() => { setShareOpen(true); closeDrawer() }}
+            className="btn btn-sm w-full"
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }}
+          >
+            🔗 Compartilhar o Bolão
+          </button>
           {user ? (
             <button onClick={handleLogout} className="mobile-drawer__logout">
               <LogoutIcon /> Sair da conta
@@ -260,6 +277,9 @@ export default function Layout() {
           )}
         </div>
       </div>
+
+      {/* ── Share modal ──────────────────────────────── */}
+      {shareOpen && <ShareModal onClose={() => setShareOpen(false)} />}
 
       {/* ── Mobile dock ──────────────────────────────── */}
       <nav className="mobile-dock" aria-label="Navegação principal">
