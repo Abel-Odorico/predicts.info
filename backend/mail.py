@@ -4,6 +4,8 @@ Usa smtplib stdlib; sem dependências externas.
 """
 import smtplib
 import ssl
+import uuid
+from email import utils as email_utils
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -25,21 +27,30 @@ def _cfg() -> dict:
     }
 
 
-def send_email(to: str, subject: str, html: str) -> bool:
+def send_email(to: str, subject: str, html: str, plain: str = "") -> bool:
     cfg = _cfg()
     if not cfg["enabled"] or not cfg["from_address"]:
         print(f"[mail] desabilitado — não enviou para {to}", flush=True)
         return False
 
+    domain = cfg["from_address"].split("@")[-1]
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f'{cfg["from_name"]} <{cfg["from_address"]}>'
-    msg["To"] = to
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    msg["Subject"]    = subject
+    msg["From"]       = f'{cfg["from_name"]} <{cfg["from_address"]}>'
+    msg["To"]         = to
+    msg["Date"]       = email_utils.formatdate(localtime=True)
+    msg["Message-ID"] = f"<{uuid.uuid4().hex}@{domain}>"
+    msg["Reply-To"]   = cfg["from_address"]
+    msg["X-Mailer"]   = "Predicts/1.0"
+
+    # Texto simples obrigatório para evitar filtro spam
+    if not plain:
+        plain = f"{subject}\n\nAcesse o link enviado no HTML deste e-mail.\n\n— {cfg['from_name']}"
+    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    msg.attach(MIMEText(html,  "html",  "utf-8"))
 
     try:
         ctx = ssl.create_default_context()
-        # port 465 → SSL; qualquer outro → STARTTLS
         if cfg["port"] == 465 or cfg["encryption"] == "ssl":
             with smtplib.SMTP_SSL(cfg["host"], cfg["port"], context=ctx, timeout=cfg["timeout"]) as srv:
                 srv.login(cfg["username"], cfg["password"])
@@ -48,6 +59,7 @@ def send_email(to: str, subject: str, html: str) -> bool:
             with smtplib.SMTP(cfg["host"], cfg["port"], timeout=cfg["timeout"]) as srv:
                 srv.ehlo()
                 srv.starttls(context=ctx)
+                srv.ehlo()
                 srv.login(cfg["username"], cfg["password"])
                 srv.sendmail(cfg["from_address"], to, msg.as_string())
         print(f"[mail] enviado para {to} — {subject}", flush=True)
@@ -116,7 +128,8 @@ def _base_template(title: str, body_html: str) -> str:
 </html>"""
 
 
-def reset_password_html(name: str, reset_url: str, expire_minutes: int = 60) -> str:
+def reset_password_html(name: str, reset_url: str, expire_minutes: int = 60) -> tuple[str, str]:
+    """Retorna (html, plain_text)."""
     body = f"""
     <div class="title">Redefinir sua senha</div>
     <p class="text">Olá, <strong>{name}</strong>!</p>
@@ -141,4 +154,13 @@ def reset_password_html(name: str, reset_url: str, expire_minutes: int = 60) -> 
       Sua senha permanece a mesma e nenhuma ação é necessária.
     </p>
 """
-    return _base_template("Redefinir Senha — Predicts", body)
+    html = _base_template("Redefinir Senha — Predicts", body)
+    plain = (
+        f"Olá, {name}!\n\n"
+        f"Recebemos uma solicitação para redefinir sua senha no Predicts.\n\n"
+        f"Acesse o link abaixo para criar uma nova senha (válido por {expire_minutes} minutos):\n\n"
+        f"{reset_url}\n\n"
+        f"Se você não solicitou a redefinição, ignore este e-mail.\n\n"
+        f"— Predicts · predicts.info"
+    )
+    return html, plain

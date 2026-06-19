@@ -257,8 +257,8 @@ class ResetPasswordPayload(BaseModel):
 def _send_reset_email_bg(name: str, email: str, token: str) -> None:
     from mail import send_email, reset_password_html
     url = f"{_FRONTEND_URL}/redefinir-senha?token={token}"
-    html = reset_password_html(name, url, _RESET_EXPIRE_MINUTES)
-    send_email(email, "Redefinir sua senha — Predicts", html)
+    html, plain = reset_password_html(name, url, _RESET_EXPIRE_MINUTES)
+    send_email(email, "Redefinir sua senha — Predicts", html, plain)
 
 
 @router.post("/forgot-password", status_code=202)
