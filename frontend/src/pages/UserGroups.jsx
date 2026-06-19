@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -69,87 +69,103 @@ export default function UserGroups() {
 
   if (loading) return <Spinner text="Carregando grupos privados..." />
 
+  const groups = data.groups ?? []
+  const pendingInvites = data.pending_invites ?? []
+  const totalMembers = groups.reduce((sum, group) => sum + (group.members?.length ?? 0), 0)
+  const totalGroupInvites = groups.reduce((sum, group) => sum + (group.pending_invites?.length ?? 0), 0)
+  const ownedGroups = groups.filter(group => group.owner_user_id === user?.id).length
+  const metricCards = [
+    { label: 'Grupos', value: groups.length, hint: 'bolões ativos', tone: 'accent' },
+    { label: 'Membros', value: totalMembers, hint: 'participantes somados', tone: 'blue' },
+    { label: 'Convites', value: pendingInvites.length + totalGroupInvites, hint: 'aguardando resposta', tone: 'gold' },
+    { label: 'Administrados', value: ownedGroups, hint: 'grupos sob sua gestão', tone: 'green' },
+  ]
+
   return (
     <div className="page">
-      <div className="fade-in-1">
-        <h1 className="page-title">MEUS GRUPOS</h1>
-        <p className="page-subtitle">Crie grupos privados, convide usuários e acompanhe quem aceitou.</p>
-      </div>
-
-      <div className="card card--accent mt-6 fade-in-2">
-        <div className="card__header">
-          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-            Criar Novo Grupo
-          </span>
+      <section className="groups-panel-hero fade-in-1">
+        <div className="groups-panel-hero__copy">
+          <span className="groups-panel-hero__eyebrow">Central dos bolões</span>
+          <h1 className="page-title">MEUS GRUPOS</h1>
+          <p className="page-subtitle">Gerencie seus bolões privados, convites e rankings em um só lugar.</p>
         </div>
-        <form onSubmit={createGroup} className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
-          <div className="form-group">
-            <label className="form-label">Nome do grupo</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Ex: Amigos do Abel"
-              value={newGroupName}
-              onChange={e => setNewGroupName(e.target.value)}
-            />
-          </div>
-          <button type="submit" className="btn btn-primary" disabled={creating}>
-            {creating ? 'Criando...' : 'Criar Grupo'}
+        <form onSubmit={createGroup} className="groups-create-bar" aria-label="Criar novo grupo">
+          <input
+            type="text"
+            className="form-input groups-create-bar__input"
+            placeholder="Nome do novo grupo"
+            value={newGroupName}
+            onChange={e => setNewGroupName(e.target.value)}
+            maxLength={120}
+          />
+          <button type="submit" className="btn btn-primary groups-create-bar__button" disabled={creating || !newGroupName.trim()}>
+            {creating ? 'Criando...' : '+ Criar grupo'}
           </button>
           {createMsg && (
-            <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: createMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
+            <div className={`groups-create-bar__message ${createMsg.startsWith('✓') ? 'is-success' : 'is-error'}`}>
               {createMsg}
             </div>
           )}
         </form>
-      </div>
+      </section>
 
-      {data.pending_invites.length > 0 && (
-        <div className="card mt-6 fade-in-2">
-          <div className="card__header">
-            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-              Convites Pendentes
-            </span>
-            <span className="badge badge-group">{data.pending_invites.length}</span>
+      <section className="groups-metrics-grid fade-in-2" aria-label="Resumo dos grupos">
+        {metricCards.map(card => (
+          <div key={card.label} className={`groups-metric-card groups-metric-card--${card.tone}`}>
+            <span className="groups-metric-card__label">{card.label}</span>
+            <strong className="groups-metric-card__value">{card.value}</strong>
+            <span className="groups-metric-card__hint">{card.hint}</span>
           </div>
-          <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
-            {data.pending_invites.map(invite => (
-              <div key={invite.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap', padding: 'var(--s3)', border: '1px solid var(--border)', borderRadius: 'var(--r2)', background: 'var(--bg-overlay)' }}>
-                <div>
-                  <div style={{ color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 14 }}>
-                    {invite.group_name}
-                  </div>
-                  <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                    Convite enviado por {invite.inviter_name || 'usuário'}
-                  </div>
+        ))}
+      </section>
+
+      {pendingInvites.length > 0 && (
+        <section className="groups-invite-strip fade-in-2">
+          <div className="groups-invite-strip__header">
+            <div>
+              <span className="groups-panel-hero__eyebrow">Convites recebidos</span>
+              <h2 className="groups-section-heading">Responda para entrar no bolão</h2>
+            </div>
+            <span className="badge badge-group">{pendingInvites.length}</span>
+          </div>
+          <div className="groups-invite-strip__list">
+            {pendingInvites.map(invite => (
+              <div key={invite.id} className="groups-received-invite">
+                <div className="groups-received-invite__main">
+                  <strong>{invite.group_name}</strong>
+                  <span>Convite enviado por {invite.inviter_name || 'usuário'}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap' }}>
+                <div className="groups-received-invite__actions">
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => respondToInvite(invite.id, 'accept')}>Aceitar</button>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => respondToInvite(invite.id, 'reject')}>Recusar</button>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="stack mt-6 fade-in-3">
-        {data.groups.length === 0 ? (
-          <div className="card">
-            <div className="card__body" style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', textAlign: 'center' }}>
-              Você ainda não participa de nenhum grupo privado.
-            </div>
+      {groups.length === 0 ? (
+        <section className="groups-empty-state fade-in-3">
+          <div className="groups-empty-state__icon">🏆</div>
+          <div>
+            <h2 className="groups-section-heading">Nenhum grupo privado ainda</h2>
+            <p>Crie seu primeiro bolão privado para convidar amigos, acompanhar rankings separados e manter a disputa organizada.</p>
           </div>
-        ) : data.groups.map(group => (
-          <UserGroupCard
-            key={group.id}
-            group={group}
-            token={token}
-            currentUser={user}
-            onRefresh={loadGroups}
-          />
-        ))}
-      </div>
+        </section>
+      ) : (
+        <section className="groups-list-grid fade-in-3" aria-label="Lista de grupos">
+          {groups.map(group => (
+            <UserGroupCard
+              key={group.id}
+              group={group}
+              token={token}
+              currentUser={user}
+              onRefresh={loadGroups}
+            />
+          ))}
+        </section>
+      )}
     </div>
   )
 }
@@ -166,6 +182,9 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState(group.name)
   const [savingName, setSavingName] = useState(false)
+  const [cancellingId, setCancellingId] = useState(null)
+  const memberPreview = (group.members ?? []).slice(0, 4)
+  const extraMembers = Math.max((group.members?.length ?? 0) - memberPreview.length, 0)
 
   async function deleteGroup() {
     if (!window.confirm(`Excluir o grupo "${group.name}"? Esta ação não pode ser desfeita.`)) return
@@ -217,6 +236,20 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
     }
   }, [query, token, isOwner])
 
+  async function cancelInvite(inviteId) {
+    if (!window.confirm('Cancelar este convite?')) return
+    setCancellingId(inviteId)
+    try {
+      await api.delete(`/user-groups/${group.id}/invites/${inviteId}`, token)
+      setMsg('✓ Convite cancelado.')
+      onRefresh()
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
   async function inviteByEmail(e) {
     e.preventDefault()
     if (!email.trim()) return
@@ -253,11 +286,11 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
   }
 
   return (
-    <div className="card">
-      <div className="card__header">
-        <div style={{ flex: 1, minWidth: 0 }}>
+    <article className="group-manager-card">
+      <header className="group-manager-card__header">
+        <div className="group-manager-card__title-block">
           {renaming ? (
-            <form onSubmit={saveRename} style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
+            <form onSubmit={saveRename} className="group-manager-card__rename">
               <input
                 type="text"
                 className="form-input"
@@ -265,136 +298,151 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
                 onChange={e => setNewName(e.target.value)}
                 maxLength={120}
                 autoFocus
-                style={{ minWidth: 160 }}
               />
-              <button type="submit" className="btn btn-primary btn-sm" disabled={savingName}>
-                {savingName ? '...' : 'Salvar'}
-              </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRenaming(false); setNewName(group.name) }}>
-                Cancelar
-              </button>
+              <button type="submit" className="btn btn-primary btn-sm" disabled={savingName}>{savingName ? '...' : 'Salvar'}</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRenaming(false); setNewName(group.name) }}>Cancelar</button>
             </form>
           ) : (
-            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-              {group.name}
-            </span>
+            <>
+              <div className="group-manager-card__kicker">Bolão privado</div>
+              <h2 className="group-manager-card__title">{group.name}</h2>
+            </>
           )}
-          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-data)' }}>
-            {group.members.length} membro(s) · {group.pending_invites.length} convite(s) pendente(s)
-          </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="group-manager-card__actions">
           {isOwner && <span className="badge badge-win">Dono</span>}
           <Link to={`/meus-grupos/${group.id}`} className="btn btn-primary btn-sm">🏆 Ranking</Link>
+          {isOwner && !renaming && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRenaming(true)}>✏️ Editar</button>}
           {isOwner && !renaming && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              style={{ fontSize: 11 }}
-              onClick={() => setRenaming(true)}
-            >
-              ✏️ Editar
-            </button>
-          )}
-          {isOwner && !renaming && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              style={{ color: 'var(--lose)', fontSize: 11 }}
-              onClick={deleteGroup}
-              disabled={deleting}
-            >
+            <button type="button" className="btn btn-ghost btn-sm group-manager-card__danger" onClick={deleteGroup} disabled={deleting} aria-label={`Excluir ${group.name}`}>
               {deleting ? '...' : '🗑'}
             </button>
           )}
         </div>
+      </header>
+
+      <div className="group-manager-card__stats">
+        <GroupStat label="Membros" value={group.members?.length ?? 0} />
+        <GroupStat label="Convites" value={group.pending_invites?.length ?? 0} />
+        <GroupStat label="Seu papel" value={isOwner ? 'Dono' : 'Membro'} compact />
       </div>
-      <div className="card__body" style={{ display: 'grid', gap: 'var(--s5)' }}>
-        <div>
-          <div className="section-title" style={{ marginBottom: 'var(--s3)' }}>Membros</div>
-          <div className="stack gap-3">
-            {group.members.map(member => (
-              <div key={member.user_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s3)', padding: 'var(--s3)', borderRadius: 'var(--r2)', background: 'var(--bg-overlay)', border: '1px solid var(--border)' }}>
-                <div>
-                  <div style={{ color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>{member.name}</div>
-                  <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{member.email}</div>
+
+      <div className="group-manager-card__body">
+        <section className="group-manager-section">
+          <div className="group-manager-section__header">
+            <h3>Membros</h3>
+            {extraMembers > 0 && <span>+{extraMembers}</span>}
+          </div>
+          <div className="group-member-preview">
+            {memberPreview.map(member => (
+              <div key={member.user_id} className="group-member-row">
+                <div className="group-member-row__avatar">{getInitials(member.name)}</div>
+                <div className="group-member-row__identity">
+                  <strong>{member.name}</strong>
+                  <span>{member.email}</span>
                 </div>
-                {member.is_owner && <span className="badge badge-group">Owner</span>}
+                {member.is_owner && <span className="badge badge-group">Dono</span>}
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
         {group.pending_invites.length > 0 && (
-          <div>
-            <div className="section-title" style={{ marginBottom: 'var(--s3)' }}>Convites pendentes</div>
-            <div className="stack gap-3">
+          <section className="group-manager-section">
+            <div className="group-manager-section__header">
+              <h3>Convites pendentes</h3>
+              <span>{group.pending_invites.length}</span>
+            </div>
+            <div className="group-pending-list">
               {group.pending_invites.map(invite => (
-                <div key={invite.id} style={{ padding: 'var(--s3)', borderRadius: 'var(--r2)', background: 'var(--bg-overlay)', border: '1px solid var(--border)', fontSize: 12 }}>
-                  <div style={{ color: 'var(--text-2)' }}>{invite.invitee_email}</div>
+                <div key={invite.id} className="pending-invite-row">
+                  <div className="pending-invite-row__content">
+                    <span className="pending-invite-row__email">{invite.invitee_email}</span>
+                    <span className="pending-invite-row__meta">Aguardando resposta</span>
+                  </div>
+                  {isOwner && (
+                    <button type="button" className="btn btn-ghost btn-sm group-manager-card__danger" disabled={cancellingId === invite.id} onClick={() => cancelInvite(invite.id)}>
+                      {cancellingId === invite.id ? '...' : 'Cancelar'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
         {isOwner && (
-          <div>
-            <div className="section-title" style={{ marginBottom: 'var(--s3)' }}>Convidar usuários</div>
-            <div className="stack gap-4">
-              <div className="form-group">
-                <label className="form-label">Buscar usuário por nome ou email</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Digite ao menos 2 caracteres"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                />
-              </div>
+          <section className="group-manager-section group-manager-section--tools">
+            <div className="group-manager-section__header">
+              <h3>Ferramentas de convite</h3>
+              <span>Admin</span>
+            </div>
+            <div className="group-invite-tools">
+              <label className="form-label" htmlFor={`user-search-${group.id}`}>Buscar usuário</label>
+              <input
+                id={`user-search-${group.id}`}
+                type="text"
+                className="form-input"
+                placeholder="Nome ou email"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
 
-              {searching && <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Buscando usuários...</div>}
+              {searching && <div className="group-tool-note">Buscando usuários...</div>}
               {results.length > 0 && (
-                <div className="stack gap-2">
+                <div className="group-search-results">
                   {results.map(result => (
-                    <div key={result.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s3)', alignItems: 'center', padding: 'var(--s3)', borderRadius: 'var(--r2)', background: 'var(--bg-overlay)', border: '1px solid var(--border)' }}>
+                    <div key={result.id} className="group-search-result">
                       <div>
-                        <div style={{ color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>{result.name}</div>
-                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{result.email}</div>
+                        <strong>{result.name}</strong>
+                        <span>{result.email}</span>
                       </div>
-                      <button type="button" className="btn btn-primary btn-sm" disabled={inviting} onClick={() => inviteUser(result.id, result.email)}>
-                        Convidar
-                      </button>
+                      <button type="button" className="btn btn-primary btn-sm" disabled={inviting} onClick={() => inviteUser(result.id, result.email)}>Convidar</button>
                     </div>
                   ))}
                 </div>
               )}
 
-              <form onSubmit={inviteByEmail} className="stack gap-3">
-                <div className="form-group">
-                  <label className="form-label">Ou convidar diretamente por email</label>
+              <form onSubmit={inviteByEmail} className="group-email-invite">
+                <label className="form-label" htmlFor={`invite-email-${group.id}`}>Convidar por email</label>
+                <div className="group-email-invite__row">
                   <input
+                    id={`invite-email-${group.id}`}
                     type="email"
                     className="form-input"
                     placeholder="email@exemplo.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                   />
+                  <button type="submit" className="btn btn-ghost btn-sm" disabled={inviting || !email.trim()}>{inviting ? 'Enviando...' : 'Enviar'}</button>
                 </div>
-                <button type="submit" className="btn btn-ghost btn-sm" disabled={inviting}>
-                  {inviting ? 'Enviando...' : 'Enviar convite'}
-                </button>
               </form>
 
-              {msg && (
-                <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: msg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
-                  {msg}
-                </div>
-              )}
+              {msg && <div className={`group-tool-message ${msg.startsWith('✓') ? 'is-success' : 'is-error'}`}>{msg}</div>}
             </div>
-          </div>
+          </section>
         )}
       </div>
+    </article>
+  )
+}
+
+function GroupStat({ label, value, compact = false }) {
+  return (
+    <div className="group-stat">
+      <span>{label}</span>
+      <strong className={compact ? 'group-stat__value--text' : undefined}>{value}</strong>
     </div>
   )
+}
+
+function getInitials(name = '') {
+  const initials = name
+    .split(' ')
+    .filter(Boolean)
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+  return initials || '?'
 }

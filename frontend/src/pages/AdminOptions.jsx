@@ -56,6 +56,18 @@ const CONFIG_GROUPS = [
     ],
   },
   {
+    group: 'Aviso aos Usuarios',
+    icon: '🔔',
+    keys: [
+      { key: 'user_notice_enabled', label: 'Aviso ativo', hint: 'Liga ou desliga o comunicado dentro da area logada', type: 'select', options: ['true', 'false'] },
+      { key: 'user_notice_profile_only', label: 'Somente perfil incompleto', hint: 'true = mostra apenas para quem ainda nao escolheu usuario ou celular; false = mostra para todos logados', type: 'select', options: ['true', 'false'] },
+      { key: 'user_notice_title', label: 'Titulo do aviso', hint: 'Ex: Complete seu perfil' },
+      { key: 'user_notice_text', label: 'Texto do aviso', hint: 'Use {itens} para inserir automaticamente o que falta no perfil', type: 'textarea', rows: 3 },
+      { key: 'user_notice_button', label: 'Texto do botao', hint: 'Ex: Atualizar perfil' },
+      { key: 'user_notice_url', label: 'Destino do botao', hint: 'Ex: /perfil, /meus-grupos ou uma URL completa' },
+    ],
+  },
+  {
     group: 'Landing Page',
     icon: '🌐',
     keys: [
@@ -266,6 +278,11 @@ export default function AdminOptions() {
           <strong className="admin-options-quick__value">Privacidade, Termos, Sobre e Contato</strong>
           <span className="admin-options-quick__meta">{legalDirtyCount > 0 ? `${legalDirtyCount} alteracao(oes)` : 'Editor pronto no admin'}</span>
         </a>
+        <a href="#user-notice-card" className="admin-options-quick__card">
+          <span className="admin-options-quick__label">Aviso aos Usuarios</span>
+          <strong className="admin-options-quick__value">{config.user_notice_title || 'Sem titulo'}</strong>
+          <span className="admin-options-quick__meta">{config.user_notice_enabled === 'true' ? 'Ativo' : 'Desativado'}</span>
+        </a>
         <a href="#adsense-card" className="admin-options-quick__card">
           <span className="admin-options-quick__label">AdSense</span>
           <strong className="admin-options-quick__value">{config.adsense_publisher_id || 'Nao configurado'}</strong>
@@ -439,7 +456,11 @@ export default function AdminOptions() {
 
       <div className="stack mt-6 fade-in-2">
         {CONFIG_GROUPS.filter(group => !['Landing Page', 'Paginas Institucionais'].includes(group.group)).map(group => (
-          <div key={group.group} className="card" id={group.group === 'Google AdSense' ? 'adsense-card' : undefined}>
+          <div
+            key={group.group}
+            className="card"
+            id={group.group === 'Google AdSense' ? 'adsense-card' : group.group === 'Aviso aos Usuarios' ? 'user-notice-card' : undefined}
+          >
             <div className="card__header">
               <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
                 {group.icon} {group.group}

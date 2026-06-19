@@ -10,6 +10,7 @@ export default function Profile() {
 
   const [name, setName]         = useState(user?.name ?? '')
   const [username, setUsername] = useState(user?.username ?? '')
+  const [phone, setPhone]       = useState(user?.phone ?? '')
   const [profileMsg, setProfileMsg] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
 
@@ -39,6 +40,7 @@ export default function Profile() {
       const updated = await api.patch('/auth/profile', {
         name: name.trim() || undefined,
         username: username.trim() || null,
+        phone: phone.trim() || null,
       }, token)
       setUser(updated)
       setProfileMsg('✓ Perfil atualizado com sucesso')
@@ -86,6 +88,9 @@ export default function Profile() {
           <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-3)' }}>{user?.email}</div>
           {user?.username && (
             <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--accent)', marginTop: 2 }}>@{user.username}</div>
+          )}
+          {user?.phone && (
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{user.phone}</div>
           )}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--s2)' }}>
@@ -142,6 +147,17 @@ export default function Profile() {
                   maxLength={30}
                 />
               </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Celular / WhatsApp</label>
+              <input
+                type="tel"
+                className="form-input"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="(11) 99999-9999"
+                autoComplete="tel"
+              />
             </div>
             <div className="form-group">
               <label className="form-label">E-mail <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(não editável)</span></label>

@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import Spinner from '../components/Spinner'
+import { useAuth } from '../stores/authStore'
 
 const FLAG = code => code ? `https://flagcdn.com/24x18/${code.toLowerCase()}.png` : null
 
@@ -20,99 +21,123 @@ function fmtDate(value) {
   }).format(d)
 }
 
-// ── Apple Activity Rings ──────────────────────────────────────────────────────
+// ── Activity Rings ────────────────────────────────────────────────────────────
+// 4 rings: ranking position (outermost) → acerto → exatos → certos
 const RINGS = [
-  { key: 'accuracy', label: 'Acerto',  color: '#FF375F', track: '#3D0011' },
-  { key: 'exact',    label: 'Exatos',  color: '#FFD60A', track: '#2D2600' },
-  { key: 'correct',  label: 'Certos',  color: '#30D158', track: '#002D0F' },
+  { key: 'ranking',  label: 'Ranking', color: '#7c6ae8', trackOp: 0.13 },
+  { key: 'accuracy', label: 'Acerto',  color: '#e85252', trackOp: 0.13 },
+  { key: 'exact',    label: 'Exatos',  color: '#e8c44a', trackOp: 0.13 },
+  { key: 'correct',  label: 'Certos',  color: '#2ec980', trackOp: 0.13 },
 ]
-const SIZE = 160, CX = SIZE / 2, STROKE = 14, GAP = 6
-const radii = [
-  CX - STROKE / 2,
-  CX - STROKE / 2 - STROKE - GAP,
-  CX - STROKE / 2 - (STROKE + GAP) * 2,
-]
+// size up slightly to fit 4 rings comfortably
+const R_SIZE = 168, R_CX = R_SIZE / 2, R_STROKE = 11, R_GAP = 4
+const R_radii = RINGS.map((_, i) => R_CX - R_STROKE / 2 - i * (R_STROKE + R_GAP))
 
-function ActivityRings({ exact, correct, evaluated, totalBets }) {
+function ActivityRings({ exact, correct, evaluated, totalBets, rankingPosition, totalUsers }) {
   if (totalBets === 0) return null
-  const accuracy = evaluated > 0 ? (exact + correct) / evaluated : 0
-  const exactPct  = evaluated > 0 ? exact   / evaluated : 0
+  const accuracy   = evaluated > 0 ? (exact + correct) / evaluated : 0
+  const exactPct   = evaluated > 0 ? exact   / evaluated : 0
   const correctPct = evaluated > 0 ? correct / evaluated : 0
-  const values = [accuracy, exactPct, correctPct]
-  const labels = [
-    { value: Math.round(accuracy * 100),  suffix: '%',  sub: 'Acerto'  },
-    { value: exact,                        suffix: '',   sub: 'Exatos'  },
-    { value: correct,                      suffix: '',   sub: 'Certos'  },
+  // ranking: 1st = 100%, last = 0% (percentile from top)
+  const rankPct    = rankingPosition && totalUsers > 1
+    ? 1 - (rankingPosition - 1) / (totalUsers - 1)
+    : rankingPosition === 1 ? 1 : null
+
+  const values = [
+    rankPct ?? 0,
+    accuracy,
+    exactPct,
+    correctPct,
   ]
 
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap', minWidth: 0, width: '100%' }}>
-      <div style={{ position: 'relative', flexShrink: 0, margin: '0 auto' }}>
-        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-          {RINGS.map((ring, i) => {
-            const r = radii[i]
-            const circ = 2 * Math.PI * r
-            const progress = Math.min(values[i], 1)
-            const offset = circ * (1 - progress)
-            // glow filter id
-            return (
-              <g key={ring.key}>
-                {/* track */}
-                <circle cx={CX} cy={CX} r={r} fill="none"
-                  stroke={ring.track} strokeWidth={STROKE} />
-                {/* progress arc */}
-                <circle cx={CX} cy={CX} r={r} fill="none"
-                  stroke={ring.color} strokeWidth={STROKE}
-                  strokeDasharray={circ}
-                  strokeDashoffset={offset}
-                  strokeLinecap="round"
-                  style={{ transform: `rotate(-90deg)`, transformOrigin: `${CX}px ${CX}px`, transition: 'stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1)' }}
-                />
-                {/* cap glow dot at tip (when progress > 0) */}
-                {progress > 0.02 && (() => {
-                  const angle = (progress * 360 - 90) * (Math.PI / 180)
-                  const x = CX + r * Math.cos(angle)
-                  const y = CX + r * Math.sin(angle)
-                  return (
-                    <circle cx={x} cy={y} r={STROKE / 2 - 1} fill={ring.color}
-                      style={{ filter: `drop-shadow(0 0 4px ${ring.color})` }} />
-                  )
-                })()}
-              </g>
-            )
-          })}
-          {/* center text */}
-          <text x={CX} y={CX - 8} textAnchor="middle"
-            style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 900, fill: RINGS[0].color }}>
-            {Math.round(accuracy * 100)}%
-          </text>
-          <text x={CX} y={CX + 10} textAnchor="middle"
-            style={{ fontFamily: 'var(--font-cond)', fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', fill: 'rgba(255,255,255,0.4)' }}>
-            ACERTO
-          </text>
-        </svg>
-      </div>
+  const rows = [
+    {
+      display: rankingPosition ? `${rankingPosition}º` : '—',
+      sub: rankingPosition ? `de ${totalUsers} · top ${Math.round((1 - (rankPct ?? 0)) * 100)}%` : 'sem ranking',
+    },
+    { display: `${Math.round(accuracy * 100)}%`, sub: 'de acerto' },
+    { display: String(exact),  sub: exact  === 1 ? 'placar exato'     : 'placares exatos'     },
+    { display: String(correct), sub: correct === 1 ? 'resultado certo' : 'resultados certos'  },
+  ]
 
-      {/* legend */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)', flex: 1, minWidth: 0 }}>
-        {RINGS.map((ring, i) => (
-          <div key={ring.key} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
-            <svg width={20} height={20} viewBox="0 0 20 20" style={{ flexShrink: 0 }}>
-              <circle cx={10} cy={10} r={8} fill="none" stroke={ring.track} strokeWidth={4} />
-              <circle cx={10} cy={10} r={8} fill="none" stroke={ring.color} strokeWidth={4}
-                strokeDasharray={2 * Math.PI * 8}
-                strokeDashoffset={2 * Math.PI * 8 * (1 - Math.min(values[i], 1))}
+  // innermost radius clear area — we skip center text to avoid overlap
+  const innerClear = R_radii[RINGS.length - 1] - R_STROKE / 2
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap', width: '100%' }}>
+      {/* SVG rings — no center text, clean center */}
+      <svg width={R_SIZE} height={R_SIZE} viewBox={`0 0 ${R_SIZE} ${R_SIZE}`}
+        style={{ flexShrink: 0, margin: '0 auto' }}>
+        <defs>
+          {RINGS.map(ring => (
+            <filter key={ring.key} id={`glow-${ring.key}`} x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          ))}
+        </defs>
+
+        {RINGS.map((ring, i) => {
+          const r        = R_radii[i]
+          const circ     = 2 * Math.PI * r
+          const progress = Math.min(values[i], 1)
+          const offset   = circ * (1 - progress)
+          const tipAngle = (progress * 360 - 90) * (Math.PI / 180)
+          return (
+            <g key={ring.key}>
+              <circle cx={R_CX} cy={R_CX} r={r} fill="none"
+                stroke={ring.color} strokeOpacity={ring.trackOp} strokeWidth={R_STROKE} />
+              <circle cx={R_CX} cy={R_CX} r={r} fill="none"
+                stroke={ring.color} strokeWidth={R_STROKE}
+                strokeDasharray={circ} strokeDashoffset={offset}
                 strokeLinecap="round"
-                style={{ transform: 'rotate(-90deg)', transformOrigin: '10px 10px' }}
+                style={{ transform: 'rotate(-90deg)', transformOrigin: `${R_CX}px ${R_CX}px`, transition: `stroke-dashoffset ${800 + i * 100}ms cubic-bezier(.4,0,.2,1)` }}
               />
-            </svg>
-            <div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 900, color: ring.color, lineHeight: 1 }}>
-                {labels[i].value}{labels[i].suffix}
+              {progress > 0.03 && (
+                <circle
+                  cx={R_CX + r * Math.cos(tipAngle)}
+                  cy={R_CX + r * Math.sin(tipAngle)}
+                  r={R_STROKE / 2 - 1.5} fill={ring.color}
+                  filter={`url(#glow-${ring.key})`}
+                />
+              )}
+            </g>
+          )
+        })}
+
+        {/* center: small icon or dot, no text overlap */}
+        <circle cx={R_CX} cy={R_CX} r={innerClear * 0.55} fill="currentColor" opacity="0.04" />
+        <text x={R_CX} y={R_CX + 5} textAnchor="middle"
+          style={{ fontFamily: 'var(--font-cond)', fontSize: Math.max(innerClear * 0.45, 9), fill: 'currentColor', opacity: 0.2, letterSpacing: '-0.02em' }}>
+          {evaluated}/{totalBets}
+        </text>
+      </svg>
+
+      {/* legend com barras */}
+      <div style={{ flex: 1, minWidth: 150, display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+        {RINGS.map((ring, i) => (
+          <div key={ring.key}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: ring.color, display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: ring.color }}>
+                  {ring.label}
+                </span>
               </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                {ring.label}
-              </div>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: ring.color, lineHeight: 1 }}>
+                {rows[i].display}
+              </span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: `${ring.color}22`, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 2, background: ring.color,
+                width: `${Math.round(Math.min(values[i], 1) * 100)}%`,
+                transition: `width ${800 + i * 100}ms cubic-bezier(.4,0,.2,1)`,
+                boxShadow: `0 0 5px ${ring.color}88`,
+              }} />
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>
+              {rows[i].sub}
             </div>
           </div>
         ))}
@@ -177,44 +202,43 @@ function PointsChart({ bets }) {
 
   if (points.length < 1) return null
 
-  const W = 400, H = 110, PADX = 8, PADY = 18
-  const maxCum = Math.max(...points.map(p => p.cum), 1)
-  const coords = points.map((p, i) => {
-    const x = PADX + (points.length === 1 ? (W - PADX * 2) / 2 : (i / (points.length - 1)) * (W - PADX * 2))
-    const y = PADY + ((1 - p.cum / maxCum) * (H - PADY * 2))
-    return [x, y]
-  })
-  const polyline = coords.map(([x, y]) => `${x},${y}`).join(' ')
-  const area = `M${coords[0][0]},${H} ` + coords.map(([x, y]) => `L${x},${y}`).join(' ') + ` L${coords[coords.length - 1][0]},${H} Z`
+  const W = 400, H = 120, PADL = 30, PADR = 8, PADT = 10, PADB = 20
+  const maxCum  = Math.max(...points.map(p => p.cum), 1)
   const totalPts = points[points.length - 1].cum
 
-  // Y axis labels
-  const yLabels = [0, Math.round(maxCum / 2), maxCum].map(v => ({
-    v,
-    y: PADY + ((1 - v / maxCum) * (H - PADY * 2)),
-  }))
+  const toX = i => PADL + (points.length === 1 ? (W - PADL - PADR) / 2 : (i / (points.length - 1)) * (W - PADL - PADR))
+  const toY = v => PADT + ((1 - v / maxCum) * (H - PADT - PADB))
+
+  const coords = points.map((p, i) => [toX(i), toY(p.cum)])
+  const pathD  = coords.reduce((acc, [x, y], i) => acc + (i === 0 ? `M${x},${y}` : ` L${x},${y}`), '')
+  const areaD  = `${pathD} L${coords[coords.length-1][0]},${H-PADB} L${coords[0][0]},${H-PADB} Z`
+
+  const yTicks = [0, Math.round(maxCum / 2), maxCum]
+
+  // colour bars below — pts per point, coloured by result
+  const BAR_H = 4
+  const barMax = Math.max(...points.map(p => p.pts), 1)
 
   return (
     <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--r3)', padding: 'var(--s5)', marginTop: 'var(--s4)' }}>
       {/* header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 'var(--s4)' }}>
-        <div>
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--s3)' }}>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
             Pontos acumulados
           </span>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 900, color: 'var(--accent)', marginLeft: 'var(--s3)' }}>
-            {totalPts} pts
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent)', lineHeight: 1 }}>
+            {totalPts}
           </span>
         </div>
-        {/* mode pills */}
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 3 }}>
           {GROUP_MODES.map(m => (
             <button key={m.id} onClick={() => setMode(m.id)} style={{
               fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
               padding: '3px 10px', borderRadius: 20, border: '1px solid', cursor: 'pointer',
               background: mode === m.id ? 'var(--accent)' : 'transparent',
               borderColor: mode === m.id ? 'var(--accent)' : 'var(--border)',
-              color: mode === m.id ? '#000' : 'var(--text-3)',
+              color: mode === m.id ? 'var(--on-accent, #000)' : 'var(--text-3)',
               transition: 'all 120ms',
             }}>
               {m.label}
@@ -224,45 +248,70 @@ function PointsChart({ bets }) {
       </div>
 
       {/* SVG chart */}
-      <div style={{ position: 'relative', overflow: 'hidden' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }}
+      <div style={{ position: 'relative' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}
           onMouseLeave={() => setTooltip(null)}>
           <defs>
-            <linearGradient id="pts-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+            <linearGradient id="pts-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.01" />
             </linearGradient>
           </defs>
-          {/* grid lines */}
-          {yLabels.map(({ v, y }) => (
-            <g key={v}>
-              <line x1={PADX} y1={y} x2={W - PADX} y2={y}
-                stroke="rgba(255,255,255,0.06)" strokeWidth="1" strokeDasharray="3,4" />
-              <text x={PADX} y={y - 3}
-                style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'rgba(255,255,255,0.25)' }}>
-                {v}
-              </text>
-            </g>
-          ))}
-          {/* area fill */}
-          <path d={area} fill="url(#pts-fill)" />
+
+          {/* Y axis + grid */}
+          {yTicks.map(v => {
+            const y = toY(v)
+            return (
+              <g key={v}>
+                <line x1={PADL} y1={y} x2={W - PADR} y2={y}
+                  stroke="currentColor" strokeOpacity="0.07" strokeWidth="1" />
+                <text x={PADL - 4} y={y + 3} textAnchor="end"
+                  style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.35 }}>
+                  {v}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* baseline */}
+          <line x1={PADL} y1={H - PADB} x2={W - PADR} y2={H - PADB}
+            stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" />
+
+          {/* area */}
+          <path d={areaD} fill="url(#pts-area)" />
+
           {/* line */}
-          <polyline points={polyline} fill="none" stroke="var(--accent)" strokeWidth="2"
+          <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth="2"
             strokeLinejoin="round" strokeLinecap="round" />
-          {/* dots + hover targets */}
-          {coords.map(([x, y], i) => (
-            <g key={i}
-              onMouseEnter={() => setTooltip({ x, y, ...points[i] })}
-              style={{ cursor: 'crosshair' }}
-            >
-              <circle cx={x} cy={y} r={10} fill="transparent" />
-              <circle cx={x} cy={y} r={tooltip?.label === points[i].label ? 5 : 3}
-                fill={tooltip?.label === points[i].label ? 'var(--accent)' : '#111'}
-                stroke="var(--accent)" strokeWidth="1.5"
-                style={{ transition: 'r 100ms' }}
-              />
-            </g>
-          ))}
+
+          {/* dots */}
+          {coords.map(([x, y], i) => {
+            const active = tooltip?.idx === i
+            return (
+              <g key={i} onMouseEnter={() => setTooltip({ x, y, idx: i, ...points[i] })} style={{ cursor: 'crosshair' }}>
+                <circle cx={x} cy={y} r={10} fill="transparent" />
+                <circle cx={x} cy={y} r={active ? 5 : 3}
+                  fill={active ? 'var(--accent)' : 'var(--bg-surface)'}
+                  stroke="var(--accent)" strokeWidth={active ? 2 : 1.5}
+                  style={{ transition: 'r 80ms' }}
+                />
+              </g>
+            )
+          })}
+
+          {/* X axis first/last labels */}
+          {points.length >= 2 && (
+            <>
+              <text x={PADL} y={H - 4} textAnchor="start"
+                style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.3 }}>
+                {points[0].label}
+              </text>
+              <text x={W - PADR} y={H - 4} textAnchor="end"
+                style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.3 }}>
+                {points[points.length - 1].label}
+              </text>
+            </>
+          )}
         </svg>
 
         {/* tooltip */}
@@ -271,27 +320,25 @@ function PointsChart({ bets }) {
             position: 'absolute',
             left: `${(tooltip.x / W) * 100}%`,
             top: `${(tooltip.y / H) * 100}%`,
-            transform: 'translate(-50%, -110%)',
-            background: '#1a1a1a',
-            border: '1px solid var(--accent)',
+            transform: 'translate(-50%, calc(-100% - 8px))',
+            background: 'var(--bg-overlay)',
+            border: '1px solid var(--border-accent)',
             borderRadius: 'var(--r2)',
-            padding: '4px 10px',
+            padding: '5px 12px',
             pointerEvents: 'none',
             whiteSpace: 'nowrap',
-            zIndex: 10,
+            zIndex: 20,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
           }}>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>{tooltip.label}</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 900, color: 'var(--accent)' }}>
-              {tooltip.cum} pts <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>+{tooltip.pts}</span>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em' }}>
+              {tooltip.label}
             </div>
-          </div>
-        )}
-
-        {/* X axis labels — apenas primeiro e último */}
-        {points.length >= 2 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, padding: `0 ${PADX}px` }}>
-            <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{points[0].label}</span>
-            <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{points[points.length - 1].label}</span>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', lineHeight: 1.1 }}>
+              {tooltip.cum} pts
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginLeft: 6 }}>
+                +{tooltip.pts}
+              </span>
+            </div>
           </div>
         )}
       </div>
@@ -301,110 +348,145 @@ function PointsChart({ bets }) {
 
 // ── Card individual de aposta ─────────────────────────────────────────────────
 function BetCard({ bet, idx }) {
-  const meta = RESULT[bet.result]
+  const meta    = RESULT[bet.result]
   const pending = bet.result == null
   const hasOfficial = bet.official_score_a != null && bet.official_score_b != null
 
+  const resultClass = bet.result === 'exact'   ? 'bet-card--result-exact'
+                    : bet.result === 'correct'  ? 'bet-card--result-correct'
+                    : bet.result === 'wrong'    ? 'bet-card--result-wrong'
+                    : ''
+
+  const ptsVariant = bet.result === 'exact'   ? 'pts-badge--exact'
+                   : bet.result === 'correct'  ? 'pts-badge--correct'
+                   : bet.result === 'wrong'    ? 'pts-badge--wrong'
+                   : 'pts-badge--pending'
+
+  const pts = pending ? '—' : `+${bet.points_earned ?? 0}`
+
   return (
-    <div
-      className="fade-in"
-      style={{
-        animationDelay: `${idx * 20}ms`,
-        background: 'var(--bg-surface)',
-        border: `1px solid ${meta ? meta.color + '44' : 'var(--border)'}`,
-        borderLeft: `3px solid ${meta ? meta.color : 'var(--border)'}`,
-        borderRadius: 'var(--r3)',
-        padding: 'var(--s4) var(--s5)',
-        display: 'flex', flexDirection: 'column', gap: 'var(--s3)',
-      }}
-    >
-      {/* top row: grupo + data + badge */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-3)', textTransform: 'uppercase' }}>
-          Grupo {bet.group_name}
-        </span>
-        <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
-          {pending ? (
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', fontStyle: 'italic' }}>Pendente</span>
-          ) : (
-            <span style={{
-              fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-              padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase',
-              background: meta.color + '22', color: meta.color, border: `1px solid ${meta.color}44`,
-            }}>
-              {meta.label} · +{bet.points_earned ?? 0}
-            </span>
-          )}
-          <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>
-            {fmtDate(bet.match_date)}
+    <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${idx * 20}ms` }}>
+      {/* top: grupo + data + pts badge */}
+      <div className="bet-card__top">
+        <span className="badge badge-group">Grupo {bet.group_name}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', flexWrap: 'wrap' }}>
+          <span className="bet-card__time">{fmtDate(bet.match_date)}</span>
+          <span className={`pts-badge ${ptsVariant}`} style={{ fontSize: 13, padding: '3px 10px' }}>
+            {pending ? 'Pendente' : `${meta.label} · ${pts}`}
           </span>
         </div>
       </div>
 
-      {/* match row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 'var(--s3)' }}>
-        {/* team A */}
+      {/* match: bandeira + time × palpite × time + bandeira */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 'var(--s3)', marginTop: 'var(--s3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
           {FLAG(bet.team_a_code) && (
             <img src={FLAG(bet.team_a_code)} alt={bet.team_a_code}
-              style={{ width: 24, height: 18, borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
+              style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }} />
           )}
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
             {bet.team_a_code}
           </span>
         </div>
 
-        {/* scores */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900,
-              color: meta ? meta.color : 'var(--text-2)', lineHeight: 1,
-              minWidth: 22, textAlign: 'right',
-            }}>{bet.score_a}</span>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>–</span>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900,
-              color: meta ? meta.color : 'var(--text-2)', lineHeight: 1,
-              minWidth: 22, textAlign: 'left',
-            }}>{bet.score_b}</span>
-          </div>
-          {hasOfficial ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
-                {bet.official_score_a}–{bet.official_score_b}
-              </span>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.06em' }}>OFICIAL</span>
-            </div>
-          ) : (
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.06em' }}>
-              {pending ? 'AGUARDANDO' : 'SEM DADO'}
-            </span>
-          )}
+          <span style={{
+            fontFamily: 'var(--font-display)', fontSize: 26, lineHeight: 1,
+            color: meta ? meta.color : 'var(--text-2)',
+          }}>
+            {bet.score_a} {String.fromCharCode(8211)} {bet.score_b}
+          </span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, letterSpacing: '0.1em', color: 'var(--text-4)', textTransform: 'uppercase' }}>
+            palpite
+          </span>
         </div>
 
-        {/* team B */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', justifyContent: 'flex-end' }}>
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
             {bet.team_b_code}
           </span>
           {FLAG(bet.team_b_code) && (
             <img src={FLAG(bet.team_b_code)} alt={bet.team_b_code}
-              style={{ width: 24, height: 18, borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
+              style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }} />
           )}
         </div>
       </div>
+
+      {/* compare: palpite × oficial × pontos */}
+      {hasOfficial && (
+        <div className="score-compare">
+          <div className="score-compare__block">
+            <span className="score-compare__label">Palpite</span>
+            <span className="score-compare__value" style={{ color: meta ? meta.color : 'var(--text-2)' }}>
+              {bet.score_a}{String.fromCharCode(8211)}{bet.score_b}
+            </span>
+          </div>
+          <div className="score-compare__divider" />
+          <div className="score-compare__block">
+            <span className="score-compare__label">Oficial</span>
+            <span className="score-compare__value" style={{ color: 'var(--text-2)' }}>
+              {bet.official_score_a}{String.fromCharCode(8211)}{bet.official_score_b}
+            </span>
+          </div>
+          <div className="score-compare__divider" />
+          <div className="score-compare__block">
+            <span className="score-compare__label">Pontos</span>
+            <span className="score-compare__value" style={{ color: meta ? meta.color : 'var(--text-3)', fontSize: 24, fontWeight: 700 }}>
+              {bet.points_earned ?? 0}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {!hasOfficial && !pending && (
+        <div style={{ marginTop: 'var(--s2)', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', textAlign: 'center' }}>
+          Aguardando resultado oficial
+        </div>
+      )}
+    </div>
+  )
+}
+
+function posLabel(pos) {
+  return pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : pos ? `${pos}º` : '—'
+}
+
+function PosBadge({ label, pos, total, accent }) {
+  const color = accent || 'var(--accent)'
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      background: `color-mix(in srgb, ${color} 10%, var(--bg-surface))`,
+      border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+      borderRadius: 'var(--r2)', padding: 'var(--s2) var(--s4)',
+      minWidth: 80, gap: 1,
+    }}>
+      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)' }}>
+        {label}
+      </span>
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: 26, lineHeight: 1, color }}>
+        {posLabel(pos)}
+      </span>
+      {total && (
+        <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
+          de {total}
+        </span>
+      )}
     </div>
   )
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function UserHistory() {
-  const { userId } = useParams()
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState('')
-  const [filter,  setFilter]  = useState('all')
+  const { userId }   = useParams()
+  const { user: me, token } = useAuth()
+  const isOwn        = me && String(me.id) === String(userId)
+
+  const [data,       setData]       = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState('')
+  const [filter,     setFilter]     = useState('all')
+  const [groupRanks, setGroupRanks] = useState([]) // [{name, pos, total}]
 
   useEffect(() => {
     setLoading(true)
@@ -414,6 +496,25 @@ export default function UserHistory() {
       .catch(err => setError(err.message || 'Não foi possível carregar o histórico.'))
       .finally(() => setLoading(false))
   }, [userId])
+
+  // fetch group positions only for own profile
+  useEffect(() => {
+    if (!isOwn || !token) return
+    api.get('/user-groups', token).then(groups => {
+      if (!Array.isArray(groups)) return
+      Promise.all(
+        groups.map(g =>
+          api.get(`/user-groups/${g.id}/ranking`, token)
+            .then(d => {
+              const ranking = d?.ranking ?? []
+              const me = ranking.find(r => String(r.user_id) === String(userId))
+              return me ? { id: g.id, name: g.name || d?.group_name || `Bolão ${g.id}`, pos: me.position ?? (ranking.indexOf(me) + 1), total: ranking.length } : null
+            })
+            .catch(() => null)
+        )
+      ).then(results => setGroupRanks(results.filter(Boolean)))
+    }).catch(() => {})
+  }, [isOwn, token, userId])
 
   if (loading) return <Spinner text="Carregando histórico..." />
   if (error) return (
@@ -427,9 +528,11 @@ export default function UserHistory() {
     </div>
   )
 
-  const bets      = data?.bets  ?? []
-  const stats     = data?.stats ?? {}
-  const user      = data?.user
+  const bets            = data?.bets  ?? []
+  const stats           = data?.stats ?? {}
+  const user            = data?.user
+  const rankingPosition = data?.ranking_position ?? null
+  const totalUsers      = data?.total_users ?? null
 
   const evaluated = bets.filter(b => b.result != null)
   const pending   = bets.filter(b => b.result == null)
@@ -456,69 +559,116 @@ export default function UserHistory() {
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : '?'
 
+  const GROUP_COLORS = ['var(--win)', '#4a90e8', '#e8a030', '#9b5de8']
+
   return (
     <div className="page">
-      {/* Header */}
+      {/* ── Player card header ─────────────────────────── */}
       <div className="fade-in-1">
         <Link to="/ranking" className="match-breadcrumb__link">‹ Ranking</Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s4)', marginTop: 'var(--s4)', flexWrap: 'wrap' }}>
+
+        <div style={{
+          marginTop: 'var(--s5)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--r3)', padding: 'var(--s5)',
+          display: 'flex', gap: 'var(--s4)', alignItems: 'center', flexWrap: 'wrap',
+          boxShadow: 'var(--shadow-soft)',
+        }}>
+          {/* avatar */}
           <div style={{
-            width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
-            background: 'color-mix(in srgb, var(--accent) 20%, var(--bg-overlay))',
-            border: '2px solid var(--accent)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 900, color: 'var(--accent)',
+            width: 52, height: 52, borderRadius: 'var(--r2)', flexShrink: 0,
+            background: 'linear-gradient(135deg, var(--accent-dim), var(--bg-overlay))',
+            border: '2px solid var(--border-accent)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 1,
           }}>
-            {initials}
+            <span style={{ fontSize: 18, lineHeight: 1 }}>🏆</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.04em' }}>
+              {initials}
+            </span>
           </div>
-          <div>
-            <h1 className="page-title" style={{ margin: 0 }}>{user?.name}</h1>
-            <p className="page-subtitle" style={{ margin: 0 }}>
+
+          {/* nome + subtítulo */}
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <h1 className="page-title" style={{ margin: 0, lineHeight: 0.95, fontSize: 'clamp(1.6rem, 6vw, 2.4rem)' }}>
+              {user?.name}
+            </h1>
+            <p className="page-subtitle" style={{ margin: '5px 0 0' }}>
               {bets.length} apostas · {evaluated.length} avaliadas · {accuracy}% de acerto
             </p>
+          </div>
+
+          {/* badges de posição */}
+          <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', alignItems: 'center' }}>
+            {rankingPosition && (
+              <PosBadge label="Geral" pos={rankingPosition} total={totalUsers} />
+            )}
+            {groupRanks.map((g, i) => (
+              <PosBadge
+                key={g.id}
+                label={g.name.length > 12 ? g.name.slice(0, 11) + '…' : g.name}
+                pos={g.pos}
+                total={g.total}
+                accent={GROUP_COLORS[i % GROUP_COLORS.length]}
+              />
+            ))}
           </div>
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="fade-in-2" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
-        gap: 'var(--s3)', marginTop: 'var(--s6)',
-      }}>
-        {[
-          { label: 'Pontos',    value: stats.total_points ?? 0, color: 'var(--accent)' },
-          { label: '% Acerto',  value: `${accuracy}%`,          color: 'var(--win)'    },
-          { label: 'Exatos',    value: exact.length,            color: 'var(--accent)' },
-          { label: 'Certos',    value: correct.length,          color: 'var(--win)'    },
-          { label: 'Erros',     value: wrong.length,            color: 'var(--lose)'   },
-          { label: 'Pendentes', value: pending.length,          color: 'var(--text-3)' },
-        ].map(k => (
-          <div key={k.label} style={{
-            background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderTop: `2px solid ${k.color}`,
-            borderRadius: 'var(--r3)', padding: 'var(--s4)',
-          }}>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 'var(--s1)' }}>
-              {k.label}
+      {/* KPI strip — 3 primários grandes + linha secundária */}
+      <div className="fade-in-2" style={{ marginTop: 'var(--s5)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--s3)' }}>
+          {[
+            { label: 'Pontos',   value: stats.total_points ?? 0, color: 'var(--accent)', big: true },
+            { label: '% Acerto', value: `${accuracy}%`,           color: 'var(--win)',    big: true },
+            { label: 'Exatos',   value: exact.length,             color: 'var(--accent)', big: true },
+          ].map(k => (
+            <div key={k.label} style={{
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              borderTop: `3px solid ${k.color}`,
+              borderRadius: 'var(--r3)', padding: 'var(--s4) var(--s5)',
+            }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+                {k.label}
+              </div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, color: k.color, lineHeight: 1, marginTop: 4 }}>
+                {k.value}
+              </div>
             </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 900, color: k.color, lineHeight: 1 }}>
-              {k.value}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--s4)', marginTop: 'var(--s3)', flexWrap: 'wrap' }}>
+          {[
+            { label: 'Certos',     value: correct.length, color: 'var(--win)'    },
+            { label: 'Erros',      value: wrong.length,   color: 'var(--lose)'   },
+            { label: 'Pendentes',  value: pending.length, color: 'var(--text-4)' },
+            { label: 'Total',      value: bets.length,    color: 'var(--text-3)' },
+          ].map(k => (
+            <span key={k.label} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+              <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, color: k.color }}>{k.value}</span>
+              {' '}{k.label}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Activity Rings + Sparkline */}
+      {/* Activity Rings */}
       {evaluated.length > 0 && (
         <div className="fade-in-2" style={{
-          display: 'flex', flexWrap: 'wrap', gap: 'var(--s6)',
-          background: '#111', border: '1px solid #222',
-          borderRadius: 'var(--r3)', padding: 'var(--s6)', marginTop: 'var(--s4)',
-          alignItems: 'center', overflow: 'hidden',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--r3)', padding: 'var(--s5)', marginTop: 'var(--s4)',
         }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', marginBottom: 'var(--s4)' }}>
+            <span style={{ fontSize: 13, opacity: 0.7 }}>📈</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+              Desempenho
+            </span>
+          </div>
           <ActivityRings
             exact={exact.length} correct={correct.length}
             evaluated={evaluated.length} totalBets={bets.length}
+            rankingPosition={rankingPosition} totalUsers={totalUsers}
           />
         </div>
       )}

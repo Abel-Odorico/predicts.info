@@ -337,6 +337,11 @@ function Countdown({ ms }) {
 
 // ── Placed bet row (Mine tab) ─────────────────────────────────────────────────
 function BetRow({ bet, index, onOpenSimulation }) {
+  const resultClass = bet.result === 'exact'   ? 'bet-card--result-exact'
+                    : bet.result === 'correct'  ? 'bet-card--result-correct'
+                    : bet.result === 'wrong'    ? 'bet-card--result-wrong'
+                    : ''
+
   const statusColor = bet.result === 'exact'   ? 'var(--accent)'
                     : bet.result === 'correct'  ? 'var(--win)'
                     : bet.result === 'wrong'    ? 'var(--lose)'
@@ -347,45 +352,73 @@ function BetRow({ bet, index, onOpenSimulation }) {
                     : bet.result === 'wrong'    ? 'Sem acerto'
                     : bet.is_open ? 'Pendente' : 'Aguardando avaliação'
 
-  const pointsLabel = bet.result === null ? '—' : `${bet.points_earned ?? 0} pt${bet.points_earned === 1 ? '' : 's'}`
-  const officialScore = bet.official_score_a != null && bet.official_score_b != null
-    ? `${bet.official_score_a} – ${bet.official_score_b}` : 'Aguardando resultado'
+  const ptsVariant = bet.result === 'exact'   ? 'pts-badge--exact'
+                   : bet.result === 'correct'  ? 'pts-badge--correct'
+                   : bet.result === 'wrong'    ? 'pts-badge--wrong'
+                   : 'pts-badge--pending'
+
+  const ptsValue = bet.result === null ? '—' : `+${bet.points_earned ?? 0}`
+
+  const hasOfficial = bet.official_score_a != null && bet.official_score_b != null
 
   return (
-    <div className="bet-card fade-in" style={{ animationDelay: `${index * 30}ms` }}>
+    <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${index * 30}ms` }}>
       <div className="bet-card__top">
         <span className="badge badge-group">Grupo {bet.group_name}</span>
-        <span className="bet-card__time">{formatMatchDate(bet.match_date)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
+          <span className="bet-card__time">{formatMatchDate(bet.match_date)}</span>
+          <span className={`pts-badge ${ptsVariant}`}>{ptsValue}</span>
+        </div>
       </div>
-      <div className="bet-card__match" style={{ marginTop: 'var(--s3)' }}>
+
+      {/* Teams + scores comparison */}
+      <div className="bet-card__match" style={{ marginTop: 'var(--s4)' }}>
         <div className="bet-card__team">{bet.team_a_code}</div>
-        <div className="bet-card__score">{bet.score_a} – {bet.score_b}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <div className="bet-card__score">{bet.score_a} – {bet.score_b}</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-4)', textTransform: 'uppercase' }}>
+            seu palpite
+          </div>
+        </div>
         <div className="bet-card__team bet-card__team--right">{bet.team_b_code}</div>
       </div>
-      <button
-        type="button"
-        className="bet-card__simulation-link"
-        onClick={onOpenSimulation}
-      >
-        Ver simulação da partida
-      </button>
-      <div className="bet-card__meta" style={{ marginTop: 'var(--s3)' }}>
-        <Metric label="Resultado oficial" value={officialScore} />
-        <Metric label="Pontuação" value={pointsLabel} accent={bet.result !== null} />
-      </div>
-      <div className="bet-card__footer" style={{ marginTop: 'var(--s3)' }}>
+
+      {/* Score comparison: palpite vs oficial */}
+      {hasOfficial && (
+        <div className="score-compare">
+          <div className="score-compare__block">
+            <span className="score-compare__label">Seu palpite</span>
+            <span className="score-compare__value" style={{ color: statusColor }}>
+              {bet.score_a}–{bet.score_b}
+            </span>
+          </div>
+          <div className="score-compare__divider" />
+          <div className="score-compare__block">
+            <span className="score-compare__label">Resultado oficial</span>
+            <span className="score-compare__value" style={{ color: 'var(--text-2)' }}>
+              {bet.official_score_a}–{bet.official_score_b}
+            </span>
+          </div>
+          <div className="score-compare__divider" />
+          <div className="score-compare__block">
+            <span className="score-compare__label">Pontos</span>
+            <span className="score-compare__value" style={{ color: statusColor, fontSize: 22 }}>
+              {bet.points_earned ?? 0}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {!hasOfficial && (
+        <div style={{ marginTop: 'var(--s3)', textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.06em' }}>
+          {bet.result === null ? 'Aguardando resultado oficial' : 'Resultado registrado'}
+        </div>
+      )}
+
+      <div className="bet-card__footer" style={{ marginTop: 'var(--s4)' }}>
         <span className="bet-card__status" style={{ color: statusColor }}>{statusLabel}</span>
         <div className="bet-card__actions">
-          <span className="bet-card__hint">
-            {bet.result === null
-              ? 'Pontuação aparece após o resultado oficial'
-              : 'Ranking atualizado'}
-          </span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={onOpenSimulation}
-          >
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenSimulation}>
             Ver Simulação
           </button>
         </div>

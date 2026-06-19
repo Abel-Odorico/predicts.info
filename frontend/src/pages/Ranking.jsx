@@ -191,29 +191,39 @@ export default function Ranking() {
                 </span>
               ))}
             </div>
-            {data.map((r, i) => (
-              <Link
-                key={r.user_id}
-                to={`/usuarios/${r.user_id}/historico`}
-                className="ranking-row fade-in"
-                style={{ animationDelay: `${i * 30}ms` }}
-              >
-                <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                </span>
-                <div className="ranking-row__meta">
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 15 }}>
-                    {r.name}
+            {data.map((r, i) => {
+              const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
+              return (
+                <Link
+                  key={r.user_id}
+                  to={`/usuarios/${r.user_id}/historico`}
+                  className={`ranking-row fade-in ${podiumClass}`}
+                  style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent' }}
+                >
+                  <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                  </span>
+                  <div className="ranking-row__meta">
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 15 }}>
+                      {r.name}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
+                      {maskEmail(r.email)}
+                    </div>
+                    <div className="ranking-row__mobile-stats">
+                      <span>{r.total_points} pts</span>
+                      <span>·</span>
+                      <span>{r.exact_scores ?? 0} exatos</span>
+                      <span>·</span>
+                      <span>{r.total_bets ?? 0} apostas</span>
+                    </div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
-                    {maskEmail(r.email)}
-                  </div>
-                </div>
-                <span className="ranking-row__pts">{r.total_points}</span>
-                <span className="ranking-row__stats ranking-row__sub">{r.exact_scores ?? 0}</span>
-                <span className="ranking-row__stats ranking-row__sub">{r.total_bets ?? 0}</span>
-              </Link>
-            ))}
+                  <span className="ranking-row__pts">{r.total_points}</span>
+                  <span className="ranking-row__stats ranking-row__sub">{r.exact_scores ?? 0}</span>
+                  <span className="ranking-row__stats ranking-row__sub">{r.total_bets ?? 0}</span>
+                </Link>
+              )
+            })}
           </div>
         )}
       </div>

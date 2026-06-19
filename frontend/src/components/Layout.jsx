@@ -152,6 +152,9 @@ export default function Layout() {
               <NavLink to="/perfil" className={({ isActive }) => `btn btn-ghost btn-sm w-full${isActive ? ' active' : ''}`}>
                 ⚙️ Meu Perfil
               </NavLink>
+              <NavLink to={`/usuarios/${user.id}/historico`} className={({ isActive }) => `btn btn-ghost btn-sm w-full${isActive ? ' active' : ''}`}>
+                🏅 Histórico
+              </NavLink>
               <button
                 onClick={handleLogout}
                 className="btn btn-ghost btn-sm w-full"

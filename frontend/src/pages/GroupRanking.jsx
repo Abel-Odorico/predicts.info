@@ -131,6 +131,7 @@ export default function GroupRanking() {
 
   const ranking = data?.ranking ?? []
   const amOwner = data?.is_owner === true
+  const myEntry = ranking.find(r => r.is_me)
 
   return (
     <div className="page">
@@ -216,6 +217,26 @@ export default function GroupRanking() {
           </span>
         </div>
 
+        {/* Hero card — my position */}
+        {myEntry && (
+          <div className="group-ranking-hero fade-in-2">
+            <div className="group-ranking-hero__pos">
+              {myEntry.position === 1 ? '🥇' : myEntry.position === 2 ? '🥈' : myEntry.position === 3 ? '🥉' : `${myEntry.position}º`}
+            </div>
+            <div className="group-ranking-hero__info">
+              <div className="group-ranking-hero__label">Sua posição no grupo</div>
+              <div className="group-ranking-hero__name">{myEntry.name}</div>
+              <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                {myEntry.exact_scores ?? 0} exatos · {myEntry.correct_results ?? 0} certos · {myEntry.total_bets ?? 0} apostas
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div className="group-ranking-hero__pts">{myEntry.total_points}</div>
+              <div className="group-ranking-hero__pts-label">pontos</div>
+            </div>
+          </div>
+        )}
+
         {ranking.length === 0 ? (
           <div style={{ padding: 'var(--s16)', textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
             Nenhuma aposta ainda.
@@ -233,43 +254,47 @@ export default function GroupRanking() {
                 </span>
               ))}
             </div>
-            {ranking.map((r, i) => (
-              <div
-                key={r.user_id}
-                className="ranking-row fade-in"
-                style={{
-                  animationDelay: `${i * 30}ms`,
-                  background: r.is_me ? 'rgba(0, 200, 83, 0.06)' : undefined,
-                  borderLeft: r.is_me ? '3px solid var(--accent)' : '3px solid transparent',
-                  textDecoration: 'none',
-                }}
-              >
-                <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                </span>
-                <Link to={`/usuarios/${r.user_id}/historico`} className="ranking-row__meta" style={{ textDecoration: 'none', flex: 1 }}>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {r.name}
-                    {r.is_me && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.08em' }}>VOCÊ</span>}
-                    {r.is_owner && !r.is_me && <span style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em' }}>DONO</span>}
-                  </div>
-                </Link>
-                <span className="ranking-row__pts">{r.total_points}</span>
-                <span className="ranking-row__stats ranking-row__sub">{r.exact_scores ?? 0}</span>
-                <span className="ranking-row__stats ranking-row__sub">{r.total_bets ?? 0}</span>
-                {amOwner && !r.is_me && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: 11, padding: '2px 8px', color: 'var(--lose)' }}
-                    disabled={removingId === r.user_id}
-                    onClick={() => removeMember(r.user_id)}
-                  >
-                    {removingId === r.user_id ? '...' : '✕'}
-                  </button>
-                )}
-              </div>
-            ))}
+            {ranking.map((r, i) => {
+              const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
+              const meStyle = r.is_me && i >= 3 ? { background: 'rgba(0, 200, 83, 0.06)', borderLeft: '3px solid var(--accent)' } : {}
+              return (
+                <div
+                  key={r.user_id}
+                  className={`ranking-row fade-in ${podiumClass}`}
+                  style={{ animationDelay: `${i * 30}ms`, borderLeft: i >= 3 ? (r.is_me ? '3px solid var(--accent)' : '3px solid transparent') : undefined, ...meStyle, textDecoration: 'none' }}
+                >
+                  <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                  </span>
+                  <Link to={`/usuarios/${r.user_id}/historico`} className="ranking-row__meta" style={{ textDecoration: 'none', flex: 1 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {r.name}
+                      {r.is_me && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.08em' }}>VOCÊ</span>}
+                      {r.is_owner && !r.is_me && <span style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em' }}>DONO</span>}
+                    </div>
+                    <div className="ranking-row__mobile-stats">
+                      <span>{r.total_points} pts</span>
+                      <span>·</span>
+                      <span>{r.exact_scores ?? 0} exatos</span>
+                    </div>
+                  </Link>
+                  <span className="ranking-row__pts">{r.total_points}</span>
+                  <span className="ranking-row__stats ranking-row__sub">{r.exact_scores ?? 0}</span>
+                  <span className="ranking-row__stats ranking-row__sub">{r.total_bets ?? 0}</span>
+                  {amOwner && !r.is_me && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 11, padding: '2px 8px', color: 'var(--lose)' }}
+                      disabled={removingId === r.user_id}
+                      onClick={() => removeMember(r.user_id)}
+                    >
+                      {removingId === r.user_id ? '...' : '✕'}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

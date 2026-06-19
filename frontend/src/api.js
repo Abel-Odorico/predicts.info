@@ -13,7 +13,11 @@ async function req(method, path, body, token) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+    const detail = err.detail;
+    const message = typeof detail === 'object' && detail !== null ? detail.message : detail;
+    const error = new Error(message || `HTTP ${res.status}`);
+    error.detail = detail;
+    throw error;
   }
   return res.json();
 }
