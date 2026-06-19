@@ -4,10 +4,15 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 
+function normalizeDate(value) {
+  if (!value) return null
+  const hasTz = value.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(value)
+  return hasTz ? value : `${value}Z`
+}
+
 function formatDateTime(value) {
   if (!value) return '—'
-  const normalized = value.endsWith('Z') ? value : `${value}Z`
-  return new Date(normalized).toLocaleString('pt-BR', {
+  return new Date(normalizeDate(value)).toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -18,7 +23,7 @@ function formatDateTime(value) {
 
 function formatCountdown(value, nowMs) {
   if (!value) return '—'
-  const normalized = value.endsWith('Z') ? value : `${value}Z`
+  const normalized = normalizeDate(value)
   const diff = new Date(normalized).getTime() - nowMs
   if (diff <= 0) return 'Executando agora'
 
