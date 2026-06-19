@@ -1658,9 +1658,12 @@ img {
 .ranking-head,
 .ranking-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 64px;
-  gap: var(--s3);
+  grid-template-columns: 36px minmax(0, 1fr) 52px;
+  gap: var(--s2);
   align-items: center;
+}
+.ranking-col-hide {
+  display: none;
 }
 
 .ranking-head {
@@ -3391,12 +3394,11 @@ img {
 
   .ranking-head,
   .ranking-row {
-    grid-template-columns: 40px minmax(0, 1fr) 80px 60px 60px;
+    grid-template-columns: 36px minmax(0, 1fr) 52px 44px 44px 44px 56px;
   }
 
-  .ranking-head span:nth-child(4),
-  .ranking-head span:nth-child(5) {
-    display: inline;
+  .ranking-col-hide {
+    display: block;
   }
 
   .ranking-row__stats {

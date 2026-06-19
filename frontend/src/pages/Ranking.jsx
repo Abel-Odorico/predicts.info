@@ -216,30 +216,14 @@ export default function Ranking() {
         ) : (
           <div>
             {/* Header */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '36px 1fr 52px 44px 44px 44px 56px',
-              gap: 'var(--s2)',
-              padding: '8px var(--s4)',
-              borderBottom: '1px solid var(--border)',
-            }}>
-              {[
-                { label: '#',       align: 'center' },
-                { label: 'Usuário', align: 'left'   },
-                { label: 'Pts',     align: 'right'  },
-                { label: 'Exatos',  align: 'right'  },
-                { label: 'Certos',  align: 'right'  },
-                { label: 'Apostas', align: 'right'  },
-                { label: '% Acerto',align: 'right'  },
-              ].map(h => (
-                <span key={h.label} style={{
-                  fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700,
-                  letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)',
-                  textAlign: h.align,
-                }}>
-                  {h.label}
-                </span>
-              ))}
+            <div className="ranking-head" style={{ padding: '6px var(--s4)' }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'center' }}>#</span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)' }}>Usuário</span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }}>Pts</span>
+              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }}>Exatos</span>
+              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }}>Certos</span>
+              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }}>Apostas</span>
+              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }}>% Acerto</span>
             </div>
 
             {/* Rows */}
@@ -253,14 +237,7 @@ export default function Ranking() {
                   key={r.user_id}
                   to={`/usuarios/${r.user_id}/historico`}
                   className={`ranking-row fade-in ${podiumClass}`}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '36px 1fr 52px 44px 44px 44px 56px',
-                    gap: 'var(--s2)',
-                    animationDelay: `${i * 30}ms`,
-                    borderLeft: i < 3 ? undefined : '3px solid transparent',
-                    alignItems: 'center',
-                  }}
+                  style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent' }}
                 >
                   <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`} style={{ textAlign: 'center' }}>
                     {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
@@ -270,8 +247,8 @@ export default function Ranking() {
                     <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.name}
                     </div>
-                    {/* Barra de pontos relativa ao líder */}
-                    <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 120 }}>
+                    {/* Barra relativa ao líder */}
+                    <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
                       <div style={{
                         height: '100%',
                         width: `${(r.total_points / leaderPts) * 100}%`,
@@ -279,21 +256,30 @@ export default function Ranking() {
                         borderRadius: 2, transition: 'width 600ms ease',
                       }} />
                     </div>
+                    {/* Resumo visível só no mobile */}
+                    <div className="ranking-row__mobile-stats">
+                      <span>{r.exact_scores ?? 0} exatos</span>
+                      <span>·</span>
+                      <span>{r.correct_results ?? 0} certos</span>
+                      <span>·</span>
+                      <span>{r.total_bets ?? 0} apostas</span>
+                      {pct !== null && <><span>·</span><span style={{ color: pct >= 70 ? 'var(--win)' : pct >= 40 ? 'var(--accent)' : 'var(--text-4)' }}>{pct}%</span></>}
+                    </div>
                   </div>
 
                   <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', textAlign: 'right', fontWeight: 700 }}>
                     {r.total_points}
                   </span>
-                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-2)', textAlign: 'right' }}>
+                  <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-2)', textAlign: 'right' }}>
                     {r.exact_scores ?? 0}
                   </span>
-                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)', textAlign: 'right' }}>
+                  <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)', textAlign: 'right' }}>
                     {r.correct_results ?? 0}
                   </span>
-                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)', textAlign: 'right' }}>
+                  <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)', textAlign: 'right' }}>
                     {r.total_bets ?? 0}
                   </span>
-                  <div style={{ textAlign: 'right' }}>
+                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
                     {pct !== null ? (
                       <span style={{
                         fontFamily: 'var(--font-data)', fontSize: 12, fontWeight: 700,
