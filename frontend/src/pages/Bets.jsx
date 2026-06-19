@@ -17,7 +17,7 @@ export default function Bets() {
 
   const load = useCallback(() => {
     const reqs = [api.get('/matches?status=scheduled&limit=200')]
-    if (token) reqs.push(api.get('/bets', token))
+    if (token) reqs.push(api.get('/bets/mine', token))
     Promise.all(reqs)
       .then(([m, b]) => { setMatches(m); if (b) setBets(b) })
       .catch(console.error)
