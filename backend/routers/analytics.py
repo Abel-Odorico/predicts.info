@@ -111,8 +111,8 @@ async def track(
         return
     _rate[key] = now
 
-    # Trim rate cache
-    if len(_rate) > 5000:
+    # Trim rate cache — always purge expired entries when dict grows
+    if len(_rate) >= 1000:
         cutoff = now - timedelta(minutes=5)
         for k in [k for k, v in _rate.items() if v < cutoff]:
             _rate.pop(k, None)

@@ -87,9 +87,9 @@ app = FastAPI(
     title="Predicts.info — World Cup 2026 Simulator",
     description="Poisson + Elo + Monte Carlo (1M simulações) + xG + Apostas",
     version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     lifespan=lifespan,
 )
 

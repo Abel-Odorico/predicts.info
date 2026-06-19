@@ -151,7 +151,6 @@ def update_bet(
     return {"id": bet.id, "match_id": bet.match_id, "score_a": bet.score_a, "score_b": bet.score_b}
 
 
-@router.get("/bets")
 @router.get("/bets/mine")
 def my_bets(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     bets = (
