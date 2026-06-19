@@ -67,17 +67,28 @@ export default function Login() {
     setErr('')
     setLoad(true)
     try {
+      const pendingJoin = sessionStorage.getItem('join_token')
       if (mode === 'login') {
         const data = await api.login(email, pass)
         const me = await api.get('/auth/me', data.access_token)
         login(me, data.access_token)
-        navigate('/')
+        if (pendingJoin) {
+          sessionStorage.removeItem('join_token')
+          navigate(`/bolao/${pendingJoin}`)
+        } else {
+          navigate('/')
+        }
       } else {
         await api.post('/auth/register', { email, password: pass, name, username: normalizedUsername, phone })
         const data = await api.login(email, pass)
         const me = await api.get('/auth/me', data.access_token)
         login(me, data.access_token)
-        navigate('/')
+        if (pendingJoin) {
+          sessionStorage.removeItem('join_token')
+          navigate(`/bolao/${pendingJoin}`)
+        } else {
+          navigate('/')
+        }
       }
     } catch (e) {
       if (e.detail?.suggestions?.length) {

@@ -92,7 +92,7 @@ export default function GroupRanking() {
       api.get(`/user-groups/${groupId}/ranking`, token),
       api.get('/matches'),
       api.get(`/ranking?date_from=${today}&date_to=${today}&limit=100`),
-      api.get(`/user-groups/${groupId}/highlights`, token),
+      api.get(`/user-groups/${groupId}/highlights`, token).catch(() => null),
     ])
       .then(([groupData, matches, todayRanking, highlightsData]) => {
         setData(groupData)
@@ -104,7 +104,6 @@ export default function GroupRanking() {
           .sort((a, b) => b.total_points - a.total_points)
         setTodayTop(groupToday[0] || null)
         setHighlights(highlightsData)
-        // Save current positions (compare next load)
         savePositions(groupId, groupData.ranking ?? [])
       })
       .catch(err => setError(err.message || 'Erro ao carregar'))
