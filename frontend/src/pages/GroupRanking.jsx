@@ -136,7 +136,7 @@ export default function GroupRanking() {
   const [messages, setMessages] = useState([])
   const [msgText, setMsgText] = useState('')
   const [sendingMsg, setSendingMsg] = useState(false)
-  const [showChat, setShowChat] = useState(false)
+  const [showChat, setShowChat] = useState(true)
   const chatEndRef = useRef(null)
   const chatPollRef = useRef(null)
 
@@ -313,7 +313,9 @@ export default function GroupRanking() {
   const ranking = data?.ranking ?? []
   const amOwner = data?.is_owner === true
   const myEntry = ranking.find(r => r.is_me)
-  const leaderPts = ranking[0]?.total_points || 1
+  const champion = data?.champion ?? null
+  const championBonusPts = data?.champion_bonus_pts ?? 0
+  const leaderPts = ranking[0]?.effective_points ?? ranking[0]?.total_points ?? 1
   const { finished, total } = matchStats
   const maxBets = ranking.length ? Math.max(...ranking.map(r => r.total_bets)) : 0
   const effectiveTotal = Math.max(finished, maxBets, 1)
@@ -542,6 +544,21 @@ export default function GroupRanking() {
           <div style={{ padding: 'var(--s8)', textAlign: 'center', color: 'var(--text-2)' }}>Carregando...</div>
         ) : (
           <>
+            {/* Banner campeão real (se definido) */}
+            {champion && activePhase === 'all' && (
+              <div style={{ margin: 'var(--s3) var(--s4)', padding: '10px 14px', borderRadius: 10, background: 'linear-gradient(90deg, #e8a03020 0%, var(--bg-raised) 100%)', border: '1px solid #e8a03060', display: 'flex', alignItems: 'center', gap: 10 }}>
+                {champion.flag_url && <img src={champion.flag_url} alt={champion.code} style={{ width: 36, height: 25, objectFit: 'cover', borderRadius: 3 }} />}
+                <div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#e8a030' }}>🏆 Campeão do Mundo</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-1)', lineHeight: 1.1 }}>{champion.name}</div>
+                </div>
+                <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>bônus correto</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: '#e8a030' }}>+{championBonusPts} pts</div>
+                </div>
+              </div>
+            )}
+
             {/* Pódio top-3 */}
             {top3.length >= 2 && activePhase === 'all' && (
               <div className="group-podium">
@@ -550,7 +567,7 @@ export default function GroupRanking() {
                     <div className="group-podium__avatar">{getInitials(r.name)}</div>
                     <div className="group-podium__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
                     <div className="group-podium__name" title={r.name}>{r.name}{r.is_me ? ' ★' : ''}</div>
-                    <div className="group-podium__pts">{r.total_points} pts</div>
+                    <div className="group-podium__pts">{r.effective_points ?? r.total_points} pts</div>
                     <div className="group-podium__platform" />
                   </div>
                 ))}
@@ -575,7 +592,8 @@ export default function GroupRanking() {
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div className="group-ranking-hero__pts">{myEntry.total_points}</div>
+                  <div className="group-ranking-hero__pts">{myEntry.effective_points ?? myEntry.total_points}</div>
+                  {myEntry.champion_bonus > 0 && <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: '#e8a030', fontWeight: 700 }}>🏆 +{myEntry.champion_bonus}</div>}
                   <div className="group-ranking-hero__pts-label">pontos</div>
                 </div>
               </div>
@@ -627,7 +645,7 @@ export default function GroupRanking() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <button onClick={() => setDuelMember(duelMember?.user_id === r.user_id ? null : r)}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, color: 'var(--text-1)' }}>{r.name}</span>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 'clamp(15px, 4vw, 16px)', color: 'var(--text-1)' }}>{r.name}</span>
                           </button>
                           {r.is_me && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>VOCÊ</span>}
                           {memberChampion && (
@@ -650,7 +668,7 @@ export default function GroupRanking() {
                             <div style={{ height: 4, width: 80, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
                               <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)', transition: 'width 600ms ease' }} />
                             </div>
-                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 'clamp(11px, 3vw, 11px)', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
                               {r.total_bets}/{effectiveTotal}{aprv !== null && ` · ${aprv}%`}
                             </span>
                           </div>
@@ -666,9 +684,12 @@ export default function GroupRanking() {
                         )}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700 }}>{r.total_points}</span>
+                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700 }}>{r.effective_points ?? r.total_points}</span>
+                        {r.champion_bonus > 0 && (
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#e8a030', fontWeight: 700, background: '#e8a03018', border: '1px solid #e8a03040', borderRadius: 10, padding: '1px 5px' }}>🏆+{r.champion_bonus}</span>
+                        )}
                         <div style={{ width: 36, height: 3, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', borderRadius: 2, width: `${leaderPts > 0 ? (r.total_points / leaderPts) * 100 : 0}%`, background: i === 0 ? '#e8a030' : i === 1 ? 'var(--text-3)' : 'var(--accent)', transition: 'width 600ms ease' }} />
+                          <div style={{ height: '100%', borderRadius: 2, width: `${leaderPts > 0 ? ((r.effective_points ?? r.total_points) / leaderPts) * 100 : 0}%`, background: i === 0 ? '#e8a030' : i === 1 ? 'var(--text-3)' : 'var(--accent)', transition: 'width 600ms ease' }} />
                         </div>
                         {amOwner && !r.is_me && (
                           <button type="button" style={{ fontSize: 10, padding: '1px 6px', color: 'var(--lose)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)' }} disabled={removingId === r.user_id} onClick={() => removeMember(r.user_id)}>

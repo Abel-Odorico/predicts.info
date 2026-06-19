@@ -44,6 +44,7 @@ export default function UserGroups() {
   const [newGroupName, setNewGroupName] = useState('')
   const [createMsg, setCreateMsg] = useState('')
   const [creating, setCreating] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
 
   async function loadGroups() {
     if (!token) return
@@ -73,10 +74,10 @@ export default function UserGroups() {
     try {
       await api.post('/user-groups', { name: newGroupName }, token)
       setNewGroupName('')
-      setCreateMsg('✓ Grupo criado.')
+      setShowCreateForm(false)
       await loadGroups()
-    } catch (e) {
-      setCreateMsg(`✗ ${e.message}`)
+    } catch (err) {
+      setCreateMsg(`✗ ${err.message}`)
     } finally {
       setCreating(false)
     }
@@ -124,25 +125,38 @@ export default function UserGroups() {
             {totalConvites > 0 && <span className="groups-pill groups-pill--alert">{totalConvites} convite{totalConvites !== 1 ? 's' : ''}</span>}
           </div>
         </div>
-        <form onSubmit={createGroup} className="groups-create-bar" aria-label="Criar novo grupo">
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm groups-create-toggle"
+          onClick={() => { setShowCreateForm(v => !v); setCreateMsg('') }}
+          aria-expanded={showCreateForm}
+        >
+          {showCreateForm ? '✕ Cancelar' : '+ Criar bolão'}
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <form onSubmit={createGroup} className="groups-create-panel fade-in-1" aria-label="Criar novo grupo">
           <input
             type="text"
-            className="form-input groups-create-bar__input"
-            placeholder="Nome do novo grupo"
+            className="form-input"
+            placeholder="Nome do bolão (ex: Família Copa 2026)"
             value={newGroupName}
             onChange={e => setNewGroupName(e.target.value)}
             maxLength={120}
+            autoFocus
+            style={{ flex: 1 }}
           />
-          <button type="submit" className="btn btn-primary groups-create-bar__button" disabled={creating || !newGroupName.trim()}>
-            {creating ? '...' : '+ Criar'}
+          <button type="submit" className="btn btn-primary" disabled={creating || !newGroupName.trim()}>
+            {creating ? '...' : 'Criar'}
           </button>
+          {createMsg && (
+            <div className={`groups-create-bar__message ${createMsg.startsWith('✓') ? 'is-success' : 'is-error'}`} style={{ width: '100%' }}>
+              {createMsg}
+            </div>
+          )}
         </form>
-        {createMsg && (
-          <div className={`groups-create-bar__message ${createMsg.startsWith('✓') ? 'is-success' : 'is-error'}`} style={{ width: '100%' }}>
-            {createMsg}
-          </div>
-        )}
-      </div>
+      )}
 
       {pendingInvites.length > 0 && (
         <section className="groups-invite-strip fade-in-2">

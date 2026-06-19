@@ -4695,6 +4695,18 @@ img {
   color: var(--accent);
   margin-bottom: var(--s2);
 }
+.groups-create-toggle {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.groups-create-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+  padding: var(--s3) 0 var(--s2);
+  border-top: 1px dashed var(--border);
+}
 .groups-create-bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -6038,4 +6050,32 @@ img {
   font-size: 12px;
   font-weight: 600;
   color: var(--lose);
+}
+
+/* ── Mobile: aumentar fontes dos cards de grupo (iPhone) ─────────────── */
+@media (max-width: 640px) {
+  .group-manager-card__title { font-size: 20px; }
+  .group-manager-card__kicker { font-size: 11px; }
+
+  .group-member-row { gap: var(--s2); padding: var(--s3) 0; }
+  .group-member-row__avatar { width: 36px; height: 36px; flex: 0 0 36px; font-size: 13px; }
+  .group-member-row__identity strong { font-size: 15px; }
+  .group-member-row__identity span { font-size: 12px; color: var(--text-2); }
+  .group-member-row__pts-val { font-size: 15px; }
+  .group-member-row__pts-pos { font-size: 13px; }
+
+  .group-my-position__pts { font-size: 24px; }
+  .group-my-position__pts span { font-size: 13px; }
+  .group-my-position__label { font-size: 11px; color: var(--text-2); }
+  .group-my-position__exact span:first-child { font-size: 22px; }
+  .group-my-position__exact span:last-child { font-size: 11px; color: var(--text-2); }
+
+  /* ranking rows */
+  .ranking-row { padding: var(--s3) var(--s4) !important; }
+
+  /* form dots maiores */
+  .form-dot { width: 9px !important; height: 9px !important; }
+
+  /* text legibility in dark */
+  .group-tool-note { color: var(--text-2); font-size: 13px; }
 }

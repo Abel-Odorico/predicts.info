@@ -401,13 +401,36 @@ def group_ranking(
     if not group:
         raise HTTPException(404, "Grupo não encontrado")
 
-    member_ids = [
-        r[0] for r in db.query(UserGroupMember.user_id)
-        .filter(UserGroupMember.group_id == group_id).all()
-    ]
+    members = db.query(UserGroupMember).filter(UserGroupMember.group_id == group_id).all()
+    member_ids = [m.user_id for m in members]
     if user.id not in member_ids:
         raise HTTPException(403, "Você não faz parte deste grupo")
 
+    # ── Champion bonus ────────────────────────────────────────
+    final_match = (
+        db.query(Match)
+        .options(joinedload(Match.result))
+        .filter(Match.phase == MatchPhase.final, Match.status == MatchStatus.finished)
+        .first()
+    )
+    champion_team_id = None
+    champion_team = None
+    if final_match and final_match.result:
+        if final_match.result.result == "a":
+            champion_team_id = final_match.team_a_id
+        elif final_match.result.result == "b":
+            champion_team_id = final_match.team_b_id
+        if champion_team_id:
+            champion_team = db.query(Team).filter(Team.id == champion_team_id).first()
+
+    picks_map = {m.user_id: m.champion_pick_team_id for m in members}
+    correct_pickers = {uid for uid, pick in picks_map.items() if pick == champion_team_id} if champion_team_id else set()
+    count_correct = len(correct_pickers)
+    total_members = len(member_ids)
+    # Proportional: fewer correct pickers → bigger bonus. Floor 10, inverse scale.
+    champion_bonus_pts = min(100, round(10 * total_members / count_correct)) if count_correct > 0 else 0
+
+    # ── Ranking query ─────────────────────────────────────────
     bet_counts = (
         db.query(Bet.user_id, func.count(Bet.id).label("total_bets"))
         .filter(Bet.user_id.in_(member_ids))
@@ -426,31 +449,41 @@ def group_ranking(
         .outerjoin(Ranking, User.id == Ranking.user_id)
         .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
         .filter(User.id.in_(member_ids))
-        .order_by(
-            desc(func.coalesce(Ranking.total_points, 0)),
-            desc(func.coalesce(Ranking.exact_scores, 0)),
-            desc(func.coalesce(bet_counts.c.total_bets, 0)),
-            User.name.asc(),
-        )
         .all()
     )
+
+    def effective_pts(r):
+        bonus = champion_bonus_pts if r.user_id in correct_pickers else 0
+        return (int(r.total_points or 0) + bonus, int(r.exact_scores or 0), int(r.total_bets or 0))
+
+    rows_sorted = sorted(rows, key=lambda r: effective_pts(r), reverse=True)
+
     return {
         "group_id": group.id,
         "group_name": group.name,
         "is_owner": group.owner_user_id == user.id,
+        "champion": {
+            "team_id": champion_team_id,
+            "name": champion_team.name if champion_team else None,
+            "code": champion_team.code if champion_team else None,
+            "flag_url": champion_team.flag_url if champion_team else None,
+        } if champion_team_id else None,
+        "champion_bonus_pts": champion_bonus_pts,
         "ranking": [
             {
                 "position": i + 1,
                 "user_id": r.user_id,
                 "name": r.name,
-                "total_points": r.total_points,
-                "exact_scores": r.exact_scores,
-                "correct_results": r.correct_results,
-                "total_bets": r.total_bets,
+                "total_points": int(r.total_points or 0),
+                "exact_scores": int(r.exact_scores or 0),
+                "correct_results": int(r.correct_results or 0),
+                "total_bets": int(r.total_bets or 0),
+                "champion_bonus": champion_bonus_pts if r.user_id in correct_pickers else 0,
+                "effective_points": int(r.total_points or 0) + (champion_bonus_pts if r.user_id in correct_pickers else 0),
                 "is_me": r.user_id == user.id,
                 "is_owner": r.user_id == group.owner_user_id,
             }
-            for i, r in enumerate(rows)
+            for i, r in enumerate(rows_sorted)
         ],
     }
 
