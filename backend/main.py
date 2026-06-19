@@ -62,6 +62,8 @@ def _run_migrations():
         for ddl in [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(60) UNIQUE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+            "UPDATE users SET updated_at = created_at WHERE updated_at IS NULL",
         ]:
             try:
                 conn.execute(text(ddl))

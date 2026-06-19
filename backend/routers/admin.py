@@ -197,6 +197,7 @@ def list_users(
             "name": user.name,
             "role": user.role.value if user.role else UserRole.user.value,
             "created_at": user.created_at,
+            "updated_at": user.updated_at,
             "bets_count": int(bets_count or 0),
             "bets_points": int(bets_points or 0),
         }

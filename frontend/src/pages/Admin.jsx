@@ -300,7 +300,7 @@ export default function Admin() {
                   <th className="adm-table__num">Apostas</th>
                   <th className="adm-table__num">Pts</th>
                   <th>Cargo</th>
-                  <th>Cadastro</th>
+                  <th>Cadastro / Atualização</th>
                   <th></th>
                 </tr>
               </thead>
@@ -345,7 +345,14 @@ export default function Admin() {
                         {u.role}
                       </span>
                     </td>
-                    <td className="adm-table__date">{fmtShort(u.created_at)}</td>
+                    <td className="adm-table__date">
+                      <div>{fmtShort(u.created_at)}</div>
+                      {u.updated_at && u.updated_at !== u.created_at && (
+                        <div style={{ color: 'var(--accent)', fontSize: 10, marginTop: 2 }}>
+                          ↻ {fmtShort(u.updated_at)}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <button
                         className={`btn btn-sm ${u.role === 'admin' ? 'btn-ghost' : 'btn-primary'}`}

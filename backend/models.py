@@ -177,6 +177,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.user)
     created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     bets = relationship("Bet", back_populates="user")
     ranking = relationship("Ranking", back_populates="user", uselist=False)
