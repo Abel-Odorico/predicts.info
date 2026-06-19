@@ -7,10 +7,10 @@ GET  /admin/users          list users with admin metrics
 PATCH /admin/users/{id}    update user role
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, text
 import redis as redis_lib
 import json
 
@@ -326,4 +326,130 @@ def bets_coverage(
     return {
         "total_users": len(users),
         "matches": coverage,
+    }
+
+
+# ── Growth / Stats ─────────────────────────────────────────────────────────
+
+_PERIOD_CFG = {
+    "day":      {"days": 1,   "trunc": "hour",  "fmt": "%H:00"},
+    "week":     {"days": 7,   "trunc": "day",   "fmt": "%d/%m"},
+    "month":    {"days": 30,  "trunc": "day",   "fmt": "%d/%m"},
+    "quarter":  {"days": 90,  "trunc": "day",   "fmt": "%d/%m"},
+    "semester": {"days": 180, "trunc": "week",  "fmt": "%d/%m"},
+    "year":     {"days": 365, "trunc": "month", "fmt": "%m/%Y"},
+}
+
+
+@router.get("/stats/growth")
+def stats_growth(
+    period: str = Query(default="month"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    if period not in _PERIOD_CFG:
+        raise HTTPException(400, f"period must be one of {list(_PERIOD_CFG)}")
+
+    cfg = _PERIOD_CFG[period]
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(days=cfg["days"])
+    trunc = cfg["trunc"]
+    fmt = cfg["fmt"]
+
+    # ── usuários por bucket ──────────────────────────
+    user_rows = db.execute(text(f"""
+        SELECT
+            date_trunc('{trunc}', created_at) AS bucket,
+            COUNT(*) AS new_users
+        FROM users
+        WHERE created_at >= :since
+        GROUP BY bucket
+        ORDER BY bucket
+    """), {"since": since}).fetchall()
+
+    # total de usuários ANTES do período (para acumulado)
+    total_before = db.execute(text("""
+        SELECT COUNT(*) FROM users WHERE created_at < :since
+    """), {"since": since}).scalar() or 0
+
+    cumulative = int(total_before)
+    users_series = []
+    for row in user_rows:
+        cumulative += int(row.new_users)
+        users_series.append({
+            "label": row.bucket.strftime(fmt),
+            "new": int(row.new_users),
+            "cumulative": cumulative,
+        })
+
+    # ── apostas por bucket ───────────────────────────
+    bet_rows = db.execute(text(f"""
+        SELECT
+            date_trunc('{trunc}', created_at) AS bucket,
+            COUNT(*) AS total_bets,
+            COUNT(DISTINCT user_id) AS unique_users
+        FROM bets
+        WHERE created_at >= :since
+        GROUP BY bucket
+        ORDER BY bucket
+    """), {"since": since}).fetchall()
+
+    bets_series = [
+        {
+            "label": row.bucket.strftime(fmt),
+            "bets": int(row.total_bets),
+            "unique_users": int(row.unique_users),
+        }
+        for row in bet_rows
+    ]
+
+    # ── summary cards ────────────────────────────────
+    now_brt = now  # já naive UTC, suficiente para diffs
+
+    def _count_users_since(delta_days):
+        cutoff = now - timedelta(days=delta_days)
+        return db.execute(text("SELECT COUNT(*) FROM users WHERE created_at >= :c"), {"c": cutoff}).scalar() or 0
+
+    def _count_bets_since(delta_days):
+        cutoff = now - timedelta(days=delta_days)
+        return db.execute(text("SELECT COUNT(*) FROM bets WHERE created_at >= :c"), {"c": cutoff}).scalar() or 0
+
+    total_users = db.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
+    total_bets  = db.execute(text("SELECT COUNT(*) FROM bets")).scalar() or 0
+    unique_bettors = db.execute(text("SELECT COUNT(DISTINCT user_id) FROM bets")).scalar() or 0
+    avg_bets = round(total_bets / total_users, 1) if total_users else 0
+
+    most_active = db.execute(text("""
+        SELECT u.name, COUNT(b.id) as cnt
+        FROM bets b JOIN users u ON u.id = b.user_id
+        GROUP BY u.id, u.name ORDER BY cnt DESC LIMIT 1
+    """)).fetchone()
+
+    most_bet_match = db.execute(text("""
+        SELECT ta.code || ' × ' || tb.code AS match_label, COUNT(b.id) as cnt
+        FROM bets b
+        JOIN matches m ON m.id = b.match_id
+        JOIN teams ta ON ta.id = m.team_a_id
+        JOIN teams tb ON tb.id = m.team_b_id
+        GROUP BY match_label ORDER BY cnt DESC LIMIT 1
+    """)).fetchone()
+
+    return {
+        "period": period,
+        "users_series": users_series,
+        "bets_series": bets_series,
+        "summary": {
+            "total_users":        int(total_users),
+            "new_today":          int(_count_users_since(1)),
+            "new_week":           int(_count_users_since(7)),
+            "new_month":          int(_count_users_since(30)),
+            "total_bets":         int(total_bets),
+            "bets_today":         int(_count_bets_since(1)),
+            "unique_bettors":     int(unique_bettors),
+            "avg_bets_per_user":  avg_bets,
+            "most_active_user":   most_active.name if most_active else None,
+            "most_active_bets":   int(most_active.cnt) if most_active else 0,
+            "most_bet_match":     most_bet_match.match_label if most_bet_match else None,
+            "most_bet_match_cnt": int(most_bet_match.cnt) if most_bet_match else 0,
+        },
     }

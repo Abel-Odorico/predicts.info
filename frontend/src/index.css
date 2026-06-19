@@ -2256,6 +2256,61 @@ img {
   align-items: flex-end;
 }
 
+/* ── Growth / Charts ─────────────────────────────────────── */
+.adm-period-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: var(--s1);
+}
+
+.adm-growth-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  overflow: hidden;
+}
+
+.adm-growth-card {
+  background: var(--bg-overlay);
+  padding: var(--s3) var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.adm-growth-card--wide {
+  grid-column: span 2;
+}
+
+.adm-growth-card__val {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1;
+  color: var(--text-1);
+}
+
+.adm-growth-card__label {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+
+@media (max-width: 900px) {
+  .adm-growth-cards { grid-template-columns: repeat(2, 1fr); }
+  .adm-growth-card--wide { grid-column: span 2; }
+}
+
+@media (max-width: 640px) {
+  .adm-growth-cards { grid-template-columns: repeat(2, 1fr); }
+  .adm-growth-card__val { font-size: 22px; }
+}
+
 /* ── Admin Shell ──────────────────────────────────────────── */
 .adm-shell {
   width: min(100%, 1200px);

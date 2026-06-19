@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
+} from 'recharts'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -40,6 +44,7 @@ function formatCountdown(value, nowMs) {
 }
 
 const TABS = [
+  { id: 'growth',   label: 'Crescimento',  icon: '📈' },
   { id: 'users',    label: 'Usuários',     icon: '👥' },
   { id: 'results',  label: 'Resultados',   icon: '⚽' },
   { id: 'sync',     label: 'Sincronização', icon: '🔄' },
@@ -47,10 +52,19 @@ const TABS = [
   { id: 'coverage', label: 'Cobertura',    icon: '📋' },
 ]
 
+const PERIODS = [
+  { id: 'day',      label: 'Dia' },
+  { id: 'week',     label: 'Semana' },
+  { id: 'month',    label: 'Mês' },
+  { id: 'quarter',  label: 'Trimestre' },
+  { id: 'semester', label: 'Semestre' },
+  { id: 'year',     label: 'Ano' },
+]
+
 export default function Admin() {
   const { user, token } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState('users')
+  const [tab, setTab] = useState('growth')
   const [nowMs, setNowMs] = useState(Date.now())
 
   // Users
@@ -81,6 +95,16 @@ export default function Admin() {
   const [coverageLoading, setCoverageLoading] = useState(false)
   const [coverageStatus, setCoverageStatus] = useState('scheduled')
 
+  // Growth
+  const [growth, setGrowth] = useState(null)
+  const [growthLoading, setGrowthLoading] = useState(false)
+  const [growthPeriod, setGrowthPeriod] = useState('month')
+  const [hiddenSeries, setHiddenSeries] = useState({})
+
+  function toggleSeries(key) {
+    setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
   useEffect(() => {
     if (!user || user.role !== 'admin') { navigate('/'); return }
     loadUsers()
@@ -89,6 +113,7 @@ export default function Admin() {
 
   // Tab-driven lazy loading
   useEffect(() => {
+    if (tab === 'growth')   loadGrowth(growthPeriod)
     if (tab === 'results' && matches.length === 0 && !matchesLoading) loadMatches()
     if (tab === 'bets' && !allBets && !betsLoading) loadBets()
     if (tab === 'coverage' && !betCoverage && !coverageLoading) loadCoverage('scheduled')
@@ -107,6 +132,16 @@ export default function Admin() {
 
   async function loadSyncStatus() {
     try { setSyncStatus(await api.get('/admin/sync-status', token)) } catch {}
+  }
+
+  async function loadGrowth(period = growthPeriod) {
+    setGrowthLoading(true)
+    try {
+      const data = await api.get(`/admin/stats/growth?period=${period}`, token)
+      setGrowth(data)
+      setGrowthPeriod(period)
+    } catch {}
+    finally { setGrowthLoading(false) }
   }
 
   async function loadUsers(query = userQuery) {
@@ -266,6 +301,164 @@ export default function Admin() {
           </button>
         ))}
       </div>
+
+      {/* ── Tab: Crescimento ──────────────────────────── */}
+      {tab === 'growth' && (
+        <div className="adm-pane fade-in-1">
+
+          {/* Period filter */}
+          <div className="adm-period-bar">
+            {PERIODS.map(p => (
+              <button
+                key={p.id}
+                className={`btn btn-sm ${growthPeriod === p.id ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => loadGrowth(p.id)}
+                disabled={growthLoading}
+              >{p.label}</button>
+            ))}
+            <button className="btn btn-ghost btn-sm" onClick={() => loadGrowth(growthPeriod)} disabled={growthLoading}>↻</button>
+          </div>
+
+          {growthLoading && (
+            <div style={{ padding: 'var(--s8)', textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>Carregando...</div>
+          )}
+
+          {!growthLoading && growth && (
+            <>
+              {/* ── KPI Cards ─────────────────────────── */}
+              <div className="adm-growth-cards">
+                {[
+                  { label: 'Total Usuários',    val: growth.summary.total_users,        color: 'var(--text-1)' },
+                  { label: 'Novos Hoje',        val: growth.summary.new_today,           color: 'var(--win)' },
+                  { label: 'Novos na Semana',   val: growth.summary.new_week,            color: 'var(--win)' },
+                  { label: 'Novos no Mês',      val: growth.summary.new_month,           color: 'var(--accent)' },
+                  { label: 'Total Apostas',     val: growth.summary.total_bets,          color: 'var(--text-1)' },
+                  { label: 'Apostas Hoje',      val: growth.summary.bets_today,          color: 'var(--win)' },
+                  { label: 'Apostadores Únicos',val: growth.summary.unique_bettors,      color: 'var(--accent)' },
+                  { label: 'Média Apostas/User',val: growth.summary.avg_bets_per_user,   color: 'var(--text-2)' },
+                ].map(card => (
+                  <div key={card.label} className="adm-growth-card">
+                    <div className="adm-growth-card__val" style={{ color: card.color }}>{card.val}</div>
+                    <div className="adm-growth-card__label">{card.label}</div>
+                  </div>
+                ))}
+                {growth.summary.most_active_user && (
+                  <div className="adm-growth-card adm-growth-card--wide">
+                    <div className="adm-growth-card__val" style={{ color: 'var(--accent)', fontSize: 16 }}>
+                      {growth.summary.most_active_user}
+                    </div>
+                    <div className="adm-growth-card__label">Usuário Mais Ativo · {growth.summary.most_active_bets} apostas</div>
+                  </div>
+                )}
+                {growth.summary.most_bet_match && (
+                  <div className="adm-growth-card adm-growth-card--wide">
+                    <div className="adm-growth-card__val" style={{ color: 'var(--accent)', fontSize: 16 }}>
+                      {growth.summary.most_bet_match}
+                    </div>
+                    <div className="adm-growth-card__label">Jogo Mais Apostado · {growth.summary.most_bet_match_cnt} apostas</div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Chart: Usuários ───────────────────── */}
+              <div className="adm-card">
+                <div className="adm-card__head">
+                  <span className="adm-card__title">Novos Usuários × Usuários Acumulados</span>
+                  <span className="adm-card__meta">{PERIODS.find(p => p.id === growthPeriod)?.label}</span>
+                </div>
+                {growth.users_series.length === 0 ? (
+                  <div className="adm-table__empty">Nenhum dado para este período.</div>
+                ) : (
+                  <div style={{ padding: 'var(--s4) var(--s2)' }}>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <ComposedChart data={growth.users_series} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(41,75,107,0.15)" />
+                        <XAxis dataKey="label" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
+                        <YAxis yAxisId="left"  tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
+                        <YAxis yAxisId="right" orientation="right" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
+                        <Tooltip
+                          contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'var(--font-cond)', fontSize: 13 }}
+                          labelStyle={{ color: 'var(--text-1)', fontWeight: 700 }}
+                        />
+                        <Legend
+                          onClick={e => toggleSeries(e.dataKey)}
+                          wrapperStyle={{ fontFamily: 'var(--font-cond)', fontSize: 13, cursor: 'pointer' }}
+                        />
+                        <Bar
+                          yAxisId="left"
+                          dataKey="new"
+                          name="Novos usuários"
+                          fill="#0f7a78"
+                          fillOpacity={hiddenSeries['new'] ? 0 : 0.85}
+                          radius={[3,3,0,0]}
+                          hide={hiddenSeries['new']}
+                        />
+                        <Line
+                          yAxisId="right"
+                          dataKey="cumulative"
+                          name="Acumulado"
+                          stroke="#e8c44a"
+                          strokeWidth={2}
+                          dot={false}
+                          hide={hiddenSeries['cumulative']}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Chart: Apostas ────────────────────── */}
+              <div className="adm-card">
+                <div className="adm-card__head">
+                  <span className="adm-card__title">Apostas por Período × Apostadores Únicos</span>
+                  <span className="adm-card__meta">{PERIODS.find(p => p.id === growthPeriod)?.label}</span>
+                </div>
+                {growth.bets_series.length === 0 ? (
+                  <div className="adm-table__empty">Nenhuma aposta neste período.</div>
+                ) : (
+                  <div style={{ padding: 'var(--s4) var(--s2)' }}>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <ComposedChart data={growth.bets_series} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(41,75,107,0.15)" />
+                        <XAxis dataKey="label" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
+                        <YAxis yAxisId="left"  tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
+                        <YAxis yAxisId="right" orientation="right" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
+                        <Tooltip
+                          contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'var(--font-cond)', fontSize: 13 }}
+                          labelStyle={{ color: 'var(--text-1)', fontWeight: 700 }}
+                        />
+                        <Legend
+                          onClick={e => toggleSeries(e.dataKey)}
+                          wrapperStyle={{ fontFamily: 'var(--font-cond)', fontSize: 13, cursor: 'pointer' }}
+                        />
+                        <Bar
+                          yAxisId="left"
+                          dataKey="bets"
+                          name="Apostas"
+                          fill="#2ec980"
+                          fillOpacity={hiddenSeries['bets'] ? 0 : 0.85}
+                          radius={[3,3,0,0]}
+                          hide={hiddenSeries['bets']}
+                        />
+                        <Line
+                          yAxisId="right"
+                          dataKey="unique_users"
+                          name="Apostadores únicos"
+                          stroke="#e85252"
+                          strokeWidth={2}
+                          dot={false}
+                          hide={hiddenSeries['unique_users']}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── Tab: Usuários ─────────────────────────────── */}
       {tab === 'users' && (
