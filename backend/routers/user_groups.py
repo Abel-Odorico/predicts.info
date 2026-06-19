@@ -121,14 +121,15 @@ def list_user_groups(
         )
         ranking_rows = (
             db.query(
-                Ranking.user_id,
-                Ranking.total_points,
-                Ranking.exact_scores,
+                User.id.label("user_id"),
+                func.coalesce(Ranking.total_points, 0).label("total_points"),
+                func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
                 func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
-                Ranking.correct_results,
+                func.coalesce(Ranking.correct_results, 0).label("correct_results"),
             )
-            .outerjoin(bet_counts, Ranking.user_id == bet_counts.c.user_id)
-            .filter(Ranking.user_id.in_(all_member_ids))
+            .outerjoin(Ranking, User.id == Ranking.user_id)
+            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+            .filter(User.id.in_(all_member_ids))
             .all()
         )
     else:
