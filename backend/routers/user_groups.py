@@ -23,6 +23,16 @@ class GroupInviteCreate(BaseModel):
     email: EmailStr | None = None
 
 
+def _mask_email(email: str) -> str:
+    if not email or "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    masked_local = local[0] + "*" * min(len(local) - 1, 4) if len(local) > 1 else local
+    parts = domain.split(".")
+    masked_domain = parts[0][0] + "*" * max(len(parts[0]) - 1, 1) + "." + ".".join(parts[1:]) if len(parts) > 1 else domain
+    return f"{masked_local}@{masked_domain}"
+
+
 def _group_payload(group: UserGroup, ranking_map: dict | None = None) -> dict:
     accepted_members = sorted(group.members, key=lambda member: (not member.is_owner, member.user.name.lower() if member.user else ""))
     pending_invites = [
@@ -31,19 +41,20 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None) -> dict:
     ]
     members_out = []
     for member in accepted_members:
-        pts = 0
-        exact = 0
+        pts = exact = bets = correct = 0
         if ranking_map and member.user_id in ranking_map:
-            pts, exact = ranking_map[member.user_id]
+            pts, exact, bets, correct = ranking_map[member.user_id]
         members_out.append({
             "id": member.id,
             "user_id": member.user_id,
             "name": member.user.name if member.user else "",
-            "email": member.user.email if member.user else "",
+            "email_masked": _mask_email(member.user.email if member.user else ""),
             "is_owner": member.is_owner,
             "joined_at": member.joined_at,
             "total_points": pts,
             "exact_scores": exact,
+            "total_bets": bets,
+            "correct_results": correct,
         })
     return {
         "id": group.id,
@@ -101,12 +112,31 @@ def list_user_groups(
         if m.group:
             for gm in m.group.members:
                 all_member_ids.add(gm.user_id)
-    ranking_rows = (
-        db.query(Ranking.user_id, Ranking.total_points, Ranking.exact_scores)
-        .filter(Ranking.user_id.in_(all_member_ids))
-        .all()
-    ) if all_member_ids else []
-    ranking_map = {r.user_id: (r.total_points or 0, r.exact_scores or 0) for r in ranking_rows}
+    if all_member_ids:
+        bet_counts = (
+            db.query(Bet.user_id, func.count(Bet.id).label("total_bets"))
+            .filter(Bet.user_id.in_(all_member_ids))
+            .group_by(Bet.user_id)
+            .subquery()
+        )
+        ranking_rows = (
+            db.query(
+                Ranking.user_id,
+                Ranking.total_points,
+                Ranking.exact_scores,
+                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+                Ranking.correct_results,
+            )
+            .outerjoin(bet_counts, Ranking.user_id == bet_counts.c.user_id)
+            .filter(Ranking.user_id.in_(all_member_ids))
+            .all()
+        )
+    else:
+        ranking_rows = []
+    ranking_map = {
+        r.user_id: (r.total_points or 0, r.exact_scores or 0, r.total_bets or 0, r.correct_results or 0)
+        for r in ranking_rows
+    }
     groups = [_group_payload(member.group, ranking_map) for member in memberships if member.group]
 
     invites = (
@@ -177,7 +207,7 @@ def search_users(
         .all()
     )
     return [
-        {"id": row.id, "name": row.name, "email": row.email}
+        {"id": row.id, "name": row.name, "email_masked": _mask_email(row.email)}
         for row in rows
     ]
 

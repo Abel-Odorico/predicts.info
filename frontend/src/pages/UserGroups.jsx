@@ -8,6 +8,7 @@ export default function UserGroups() {
   const { token, user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState({ groups: [], pending_invites: [] })
+  const [matchStats, setMatchStats] = useState({ finished: 0, total: 0 })
   const [newGroupName, setNewGroupName] = useState('')
   const [createMsg, setCreateMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -16,8 +17,13 @@ export default function UserGroups() {
     if (!token) return
     setLoading(true)
     try {
-      const response = await api.get('/user-groups', token)
+      const [response, matches] = await Promise.all([
+        api.get('/user-groups', token),
+        api.get('/matches'),
+      ])
       setData(response)
+      const finished = matches.filter(m => m.status === 'finished').length
+      setMatchStats({ finished, total: matches.length })
     } catch (e) {
       setCreateMsg(e.message)
     } finally {
@@ -160,6 +166,7 @@ export default function UserGroups() {
               token={token}
               currentUser={user}
               onRefresh={loadGroups}
+              matchStats={matchStats}
             />
           ))}
         </section>
@@ -168,7 +175,17 @@ export default function UserGroups() {
   )
 }
 
-function UserGroupCard({ group, token, currentUser, onRefresh }) {
+function getBadges(r, position, effectiveTotal) {
+  const badges = []
+  if (position === 0) badges.push({ icon: '🏆', label: 'Líder', color: '#e8a030' })
+  if (r.total_bets >= 5 && r.exact_scores / r.total_bets >= 0.28)
+    badges.push({ icon: '🎯', label: 'Sniper', color: '#e85252' })
+  if (effectiveTotal > 0 && r.total_bets >= effectiveTotal * 0.85)
+    badges.push({ icon: '⚡', label: 'Maratonista', color: '#9b5de8' })
+  return badges
+}
+
+function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 } }) {
   const isOwner = group.owner_user_id === currentUser?.id
   const myEntry = (group.members ?? []).find(m => m.user_id === currentUser?.id)
   const myPoints = myEntry?.total_points ?? 0
@@ -325,11 +342,11 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
     }
   }
 
-  async function inviteUser(userId, emailValue) {
+  async function inviteUser(userId) {
     setInviting(true)
     setMsg('')
     try {
-      await api.post(`/user-groups/${group.id}/invites`, { user_id: userId, email: emailValue }, token)
+      await api.post(`/user-groups/${group.id}/invites`, { user_id: userId }, token)
       setQuery('')
       setResults([])
       setMsg('✓ Convite enviado.')
@@ -404,8 +421,9 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
 
       <div className="group-manager-card__stats">
         <GroupStat label="Membros" value={sortedMembers.length} />
+        <GroupStat label="Jogos realizados" value={`${matchStats.finished}/${matchStats.total}`} />
+        <GroupStat label="Pendentes" value={matchStats.total - matchStats.finished} />
         <GroupStat label="Convites" value={group.pending_invites?.length ?? 0} />
-        <GroupStat label="Seu papel" value={isOwner ? 'Dono' : 'Membro'} compact />
       </div>
 
       <div className="group-manager-card__body">
@@ -416,22 +434,63 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
             {extraMembers > 0 && !showAllMembers && <span>+{extraMembers}</span>}
           </div>
           <div className="group-member-preview">
-            {visibleMembers.map((member, i) => (
-              <div key={member.user_id} className={`group-member-row${member.user_id === currentUser?.id ? ' group-member-row--me' : ''}`}>
-                <div className="group-member-row__avatar">{getInitials(member.name)}</div>
-                <div className="group-member-row__identity">
-                  <strong>{member.name}{member.user_id === currentUser?.id ? ' (você)' : ''}</strong>
-                  <span>{member.email}</span>
+            {visibleMembers.map((member, i) => {
+              const effectiveTotal = Math.max(matchStats.finished, ...sortedMembers.map(m => m.total_bets || 0), 1)
+              const coveragePct = effectiveTotal > 0 ? Math.min(100, Math.round((member.total_bets || 0) / effectiveTotal * 100)) : 0
+              const badges = getBadges(member, i, effectiveTotal)
+              return (
+                <div key={member.user_id} className={`group-member-row${member.user_id === currentUser?.id ? ' group-member-row--me' : ''}`}>
+                  <div className="group-member-row__avatar">{getInitials(member.name)}</div>
+                  <div className="group-member-row__identity" style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                      <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {member.name}{member.user_id === currentUser?.id ? ' (você)' : ''}
+                      </strong>
+                      {member.is_owner && <span className="badge badge-group" style={{ fontSize: 9 }}>Dono</span>}
+                    </div>
+                    {/* Badges */}
+                    {badges.length > 0 && (
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
+                        {badges.map(b => (
+                          <span key={b.label} style={{
+                            fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700,
+                            padding: '1px 5px', borderRadius: 20,
+                            background: `${b.color}20`, color: b.color,
+                            border: `1px solid ${b.color}40`,
+                          }}>
+                            {b.icon} {b.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {/* Barra de cobertura */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                      <div style={{ height: 3, width: 60, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 2,
+                          width: `${coveragePct}%`,
+                          background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)',
+                        }} />
+                      </div>
+                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
+                        {member.total_bets || 0}/{effectiveTotal} apostas
+                      </span>
+                    </div>
+                  </div>
+                  <div className="group-member-row__pts">
+                    <span className="group-member-row__pts-pos">
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`}
+                    </span>
+                    <span className="group-member-row__pts-val">{member.total_points ?? 0}pts</span>
+                    {member.exact_scores > 0 && (
+                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
+                        {member.exact_scores} exatos
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="group-member-row__pts">
-                  <span className="group-member-row__pts-pos">
-                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`}
-                  </span>
-                  <span className="group-member-row__pts-val">{member.total_points ?? 0}pts</span>
-                </div>
-                {member.is_owner && <span className="badge badge-group">Dono</span>}
-              </div>
-            ))}
+              )
+            })}
           </div>
           {sortedMembers.length > 4 && (
             <button
@@ -483,7 +542,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
               {group.pending_invites.map(invite => (
                 <div key={invite.id} className="pending-invite-row">
                   <div className="pending-invite-row__content">
-                    <span className="pending-invite-row__email">{invite.invitee_email}</span>
+                    <span className="pending-invite-row__email">{maskEmail(invite.invitee_email)}</span>
                     <span className="pending-invite-row__meta">Aguardando resposta</span>
                   </div>
                   {isOwner && (
@@ -521,9 +580,9 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
                     <div key={result.id} className="group-search-result">
                       <div>
                         <strong>{result.name}</strong>
-                        <span>{result.email}</span>
+                        <span style={{ color: 'var(--text-4)', fontSize: 11 }}>{result.email_masked}</span>
                       </div>
-                      <button type="button" className="btn btn-primary btn-sm" disabled={inviting} onClick={() => inviteUser(result.id, result.email)}>Convidar</button>
+                      <button type="button" className="btn btn-primary btn-sm" disabled={inviting} onClick={() => inviteUser(result.id, null)}>Convidar</button>
                     </div>
                   ))}
                 </div>
@@ -566,4 +625,13 @@ function GroupStat({ label, value, compact = false }) {
 
 function getInitials(name = '') {
   return name.split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+}
+
+function maskEmail(email = '') {
+  if (!email || !email.includes('@')) return '***'
+  const [local, domain] = email.split('@')
+  const maskedLocal = local[0] + '*'.repeat(Math.min(local.length - 1, 4))
+  const parts = domain.split('.')
+  const maskedDomain = parts[0][0] + '*'.repeat(Math.max(parts[0].length - 1, 1)) + '.' + parts.slice(1).join('.')
+  return `${maskedLocal}@${maskedDomain}`
 }
