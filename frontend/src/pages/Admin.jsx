@@ -274,11 +274,10 @@ export default function Admin() {
             <input
               type="text"
               className="form-input"
-              placeholder="Buscar por nome, e-mail ou @username…"
+              placeholder="Nome, e-mail ou @username…"
               value={userQuery}
               onChange={e => setUserQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && loadUsers()}
-              style={{ flex: 1 }}
             />
             <button className="btn btn-primary" onClick={() => loadUsers()}>Buscar</button>
             <button className="btn btn-ghost" onClick={() => { setUserQuery(''); loadUsers('') }}>↺</button>
