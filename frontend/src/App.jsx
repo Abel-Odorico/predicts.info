@@ -21,6 +21,8 @@ import UserGroups     from './pages/UserGroups'
 import GroupRanking   from './pages/GroupRanking'
 import JoinGroup      from './pages/JoinGroup'
 import Profile        from './pages/Profile'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword  from './pages/ResetPassword'
 import { useAuth } from './stores/authStore'
 import { api } from './api'
 
@@ -52,7 +54,9 @@ export default function App() {
             <Route path="/termos"      element={<Terms />} />
             <Route path="/sobre"       element={<About />} />
             <Route path="/contato"     element={<Contact />} />
-            <Route path="/perfil"      element={<Profile />} />
+            <Route path="/perfil"         element={<Profile />} />
+            <Route path="/esqueci-senha"  element={<ForgotPassword />} />
+            <Route path="/redefinir-senha" element={<ResetPassword />} />
           </Routes>
         </main>
       </div>

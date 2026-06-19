@@ -209,6 +209,21 @@ export default function Login() {
                 : mode === 'login' ? 'Entrar' : 'Criar Conta'}
             </button>
 
+            {mode === 'login' && (
+              <div style={{ textAlign: 'center', marginTop: 'var(--s2)' }}>
+                <Link
+                  to="/esqueci-senha"
+                  style={{
+                    fontFamily: 'var(--font-cond)', fontSize: 13,
+                    color: 'var(--text-3)', textDecoration: 'none',
+                    letterSpacing: '0.03em',
+                  }}
+                >
+                  Esqueci minha senha
+                </Link>
+              </div>
+            )}
+
             {mode === 'register' && (
               <div className="register-explainer">
                 <div className="register-explainer__title">Como funciona a pontuacao das apostas</div>

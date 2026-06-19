@@ -64,6 +64,20 @@ def _run_migrations():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
             "UPDATE users SET updated_at = created_at WHERE updated_at IS NULL",
+            # Índice parcial unique em phone (NULL permitido, valores não-null devem ser únicos)
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_phone ON users (phone) WHERE phone IS NOT NULL",
+            # Tabela de tokens de reset de senha
+            """
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token VARCHAR(64) NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_prt_token ON password_reset_tokens (token)",
         ]:
             try:
                 conn.execute(text(ddl))

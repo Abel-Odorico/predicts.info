@@ -1,11 +1,13 @@
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User, UserRole, Ranking
+from models import User, UserRole, Ranking, PasswordResetToken
 from schemas import UserCreate, UserResponse, Token, ProfileUpdate, PasswordChange
 from auth_utils import hash_password, verify_password, create_token, get_current_user
 from routers.audit import log_action
@@ -56,6 +58,13 @@ def _validate_username(username: str) -> None:
 def _validate_phone(phone: str | None) -> None:
     if phone and not _PHONE_RE.match(phone):
         raise HTTPException(400, "Celular inválido")
+
+
+def _phone_exists(db: Session, phone: str, exclude_user_id: int | None = None) -> bool:
+    query = db.query(User).filter(User.phone == phone)
+    if exclude_user_id is not None:
+        query = query.filter(User.id != exclude_user_id)
+    return query.first() is not None
 
 
 def _username_exists(db: Session, username: str, exclude_user_id: int | None = None) -> bool:
@@ -125,6 +134,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
     phone = _normalize_phone(payload.phone)
     _validate_phone(phone)
+    if phone and _phone_exists(db, phone):
+        raise HTTPException(409, "Telefone já cadastrado em outra conta")
 
     user = User(
         email=payload.email,
@@ -195,6 +206,8 @@ def update_profile(
     if payload.phone is not None:
         phone = _normalize_phone(payload.phone)
         _validate_phone(phone)
+        if phone and _phone_exists(db, phone, user.id):
+            raise HTTPException(409, "Telefone já cadastrado em outra conta")
         changes["phone"] = {"from": user.phone, "to": phone}
         user.phone = phone
 
@@ -224,3 +237,92 @@ def change_password(
     log_action(db, user.id, "profile.password_change", None, request.client.host if request.client else None)
     db.commit()
     return {"status": "ok", "message": "Senha alterada com sucesso"}
+
+
+# ── Forgot / Reset Password ────────────────────────────────────────────────
+
+_RESET_EXPIRE_MINUTES = 60
+_FRONTEND_URL = "https://predicts.info"
+
+
+class ForgotPasswordPayload(BaseModel):
+    email: str
+
+
+class ResetPasswordPayload(BaseModel):
+    token: str
+    new_password: str = ""
+
+
+def _send_reset_email_bg(name: str, email: str, token: str) -> None:
+    from mail import send_email, reset_password_html
+    url = f"{_FRONTEND_URL}/redefinir-senha?token={token}"
+    html = reset_password_html(name, url, _RESET_EXPIRE_MINUTES)
+    send_email(email, "Redefinir sua senha — Predicts", html)
+
+
+@router.post("/forgot-password", status_code=202)
+def forgot_password(
+    payload: ForgotPasswordPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    # Sempre retorna 202 para não vazar se e-mail existe
+    user = db.query(User).filter(func.lower(User.email) == payload.email.strip().lower()).first()
+    if not user:
+        return {"status": "ok", "message": "Se o e-mail existir, um link será enviado."}
+
+    # Invalida tokens anteriores não usados
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).delete()
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    token = secrets.token_urlsafe(48)
+    db.add(PasswordResetToken(
+        user_id=user.id,
+        token=token,
+        expires_at=now + timedelta(minutes=_RESET_EXPIRE_MINUTES),
+    ))
+    db.commit()
+
+    background_tasks.add_task(_send_reset_email_bg, user.name, user.email, token)
+    return {"status": "ok", "message": "Se o e-mail existir, um link será enviado."}
+
+
+@router.get("/reset-password/validate")
+def validate_reset_token(token: str = Query(...), db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    rec = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == token,
+        PasswordResetToken.used_at.is_(None),
+        PasswordResetToken.expires_at > now,
+    ).first()
+    if not rec:
+        raise HTTPException(400, "Link inválido ou expirado")
+    return {"valid": True, "email": rec.user.email if rec.user else None}
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordPayload, db: Session = Depends(get_db)):
+    if len(payload.new_password) < 6:
+        raise HTTPException(400, "Nova senha deve ter ao menos 6 caracteres")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    rec = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == payload.token,
+        PasswordResetToken.used_at.is_(None),
+        PasswordResetToken.expires_at > now,
+    ).first()
+    if not rec:
+        raise HTTPException(400, "Link inválido ou expirado")
+
+    user = db.query(User).filter(User.id == rec.user_id).first()
+    if not user:
+        raise HTTPException(404, "Usuário não encontrado")
+
+    user.password_hash = hash_password(payload.new_password)
+    rec.used_at = now
+    db.commit()
+    return {"status": "ok", "message": "Senha redefinida com sucesso"}

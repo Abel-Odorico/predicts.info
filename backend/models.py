@@ -187,6 +187,19 @@ class User(Base):
     received_group_invites = relationship("UserGroupInvite", back_populates="invitee", foreign_keys="UserGroupInvite.invitee_user_id")
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String(64), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    user = relationship("User")
+
+
 class Bet(Base):
     __tablename__ = "bets"
     __table_args__ = (UniqueConstraint("user_id", "match_id", name="uq_user_match_bet"),)
