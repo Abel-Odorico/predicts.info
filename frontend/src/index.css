@@ -3394,7 +3394,7 @@ img {
 
   .ranking-head,
   .ranking-row {
-    grid-template-columns: 36px minmax(0, 1fr) 52px 44px 44px 44px 56px;
+    grid-template-columns: 36px minmax(0, 1fr) 52px 56px 52px 52px;
   }
 
   .ranking-col-hide {
