@@ -192,6 +192,8 @@ def list_users(
         {
             "id": user.id,
             "email": user.email,
+            "username": user.username,
+            "phone": user.phone,
             "name": user.name,
             "role": user.role.value if user.role else UserRole.user.value,
             "created_at": user.created_at,

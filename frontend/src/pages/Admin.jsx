@@ -323,6 +323,17 @@ export default function Admin() {
                       <span>Cadastro {formatDateTime(item.created_at)}</span>
                       <span>{item.bets_count} apostas</span>
                       <span>{item.bets_points} pontos</span>
+                      {item.username && <span>@{item.username}</span>}
+                      {item.phone && (
+                        <a
+                          href={`https://wa.me/${item.phone.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--win)', textDecoration: 'none' }}
+                        >
+                          📱 {item.phone}
+                        </a>
+                      )}
                     </div>
                   </div>
                   <div className="admin-user-card__side">
