@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from auth_utils import get_current_user
 from database import get_db
-from models import Bet, GroupInviteStatus, Ranking, User, UserGroup, UserGroupInvite, UserGroupMember
+from models import Bet, GroupInviteStatus, Match, MatchStatus, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
 from routers.audit import log_action
 
 router = APIRouter(prefix="/user-groups", tags=["user-groups"])
@@ -600,3 +600,118 @@ def cancel_invite(
     db.delete(invite)
     db.commit()
     return {"status": "cancelled", "invite_id": invite_id}
+
+
+# ── Highlights do grupo ───────────────────────────────────────────────────────
+
+@router.get("/{group_id}/highlights")
+def group_highlights(
+    group_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+
+    member_ids = [
+        r[0] for r in db.query(UserGroupMember.user_id)
+        .filter(UserGroupMember.group_id == group_id).all()
+    ]
+    if user.id not in member_ids:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+
+    # Próximo jogo aberto
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    next_match = (
+        db.query(Match)
+        .options(
+            __import__('sqlalchemy.orm', fromlist=['joinedload']).joinedload(Match.team_a),
+            __import__('sqlalchemy.orm', fromlist=['joinedload']).joinedload(Match.team_b),
+        )
+        .filter(Match.status == MatchStatus.scheduled, Match.match_date > now)
+        .order_by(Match.match_date.asc())
+        .first()
+    )
+
+    next_match_out = None
+    members_bet_next = []
+    members_no_bet_next = []
+
+    if next_match:
+        next_match_out = {
+            "id": next_match.id,
+            "match_date": next_match.match_date.isoformat() if next_match.match_date else None,
+            "team_a": {"name": next_match.team_a.name, "code": next_match.team_a.code, "flag_url": next_match.team_a.flag_url} if next_match.team_a else {},
+            "team_b": {"name": next_match.team_b.name, "code": next_match.team_b.code, "flag_url": next_match.team_b.flag_url} if next_match.team_b else {},
+            "group_name": next_match.group_name,
+        }
+        bet_user_ids = {
+            r[0] for r in db.query(Bet.user_id)
+            .filter(Bet.match_id == next_match.id, Bet.user_id.in_(member_ids)).all()
+        }
+        members_with_names = {
+            r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
+        }
+        members_bet_next = [{"user_id": uid, "name": members_with_names.get(uid, "")} for uid in member_ids if uid in bet_user_ids]
+        members_no_bet_next = [{"user_id": uid, "name": members_with_names.get(uid, "")} for uid in member_ids if uid not in bet_user_ids]
+
+    # Palpite mais ousado (maior placar combinado em jogo finalizado)
+    top_bet_row = (
+        db.query(
+            Bet.score_a, Bet.score_b,
+            User.name.label("user_name"),
+            Match.group_name,
+        )
+        .join(User, Bet.user_id == User.id)
+        .join(Match, Bet.match_id == Match.id)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+        .order_by(desc(Bet.score_a + Bet.score_b), desc(Bet.score_a))
+        .first()
+    )
+    top_bet = None
+    if top_bet_row:
+        top_bet = {
+            "score_a": top_bet_row.score_a,
+            "score_b": top_bet_row.score_b,
+            "user_name": top_bet_row.user_name,
+            "group": top_bet_row.group_name,
+        }
+
+    # Sequência de exatos: maior streak de apostas com points_earned == 3 por membro
+    all_bets = (
+        db.query(Bet.user_id, Bet.points_earned)
+        .join(Match, Bet.match_id == Match.id)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+        .order_by(Bet.user_id, Match.match_date.asc())
+        .all()
+    )
+    from itertools import groupby
+    streaks = {}
+    for uid, bets_iter in groupby(all_bets, key=lambda b: b.user_id):
+        bets_list = list(bets_iter)
+        max_streak = cur = 0
+        for b in bets_list:
+            if b.points_earned == 3:
+                cur += 1
+                max_streak = max(max_streak, cur)
+            else:
+                cur = 0
+        streaks[uid] = max_streak
+
+    members_with_names2 = {
+        r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
+    }
+    streak_list = sorted(
+        [{"user_id": uid, "name": members_with_names2.get(uid, ""), "streak": s} for uid, s in streaks.items() if s > 0],
+        key=lambda x: -x["streak"]
+    )
+
+    return {
+        "next_match": next_match_out,
+        "members_bet_next": members_bet_next,
+        "members_no_bet_next": members_no_bet_next,
+        "top_bet": top_bet,
+        "streaks": streak_list,
+    }
