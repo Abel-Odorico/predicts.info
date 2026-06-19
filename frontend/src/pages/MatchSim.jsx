@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '../api'
 import ProbBar from '../components/ProbBar'
@@ -27,6 +27,7 @@ export default function MatchSim() {
   const [betMsg, setBetMsg] = useState('')
   const [existingBet, setExistingBet] = useState(null)
   const [n, setN] = useState(1000000)
+  const betRef = useRef(null)
 
   useEffect(() => { fetchAll() }, [id])
 
@@ -79,6 +80,16 @@ export default function MatchSim() {
   }
 
   const bettingOpen = isBettingOpen(match)
+
+  function handleScoreSelect(score) {
+    if (!token || !bettingOpen) return
+    const [a, b] = score.split('x').map(Number)
+    setBetScore({ a, b })
+    setBetMsg('')
+    setTimeout(() => betRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+  }
+
+  const selectedScore = `${betScore.a}x${betScore.b}`
 
   if (loading) return <Spinner text="Simulando partida..." />
   if (!match) return <div className="page"><p className="text-3">Partida não encontrada.</p></div>
@@ -143,7 +154,20 @@ export default function MatchSim() {
             </span>
           </div>
           <div className="card__body">
-            {sim ? <ScoreGrid scores={sim.top_scores} /> : <Spinner />}
+            {sim ? (
+              <>
+                {token && bettingOpen && (
+                  <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginBottom: 'var(--s3)', letterSpacing: '0.05em' }}>
+                    Clique num placar para preencher sua aposta ↓
+                  </p>
+                )}
+                <ScoreGrid
+                  scores={sim.top_scores}
+                  onSelect={token && bettingOpen ? handleScoreSelect : undefined}
+                  selectedScore={token && bettingOpen ? selectedScore : undefined}
+                />
+              </>
+            ) : <Spinner />}
           </div>
         </div>
 
@@ -174,7 +198,7 @@ export default function MatchSim() {
           )}
 
           {match.status !== 'finished' && (
-            <div className="card fade-in-4">
+            <div className="card fade-in-4" ref={betRef}>
               <div className="card__header">
                 <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
                   🎯 Apostar no Placar

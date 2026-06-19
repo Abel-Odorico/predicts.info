@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from auth_utils import get_current_user
 from database import get_db
-from models import Bet, GroupInviteStatus, Match, MatchStatus, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
+from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchStatus, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
 from routers.audit import log_action
 
 router = APIRouter(prefix="/user-groups", tags=["user-groups"])
@@ -821,3 +821,356 @@ def group_highlights(
         "group_level": group_level,
         "next_level_xp": next_level_xp,
     }
+
+
+# ── Apostas reveladas (bets de todos os membros num jogo) ─────────────────────
+
+@router.get("/{group_id}/matches/{match_id}/bets")
+def group_match_bets(
+    group_id: int,
+    match_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    member_ids = [
+        r[0] for r in db.query(UserGroupMember.user_id)
+        .filter(UserGroupMember.group_id == group_id).all()
+    ]
+    if user.id not in member_ids:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+    match = db.query(Match).filter(Match.id == match_id).first()
+    if not match:
+        raise HTTPException(404, "Partida não encontrada")
+    if match.status != MatchStatus.finished:
+        raise HTTPException(400, "Apostas só reveladas após o jogo encerrar")
+    bets = (
+        db.query(Bet, User.name)
+        .join(User, Bet.user_id == User.id)
+        .filter(Bet.match_id == match_id, Bet.user_id.in_(member_ids))
+        .order_by(desc(Bet.points_earned), Bet.score_a + Bet.score_b)
+        .all()
+    )
+    return [
+        {
+            "user_id": bet.user_id,
+            "name": name,
+            "score_a": bet.score_a,
+            "score_b": bet.score_b,
+            "points_earned": bet.points_earned,
+            "is_me": bet.user_id == user.id,
+        }
+        for bet, name in bets
+    ]
+
+
+# ── Partidas recentes do grupo (para apostas reveladas) ───────────────────────
+
+@router.get("/{group_id}/recent-matches")
+def group_recent_matches(
+    group_id: int,
+    limit: int = Query(default=5, le=20),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    member_ids = [
+        r[0] for r in db.query(UserGroupMember.user_id)
+        .filter(UserGroupMember.group_id == group_id).all()
+    ]
+    if user.id not in member_ids:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+    matches = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+        .filter(Match.status == MatchStatus.finished)
+        .order_by(desc(Match.match_date))
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": m.id,
+            "match_date": m.match_date.isoformat() if m.match_date else None,
+            "team_a": {"name": m.team_a.name, "code": m.team_a.code, "flag_url": m.team_a.flag_url} if m.team_a else {},
+            "team_b": {"name": m.team_b.name, "code": m.team_b.code, "flag_url": m.team_b.flag_url} if m.team_b else {},
+            "result": {"score_a": m.result.score_a, "score_b": m.result.score_b} if m.result else None,
+            "phase": m.phase.value if m.phase else None,
+        }
+        for m in matches
+    ]
+
+
+# ── Pick do campeão ───────────────────────────────────────────────────────────
+
+class ChampionPickBody(BaseModel):
+    team_id: int
+
+
+@router.get("/{group_id}/champion")
+def get_champion_picks(
+    group_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    members = (
+        db.query(UserGroupMember)
+        .options(
+            joinedload(UserGroupMember.user),
+            joinedload(UserGroupMember.champion_pick),
+        )
+        .filter(UserGroupMember.group_id == group_id)
+        .all()
+    )
+    if not any(m.user_id == user.id for m in members):
+        raise HTTPException(403, "Você não faz parte deste grupo")
+    return [
+        {
+            "user_id": m.user_id,
+            "name": m.user.name if m.user else "",
+            "is_me": m.user_id == user.id,
+            "champion": {
+                "id": m.champion_pick.id,
+                "name": m.champion_pick.name,
+                "code": m.champion_pick.code,
+                "flag_url": m.champion_pick.flag_url,
+            } if m.champion_pick else None,
+        }
+        for m in members
+    ]
+
+
+@router.post("/{group_id}/champion")
+def set_champion_pick(
+    group_id: int,
+    body: ChampionPickBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    member = db.query(UserGroupMember).filter(
+        UserGroupMember.group_id == group_id,
+        UserGroupMember.user_id == user.id,
+    ).first()
+    if not member:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+    team = db.query(Team).filter(Team.id == body.team_id).first()
+    if not team:
+        raise HTTPException(404, "Time não encontrado")
+    member.champion_pick_team_id = body.team_id
+    db.commit()
+    return {"team_id": body.team_id, "team_name": team.name, "team_code": team.code}
+
+
+# ── Chat do bolão ─────────────────────────────────────────────────────────────
+
+class MessageBody(BaseModel):
+    content: str
+
+
+@router.get("/{group_id}/messages")
+def get_messages(
+    group_id: int,
+    limit: int = Query(default=30, le=100),
+    before_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    member = db.query(UserGroupMember).filter(
+        UserGroupMember.group_id == group_id,
+        UserGroupMember.user_id == user.id,
+    ).first()
+    if not member:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+    q = db.query(GroupMessage).options(joinedload(GroupMessage.user)).filter(
+        GroupMessage.group_id == group_id
+    )
+    if before_id:
+        q = q.filter(GroupMessage.id < before_id)
+    messages = q.order_by(desc(GroupMessage.id)).limit(limit).all()
+    return [
+        {
+            "id": m.id,
+            "user_id": m.user_id,
+            "name": m.user.name if m.user else "",
+            "content": m.content,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "is_me": m.user_id == user.id,
+        }
+        for m in reversed(messages)
+    ]
+
+
+@router.post("/{group_id}/messages", status_code=201)
+def post_message(
+    group_id: int,
+    body: MessageBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    member = db.query(UserGroupMember).filter(
+        UserGroupMember.group_id == group_id,
+        UserGroupMember.user_id == user.id,
+    ).first()
+    if not member:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+    content = body.content.strip()
+    if not content or len(content) > 500:
+        raise HTTPException(400, "Mensagem deve ter entre 1 e 500 caracteres")
+    msg = GroupMessage(group_id=group_id, user_id=user.id, content=content)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {
+        "id": msg.id,
+        "user_id": msg.user_id,
+        "name": user.name,
+        "content": msg.content,
+        "created_at": msg.created_at.isoformat() if msg.created_at else None,
+        "is_me": True,
+    }
+
+
+# ── Evolução de posições ──────────────────────────────────────────────────────
+
+@router.get("/{group_id}/evolution")
+def group_evolution(
+    group_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    member_ids = [
+        r[0] for r in db.query(UserGroupMember.user_id)
+        .filter(UserGroupMember.group_id == group_id).all()
+    ]
+    if user.id not in member_ids:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+
+    members_names = {
+        r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
+    }
+
+    # All finished matches ordered by date
+    finished_matches = (
+        db.query(Match.id, Match.match_date)
+        .filter(Match.status == MatchStatus.finished)
+        .order_by(Match.match_date.asc())
+        .all()
+    )
+    if not finished_matches:
+        return {"labels": [], "series": []}
+
+    # All bets by group members on finished matches
+    all_bets = (
+        db.query(Bet.user_id, Bet.match_id, Bet.points_earned)
+        .filter(Bet.user_id.in_(member_ids), Bet.match_id.in_([m.id for m in finished_matches]))
+        .all()
+    )
+    pts_by_user_match: dict[int, dict[int, int]] = {uid: {} for uid in member_ids}
+    for b in all_bets:
+        pts_by_user_match[b.user_id][b.match_id] = b.points_earned
+
+    # Build cumulative points per match checkpoint (every 3 matches)
+    step = max(1, len(finished_matches) // 10)
+    checkpoints = finished_matches[step - 1::step]
+    if not checkpoints or checkpoints[-1].id != finished_matches[-1].id:
+        checkpoints = list(checkpoints) + [finished_matches[-1]]
+
+    match_id_set_upto: list[set] = []
+    for cp in checkpoints:
+        cp_idx = next(i for i, m in enumerate(finished_matches) if m.id == cp.id)
+        match_id_set_upto.append({m.id for m in finished_matches[: cp_idx + 1]})
+
+    labels = [
+        cp.match_date.strftime("%d/%m") if cp.match_date else f"J{i+1}"
+        for i, cp in enumerate(checkpoints)
+    ]
+
+    series = []
+    for uid in member_ids:
+        pts_timeline = []
+        for match_set in match_id_set_upto:
+            total = sum(pts_by_user_match[uid].get(mid, 0) for mid in match_set)
+            pts_timeline.append(total)
+        # Compute positions at each checkpoint
+        pos_timeline = []
+        for ci, match_set in enumerate(match_id_set_upto):
+            scores = {u: sum(pts_by_user_match[u].get(mid, 0) for mid in match_set) for u in member_ids}
+            sorted_uids = sorted(member_ids, key=lambda u: -scores[u])
+            pos = sorted_uids.index(uid) + 1
+            pos_timeline.append(pos)
+        series.append({
+            "user_id": uid,
+            "name": members_names.get(uid, ""),
+            "is_me": uid == user.id,
+            "pts": pts_timeline,
+            "positions": pos_timeline,
+        })
+
+    return {"labels": labels, "series": series}
+
+
+# ── Ranking por fase ──────────────────────────────────────────────────────────
+
+@router.get("/{group_id}/ranking-phase")
+def group_ranking_by_phase(
+    group_id: int,
+    phase: str = Query(default="all"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    member_ids = [
+        r[0] for r in db.query(UserGroupMember.user_id)
+        .filter(UserGroupMember.group_id == group_id).all()
+    ]
+    if user.id not in member_ids:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+
+    q = (
+        db.query(
+            Bet.user_id,
+            User.name,
+            func.sum(Bet.points_earned).label("total_points"),
+            func.sum(case((Bet.points_earned == 3, 1), else_=0)).label("exact_scores"),
+            func.sum(case((Bet.points_earned == 1, 1), else_=0)).label("correct_results"),
+            func.count(Bet.id).label("total_bets"),
+        )
+        .join(User, Bet.user_id == User.id)
+        .join(Match, Bet.match_id == Match.id)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+    )
+    if phase != "all":
+        try:
+            q = q.filter(Match.phase == MatchPhase(phase))
+        except ValueError:
+            raise HTTPException(400, f"Fase inválida: {phase}")
+    rows = (
+        q.group_by(Bet.user_id, User.name)
+        .order_by(desc(func.sum(Bet.points_earned)), desc(func.sum(case((Bet.points_earned == 3, 1), else_=0))))
+        .all()
+    )
+    return [
+        {
+            "position": i + 1,
+            "user_id": r.user_id,
+            "name": r.name,
+            "total_points": int(r.total_points or 0),
+            "exact_scores": int(r.exact_scores or 0),
+            "correct_results": int(r.correct_results or 0),
+            "total_bets": int(r.total_bets or 0),
+            "is_me": r.user_id == user.id,
+        }
+        for i, r in enumerate(rows)
+    ]

@@ -74,7 +74,12 @@ export default function Login() {
         login(me, data.access_token)
         if (pendingJoin) {
           sessionStorage.removeItem('join_token')
-          navigate(`/bolao/${pendingJoin}`)
+          try {
+            await api.post(`/user-groups/join/${pendingJoin}`, {}, data.access_token)
+            navigate(`/bolao/${pendingJoin}`, { state: { justJoined: true } })
+          } catch (_) {
+            navigate(`/bolao/${pendingJoin}`)
+          }
         } else {
           navigate('/')
         }
@@ -85,7 +90,12 @@ export default function Login() {
         login(me, data.access_token)
         if (pendingJoin) {
           sessionStorage.removeItem('join_token')
-          navigate(`/bolao/${pendingJoin}`)
+          try {
+            await api.post(`/user-groups/join/${pendingJoin}`, {}, data.access_token)
+            navigate(`/bolao/${pendingJoin}`, { state: { justJoined: true } })
+          } catch (_) {
+            navigate(`/bolao/${pendingJoin}`)
+          }
         } else {
           navigate('/')
         }

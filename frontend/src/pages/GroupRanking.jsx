@@ -1,22 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import QRCode from 'qrcode'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 
 const POSITION_STORE_KEY = id => `predicts_group_positions_${id}`
+const PHASE_LABELS = {
+  all: 'Geral', group: 'Fase de Grupos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semifinal', final: 'Final', '3rd': '3º Lugar',
+}
+const LINE_COLORS = ['#0fa896', '#e8a030', '#e85252', '#9b5de8', '#4a90e8', '#25D366', '#ff6b35', '#c43c97']
 
 function todayStr() {
   const now = new Date()
   const p = n => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
 }
-
 function aproveitamento(r) {
   if (!r.total_bets) return null
   return Math.round(r.total_points / (r.total_bets * 3) * 100)
 }
-
 function getBadges(r, position, effectiveTotal, isHotToday, topStreak, isMuralHero) {
   const badges = []
   if (position === 1) badges.push({ icon: '🏆', label: 'Líder', color: '#e8a030' })
@@ -34,7 +37,6 @@ function getBadges(r, position, effectiveTotal, isHotToday, topStreak, isMuralHe
   if (isMuralHero) badges.push({ icon: '🎲', label: 'Ousado', color: '#e8a030' })
   return badges
 }
-
 function buildShareText(groupName, ranking, finished, total, inviteLink) {
   const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
   const rows = ranking.slice(0, 5).map((r, i) =>
@@ -43,14 +45,12 @@ function buildShareText(groupName, ranking, finished, total, inviteLink) {
   const link = inviteLink || 'https://predicts.info'
   return `🏆 *${groupName} — Ranking do Bolão*\n\n${rows}\n\n⚽ ${finished}/${total} jogos realizados\n\n🎯 Entre no grupo: ${link}`
 }
-
 function loadSavedPositions(groupId) {
   try {
     const raw = localStorage.getItem(POSITION_STORE_KEY(groupId))
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
-
 function savePositions(groupId, ranking) {
   try {
     const map = {}
@@ -81,33 +81,68 @@ function useCountdown(targetDateStr) {
 }
 
 export default function GroupRanking() {
-  const { groupId }    = useParams()
-  const { token }      = useAuth()
+  const { groupId } = useParams()
+  const { token } = useAuth()
 
-  const [data,         setData]         = useState(null)
-  const [matchStats,   setMatchStats]   = useState({ finished: 0, total: 0 })
-  const [todayTop,     setTodayTop]     = useState(null)
-  const [highlights,   setHighlights]   = useState(null)
-  const [prevPositions, setPrevPos]     = useState(null)
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState('')
+  // ── Core state ─────────────────────────────────────────────
+  const [data, setData] = useState(null)
+  const [matchStats, setMatchStats] = useState({ finished: 0, total: 0 })
+  const [todayTop, setTodayTop] = useState(null)
+  const [highlights, setHighlights] = useState(null)
+  const [prevPositions, setPrevPos] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [teams, setTeams] = useState([])
 
-  const [inviteLink,   setInviteLink]   = useState('')
-  const [linkLoading,  setLinkLoading]  = useState(false)
-  const [copied,       setCopied]       = useState(false)
+  // ── Invite & share ─────────────────────────────────────────
+  const [inviteLink, setInviteLink] = useState('')
+  const [linkLoading, setLinkLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState('')
+  const [showQr, setShowQr] = useState(false)
 
-  const [shareOpen,    setShareOpen]    = useState(false)
-  const [shareCopied,  setShareCopied]  = useState(false)
+  // ── Owner actions ───────────────────────────────────────────
+  const [renaming, setRenaming] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [renameMsg, setRenameMsg] = useState('')
+  const [savingName, setSavingName] = useState(false)
+  const [removingId, setRemovingId] = useState(null)
+  const [duelMember, setDuelMember] = useState(null)
 
-  const [renaming,     setRenaming]     = useState(false)
-  const [newName,      setNewName]      = useState('')
-  const [renameMsg,    setRenameMsg]    = useState('')
-  const [savingName,   setSavingName]   = useState(false)
-  const [removingId,   setRemovingId]   = useState(null)
-  const [duelMember,   setDuelMember]   = useState(null)
+  // ── Phase ranking ───────────────────────────────────────────
+  const [activePhase, setActivePhase] = useState('all')
+  const [phaseRanking, setPhaseRanking] = useState(null)
+  const [phaseLoading, setPhaseLoading] = useState(false)
+
+  // ── Apostas reveladas ───────────────────────────────────────
+  const [recentMatches, setRecentMatches] = useState([])
+  const [selectedMatch, setSelectedMatch] = useState(null)
+  const [matchBets, setMatchBets] = useState([])
+  const [matchBetsLoading, setMatchBetsLoading] = useState(false)
+
+  // ── Champion pick ───────────────────────────────────────────
+  const [championPicks, setChampionPicks] = useState([])
+  const [showChampionPicker, setShowChampionPicker] = useState(false)
+  const [championSearch, setChampionSearch] = useState('')
+  const [savingChampion, setSavingChampion] = useState(false)
+
+  // ── Evolution chart ─────────────────────────────────────────
+  const [evolution, setEvolution] = useState(null)
+  const [showEvolution, setShowEvolution] = useState(false)
+
+  // ── Chat ────────────────────────────────────────────────────
+  const [messages, setMessages] = useState([])
+  const [msgText, setMsgText] = useState('')
+  const [sendingMsg, setSendingMsg] = useState(false)
+  const [showChat, setShowChat] = useState(false)
+  const chatEndRef = useRef(null)
+  const chatPollRef = useRef(null)
 
   const today = todayStr()
 
+  // ── Primary load ────────────────────────────────────────────
   const load = useCallback(() => {
     if (!token) return
     setLoading(true)
@@ -119,25 +154,79 @@ export default function GroupRanking() {
       api.get('/matches'),
       api.get(`/ranking?date_from=${today}&date_to=${today}&limit=100`),
       api.get(`/user-groups/${groupId}/highlights`, token).catch(() => null),
-    ])
-      .then(([groupData, matches, todayRanking, highlightsData]) => {
-        setData(groupData)
-        const finished = matches.filter(m => m.status === 'finished').length
-        setMatchStats({ finished, total: matches.length })
-        const memberIds = new Set((groupData.ranking ?? []).map(r => r.user_id))
-        const groupToday = todayRanking
-          .filter(r => memberIds.has(r.user_id))
-          .sort((a, b) => b.total_points - a.total_points)
-        setTodayTop(groupToday[0] || null)
-        setHighlights(highlightsData)
-        savePositions(groupId, groupData.ranking ?? [])
+    ]).then(([groupData, matches, todayRanking, highlightsData]) => {
+      setData(groupData)
+      const finished = matches.filter(m => m.status === 'finished').length
+      setMatchStats({ finished, total: matches.length })
+      // Extract teams from matches for champion picker
+      const teamMap = {}
+      matches.forEach(m => {
+        if (m.team_a) teamMap[m.team_a.id] = m.team_a
+        if (m.team_b) teamMap[m.team_b.id] = m.team_b
       })
-      .catch(err => setError(err.message || 'Erro ao carregar'))
+      setTeams(Object.values(teamMap).sort((a, b) => a.name.localeCompare(b.name)))
+      const memberIds = new Set((groupData.ranking ?? []).map(r => r.user_id))
+      const groupToday = todayRanking
+        .filter(r => memberIds.has(r.user_id))
+        .sort((a, b) => b.total_points - a.total_points)
+      setTodayTop(groupToday[0] || null)
+      setHighlights(highlightsData)
+      savePositions(groupId, groupData.ranking ?? [])
+    }).catch(err => setError(err.message || 'Erro ao carregar'))
       .finally(() => setLoading(false))
+
+    // Secondary fetches (non-blocking)
+    api.get(`/user-groups/${groupId}/champion`, token).catch(() => []).then(setChampionPicks)
+    api.get(`/user-groups/${groupId}/recent-matches`, token).catch(() => []).then(setRecentMatches)
+    api.get(`/user-groups/${groupId}/evolution`, token).catch(() => null).then(setEvolution)
+    api.get(`/user-groups/${groupId}/messages`, token).catch(() => []).then(setMessages)
   }, [groupId, token, today])
 
   useEffect(() => { load() }, [load])
 
+  // ── Chat polling ────────────────────────────────────────────
+  useEffect(() => {
+    if (!token || !showChat) return
+    chatPollRef.current = setInterval(() => {
+      api.get(`/user-groups/${groupId}/messages`, token).catch(() => null).then(msgs => {
+        if (msgs) setMessages(msgs)
+      })
+    }, 10000)
+    return () => clearInterval(chatPollRef.current)
+  }, [groupId, token, showChat])
+
+  useEffect(() => {
+    if (showChat && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, showChat])
+
+  // ── QR Code generation ──────────────────────────────────────
+  useEffect(() => {
+    if (!inviteLink) return
+    QRCode.toDataURL(inviteLink, { width: 200, margin: 1, color: { dark: '#0c1a2a', light: '#f5f7fb' } })
+      .then(setQrDataUrl).catch(() => {})
+  }, [inviteLink])
+
+  // ── Phase ranking ───────────────────────────────────────────
+  useEffect(() => {
+    if (!token || activePhase === 'all') { setPhaseRanking(null); return }
+    setPhaseLoading(true)
+    api.get(`/user-groups/${groupId}/ranking-phase?phase=${activePhase}`, token)
+      .then(setPhaseRanking).catch(() => setPhaseRanking(null))
+      .finally(() => setPhaseLoading(false))
+  }, [groupId, token, activePhase])
+
+  // ── Match bets (apostas reveladas) ──────────────────────────
+  useEffect(() => {
+    if (!selectedMatch) return
+    setMatchBetsLoading(true)
+    api.get(`/user-groups/${groupId}/matches/${selectedMatch.id}/bets`, token)
+      .then(setMatchBets).catch(() => setMatchBets([]))
+      .finally(() => setMatchBetsLoading(false))
+  }, [groupId, token, selectedMatch])
+
+  // ── Actions ─────────────────────────────────────────────────
   const nextMatchDate = highlights?.next_match?.match_date
   const countdown = useCountdown(nextMatchDate)
 
@@ -149,16 +238,13 @@ export default function GroupRanking() {
     } catch (e) { setError(e.message) }
     finally { setLinkLoading(false) }
   }
-
   async function copyLink() {
     try { await navigator.clipboard.writeText(inviteLink); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch {}
   }
-
   async function shareLink() {
-    if (navigator.share) await navigator.share({ title: data?.group_name, text: `Entre no bolão: ${data?.group_name}`, url: inviteLink })
+    if (navigator.share) await navigator.share({ title: data?.group_name, url: inviteLink })
     else copyLink()
   }
-
   async function saveRename(e) {
     e.preventDefault()
     if (!newName.trim()) return
@@ -170,7 +256,6 @@ export default function GroupRanking() {
     } catch (err) { setRenameMsg(`✗ ${err.message}`) }
     finally { setSavingName(false) }
   }
-
   async function removeMember(userId) {
     if (!window.confirm('Remover este membro do grupo?')) return
     setRemovingId(userId)
@@ -180,15 +265,35 @@ export default function GroupRanking() {
     } catch (err) { setError(err.message) }
     finally { setRemovingId(null) }
   }
-
   function copyShareText() {
     const text = buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, inviteLink)
     navigator.clipboard.writeText(text).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000) })
   }
-
   function shareWhatsApp() {
     const text = buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, inviteLink)
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+  async function pickChampion(teamId) {
+    setSavingChampion(true)
+    try {
+      await api.post(`/user-groups/${groupId}/champion`, { team_id: teamId }, token)
+      const picks = await api.get(`/user-groups/${groupId}/champion`, token)
+      setChampionPicks(picks)
+      setShowChampionPicker(false)
+    } catch (e) { alert(e.message) }
+    finally { setSavingChampion(false) }
+  }
+  async function sendMessage(e) {
+    e.preventDefault()
+    if (!msgText.trim() || sendingMsg) return
+    setSendingMsg(true)
+    try {
+      const msg = await api.post(`/user-groups/${groupId}/messages`, { content: msgText.trim() }, token)
+      setMessages(prev => [...prev, msg])
+      setMsgText('')
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    } catch (err) { alert(err.message) }
+    finally { setSendingMsg(false) }
   }
 
   if (!token) return (
@@ -197,7 +302,6 @@ export default function GroupRanking() {
       <Link to="/login" className="btn btn-primary btn-lg" style={{ marginTop: 'var(--s6)' }}>Entrar</Link>
     </div></div>
   )
-
   if (loading) return <Spinner text="Carregando ranking do grupo..." />
   if (error) return (
     <div className="page"><div className="card fade-in-1"><div className="card__body">
@@ -215,23 +319,25 @@ export default function GroupRanking() {
   const effectiveTotal = Math.max(finished, maxBets, 1)
   const streakMap = Object.fromEntries((highlights?.streaks ?? []).map(s => [s.user_id, s.streak]))
   const recentForm = highlights?.recent_form ?? {}
-  const muralHeroId = highlights?.top_bets?.[0] ? null : null // resolved below
   const muralHeroName = highlights?.top_bets?.[0]?.user_name
-
   const groupLevel = highlights?.group_level ?? 1
   const groupXp = highlights?.group_xp ?? 0
   const nextLevelXp = highlights?.next_level_xp ?? 500
   const xpPct = Math.min(100, Math.round((groupXp % 500) / 5))
-
   const topBets = highlights?.top_bets ?? []
   const weeklyRanking = highlights?.weekly_ranking ?? []
-
   const top3 = ranking.slice(0, 3)
-
   const padTime = n => String(n).padStart(2, '0')
+  const myChampionPick = championPicks.find(p => p.is_me)
+  const availablePhases = ['all', 'group', 'r16', 'qf', 'sf', 'final']
+  const displayRanking = (activePhase !== 'all' && phaseRanking) ? phaseRanking : ranking
+  const filteredTeams = teams.filter(t =>
+    !championSearch || t.name.toLowerCase().includes(championSearch.toLowerCase()) || t.code.toLowerCase().includes(championSearch.toLowerCase())
+  )
 
   return (
     <div className="page">
+
       {/* ── Cabeçalho ── */}
       <div className="fade-in-1">
         <Link to="/meus-grupos" className="match-breadcrumb__link">‹ Meus Grupos</Link>
@@ -251,42 +357,29 @@ export default function GroupRanking() {
           </div>
           <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-sm" style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }} onClick={() => setShareOpen(o => !o)}>
-              📤 Compartilhar Ranking
+              📤 Ranking
             </button>
             {amOwner && !renaming && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setNewName(data?.group_name ?? ''); setRenaming(true) }}>
-                ✏️ Renomear
+                ✏️
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Nível do grupo ── */}
+      {/* ── Nível XP do grupo ── */}
       {groupXp > 0 && (
-        <div className="card mt-4 fade-in-1" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: 'var(--s3) var(--s4)', display: 'flex', alignItems: 'center', gap: 'var(--s3)', justifyContent: 'space-between' }}>
+        <div className="card mt-4 fade-in-1 group-xp-bar">
+          <div style={{ padding: 'var(--s3) var(--s4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)' }}>
-                Nível do Grupo
-              </span>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent)', lineHeight: 1, marginTop: 2 }}>
-                ⚡ Nível {groupLevel}
-              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>Nível do Grupo</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent)', lineHeight: 1, marginTop: 2 }}>⚡ Nível {groupLevel}</div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
-                {groupXp % 500} / 500 XP
-              </span>
-            </div>
+            <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)' }}>{groupXp % 500} / 500 XP</span>
           </div>
           <div style={{ height: 5, background: 'var(--bg-overlay)' }}>
-            <div style={{
-              height: '100%',
-              width: `${xpPct}%`,
-              background: 'linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #fff))',
-              transition: 'width 800ms cubic-bezier(0.22,1,0.36,1)',
-            }} />
+            <div style={{ height: '100%', width: `${xpPct}%`, background: 'linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #fff))', transition: 'width 800ms cubic-bezier(0.22,1,0.36,1)' }} />
           </div>
         </div>
       )}
@@ -295,14 +388,14 @@ export default function GroupRanking() {
       {shareOpen && (
         <div className="card mt-4 fade-in-1" style={{ padding: 'var(--s4) var(--s5)', borderLeft: '3px solid var(--accent)' }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>Compartilhar Ranking</div>
-          <pre style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)', background: 'var(--bg-overlay)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
+          <pre style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-1)', background: 'var(--bg-overlay)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
             {buildShareText(data.group_name, ranking, finished, total, inviteLink)}
           </pre>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={shareWhatsApp} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: '#25D366', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <WaIcon /> WhatsApp
             </button>
-            <button onClick={copyShareText} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: shareCopied ? 'var(--win)' : 'transparent', color: shareCopied ? '#fff' : 'var(--text-2)', transition: 'all .2s' }}>
+            <button onClick={copyShareText} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: shareCopied ? 'var(--win)' : 'var(--bg-raised)', color: shareCopied ? '#fff' : 'var(--text-1)', transition: 'all .2s' }}>
               {shareCopied ? '✓ Copiado!' : '📋 Copiar texto'}
             </button>
           </div>
@@ -317,7 +410,7 @@ export default function GroupRanking() {
         {todayTop && <StatPill icon="🔥" label="Em Alta Hoje" value={todayTop.name} sub={`+${todayTop.total_points} pts`} accent />}
       </div>
 
-      {/* ── Próximo jogo + countdown + cobertura ── */}
+      {/* ── Próximo jogo + countdown ── */}
       {highlights?.next_match && (
         <div className="card mt-4 fade-in-2">
           <div className="card__header">
@@ -332,11 +425,11 @@ export default function GroupRanking() {
           <div style={{ padding: 'var(--s3) var(--s4)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
               <TeamChip t={highlights.next_match.team_a} />
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-3)' }}>×</span>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-2)' }}>×</span>
               <TeamChip t={highlights.next_match.team_b} />
             </div>
             <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap' }}>
-              {highlights.members_bet_next.length > 0 && (
+              {highlights.members_bet_next?.length > 0 && (
                 <div style={{ flex: 1, minWidth: 120 }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--win)', marginBottom: 5 }}>
                     ✓ Apostaram ({highlights.members_bet_next.length})
@@ -346,13 +439,15 @@ export default function GroupRanking() {
                   ))}
                 </div>
               )}
-              {highlights.members_no_bet_next.length > 0 && (
+              {highlights.members_no_bet_next?.length > 0 && (
                 <div style={{ flex: 1, minWidth: 120 }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--lose)', marginBottom: 5 }}>
                     ⚠ Faltam apostar ({highlights.members_no_bet_next.length})
                   </div>
                   {highlights.members_no_bet_next.map(m => (
-                    <div key={m.user_id} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', padding: '2px 0' }}>{m.name}</div>
+                    <div key={m.user_id} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1)', fontWeight: 700, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ color: 'var(--lose)' }}>!</span> {m.name}
+                    </div>
                   ))}
                 </div>
               )}
@@ -360,16 +455,16 @@ export default function GroupRanking() {
             {ranking.length > 0 && (
               <div style={{ marginTop: 'var(--s3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>Cobertura do grupo</span>
-                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)' }}>
-                    {highlights.members_bet_next.length}/{ranking.length}
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>Cobertura do grupo</span>
+                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-2)' }}>
+                    {highlights.members_bet_next?.length}/{ranking.length}
                   </span>
                 </div>
                 <div style={{ height: 6, background: 'var(--bg-overlay)', borderRadius: 3, overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', borderRadius: 3, transition: 'width 600ms ease',
-                    width: `${Math.round(highlights.members_bet_next.length / ranking.length * 100)}%`,
-                    background: highlights.members_bet_next.length === ranking.length ? 'var(--win)' : 'var(--accent)',
+                    width: `${Math.round((highlights.members_bet_next?.length ?? 0) / ranking.length * 100)}%`,
+                    background: highlights.members_bet_next?.length === ranking.length ? 'var(--win)' : 'var(--accent)',
                   }} />
                 </div>
               </div>
@@ -378,38 +473,323 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Highlights: streaks ── */}
+      {/* ── Pick do Campeão ── */}
+      <div className="card mt-4 fade-in-2">
+        <div className="card__header">
+          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🏆 Palpite do Campeão</span>
+          <button className="btn btn-sm" style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }}
+            onClick={() => setShowChampionPicker(p => !p)}>
+            {myChampionPick ? `✏️ ${myChampionPick.champion?.code ?? 'Trocar'}` : '+ Escolher'}
+          </button>
+        </div>
+        {showChampionPicker && (
+          <div style={{ padding: 'var(--s3) var(--s4)', borderBottom: '1px solid var(--border)' }}>
+            <input
+              type="text" placeholder="Buscar time..." value={championSearch}
+              onChange={e => setChampionSearch(e.target.value)}
+              style={{ width: '100%', fontFamily: 'var(--font-cond)', fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-1)', marginBottom: 8, boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
+              {filteredTeams.map(t => (
+                <button key={t.id} onClick={() => pickChampion(t.id)} disabled={savingChampion}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 20, border: '1px solid var(--border)', background: myChampionPick?.champion?.id === t.id ? 'var(--accent)' : 'var(--bg-raised)', color: myChampionPick?.champion?.id === t.id ? '#fff' : 'var(--text-1)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600 }}>
+                  {t.flag_url && <img src={t.flag_url} alt={t.code} style={{ width: 18, height: 12, objectFit: 'cover', borderRadius: 2 }} />}
+                  {t.code}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {championPicks.length > 0 ? (
+          <div style={{ padding: 'var(--s2) var(--s4) var(--s4)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {championPicks.map(p => (
+                <div key={p.user_id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 10, background: p.is_me ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'var(--bg-raised)', border: p.is_me ? '1px solid var(--accent)' : '1px solid var(--border)', minWidth: 70 }}>
+                  {p.champion ? (
+                    <>
+                      {p.champion.flag_url && <img src={p.champion.flag_url} alt={p.champion.code} style={{ width: 32, height: 22, objectFit: 'cover', borderRadius: 3 }} />}
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{p.champion.code}</span>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: 20 }}>❓</span>
+                  )}
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: p.is_me ? 'var(--accent)' : 'var(--text-2)', fontWeight: p.is_me ? 700 : 400 }}>{p.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: 'var(--s4)', color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>Nenhum membro escolheu o campeão ainda.</div>
+        )}
+      </div>
+
+      {/* ── Ranking por fase (tabs) ── */}
+      <div className="card mt-4 fade-in-2">
+        <div className="card__header">
+          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>Classificação do Grupo</span>
+        </div>
+        {/* Phase tabs */}
+        <div style={{ display: 'flex', gap: 4, padding: '0 var(--s4) var(--s3)', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingTop: 'var(--s3)' }}>
+          {availablePhases.map(ph => (
+            <button key={ph} onClick={() => setActivePhase(ph)}
+              style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, border: activePhase === ph ? 'none' : '1px solid var(--border)', background: activePhase === ph ? 'var(--accent)' : 'var(--bg-raised)', color: activePhase === ph ? '#fff' : 'var(--text-2)', cursor: 'pointer', transition: 'all .15s' }}>
+              {PHASE_LABELS[ph]}
+            </button>
+          ))}
+        </div>
+
+        {phaseLoading ? (
+          <div style={{ padding: 'var(--s8)', textAlign: 'center', color: 'var(--text-2)' }}>Carregando...</div>
+        ) : (
+          <>
+            {/* Pódio top-3 */}
+            {top3.length >= 2 && activePhase === 'all' && (
+              <div className="group-podium">
+                {top3.map((r, i) => (
+                  <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
+                    <div className="group-podium__avatar">{getInitials(r.name)}</div>
+                    <div className="group-podium__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
+                    <div className="group-podium__name" title={r.name}>{r.name}{r.is_me ? ' ★' : ''}</div>
+                    <div className="group-podium__pts">{r.total_points} pts</div>
+                    <div className="group-podium__platform" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Minha posição */}
+            {myEntry && activePhase === 'all' && (
+              <div className="group-ranking-hero fade-in-2">
+                <div className="group-ranking-hero__pos">
+                  {myEntry.position === 1 ? '🥇' : myEntry.position === 2 ? '🥈' : myEntry.position === 3 ? '🥉' : `${myEntry.position}º`}
+                </div>
+                <div className="group-ranking-hero__info">
+                  <div className="group-ranking-hero__label">Sua posição</div>
+                  <div className="group-ranking-hero__name">{myEntry.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                    <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)' }}>
+                      {myEntry.exact_scores} exatos · {myEntry.correct_results} certos · {myEntry.total_bets} apostas
+                      {aproveitamento(myEntry) !== null && ` · ${aproveitamento(myEntry)}%`}
+                    </span>
+                    {recentForm[myEntry.user_id]?.length > 0 && <FormDots form={recentForm[myEntry.user_id]} />}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div className="group-ranking-hero__pts">{myEntry.total_points}</div>
+                  <div className="group-ranking-hero__pts-label">pontos</div>
+                </div>
+              </div>
+            )}
+
+            {/* Tabela */}
+            {displayRanking.length === 0 ? (
+              <div style={{ padding: 'var(--s16)', textAlign: 'center', color: 'var(--text-2)', fontFamily: 'var(--font-cond)' }}>
+                {activePhase !== 'all' ? 'Nenhum jogo desta fase encerrado ainda.' : 'Nenhuma aposta ainda.'}
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 52px', gap: 'var(--s2)', padding: '6px var(--s4)', borderBottom: '1px solid var(--border)' }}>
+                  {['#', 'Participante', 'Pts'].map((h, i) => (
+                    <span key={h} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)', textAlign: i === 0 ? 'center' : i === 2 ? 'right' : 'left' }}>{h}</span>
+                  ))}
+                </div>
+                {displayRanking.map((r, i) => {
+                  const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
+                  const isHotToday = todayTop?.user_id === r.user_id
+                  const streak = streakMap[r.user_id] || 0
+                  const isMuralHero = muralHeroName === r.name
+                  const badges = getBadges(r, i + 1, effectiveTotal, isHotToday, streak, isMuralHero)
+                  const prevMember = i > 0 ? displayRanking[i - 1] : null
+                  const ptsDiff = prevMember ? prevMember.total_points - r.total_points : 0
+                  const coveragePct = Math.min(100, Math.round(r.total_bets / effectiveTotal * 100))
+                  const aprv = aproveitamento(r)
+                  const prevPos = prevPositions?.[r.user_id]
+                  const curPos = i + 1
+                  const delta = prevPos && prevPos !== curPos ? prevPos - curPos : 0
+                  const form = recentForm[r.user_id] ?? []
+                  const memberChampion = championPicks.find(p => p.user_id === r.user_id)?.champion
+
+                  return (
+                    <div key={r.user_id}
+                      className={`ranking-row fade-in ${podiumClass}`}
+                      style={{ display: 'grid', gridTemplateColumns: '36px 1fr 52px', gap: 'var(--s2)', animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : r.is_me ? '3px solid var(--accent)' : '3px solid transparent', background: r.is_me && i >= 3 ? 'rgba(15,122,120,0.04)' : undefined }}>
+                      <div style={{ textAlign: 'center', alignSelf: 'start', paddingTop: 4 }}>
+                        <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
+                          {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                        </span>
+                        {delta !== 0 && (
+                          <div style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: delta > 0 ? 'var(--win)' : 'var(--lose)', lineHeight: 1, marginTop: 2 }}>
+                            {delta > 0 ? `▲${delta}` : `▼${Math.abs(delta)}`}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <button onClick={() => setDuelMember(duelMember?.user_id === r.user_id ? null : r)}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, color: 'var(--text-1)' }}>{r.name}</span>
+                          </button>
+                          {r.is_me && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>VOCÊ</span>}
+                          {memberChampion && (
+                            <span title={`Campeão: ${memberChampion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '0px 5px' }}>
+                              🏆 {memberChampion.code}
+                            </span>
+                          )}
+                        </div>
+                        {badges.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {badges.map(b => (
+                              <span key={b.label} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: `${b.color}20`, color: b.color, border: `1px solid ${b.color}40` }}>
+                                {b.icon} {b.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ height: 4, width: 80, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+                              <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)', transition: 'width 600ms ease' }} />
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+                              {r.total_bets}/{effectiveTotal}{aprv !== null && ` · ${aprv}%`}
+                            </span>
+                          </div>
+                          {form.length > 0 && <FormDots form={form} />}
+                        </div>
+                        {prevMember && ptsDiff > 0 && (
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>
+                            ▲ faltam <strong style={{ color: 'var(--text-1)' }}>{ptsDiff} pts</strong> para {prevMember.name}
+                          </div>
+                        )}
+                        {prevMember && ptsDiff === 0 && (
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--win)' }}>= empatado com {prevMember.name}</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700 }}>{r.total_points}</span>
+                        <div style={{ width: 36, height: 3, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', borderRadius: 2, width: `${leaderPts > 0 ? (r.total_points / leaderPts) * 100 : 0}%`, background: i === 0 ? '#e8a030' : i === 1 ? 'var(--text-3)' : 'var(--accent)', transition: 'width 600ms ease' }} />
+                        </div>
+                        {amOwner && !r.is_me && (
+                          <button type="button" style={{ fontSize: 10, padding: '1px 6px', color: 'var(--lose)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)' }} disabled={removingId === r.user_id} onClick={() => removeMember(r.user_id)}>
+                            {removingId === r.user_id ? '...' : '✕'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── Duelo ── */}
+      {duelMember && myEntry && duelMember.user_id !== myEntry.user_id && (
+        <div className="card mt-4 fade-in-1" style={{ borderLeft: '3px solid #9b5de8', padding: 0 }}>
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>⚔️ Duelo Direto</span>
+            <button onClick={() => setDuelMember(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 18 }}>×</button>
+          </div>
+          <DuelCard me={myEntry} them={duelMember} />
+        </div>
+      )}
+
+      {/* ── Gráfico de evolução ── */}
+      {evolution?.series?.length > 0 && (
+        <div className="card mt-4 fade-in-3">
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📈 Evolução de Posições</span>
+            <button onClick={() => setShowEvolution(e => !e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>
+              {showEvolution ? 'Ocultar ▲' : 'Ver ▼'}
+            </button>
+          </div>
+          {showEvolution && <EvolutionChart data={evolution} />}
+          {!showEvolution && (
+            <div style={{ padding: '0 var(--s4) var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>
+              {evolution.labels.length} checkpoints · {evolution.series.length} participantes
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Apostas reveladas ── */}
+      {recentMatches.length > 0 && (
+        <div className="card mt-4 fade-in-3">
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🔍 Apostas Reveladas</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>pós-jogo</span>
+          </div>
+          <div style={{ padding: 'var(--s3) var(--s4)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {recentMatches.map(m => (
+              <button key={m.id} onClick={() => setSelectedMatch(selectedMatch?.id === m.id ? null : m)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, border: selectedMatch?.id === m.id ? '1.5px solid var(--accent)' : '1px solid var(--border)', background: selectedMatch?.id === m.id ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-raised)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', transition: 'all .15s' }}>
+                {m.team_a?.flag_url && <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+                <span>{m.team_a?.code}</span>
+                <span style={{ color: 'var(--text-2)', fontFamily: 'var(--font-data)', fontSize: 11 }}>{m.result?.score_a}–{m.result?.score_b}</span>
+                <span>{m.team_b?.code}</span>
+                {m.team_b?.flag_url && <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+              </button>
+            ))}
+          </div>
+          {selectedMatch && (
+            <div style={{ borderTop: '1px solid var(--border)', padding: 'var(--s3) var(--s4)' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8 }}>
+                Palpites · {selectedMatch.team_a?.code} {selectedMatch.result?.score_a}–{selectedMatch.result?.score_b} {selectedMatch.team_b?.code}
+              </div>
+              {matchBetsLoading ? (
+                <div style={{ color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>Carregando...</div>
+              ) : matchBets.length === 0 ? (
+                <div style={{ color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>Nenhum palpite encontrado.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {matchBets.map((b, i) => {
+                    const exact = b.score_a === selectedMatch.result?.score_a && b.score_b === selectedMatch.result?.score_b
+                    const correct = b.points_earned > 0
+                    return (
+                      <div key={b.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 8, background: b.is_me ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--bg-raised)', border: b.is_me ? '1px solid var(--accent)' : '1px solid var(--border)' }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', width: 20, textAlign: 'center' }}>{i + 1}.</span>
+                        <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{b.name}</span>
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, fontWeight: 700, color: exact ? 'var(--win)' : correct ? 'var(--accent)' : 'var(--text-2)', minWidth: 40, textAlign: 'center' }}>
+                          {b.score_a}–{b.score_b}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: exact ? 'var(--win)' : correct ? 'var(--accent-dim)' : 'var(--bg-overlay)', color: exact ? '#fff' : correct ? 'var(--accent)' : 'var(--text-3)' }}>
+                          {exact ? '🎯 +3' : correct ? `+${b.points_earned}` : '0'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Highlights ── */}
       {highlights?.streaks?.length > 0 && (
-        <div className="card mt-4 fade-in-2" style={{ padding: 'var(--s4) var(--s5)' }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0fa896', marginBottom: 8 }}>
-            🔗 Maior Sequência de Exatos
-          </div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text-1)', lineHeight: 1 }}>
-            {highlights.streaks[0].streak}
-          </div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', marginTop: 4 }}>{highlights.streaks[0].name}</div>
-          <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>consecutivos</div>
+        <div className="card mt-4 fade-in-3" style={{ padding: 'var(--s4) var(--s5)' }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0fa896', marginBottom: 8 }}>🔗 Maior Sequência de Exatos</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text-1)', lineHeight: 1 }}>{highlights.streaks[0].streak}</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', marginTop: 4 }}>{highlights.streaks[0].name}</div>
+          <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-2)', marginTop: 2 }}>consecutivos</div>
         </div>
       )}
 
       {/* ── Mural de provocações ── */}
       {topBets.length > 0 && (
-        <div className="card mt-4 fade-in-2">
+        <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🎲 Mural de Provocações</span>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>palpites mais ousados</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>palpites mais ousados</span>
           </div>
           <div className="mural-grid">
             {topBets.map((bet, i) => (
               <div key={i} className={`mural-card mural-card--${i + 1}`}>
-                <span className="mural-card__tag">
-                  {i === 0 ? '🏅 Mais ousado' : i === 1 ? '2º lugar' : '3º lugar'}
-                </span>
+                <span className="mural-card__tag">{i === 0 ? '🏅 Mais ousado' : i === 1 ? '2º lugar' : '3º lugar'}</span>
                 <div className="mural-card__score">{bet.score_a} × {bet.score_b}</div>
                 <div className="mural-card__name">{bet.user_name}</div>
-                {bet.group && (
-                  <div style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>Grupo {bet.group}</div>
-                )}
               </div>
             ))}
           </div>
@@ -418,17 +798,15 @@ export default function GroupRanking() {
 
       {/* ── Ranking semanal ── */}
       {weeklyRanking.length > 0 && (
-        <div className="card mt-4 fade-in-2">
+        <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📅 Ranking da Semana</span>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>últimos 7 dias</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>últimos 7 dias</span>
           </div>
           <div className="weekly-ranking">
             {weeklyRanking.slice(0, 5).map((r, i) => (
               <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
-                <span className="weekly-ranking__medal">
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
-                </span>
+                <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
                 <span className="weekly-ranking__name">{r.name}</span>
                 <span className="weekly-ranking__pts">+{r.pts_week}</span>
               </div>
@@ -437,194 +815,91 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Link de convite ── */}
-      <div className="card mt-6 fade-in-2" style={{ padding: 'var(--s12) var(--s16)' }}>
+      {/* ── Link de convite + QR ── */}
+      <div className="card mt-6 fade-in-3" style={{ padding: 'var(--s12) var(--s16)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Link de convite</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Link de convite</span>
           {!inviteLink ? (
             <button className="btn btn-primary btn-sm" onClick={generateLink} disabled={linkLoading}>{linkLoading ? 'Gerando...' : '🔗 Gerar link'}</button>
           ) : (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
-              <input readOnly value={inviteLink} style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-data)', fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)' }} />
+              <input readOnly value={inviteLink} style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-data)', fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-1)' }} />
               <button className="btn btn-primary btn-sm" onClick={shareLink}>{copied ? '✓ Copiado' : '📤 Compartilhar'}</button>
               <button className="btn btn-ghost btn-sm" onClick={copyLink} title="Copiar link">📋</button>
+              {qrDataUrl && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowQr(q => !q)} title="QR Code">⬛</button>
+              )}
             </div>
           )}
         </div>
-        <div style={{ marginTop: 6, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-3)' }}>Qualquer pessoa com o link pode entrar no grupo.</div>
+        {showQr && qrDataUrl && (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <img src={qrDataUrl} alt="QR Code do convite" style={{ width: 180, height: 180, borderRadius: 10, border: '1px solid var(--border)' }} />
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>Compartilhe o QR para entrar no bolão</span>
+          </div>
+        )}
+        <div style={{ marginTop: 6, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-2)' }}>Qualquer pessoa com o link pode entrar no grupo.</div>
       </div>
 
-      {/* ── Ranking ── */}
-      <div className="card mt-4 fade-in-3">
+      {/* ── Chat do bolão ── */}
+      <div className="card mt-4 fade-in-4">
         <div className="card__header">
-          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>Classificação do Grupo</span>
+          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>💬 Chat do Bolão</span>
+          <button onClick={() => setShowChat(c => !c)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>
+            {showChat ? 'Ocultar ▲' : `Ver (${messages.length}) ▼`}
+          </button>
         </div>
-
-        {/* Pódio top-3 */}
-        {top3.length >= 2 && (
-          <div className="group-podium">
-            {top3.map((r, i) => (
-              <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
-                <div className="group-podium__avatar">{getInitials(r.name)}</div>
-                <div className="group-podium__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
-                <div className="group-podium__name" title={r.name}>{r.name}{r.is_me ? ' ★' : ''}</div>
-                <div className="group-podium__pts">{r.total_points} pts</div>
-                <div className="group-podium__platform" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {myEntry && (
-          <div className="group-ranking-hero fade-in-2">
-            <div className="group-ranking-hero__pos">
-              {myEntry.position === 1 ? '🥇' : myEntry.position === 2 ? '🥈' : myEntry.position === 3 ? '🥉' : `${myEntry.position}º`}
-            </div>
-            <div className="group-ranking-hero__info">
-              <div className="group-ranking-hero__label">Sua posição no grupo</div>
-              <div className="group-ranking-hero__name">{myEntry.name}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
-                  {myEntry.exact_scores} exatos · {myEntry.correct_results} certos · {myEntry.total_bets} apostas
-                  {aproveitamento(myEntry) !== null && ` · ${aproveitamento(myEntry)}% aproveito`}
-                </span>
-                {recentForm[myEntry.user_id]?.length > 0 && (
-                  <FormDots form={recentForm[myEntry.user_id]} />
-                )}
-              </div>
-            </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div className="group-ranking-hero__pts">{myEntry.total_points}</div>
-              <div className="group-ranking-hero__pts-label">pontos</div>
-            </div>
-          </div>
-        )}
-
-        {ranking.length === 0 ? (
-          <div style={{ padding: 'var(--s16)', textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>Nenhuma aposta ainda.</div>
-        ) : (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 52px', gap: 'var(--s2)', padding: '6px var(--s4)', borderBottom: '1px solid var(--border)' }}>
-              {['#', 'Participante', 'Pts'].map((h, i) => (
-                <span key={h} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: i === 0 ? 'center' : i === 2 ? 'right' : 'left' }}>{h}</span>
-              ))}
-            </div>
-
-            {ranking.map((r, i) => {
-              const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
-              const isHotToday = todayTop?.user_id === r.user_id
-              const streak = streakMap[r.user_id] || 0
-              const isMuralHero = muralHeroName === r.name
-              const badges = getBadges(r, i + 1, effectiveTotal, isHotToday, streak, isMuralHero)
-              const prevMember = i > 0 ? ranking[i - 1] : null
-              const ptsDiff = prevMember ? prevMember.total_points - r.total_points : 0
-              const coveragePct = Math.min(100, Math.round(r.total_bets / effectiveTotal * 100))
-              const aprv = aproveitamento(r)
-              const prevPos = prevPositions?.[r.user_id]
-              const curPos = i + 1
-              const delta = prevPos && prevPos !== curPos ? prevPos - curPos : 0
-              const form = recentForm[r.user_id] ?? []
-
-              return (
-                <div
-                  key={r.user_id}
-                  className={`ranking-row fade-in ${podiumClass}`}
-                  style={{ display: 'grid', gridTemplateColumns: '36px 1fr 52px', gap: 'var(--s2)', animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : r.is_me ? '3px solid var(--accent)' : '3px solid transparent', background: r.is_me && i >= 3 ? 'rgba(15,122,120,0.04)' : undefined }}
-                >
-                  <div style={{ textAlign: 'center', alignSelf: 'start', paddingTop: 4 }}>
-                    <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
-                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                    </span>
-                    {delta !== 0 && (
-                      <div style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: delta > 0 ? 'var(--win)' : 'var(--lose)', lineHeight: 1, marginTop: 2 }}>
-                        {delta > 0 ? `▲${delta}` : `▼${Math.abs(delta)}`}
-                      </div>
-                    )}
+        {showChat && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ maxHeight: 300, overflowY: 'auto', padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {messages.length === 0 ? (
+                <div style={{ color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 12, textAlign: 'center', padding: 'var(--s4)' }}>
+                  Nenhuma mensagem ainda. Mande a primeira provocação! 😄
+                </div>
+              ) : messages.map(m => (
+                <div key={m.id} style={{ display: 'flex', flexDirection: m.is_me ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-end' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.is_me ? 'var(--accent)' : 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: m.is_me ? '#fff' : 'var(--text-2)', flexShrink: 0 }}>
+                    {getInitials(m.name)}
                   </div>
-
-                  <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => setDuelMember(duelMember?.user_id === r.user_id ? null : r)}
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
-                      >
-                        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, color: 'var(--text-1)' }}>{r.name}</span>
-                      </button>
-                      {r.is_me && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>VOCÊ</span>}
+                  <div style={{ maxWidth: '75%' }}>
+                    {!m.is_me && <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)', marginBottom: 2, fontWeight: 700 }}>{m.name}</div>}
+                    <div style={{ padding: '8px 12px', borderRadius: m.is_me ? '14px 14px 4px 14px' : '14px 14px 14px 4px', background: m.is_me ? 'var(--accent)' : 'var(--bg-raised)', border: m.is_me ? 'none' : '1px solid var(--border)', fontFamily: 'var(--font-body)', fontSize: 13, color: m.is_me ? '#fff' : 'var(--text-1)', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                      {m.content}
                     </div>
-                    {badges.length > 0 && (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {badges.map(b => (
-                          <span key={b.label} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: `${b.color}20`, color: b.color, border: `1px solid ${b.color}40` }}>
-                            {b.icon} {b.label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ height: 4, width: 80, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
-                          <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)', transition: 'width 600ms ease' }} />
-                        </div>
-                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>
-                          {r.total_bets}/{effectiveTotal}{aprv !== null && ` · ${aprv}%`}
-                        </span>
-                      </div>
-                      {form.length > 0 && <FormDots form={form} />}
+                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-3)', marginTop: 2, textAlign: m.is_me ? 'right' : 'left' }}>
+                      {m.created_at ? new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}
                     </div>
-                    {prevMember && ptsDiff > 0 && (
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>
-                        ▲ faltam <strong style={{ color: 'var(--text-3)' }}>{ptsDiff} pts</strong> para {prevMember.name}
-                      </div>
-                    )}
-                    {prevMember && ptsDiff === 0 && (
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--win)' }}>= empatado com {prevMember.name}</div>
-                    )}
-                    {duelMember && duelMember.user_id !== r.user_id && myEntry && r.user_id === myEntry.user_id && (
-                      <DuelCard me={myEntry} them={duelMember} onClose={() => setDuelMember(null)} />
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700 }}>{r.total_points}</span>
-                    <div style={{ width: 36, height: 3, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 2, width: `${leaderPts > 0 ? (r.total_points / leaderPts) * 100 : 0}%`, background: i === 0 ? '#e8a030' : i === 1 ? 'var(--text-3)' : 'var(--accent)', transition: 'width 600ms ease' }} />
-                    </div>
-                    {amOwner && !r.is_me && (
-                      <button type="button" style={{ fontSize: 10, padding: '1px 6px', color: 'var(--lose)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)' }} disabled={removingId === r.user_id} onClick={() => removeMember(r.user_id)}>
-                        {removingId === r.user_id ? '...' : '✕'}
-                      </button>
-                    )}
                   </div>
                 </div>
-              )
-            })}
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            <form onSubmit={sendMessage} style={{ display: 'flex', gap: 8, padding: 'var(--s3) var(--s4)', borderTop: '1px solid var(--border)' }}>
+              <input
+                type="text" placeholder="Mande uma provocação..." maxLength={500}
+                value={msgText} onChange={e => setMsgText(e.target.value)}
+                style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, padding: '8px 12px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-1)', outline: 'none' }}
+              />
+              <button type="submit" disabled={sendingMsg || !msgText.trim()}
+                style={{ padding: '8px 16px', borderRadius: 20, border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: sendingMsg || !msgText.trim() ? 0.5 : 1 }}>
+                {sendingMsg ? '...' : '→'}
+              </button>
+            </form>
           </div>
         )}
       </div>
-
-      {/* Duelo modal */}
-      {duelMember && myEntry && duelMember.user_id !== myEntry.user_id && (
-        <div className="card mt-4 fade-in-1" style={{ borderLeft: '3px solid #9b5de8', padding: 0 }}>
-          <div className="card__header">
-            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>⚔️ Duelo Direto</span>
-            <button onClick={() => setDuelMember(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 18 }}>×</button>
-          </div>
-          <DuelCard me={myEntry} them={duelMember} />
-        </div>
-      )}
 
       {/* ── Conquistas ── */}
       {ranking.length > 0 && (
         <div className="card mt-4 fade-in-4" style={{ padding: 'var(--s4) var(--s5)' }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', marginBottom: 8 }}>Conquistas</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8 }}>Conquistas</div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {[
               { icon: '🏆', label: 'Líder', desc: '1º no grupo' },
               { icon: '🎯', label: 'Sniper', desc: '≥28% exatos (mín. 5)' },
               { icon: '💯', label: 'Cem%', desc: 'Apostou em todos os jogos' },
               { icon: '⚡', label: 'Maratonista', desc: '≥85% jogos apostados' },
-              { icon: '🔮', label: 'Preciso', desc: '≥60% aproveitamento (mín. 10)' },
+              { icon: '🔮', label: 'Preciso', desc: '≥60% aproveit (mín. 10)' },
               { icon: '🔥', label: 'Em Alta', desc: 'Maior pts hoje no grupo' },
               { icon: '🔗', label: 'Sequência', desc: '≥3 exatos consecutivos' },
               { icon: '🎲', label: 'Ousado', desc: 'Palpite mais audacioso' },
@@ -632,14 +907,74 @@ export default function GroupRanking() {
               <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 14 }}>{b.icon}</span>
                 <div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>{b.label}</div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>{b.desc}</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{b.label}</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>{b.desc}</div>
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Evolution Chart ───────────────────────────────────────────────────────────
+function EvolutionChart({ data }) {
+  const { labels, series } = data
+  if (!labels?.length || !series?.length) return null
+  const memberCount = Math.max(...series.map(s => s.positions?.length ? Math.max(...s.positions) : 1), 1)
+  const W = 300, H = 120, PAD = { t: 10, b: 28, l: 20, r: 10 }
+  const chartW = W - PAD.l - PAD.r
+  const chartH = H - PAD.t - PAD.b
+  const xPos = i => PAD.l + (i / Math.max(labels.length - 1, 1)) * chartW
+  const yPos = pos => PAD.t + ((pos - 1) / Math.max(memberCount - 1, 1)) * chartH
+
+  return (
+    <div style={{ padding: 'var(--s3) var(--s4)' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W, display: 'block' }} aria-label="Evolução de posições">
+        {/* Grid lines */}
+        {Array.from({ length: memberCount }, (_, i) => (
+          <line key={i} x1={PAD.l} x2={W - PAD.r} y1={yPos(i + 1)} y2={yPos(i + 1)}
+            stroke="var(--bg-overlay)" strokeWidth="1" />
+        ))}
+        {/* Series lines */}
+        {series.map((s, si) => {
+          if (!s.positions?.length) return null
+          const color = LINE_COLORS[si % LINE_COLORS.length]
+          const pts = s.positions.map((pos, i) => `${xPos(i)},${yPos(pos)}`).join(' ')
+          return (
+            <g key={s.user_id}>
+              <polyline points={pts} fill="none" stroke={color} strokeWidth={s.is_me ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round" opacity={s.is_me ? 1 : 0.6} />
+              {s.positions.map((pos, i) => (
+                <circle key={i} cx={xPos(i)} cy={yPos(pos)} r={s.is_me ? 3 : 2} fill={color} opacity={s.is_me ? 1 : 0.6} />
+              ))}
+            </g>
+          )
+        })}
+        {/* X-axis labels */}
+        {labels.filter((_, i) => i === 0 || i === labels.length - 1 || labels.length <= 5 || i % Math.ceil(labels.length / 4) === 0).map((label, i, arr) => {
+          const origI = labels.indexOf(label)
+          return (
+            <text key={i} x={xPos(origI)} y={H - 4} textAnchor="middle" fill="var(--text-3)" style={{ fontSize: 8, fontFamily: 'monospace' }}>{label}</text>
+          )
+        })}
+        {/* Y-axis labels */}
+        {Array.from({ length: Math.min(memberCount, 5) }, (_, i) => (
+          <text key={i} x={PAD.l - 4} y={yPos(i + 1) + 3} textAnchor="end" fill="var(--text-3)" style={{ fontSize: 8, fontFamily: 'monospace' }}>{i + 1}º</text>
+        ))}
+      </svg>
+      {/* Legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        {series.map((s, i) => (
+          <div key={s.user_id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ width: 12, height: 3, borderRadius: 2, background: LINE_COLORS[i % LINE_COLORS.length] }} />
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: s.is_me ? 'var(--text-1)' : 'var(--text-2)', fontWeight: s.is_me ? 700 : 400 }}>
+              {s.name}{s.is_me ? ' ★' : ''}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -655,8 +990,8 @@ function FormDots({ form }) {
   )
 }
 
-// ── Duelo Direto ──────────────────────────────────────────────────────────────
-function DuelCard({ me, them, onClose }) {
+// ── Duelo ─────────────────────────────────────────────────────────────────────
+function DuelCard({ me, them }) {
   const stats = [
     { label: 'Pontos', me: me.total_points, them: them.total_points },
     { label: 'Exatos', me: me.exact_scores, them: them.exact_scores },
@@ -670,37 +1005,36 @@ function DuelCard({ me, them, onClose }) {
   return (
     <div style={{ padding: 'var(--s4)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 'var(--s3)', alignItems: 'center', marginBottom: 'var(--s4)' }}>
-        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--accent)' }}>{me.name} <span style={{ fontSize: 10, color: 'var(--text-4)' }}>você</span></div>
-        <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-3)', fontSize: 16 }}>VS</span>
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--accent)' }}>{me.name} <span style={{ fontSize: 10, color: 'var(--text-3)' }}>você</span></div>
+        <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-2)', fontSize: 16 }}>VS</span>
         <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: '#9b5de8', textAlign: 'right' }}>{them.name}</div>
       </div>
       {stats.map(s => {
-        const meWins = s.me > s.them
-        const tie = s.me === s.them
+        const meWins = s.me > s.them, tie = s.me === s.them
         return (
           <div key={s.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: meWins ? 'var(--win)' : tie ? 'var(--text-2)' : 'var(--text-3)', textAlign: 'right' }}>{s.me}</div>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</span>
-            <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: !meWins && !tie ? 'var(--win)' : tie ? 'var(--text-2)' : 'var(--text-3)' }}>{s.them}</div>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: meWins ? 'var(--win)' : tie ? 'var(--text-2)' : 'var(--text-2)', textAlign: 'right' }}>{s.me}</div>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</span>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: !meWins && !tie ? 'var(--win)' : tie ? 'var(--text-2)' : 'var(--text-2)' }}>{s.them}</div>
           </div>
         )
       })}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: aprv(me) >= aprv(them) ? 'var(--win)' : 'var(--text-3)', textAlign: 'right' }}>{aprv(me)}%</div>
-        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Aproveito</span>
-        <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: aprv(them) > aprv(me) ? 'var(--win)' : 'var(--text-3)' }}>{aprv(them)}%</div>
+        <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: aprv(me) >= aprv(them) ? 'var(--win)' : 'var(--text-2)', textAlign: 'right' }}>{aprv(me)}%</div>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Aproveito</span>
+        <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: aprv(them) > aprv(me) ? 'var(--win)' : 'var(--text-2)' }}>{aprv(them)}%</div>
       </div>
     </div>
   )
 }
 
-// ── Sub-componentes ────────────────────────────────────────────────────────────
+// ── Sub-componentes ───────────────────────────────────────────────────────────
 function StatPill({ icon, label, value, sub, accent }) {
   return (
-    <div style={{ background: accent ? 'var(--accent-dim)' : 'var(--surface)', border: `1px solid ${accent ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: accent ? 'var(--accent)' : 'var(--text-4)' }}>{icon} {label}</div>
+    <div style={{ background: accent ? 'var(--accent-dim)' : 'var(--bg-raised)', border: `1px solid ${accent ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: accent ? 'var(--accent)' : 'var(--text-3)' }}>{icon} {label}</div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: accent ? 'var(--accent)' : 'var(--text-1)', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
-      {sub && <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)' }}>{sub}</div>}
+      {sub && <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-2)' }}>{sub}</div>}
     </div>
   )
 }

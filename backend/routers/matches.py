@@ -6,7 +6,7 @@ import redis as redis_lib
 
 from database import get_db
 from config import settings
-from models import Match, Team, SimulationCache, MatchPhase, MatchStatus
+from models import Match, Team, SimulationCache, MatchPhase, MatchStatus, Bet, User
 from schemas import MatchSimulationResponse
 from engine.weights import compute_weighted_lambdas, TeamInput
 from engine.monte_carlo import simulate_match
@@ -331,3 +331,25 @@ def simulate_match_endpoint(
         pass
 
     return response
+
+
+@router.get("/{match_id}/live-bets")
+def match_live_bets(match_id: int, db: Session = Depends(get_db)):
+    match = db.query(Match).filter(Match.id == match_id).first()
+    if not match:
+        raise HTTPException(404, "Partida não encontrada")
+
+    bets = (
+        db.query(Bet, User.name.label("user_name"))
+        .join(User, Bet.user_id == User.id)
+        .filter(Bet.match_id == match_id)
+        .all()
+    )
+
+    rows = [
+        {"user_name": user_name, "score_a": bet.score_a, "score_b": bet.score_b}
+        for bet, user_name in bets
+    ]
+    rows.sort(key=lambda r: r["user_name"])
+
+    return {"match_id": match_id, "total_bets": len(rows), "bets": rows}

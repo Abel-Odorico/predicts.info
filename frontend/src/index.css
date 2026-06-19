@@ -67,6 +67,9 @@
   --mobile-topbar: 72px;
   --mobile-nav: 78px;
   --page-max: 1200px;
+
+  --surface: var(--bg-surface);
+  --surface-2: var(--bg-raised);
 }
 
 [data-theme='dark'] {
@@ -78,10 +81,10 @@
   --bg-overlay: #192d40;
   --bg-hover: rgba(100, 160, 220, 0.06);
 
-  --text-1: #e8f2fc;
-  --text-2: #7a9db8;
-  --text-3: #42647c;
-  --text-4: #253d4f;
+  --text-1: #edf4fd;
+  --text-2: #9dbdd4;
+  --text-3: #6a96b0;
+  --text-4: #4a7490;
 
   --accent: #e8c44a;
   --accent-strong: #f2d77c;
@@ -90,8 +93,8 @@
   --on-accent: #06101c;
 
   --draw: rgba(232, 242, 252, 0.18);
-  --border: rgba(100, 160, 220, 0.09);
-  --border-strong: rgba(100, 160, 220, 0.18);
+  --border: rgba(100, 160, 220, 0.14);
+  --border-strong: rgba(100, 160, 220, 0.26);
   --border-accent: rgba(232, 196, 74, 0.3);
   --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.18);
   --hero-glow: rgba(74, 144, 232, 0.12);
@@ -5741,6 +5744,48 @@ img {
   .uh-header__avatar { width: 52px; height: 52px; }
   .uh-header__avatar-icon { font-size: 18px; }
   .uh-streaks__val { font-size: 26px; }
+}
+
+/* ── Groups top bar (minimal header) ────────────────────────────────── */
+.groups-topbar {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  margin-bottom: var(--s5);
+}
+.groups-topbar__left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+.groups-topbar__pills {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+.groups-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-family: var(--font-cond);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+}
+.groups-pill--alert {
+  color: #e8a030;
+  background: rgba(232,160,48,.1);
+  border-color: rgba(232,160,48,.3);
+}
+@media (max-width: 640px) {
+  .groups-topbar { flex-direction: column; }
+  .groups-create-bar { width: 100%; }
 }
 
 /* ── Group Podium ────────────────────────────────────────────────────── */

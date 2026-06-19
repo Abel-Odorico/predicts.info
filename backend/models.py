@@ -255,9 +255,11 @@ class UserGroupMember(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_owner = Column(Boolean, default=False)
     joined_at = Column(DateTime, default=_utcnow)
+    champion_pick_team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
 
     group = relationship("UserGroup", back_populates="members")
     user = relationship("User", back_populates="group_memberships")
+    champion_pick = relationship("Team", foreign_keys=[champion_pick_team_id])
 
 
 class UserGroupInvite(Base):
@@ -275,6 +277,19 @@ class UserGroupInvite(Base):
     group = relationship("UserGroup", back_populates="invites")
     inviter = relationship("User", back_populates="sent_group_invites", foreign_keys=[inviter_user_id])
     invitee = relationship("User", back_populates="received_group_invites", foreign_keys=[invitee_user_id])
+
+
+class GroupMessage(Base):
+    __tablename__ = "group_messages"
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    group = relationship("UserGroup")
+    user = relationship("User")
 
 
 class AuditLog(Base):

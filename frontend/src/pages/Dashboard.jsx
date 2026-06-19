@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 
 export default function Dashboard() {
-  const [matches, setMatches]     = useState([])
-  const [results, setResults]     = useState([])
-  const [tourney, setTourney]     = useState(null)
-  const [liveGames, setLiveGames] = useState([])
-  const [calendar, setCalendar]   = useState([])
-  const [loading, setLoading]     = useState(true)
+  const [matches, setMatches]         = useState([])
+  const [results, setResults]         = useState([])
+  const [tourney, setTourney]         = useState(null)
+  const [liveGames, setLiveGames]     = useState([])
+  const [calendar, setCalendar]       = useState([])
+  const [topBettors, setTopBettors]   = useState([])
+  const [liveBets, setLiveBets]       = useState({}) // { [match_id]: bets[] }
+  const [loading, setLoading]         = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -28,8 +30,23 @@ export default function Dashboard() {
         setMatches(sched)
         setResults(done)
         setTourney(tour)
-        setLiveGames(live?.games || [])
+        const games = live?.games || []
+        setLiveGames(games)
         setCalendar(fullCalendar?.days || [])
+        api.get('/ranking?limit=8').then(bettors => {
+          if (!mounted) return
+          setTopBettors(Array.isArray(bettors) ? bettors.filter(b => b.total_points > 0) : [])
+        }).catch(() => {})
+        const liveMatchIds = games.filter(g => g.status === 'live' && g.match_id).map(g => g.match_id)
+        if (liveMatchIds.length > 0) {
+          Promise.all(liveMatchIds.map(id => api.get(`/matches/${id}/live-bets`).catch(() => null)))
+            .then(results => {
+              if (!mounted) return
+              const map = {}
+              results.forEach(r => { if (r) map[r.match_id] = r.bets })
+              setLiveBets(map)
+            })
+        }
       } catch (error) {
         console.error(error)
       } finally {
@@ -44,8 +61,19 @@ export default function Dashboard() {
           api.get('/matches/calendar'),
         ])
         if (!mounted) return
-        setLiveGames(live?.games || [])
+        const games = live?.games || []
+        setLiveGames(games)
         setCalendar(fullCalendar?.days || [])
+        const liveMatchIds = games.filter(g => g.status === 'live' && g.match_id).map(g => g.match_id)
+        if (liveMatchIds.length > 0) {
+          Promise.all(liveMatchIds.map(id => api.get(`/matches/${id}/live-bets`).catch(() => null)))
+            .then(results => {
+              if (!mounted) return
+              const map = {}
+              results.forEach(r => { if (r) map[r.match_id] = r.bets })
+              setLiveBets(map)
+            })
+        }
       } catch (error) {
         console.error(error)
       }
@@ -295,6 +323,10 @@ export default function Dashboard() {
         </div>
 
         <div className="stack gap-6">
+          {topBettors.length > 0 && (
+            <TopBettorsCard bettors={topBettors} />
+          )}
+
           <div className="card fade-in-2">
             <div className="card__header">
               <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
@@ -475,4 +507,136 @@ function StatusBadge({ game }) {
     return <span className="badge badge-done">{game.status_raw || 'Fim'}</span>
   }
   return <span className="badge badge-group">{game.status_raw || 'Agendado'}</span>
+}
+
+const MEDAL = ['🥇', '🥈', '🥉']
+
+function TopBettorsCard({ bettors }) {
+  const [idx, setIdx]       = useState(0)
+  const [visible, setVisible] = useState(true)
+  const timerRef            = useRef(null)
+
+  const maxPts = bettors[0]?.total_points || 1
+
+  function goTo(next) {
+    setVisible(false)
+    setTimeout(() => {
+      setIdx(next)
+      setVisible(true)
+    }, 220)
+  }
+
+  useEffect(() => {
+    if (bettors.length < 2) return
+    timerRef.current = setInterval(() => {
+      setIdx(prev => {
+        const next = (prev + 1) % bettors.length
+        setVisible(false)
+        setTimeout(() => setVisible(true), 220)
+        return next
+      })
+    }, 3500)
+    return () => clearInterval(timerRef.current)
+  }, [bettors.length])
+
+  const b = bettors[idx]
+  if (!b) return null
+
+  const accuracy = b.total_bets > 0 ? Math.round(((b.exact_scores + b.correct_results) / b.total_bets) * 100) : 0
+  const ptsWidth  = Math.round((b.total_points / maxPts) * 100)
+
+  return (
+    <div className="card fade-in-2" style={{ overflow: 'hidden' }}>
+      <div className="card__header">
+        <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          🎯 Melhores Apostadores
+        </span>
+        <Link to="/ranking" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
+          Ver todos →
+        </Link>
+      </div>
+
+      {/* dots nav */}
+      <div style={{ display: 'flex', gap: 5, justifyContent: 'center', padding: '0 var(--s4) var(--s2)' }}>
+        {bettors.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            style={{
+              width: i === idx ? 18 : 6,
+              height: 6,
+              borderRadius: 3,
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              background: i === idx ? 'var(--accent)' : 'var(--border)',
+              transition: 'width 300ms ease, background 300ms ease',
+            }}
+          />
+        ))}
+      </div>
+
+      <div
+        className="card__body"
+        style={{
+          paddingTop: 'var(--s3)',
+          paddingBottom: 'var(--s4)',
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0)' : 'translateY(6px)',
+          transition: 'opacity 220ms ease, transform 220ms ease',
+        }}
+      >
+        {/* position + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', marginBottom: 'var(--s4)' }}>
+          <span style={{ fontSize: 28, lineHeight: 1 }}>
+            {MEDAL[idx] || `#${idx + 1}`}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 17,
+              color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+            }}>
+              {b.name}
+            </div>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+              {b.total_bets} aposta{b.total_bets !== 1 ? 's' : ''} · {accuracy}% acertos
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent)', lineHeight: 1 }}>
+              {b.total_points}
+            </div>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>pts</div>
+          </div>
+        </div>
+
+        {/* points bar */}
+        <div style={{ height: 5, background: 'var(--bg-overlay)', borderRadius: 3, overflow: 'hidden', marginBottom: 'var(--s4)' }}>
+          <div style={{
+            height: '100%',
+            width: `${ptsWidth}%`,
+            background: 'var(--accent)',
+            borderRadius: 3,
+            transition: 'width 400ms ease',
+          }} />
+        </div>
+
+        {/* stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--s2)', textAlign: 'center' }}>
+          <div style={{ background: 'var(--bg-overlay)', borderRadius: 8, padding: 'var(--s3) var(--s2)' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--win)' }}>{b.exact_scores}</div>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 }}>Exatos</div>
+          </div>
+          <div style={{ background: 'var(--bg-overlay)', borderRadius: 8, padding: 'var(--s3) var(--s2)' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-2)' }}>{b.correct_results}</div>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 }}>Acertos</div>
+          </div>
+          <div style={{ background: 'var(--bg-overlay)', borderRadius: 8, padding: 'var(--s3) var(--s2)' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-2)' }}>{b.total_bets}</div>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 }}>Apostas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -8,11 +8,12 @@ export default function JoinGroup() {
   const { token: joinToken } = useParams()
   const { token, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [group,   setGroup]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [joining, setJoining] = useState(false)
   const [error,   setError]   = useState('')
-  const [joined,  setJoined]  = useState(false)
+  const [joined,  setJoined]  = useState(!!location.state?.justJoined)
 
   useEffect(() => {
     api.get(`/user-groups/join/${joinToken}`)

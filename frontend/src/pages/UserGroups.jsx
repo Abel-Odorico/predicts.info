@@ -111,21 +111,18 @@ export default function UserGroups() {
   const myBetNext = data.my_bet_next ?? false
   const totalMembers = groups.reduce((sum, g) => sum + (g.members?.length ?? 0), 0)
   const totalGroupInvites = groups.reduce((sum, g) => sum + (g.pending_invites?.length ?? 0), 0)
-  const ownedGroups = groups.filter(g => g.owner_user_id === user?.id).length
-  const metricCards = [
-    { label: 'Grupos', value: groups.length, hint: 'bolões ativos', tone: 'accent' },
-    { label: 'Membros', value: totalMembers, hint: 'participantes somados', tone: 'blue' },
-    { label: 'Convites', value: pendingInvites.length + totalGroupInvites, hint: 'aguardando resposta', tone: 'gold' },
-    { label: 'Administrados', value: ownedGroups, hint: 'grupos sob sua gestão', tone: 'green' },
-  ]
+  const totalConvites = pendingInvites.length + totalGroupInvites
 
   return (
     <div className="page">
-      <section className="groups-panel-hero fade-in-1">
-        <div className="groups-panel-hero__copy">
-          <span className="groups-panel-hero__eyebrow">Central dos bolões</span>
-          <h1 className="page-title">MEUS GRUPOS</h1>
-          <p className="page-subtitle">Gerencie seus bolões privados, convites e rankings em um só lugar.</p>
+      <div className="groups-topbar fade-in-1">
+        <div className="groups-topbar__left">
+          <h1 className="page-title" style={{ margin: 0 }}>MEUS GRUPOS</h1>
+          <div className="groups-topbar__pills">
+            <span className="groups-pill">{groups.length} bolão{groups.length !== 1 ? 'es' : ''}</span>
+            <span className="groups-pill">{totalMembers} membro{totalMembers !== 1 ? 's' : ''}</span>
+            {totalConvites > 0 && <span className="groups-pill groups-pill--alert">{totalConvites} convite{totalConvites !== 1 ? 's' : ''}</span>}
+          </div>
         </div>
         <form onSubmit={createGroup} className="groups-create-bar" aria-label="Criar novo grupo">
           <input
@@ -137,25 +134,15 @@ export default function UserGroups() {
             maxLength={120}
           />
           <button type="submit" className="btn btn-primary groups-create-bar__button" disabled={creating || !newGroupName.trim()}>
-            {creating ? 'Criando...' : '+ Criar grupo'}
+            {creating ? '...' : '+ Criar'}
           </button>
-          {createMsg && (
-            <div className={`groups-create-bar__message ${createMsg.startsWith('✓') ? 'is-success' : 'is-error'}`}>
-              {createMsg}
-            </div>
-          )}
         </form>
-      </section>
-
-      <section className="groups-metrics-grid fade-in-2" aria-label="Resumo dos grupos">
-        {metricCards.map(card => (
-          <div key={card.label} className={`groups-metric-card groups-metric-card--${card.tone}`}>
-            <span className="groups-metric-card__label">{card.label}</span>
-            <strong className="groups-metric-card__value">{card.value}</strong>
-            <span className="groups-metric-card__hint">{card.hint}</span>
+        {createMsg && (
+          <div className={`groups-create-bar__message ${createMsg.startsWith('✓') ? 'is-success' : 'is-error'}`} style={{ width: '100%' }}>
+            {createMsg}
           </div>
-        ))}
-      </section>
+        )}
+      </div>
 
       {pendingInvites.length > 0 && (
         <section className="groups-invite-strip fade-in-2">
