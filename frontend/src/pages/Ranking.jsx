@@ -85,7 +85,7 @@ export default function Ranking() {
   const reiExatos   = data.length ? [...data].sort((a,b) => b.exact_scores - a.exact_scores)[0] : null
   const maisAtivo   = data.length ? [...data].sort((a,b) => b.total_bets   - a.total_bets  )[0] : null
   const topAcerto   = data.length
-    ? [...data].filter(r => r.total_bets >= 3).sort((a,b) => (acerto(b)||0) - (acerto(a)||0))[0]
+    ? [...data].filter(r => r.total_bets >= 3).sort((a,b) => (aproveitamento(b)||0) - (aproveitamento(a)||0))[0]
     : null
 
   return (
