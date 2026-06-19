@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
@@ -17,15 +17,21 @@ function aproveitamento(r) {
   return Math.round(r.total_points / (r.total_bets * 3) * 100)
 }
 
-function getBadges(r, position, effectiveTotal, isHotToday, topStreak) {
+function getBadges(r, position, effectiveTotal, isHotToday, topStreak, isMuralHero) {
   const badges = []
   if (position === 1) badges.push({ icon: '🏆', label: 'Líder', color: '#e8a030' })
+  if (position === 2) badges.push({ icon: '🥈', label: 'Vice', color: '#a0a0a0' })
   if (r.total_bets >= 5 && r.exact_scores / r.total_bets >= 0.28)
     badges.push({ icon: '🎯', label: 'Sniper', color: '#e85252' })
+  if (effectiveTotal >= 5 && r.total_bets >= effectiveTotal)
+    badges.push({ icon: '💯', label: 'Cem%', color: '#0fa896' })
   if (effectiveTotal > 0 && r.total_bets >= effectiveTotal * 0.85)
     badges.push({ icon: '⚡', label: 'Maratonista', color: '#9b5de8' })
+  if (r.total_bets >= 10 && aproveitamento(r) >= 60)
+    badges.push({ icon: '🔮', label: 'Preciso', color: '#4a90e8' })
   if (isHotToday) badges.push({ icon: '🔥', label: 'Em Alta', color: 'var(--win)' })
   if (topStreak && topStreak >= 3) badges.push({ icon: '🔗', label: `${topStreak} seguidos`, color: '#0fa896' })
+  if (isMuralHero) badges.push({ icon: '🎲', label: 'Ousado', color: '#e8a030' })
   return badges
 }
 
@@ -51,6 +57,27 @@ function savePositions(groupId, ranking) {
     ranking.forEach((r, i) => { map[r.user_id] = i + 1 })
     localStorage.setItem(POSITION_STORE_KEY(groupId), JSON.stringify({ date: todayStr(), positions: map }))
   } catch {}
+}
+
+function useCountdown(targetDateStr) {
+  const [time, setTime] = useState({ hours: 0, minutes: 0, seconds: 0, urgent: false })
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!targetDateStr) return
+    function tick() {
+      const diff = new Date(targetDateStr) - new Date()
+      if (diff <= 0) { setTime({ hours: 0, minutes: 0, seconds: 0, urgent: true }); return }
+      const totalSec = Math.floor(diff / 1000)
+      const hours = Math.floor(totalSec / 3600)
+      const minutes = Math.floor((totalSec % 3600) / 60)
+      const seconds = totalSec % 60
+      setTime({ hours, minutes, seconds, urgent: hours === 0 && minutes < 30 })
+    }
+    tick()
+    ref.current = setInterval(tick, 1000)
+    return () => clearInterval(ref.current)
+  }, [targetDateStr])
+  return time
 }
 
 export default function GroupRanking() {
@@ -84,7 +111,6 @@ export default function GroupRanking() {
   const load = useCallback(() => {
     if (!token) return
     setLoading(true)
-    // Load previous positions before fetch (for delta arrows)
     const saved = loadSavedPositions(groupId)
     if (saved) setPrevPos(saved.positions)
 
@@ -111,6 +137,9 @@ export default function GroupRanking() {
   }, [groupId, token, today])
 
   useEffect(() => { load() }, [load])
+
+  const nextMatchDate = highlights?.next_match?.match_date
+  const countdown = useCountdown(nextMatchDate)
 
   async function generateLink() {
     setLinkLoading(true)
@@ -185,6 +214,21 @@ export default function GroupRanking() {
   const maxBets = ranking.length ? Math.max(...ranking.map(r => r.total_bets)) : 0
   const effectiveTotal = Math.max(finished, maxBets, 1)
   const streakMap = Object.fromEntries((highlights?.streaks ?? []).map(s => [s.user_id, s.streak]))
+  const recentForm = highlights?.recent_form ?? {}
+  const muralHeroId = highlights?.top_bets?.[0] ? null : null // resolved below
+  const muralHeroName = highlights?.top_bets?.[0]?.user_name
+
+  const groupLevel = highlights?.group_level ?? 1
+  const groupXp = highlights?.group_xp ?? 0
+  const nextLevelXp = highlights?.next_level_xp ?? 500
+  const xpPct = Math.min(100, Math.round((groupXp % 500) / 5))
+
+  const topBets = highlights?.top_bets ?? []
+  const weeklyRanking = highlights?.weekly_ranking ?? []
+
+  const top3 = ranking.slice(0, 3)
+
+  const padTime = n => String(n).padStart(2, '0')
 
   return (
     <div className="page">
@@ -218,6 +262,35 @@ export default function GroupRanking() {
         </div>
       </div>
 
+      {/* ── Nível do grupo ── */}
+      {groupXp > 0 && (
+        <div className="card mt-4 fade-in-1" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: 'var(--s3) var(--s4)', display: 'flex', alignItems: 'center', gap: 'var(--s3)', justifyContent: 'space-between' }}>
+            <div>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)' }}>
+                Nível do Grupo
+              </span>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent)', lineHeight: 1, marginTop: 2 }}>
+                ⚡ Nível {groupLevel}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
+                {groupXp % 500} / 500 XP
+              </span>
+            </div>
+          </div>
+          <div style={{ height: 5, background: 'var(--bg-overlay)' }}>
+            <div style={{
+              height: '100%',
+              width: `${xpPct}%`,
+              background: 'linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #fff))',
+              transition: 'width 800ms cubic-bezier(0.22,1,0.36,1)',
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* ── Compartilhar ── */}
       {shareOpen && (
         <div className="card mt-4 fade-in-1" style={{ padding: 'var(--s4) var(--s5)', borderLeft: '3px solid var(--accent)' }}>
@@ -241,43 +314,42 @@ export default function GroupRanking() {
         <StatPill icon="⚽" label="Realizados" value={`${finished}/${total}`} />
         <StatPill icon="⏳" label="Pendentes" value={total - finished} />
         <StatPill icon="👥" label="Participantes" value={ranking.length} />
-        {todayTop && <StatPill icon="🔥" label="Em Alta Hoje" value={todayTop.name} sub={`${todayTop.total_points} pts`} accent />}
+        {todayTop && <StatPill icon="🔥" label="Em Alta Hoje" value={todayTop.name} sub={`+${todayTop.total_points} pts`} accent />}
       </div>
 
-      {/* ── Próximo jogo + quem falta apostar ── */}
+      {/* ── Próximo jogo + countdown + cobertura ── */}
       {highlights?.next_match && (
         <div className="card mt-4 fade-in-2">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>⏰ Próximo Jogo</span>
-            <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
-              {new Date(highlights.next_match.match_date).toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            <span className={`countdown-chip${countdown.urgent ? ' countdown-chip--urgent' : ''}`}>
+              {countdown.hours > 0
+                ? `${padTime(countdown.hours)}h ${padTime(countdown.minutes)}m`
+                : `${padTime(countdown.minutes)}m ${padTime(countdown.seconds)}s`
+              }
             </span>
           </div>
           <div style={{ padding: 'var(--s3) var(--s4)' }}>
-            {/* Times */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
               <TeamChip t={highlights.next_match.team_a} />
               <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-3)' }}>×</span>
               <TeamChip t={highlights.next_match.team_b} />
             </div>
-            {/* Cobertura de apostas */}
             <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap' }}>
-              {/* Já apostaram */}
               {highlights.members_bet_next.length > 0 && (
                 <div style={{ flex: 1, minWidth: 120 }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--win)', marginBottom: 5 }}>
-                    ✓ Já apostaram ({highlights.members_bet_next.length})
+                    ✓ Apostaram ({highlights.members_bet_next.length})
                   </div>
                   {highlights.members_bet_next.map(m => (
                     <div key={m.user_id} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', padding: '2px 0' }}>{m.name}</div>
                   ))}
                 </div>
               )}
-              {/* Falta apostar */}
               {highlights.members_no_bet_next.length > 0 && (
                 <div style={{ flex: 1, minWidth: 120 }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--lose)', marginBottom: 5 }}>
-                    ⚠ Falta apostar ({highlights.members_no_bet_next.length})
+                    ⚠ Faltam apostar ({highlights.members_no_bet_next.length})
                   </div>
                   {highlights.members_no_bet_next.map(m => (
                     <div key={m.user_id} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', padding: '2px 0' }}>{m.name}</div>
@@ -285,7 +357,6 @@ export default function GroupRanking() {
                 </div>
               )}
             </div>
-            {/* Barra de progresso da cobertura */}
             {ranking.length > 0 && (
               <div style={{ marginTop: 'var(--s3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -307,35 +378,62 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Highlights: palpite ousado + sequências ── */}
-      {(highlights?.top_bet || (highlights?.streaks?.length > 0)) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s4)' }} className="fade-in-2">
-          {highlights?.top_bet && (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderTop: '3px solid #e8a030', borderRadius: 12, padding: 'var(--s4)' }}>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#e8a030', marginBottom: 6 }}>
-                🎲 Palpite Mais Ousado
+      {/* ── Highlights: streaks ── */}
+      {highlights?.streaks?.length > 0 && (
+        <div className="card mt-4 fade-in-2" style={{ padding: 'var(--s4) var(--s5)' }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0fa896', marginBottom: 8 }}>
+            🔗 Maior Sequência de Exatos
+          </div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text-1)', lineHeight: 1 }}>
+            {highlights.streaks[0].streak}
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', marginTop: 4 }}>{highlights.streaks[0].name}</div>
+          <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>consecutivos</div>
+        </div>
+      )}
+
+      {/* ── Mural de provocações ── */}
+      {topBets.length > 0 && (
+        <div className="card mt-4 fade-in-2">
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🎲 Mural de Provocações</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>palpites mais ousados</span>
+          </div>
+          <div className="mural-grid">
+            {topBets.map((bet, i) => (
+              <div key={i} className={`mural-card mural-card--${i + 1}`}>
+                <span className="mural-card__tag">
+                  {i === 0 ? '🏅 Mais ousado' : i === 1 ? '2º lugar' : '3º lugar'}
+                </span>
+                <div className="mural-card__score">{bet.score_a} × {bet.score_b}</div>
+                <div className="mural-card__name">{bet.user_name}</div>
+                {bet.group && (
+                  <div style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>Grupo {bet.group}</div>
+                )}
               </div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-1)', lineHeight: 1 }}>
-                {highlights.top_bet.score_a} × {highlights.top_bet.score_b}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Ranking semanal ── */}
+      {weeklyRanking.length > 0 && (
+        <div className="card mt-4 fade-in-2">
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📅 Ranking da Semana</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>últimos 7 dias</span>
+          </div>
+          <div className="weekly-ranking">
+            {weeklyRanking.slice(0, 5).map((r, i) => (
+              <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
+                <span className="weekly-ranking__medal">
+                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
+                </span>
+                <span className="weekly-ranking__name">{r.name}</span>
+                <span className="weekly-ranking__pts">+{r.pts_week}</span>
               </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>{highlights.top_bet.user_name}</div>
-              {highlights.top_bet.group && (
-                <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>Grupo {highlights.top_bet.group}</div>
-              )}
-            </div>
-          )}
-          {highlights?.streaks?.slice(0, 1).map(s => (
-            <div key={s.user_id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderTop: '3px solid #0fa896', borderRadius: 12, padding: 'var(--s4)' }}>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0fa896', marginBottom: 6 }}>
-                🔗 Maior Sequência de Exatos
-              </div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-1)', lineHeight: 1 }}>
-                {s.streak}
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>{s.name}</div>
-              <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>consecutivos</div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
@@ -362,6 +460,21 @@ export default function GroupRanking() {
           <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>Classificação do Grupo</span>
         </div>
 
+        {/* Pódio top-3 */}
+        {top3.length >= 2 && (
+          <div className="group-podium">
+            {top3.map((r, i) => (
+              <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
+                <div className="group-podium__avatar">{getInitials(r.name)}</div>
+                <div className="group-podium__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
+                <div className="group-podium__name" title={r.name}>{r.name}{r.is_me ? ' ★' : ''}</div>
+                <div className="group-podium__pts">{r.total_points} pts</div>
+                <div className="group-podium__platform" />
+              </div>
+            ))}
+          </div>
+        )}
+
         {myEntry && (
           <div className="group-ranking-hero fade-in-2">
             <div className="group-ranking-hero__pos">
@@ -370,9 +483,14 @@ export default function GroupRanking() {
             <div className="group-ranking-hero__info">
               <div className="group-ranking-hero__label">Sua posição no grupo</div>
               <div className="group-ranking-hero__name">{myEntry.name}</div>
-              <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-                {myEntry.exact_scores} exatos · {myEntry.correct_results} certos · {myEntry.total_bets} apostas
-                {aproveitamento(myEntry) !== null && ` · ${aproveitamento(myEntry)}% aproveito`}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
+                  {myEntry.exact_scores} exatos · {myEntry.correct_results} certos · {myEntry.total_bets} apostas
+                  {aproveitamento(myEntry) !== null && ` · ${aproveitamento(myEntry)}% aproveito`}
+                </span>
+                {recentForm[myEntry.user_id]?.length > 0 && (
+                  <FormDots form={recentForm[myEntry.user_id]} />
+                )}
               </div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -396,15 +514,16 @@ export default function GroupRanking() {
               const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
               const isHotToday = todayTop?.user_id === r.user_id
               const streak = streakMap[r.user_id] || 0
-              const badges = getBadges(r, i + 1, effectiveTotal, isHotToday, streak)
+              const isMuralHero = muralHeroName === r.name
+              const badges = getBadges(r, i + 1, effectiveTotal, isHotToday, streak, isMuralHero)
               const prevMember = i > 0 ? ranking[i - 1] : null
               const ptsDiff = prevMember ? prevMember.total_points - r.total_points : 0
               const coveragePct = Math.min(100, Math.round(r.total_bets / effectiveTotal * 100))
               const aprv = aproveitamento(r)
-              // Posição anterior (delta)
               const prevPos = prevPositions?.[r.user_id]
               const curPos = i + 1
               const delta = prevPos && prevPos !== curPos ? prevPos - curPos : 0
+              const form = recentForm[r.user_id] ?? []
 
               return (
                 <div
@@ -442,13 +561,16 @@ export default function GroupRanking() {
                         ))}
                       </div>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ height: 4, width: 80, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
-                        <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)', transition: 'width 600ms ease' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ height: 4, width: 80, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+                          <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)', transition: 'width 600ms ease' }} />
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>
+                          {r.total_bets}/{effectiveTotal}{aprv !== null && ` · ${aprv}%`}
+                        </span>
                       </div>
-                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>
-                        {r.total_bets}/{effectiveTotal}{aprv !== null && ` · ${aprv}%`}
-                      </span>
+                      {form.length > 0 && <FormDots form={form} />}
                     </div>
                     {prevMember && ptsDiff > 0 && (
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>
@@ -458,7 +580,6 @@ export default function GroupRanking() {
                     {prevMember && ptsDiff === 0 && (
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--win)' }}>= empatado com {prevMember.name}</div>
                     )}
-                    {/* Duelo direto inline */}
                     {duelMember && duelMember.user_id !== r.user_id && myEntry && r.user_id === myEntry.user_id && (
                       <DuelCard me={myEntry} them={duelMember} onClose={() => setDuelMember(null)} />
                     )}
@@ -482,7 +603,7 @@ export default function GroupRanking() {
         )}
       </div>
 
-      {/* Duelo modal (para não-me) */}
+      {/* Duelo modal */}
       {duelMember && myEntry && duelMember.user_id !== myEntry.user_id && (
         <div className="card mt-4 fade-in-1" style={{ borderLeft: '3px solid #9b5de8', padding: 0 }}>
           <div className="card__header">
@@ -493,7 +614,7 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Legenda ── */}
+      {/* ── Conquistas ── */}
       {ranking.length > 0 && (
         <div className="card mt-4 fade-in-4" style={{ padding: 'var(--s4) var(--s5)' }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', marginBottom: 8 }}>Conquistas</div>
@@ -501,9 +622,12 @@ export default function GroupRanking() {
             {[
               { icon: '🏆', label: 'Líder', desc: '1º no grupo' },
               { icon: '🎯', label: 'Sniper', desc: '≥28% exatos (mín. 5)' },
-              { icon: '⚡', label: 'Maratonista', desc: '≥85% dos jogos apostados' },
+              { icon: '💯', label: 'Cem%', desc: 'Apostou em todos os jogos' },
+              { icon: '⚡', label: 'Maratonista', desc: '≥85% jogos apostados' },
+              { icon: '🔮', label: 'Preciso', desc: '≥60% aproveitamento (mín. 10)' },
               { icon: '🔥', label: 'Em Alta', desc: 'Maior pts hoje no grupo' },
               { icon: '🔗', label: 'Sequência', desc: '≥3 exatos consecutivos' },
+              { icon: '🎲', label: 'Ousado', desc: 'Palpite mais audacioso' },
             ].map(b => (
               <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 14 }}>{b.icon}</span>
@@ -520,13 +644,24 @@ export default function GroupRanking() {
   )
 }
 
+// ── FormDots ─────────────────────────────────────────────────────────────────
+function FormDots({ form }) {
+  return (
+    <div className="form-dots" title={form.join(' ')}>
+      {form.map((f, i) => (
+        <div key={i} className={`form-dot form-dot--${f}`} title={f === 'E' ? 'Exato' : f === 'C' ? 'Certo' : 'Errado'} />
+      ))}
+    </div>
+  )
+}
+
 // ── Duelo Direto ──────────────────────────────────────────────────────────────
 function DuelCard({ me, them, onClose }) {
   const stats = [
-    { label: 'Pontos', me: me.total_points, them: them.total_points, higher: 'more' },
-    { label: 'Exatos', me: me.exact_scores, them: them.exact_scores, higher: 'more' },
-    { label: 'Certos', me: me.correct_results, them: them.correct_results, higher: 'more' },
-    { label: 'Apostas', me: me.total_bets, them: them.total_bets, higher: 'more' },
+    { label: 'Pontos', me: me.total_points, them: them.total_points },
+    { label: 'Exatos', me: me.exact_scores, them: them.exact_scores },
+    { label: 'Certos', me: me.correct_results, them: them.correct_results },
+    { label: 'Apostas', me: me.total_bets, them: them.total_bets },
   ]
   function aprv(r) {
     if (!r.total_bets) return 0
@@ -577,6 +712,10 @@ function TeamChip({ t }) {
       <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{t?.code}</span>
     </div>
   )
+}
+
+function getInitials(name = '') {
+  return name.split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?'
 }
 
 function WaIcon() {

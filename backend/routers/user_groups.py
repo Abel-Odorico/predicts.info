@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import desc, func, or_
+from datetime import timedelta
+
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from auth_utils import get_current_user
@@ -33,17 +35,21 @@ def _mask_email(email: str) -> str:
     return f"{masked_local}@{masked_domain}"
 
 
-def _group_payload(group: UserGroup, ranking_map: dict | None = None) -> dict:
+def _group_payload(group: UserGroup, ranking_map: dict | None = None, recent_form_map: dict | None = None) -> dict:
     accepted_members = sorted(group.members, key=lambda member: (not member.is_owner, member.user.name.lower() if member.user else ""))
     pending_invites = [
         invite for invite in group.invites
         if invite.status == GroupInviteStatus.pending
     ]
     members_out = []
+    total_bets_g = total_exacts_g = 0
     for member in accepted_members:
         pts = exact = bets = correct = 0
         if ranking_map and member.user_id in ranking_map:
             pts, exact, bets, correct = ranking_map[member.user_id]
+        total_bets_g += bets
+        total_exacts_g += exact
+        form = (recent_form_map or {}).get(member.user_id, [])
         members_out.append({
             "id": member.id,
             "user_id": member.user_id,
@@ -55,7 +61,11 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None) -> dict:
             "exact_scores": exact,
             "total_bets": bets,
             "correct_results": correct,
+            "recent_form": form,
         })
+    member_count = len(accepted_members)
+    group_xp = total_bets_g * 10 + total_exacts_g * 20 + member_count * 50
+    group_level = max(1, group_xp // 500 + 1)
     return {
         "id": group.id,
         "name": group.name,
@@ -63,6 +73,9 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None) -> dict:
         "created_at": group.created_at,
         "invite_token": group.invite_token,
         "members": members_out,
+        "group_xp": group_xp,
+        "group_level": group_level,
+        "group_level_xp_next": group_level * 500,
         "pending_invites": [
             {
                 "id": invite.id,
@@ -98,6 +111,9 @@ def list_user_groups(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
     memberships = (
         db.query(UserGroupMember)
         .options(
@@ -112,6 +128,10 @@ def list_user_groups(
         if m.group:
             for gm in m.group.members:
                 all_member_ids.add(gm.user_id)
+
+    ranking_map: dict = {}
+    recent_form_map: dict = {}
+
     if all_member_ids:
         bet_counts = (
             db.query(Bet.user_id, func.count(Bet.id).label("total_bets"))
@@ -132,13 +152,54 @@ def list_user_groups(
             .filter(User.id.in_(all_member_ids))
             .all()
         )
-    else:
-        ranking_rows = []
-    ranking_map = {
-        r.user_id: (r.total_points or 0, r.exact_scores or 0, r.total_bets or 0, r.correct_results or 0)
-        for r in ranking_rows
-    }
-    groups = [_group_payload(member.group, ranking_map) for member in memberships if member.group]
+        ranking_map = {
+            r.user_id: (r.total_points or 0, r.exact_scores or 0, r.total_bets or 0, r.correct_results or 0)
+            for r in ranking_rows
+        }
+
+        # Recent form (last 5 finished bets per user)
+        recent_bets_raw = (
+            db.query(Bet.user_id, Bet.points_earned)
+            .join(Match, Bet.match_id == Match.id)
+            .filter(Bet.user_id.in_(all_member_ids), Match.status == MatchStatus.finished)
+            .order_by(Bet.user_id, Match.match_date.asc())
+            .all()
+        )
+        user_bets_asc: dict[int, list[int]] = {}
+        for b in recent_bets_raw:
+            user_bets_asc.setdefault(b.user_id, []).append(b.points_earned)
+        for uid, bets_list in user_bets_asc.items():
+            form = []
+            for pts in reversed(bets_list):
+                if len(form) >= 5:
+                    break
+                form.append("E" if pts == 3 else "C" if pts == 1 else "X")
+            recent_form_map[uid] = form
+
+    groups = [_group_payload(member.group, ranking_map, recent_form_map) for member in memberships if member.group]
+
+    # Next scheduled match + whether current user has bet on it
+    next_match_db = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .filter(Match.status == MatchStatus.scheduled, Match.match_date > now)
+        .order_by(Match.match_date.asc())
+        .first()
+    )
+    next_match_out = None
+    my_bet_next = False
+    if next_match_db:
+        next_match_out = {
+            "id": next_match_db.id,
+            "match_date": next_match_db.match_date.isoformat() if next_match_db.match_date else None,
+            "team_a": {"name": next_match_db.team_a.name, "code": next_match_db.team_a.code} if next_match_db.team_a else {},
+            "team_b": {"name": next_match_db.team_b.name, "code": next_match_db.team_b.code} if next_match_db.team_b else {},
+        }
+        my_bet_next = bool(
+            db.query(Bet.id)
+            .filter(Bet.match_id == next_match_db.id, Bet.user_id == user.id)
+            .first()
+        )
 
     invites = (
         db.query(UserGroupInvite)
@@ -164,7 +225,7 @@ def list_user_groups(
         }
         for invite in invites
     ]
-    return {"groups": groups, "pending_invites": pending_invites}
+    return {"groups": groups, "pending_invites": pending_invites, "next_match": next_match_out, "my_bet_next": my_bet_next}
 
 
 @router.post("", status_code=201)
@@ -622,15 +683,19 @@ def group_highlights(
     if user.id not in member_ids:
         raise HTTPException(403, "Você não faz parte deste grupo")
 
-    # Próximo jogo aberto
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    week_ago = now - timedelta(days=7)
+
+    # Member names (single query reused throughout)
+    members_with_names = {
+        r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
+    }
+
+    # Próximo jogo aberto
     next_match = (
         db.query(Match)
-        .options(
-            __import__('sqlalchemy.orm', fromlist=['joinedload']).joinedload(Match.team_a),
-            __import__('sqlalchemy.orm', fromlist=['joinedload']).joinedload(Match.team_b),
-        )
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
         .filter(Match.status == MatchStatus.scheduled, Match.match_date > now)
         .order_by(Match.match_date.asc())
         .first()
@@ -652,16 +717,67 @@ def group_highlights(
             r[0] for r in db.query(Bet.user_id)
             .filter(Bet.match_id == next_match.id, Bet.user_id.in_(member_ids)).all()
         }
-        members_with_names = {
-            r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
-        }
         members_bet_next = [{"user_id": uid, "name": members_with_names.get(uid, "")} for uid in member_ids if uid in bet_user_ids]
         members_no_bet_next = [{"user_id": uid, "name": members_with_names.get(uid, "")} for uid in member_ids if uid not in bet_user_ids]
 
-    # Palpite mais ousado (maior placar combinado em jogo finalizado)
-    top_bet_row = (
+    # Combined bet data for streaks + recent form (single query, asc order)
+    all_bets_data = (
+        db.query(Bet.user_id, Bet.points_earned, Match.match_date)
+        .join(Match, Bet.match_id == Match.id)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+        .order_by(Bet.user_id, Match.match_date.asc())
+        .all()
+    )
+    user_bets_asc: dict[int, list[int]] = {}
+    for b in all_bets_data:
+        user_bets_asc.setdefault(b.user_id, []).append(b.points_earned)
+
+    # Streaks (ascending order — counts consecutive 3-pt runs)
+    streak_list = []
+    for uid, bets_list in user_bets_asc.items():
+        max_streak = cur = 0
+        for pts in bets_list:
+            if pts == 3:
+                cur += 1
+                max_streak = max(max_streak, cur)
+            else:
+                cur = 0
+        if max_streak > 0:
+            streak_list.append({"user_id": uid, "name": members_with_names.get(uid, ""), "streak": max_streak})
+    streak_list.sort(key=lambda x: -x["streak"])
+
+    # Recent form per user (last 5 bets, most recent first)
+    recent_form: dict[int, list[str]] = {}
+    for uid, bets_list in user_bets_asc.items():
+        form: list[str] = []
+        for pts in reversed(bets_list):
+            if len(form) >= 5:
+                break
+            form.append("E" if pts == 3 else "C" if pts == 1 else "X")
+        recent_form[uid] = form
+
+    # Weekly ranking (last 7 days)
+    weekly_rows = (
+        db.query(Bet.user_id, func.sum(Bet.points_earned).label("pts_week"))
+        .join(Match, Bet.match_id == Match.id)
+        .filter(
+            Bet.user_id.in_(member_ids),
+            Match.status == MatchStatus.finished,
+            Match.match_date >= week_ago,
+        )
+        .group_by(Bet.user_id)
+        .order_by(desc(func.sum(Bet.points_earned)))
+        .all()
+    )
+    weekly_ranking = [
+        {"user_id": r.user_id, "name": members_with_names.get(r.user_id, ""), "pts_week": int(r.pts_week or 0)}
+        for r in weekly_rows
+    ]
+
+    # Top 3 most audacious bets (highest combined score)
+    top_bets_rows = (
         db.query(
-            Bet.score_a, Bet.score_b,
+            Bet.user_id, Bet.score_a, Bet.score_b,
             User.name.label("user_name"),
             Match.group_name,
         )
@@ -669,50 +785,39 @@ def group_highlights(
         .join(Match, Bet.match_id == Match.id)
         .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
         .order_by(desc(Bet.score_a + Bet.score_b), desc(Bet.score_a))
-        .first()
-    )
-    top_bet = None
-    if top_bet_row:
-        top_bet = {
-            "score_a": top_bet_row.score_a,
-            "score_b": top_bet_row.score_b,
-            "user_name": top_bet_row.user_name,
-            "group": top_bet_row.group_name,
-        }
-
-    # Sequência de exatos: maior streak de apostas com points_earned == 3 por membro
-    all_bets = (
-        db.query(Bet.user_id, Bet.points_earned)
-        .join(Match, Bet.match_id == Match.id)
-        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
-        .order_by(Bet.user_id, Match.match_date.asc())
+        .limit(3)
         .all()
     )
-    from itertools import groupby
-    streaks = {}
-    for uid, bets_iter in groupby(all_bets, key=lambda b: b.user_id):
-        bets_list = list(bets_iter)
-        max_streak = cur = 0
-        for b in bets_list:
-            if b.points_earned == 3:
-                cur += 1
-                max_streak = max(max_streak, cur)
-            else:
-                cur = 0
-        streaks[uid] = max_streak
+    top_bets = [
+        {"score_a": r.score_a, "score_b": r.score_b, "user_name": r.user_name, "group": r.group_name}
+        for r in top_bets_rows
+    ]
 
-    members_with_names2 = {
-        r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
-    }
-    streak_list = sorted(
-        [{"user_id": uid, "name": members_with_names2.get(uid, ""), "streak": s} for uid, s in streaks.items() if s > 0],
-        key=lambda x: -x["streak"]
+    # Group XP & level (based on all bets by members)
+    xp_row = (
+        db.query(
+            func.count(Bet.id).label("total_bets"),
+            func.sum(case((Bet.points_earned == 3, 1), else_=0)).label("total_exacts"),
+        )
+        .filter(Bet.user_id.in_(member_ids))
+        .first()
     )
+    total_bets_all = int(xp_row.total_bets or 0) if xp_row else 0
+    total_exacts_all = int(xp_row.total_exacts or 0) if xp_row else 0
+    group_xp = total_bets_all * 10 + total_exacts_all * 20 + len(member_ids) * 50
+    group_level = max(1, group_xp // 500 + 1)
+    next_level_xp = group_level * 500
 
     return {
         "next_match": next_match_out,
         "members_bet_next": members_bet_next,
         "members_no_bet_next": members_no_bet_next,
-        "top_bet": top_bet,
+        "top_bet": top_bets[0] if top_bets else None,
+        "top_bets": top_bets,
         "streaks": streak_list,
+        "recent_form": recent_form,
+        "weekly_ranking": weekly_ranking,
+        "group_xp": group_xp,
+        "group_level": group_level,
+        "next_level_xp": next_level_xp,
     }

@@ -1,13 +1,45 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 
+function useCountdownStr(targetDateStr) {
+  const [str, setStr] = useState('')
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!targetDateStr) return
+    function tick() {
+      const diff = new Date(targetDateStr) - new Date()
+      if (diff <= 0) { setStr('Agora!'); return }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      const p = n => String(n).padStart(2, '0')
+      setStr(h > 0 ? `${p(h)}h ${p(m)}m` : `${p(m)}m ${p(s)}s`)
+    }
+    tick()
+    ref.current = setInterval(tick, 1000)
+    return () => clearInterval(ref.current)
+  }, [targetDateStr])
+  return str
+}
+
+function FormDots({ form }) {
+  if (!form?.length) return null
+  return (
+    <div className="form-dots" title={form.join(' ')}>
+      {form.map((f, i) => (
+        <div key={i} className={`form-dot form-dot--${f}`} title={f === 'E' ? 'Exato' : f === 'C' ? 'Certo' : 'Errado'} />
+      ))}
+    </div>
+  )
+}
+
 export default function UserGroups() {
   const { token, user } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [data, setData] = useState({ groups: [], pending_invites: [] })
+  const [data, setData] = useState({ groups: [], pending_invites: [], next_match: null, my_bet_next: false })
   const [matchStats, setMatchStats] = useState({ finished: 0, total: 0 })
   const [newGroupName, setNewGroupName] = useState('')
   const [createMsg, setCreateMsg] = useState('')
@@ -75,6 +107,8 @@ export default function UserGroups() {
 
   const groups = data.groups ?? []
   const pendingInvites = data.pending_invites ?? []
+  const nextMatch = data.next_match ?? null
+  const myBetNext = data.my_bet_next ?? false
   const totalMembers = groups.reduce((sum, g) => sum + (g.members?.length ?? 0), 0)
   const totalGroupInvites = groups.reduce((sum, g) => sum + (g.pending_invites?.length ?? 0), 0)
   const ownedGroups = groups.filter(g => g.owner_user_id === user?.id).length
@@ -167,6 +201,8 @@ export default function UserGroups() {
               currentUser={user}
               onRefresh={loadGroups}
               matchStats={matchStats}
+              nextMatch={nextMatch}
+              myBetNext={myBetNext}
             />
           ))}
         </section>
@@ -185,7 +221,7 @@ function getBadges(r, position, effectiveTotal) {
   return badges
 }
 
-function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 } }) {
+function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 }, nextMatch = null, myBetNext = false }) {
   const isOwner = group.owner_user_id === currentUser?.id
   const myEntry = (group.members ?? []).find(m => m.user_id === currentUser?.id)
   const myPoints = myEntry?.total_points ?? 0
@@ -359,6 +395,11 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   }
 
   const posEmoji = myPosition === 1 ? '🥇' : myPosition === 2 ? '🥈' : myPosition === 3 ? '🥉' : null
+  const countdownStr = useCountdownStr(nextMatch?.match_date)
+  const groupLevel = group.group_level ?? 1
+  const groupXp = group.group_xp ?? 0
+  const groupLevelNext = group.group_level_xp_next ?? 500
+  const xpPct = Math.min(100, Math.round((groupXp % 500) / 5))
 
   return (
     <article className="group-manager-card">
@@ -432,11 +473,35 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
         </div>
       )}
 
+      {/* Alerta próximo jogo */}
+      {nextMatch && !myBetNext && (
+        <div className="no-bet-alert">
+          <span style={{ fontSize: 14 }}>⚠️</span>
+          <span className="no-bet-alert__text">
+            Aposte em {nextMatch.team_a?.code} × {nextMatch.team_b?.code} — faltam {countdownStr}
+          </span>
+          <Link to="/apostas" className="btn btn-sm" style={{ background: 'var(--lose)', color: '#fff', border: 'none', fontSize: 11, padding: '4px 10px', flexShrink: 0 }}>
+            Apostar
+          </Link>
+        </div>
+      )}
+
       <div className="group-manager-card__stats">
         <GroupStat label="Membros" value={sortedMembers.length} />
         <GroupStat label="Realizados" value={`${matchStats.finished}/${matchStats.total}`} />
         <GroupStat label="Pendentes" value={matchStats.total - matchStats.finished} />
         <GroupStat label="Convites" value={group.pending_invites?.length ?? 0} />
+      </div>
+
+      {/* Barra XP do grupo */}
+      <div className="group-xp-bar">
+        <div className="group-xp-bar__header">
+          <span className="group-xp-bar__label">Nível do grupo</span>
+          <span className="group-xp-bar__level">⚡ Nível {groupLevel}</span>
+        </div>
+        <div className="group-xp-bar__track">
+          <div className="group-xp-bar__fill" style={{ width: `${xpPct}%` }} />
+        </div>
       </div>
 
       <div className="group-manager-card__body">
@@ -476,18 +541,21 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                         ))}
                       </div>
                     )}
-                    {/* Barra de cobertura */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-                      <div style={{ height: 3, width: 60, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%', borderRadius: 2,
-                          width: `${coveragePct}%`,
-                          background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)',
-                        }} />
+                    {/* Barra de cobertura + forma recente */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div style={{ height: 3, width: 60, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', borderRadius: 2,
+                            width: `${coveragePct}%`,
+                            background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)',
+                          }} />
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
+                          {member.total_bets || 0}/{effectiveTotal}
+                        </span>
                       </div>
-                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
-                        {member.total_bets || 0}/{effectiveTotal} apostas
-                      </span>
+                      {member.recent_form?.length > 0 && <FormDots form={member.recent_form} />}
                     </div>
                   </div>
                   <div className="group-member-row__pts">
