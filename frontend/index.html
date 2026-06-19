@@ -3,8 +3,11 @@
   <head>
     <script>
       (function() {
-        var theme = localStorage.getItem('predicts_theme') || 'light'
-        document.documentElement.setAttribute('data-theme', theme)
+        var mode = localStorage.getItem('predicts_theme') || 'system'
+        var resolved = mode === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : mode
+        document.documentElement.setAttribute('data-theme', resolved)
       })()
     </script>
     <meta charset="UTF-8" />

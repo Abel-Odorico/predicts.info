@@ -25,9 +25,7 @@ export default function UserGroups() {
     }
   }
 
-  useEffect(() => {
-    loadGroups()
-  }, [token])
+  useEffect(() => { loadGroups() }, [token])
 
   async function createGroup(e) {
     e.preventDefault()
@@ -71,9 +69,9 @@ export default function UserGroups() {
 
   const groups = data.groups ?? []
   const pendingInvites = data.pending_invites ?? []
-  const totalMembers = groups.reduce((sum, group) => sum + (group.members?.length ?? 0), 0)
-  const totalGroupInvites = groups.reduce((sum, group) => sum + (group.pending_invites?.length ?? 0), 0)
-  const ownedGroups = groups.filter(group => group.owner_user_id === user?.id).length
+  const totalMembers = groups.reduce((sum, g) => sum + (g.members?.length ?? 0), 0)
+  const totalGroupInvites = groups.reduce((sum, g) => sum + (g.pending_invites?.length ?? 0), 0)
+  const ownedGroups = groups.filter(g => g.owner_user_id === user?.id).length
   const metricCards = [
     { label: 'Grupos', value: groups.length, hint: 'bolões ativos', tone: 'accent' },
     { label: 'Membros', value: totalMembers, hint: 'participantes somados', tone: 'blue' },
@@ -172,6 +170,13 @@ export default function UserGroups() {
 
 function UserGroupCard({ group, token, currentUser, onRefresh }) {
   const isOwner = group.owner_user_id === currentUser?.id
+  const myEntry = (group.members ?? []).find(m => m.user_id === currentUser?.id)
+  const myPoints = myEntry?.total_points ?? 0
+  const myExact = myEntry?.exact_scores ?? 0
+
+  const sortedMembers = [...(group.members ?? [])].sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0))
+  const myPosition = sortedMembers.findIndex(m => m.user_id === currentUser?.id) + 1
+
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [email, setEmail] = useState('')
@@ -179,12 +184,20 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
   const [searching, setSearching] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState(group.name)
   const [savingName, setSavingName] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
-  const memberPreview = (group.members ?? []).slice(0, 4)
-  const extraMembers = Math.max((group.members?.length ?? 0) - memberPreview.length, 0)
+  const [showAllMembers, setShowAllMembers] = useState(false)
+  const [inviteLink, setInviteLink] = useState(
+    group.invite_token ? `${window.location.origin}/bolao/${group.invite_token}` : ''
+  )
+  const [linkLoading, setLinkLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const visibleMembers = showAllMembers ? sortedMembers : sortedMembers.slice(0, 4)
+  const extraMembers = Math.max(sortedMembers.length - 4, 0)
 
   async function deleteGroup() {
     if (!window.confirm(`Excluir o grupo "${group.name}"? Esta ação não pode ser desfeita.`)) return
@@ -195,6 +208,18 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
     } catch (e) {
       setMsg(`✗ ${e.message}`)
       setDeleting(false)
+    }
+  }
+
+  async function leaveGroup() {
+    if (!window.confirm(`Sair do grupo "${group.name}"?`)) return
+    setLeaving(true)
+    try {
+      await api.delete(`/user-groups/${group.id}/leave`, token)
+      onRefresh()
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+      setLeaving(false)
     }
   }
 
@@ -213,13 +238,47 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
     }
   }
 
-  useEffect(() => {
-    if (!isOwner || query.trim().length < 2) {
-      setResults([])
-      return
+  async function generateLink() {
+    setLinkLoading(true)
+    try {
+      const res = await api.post(`/user-groups/${group.id}/invite-link`, {}, token)
+      setInviteLink(`${window.location.origin}/bolao/${res.token}`)
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+    } finally {
+      setLinkLoading(false)
     }
+  }
+
+  async function copyLink() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteLink)
+      } else {
+        const el = document.createElement('textarea')
+        el.value = inviteLink
+        document.body.appendChild(el)
+        el.select()
+        document.execCommand('copy')
+        document.body.removeChild(el)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {}
+  }
+
+  async function shareLink() {
+    if (navigator.share) {
+      await navigator.share({ title: group.name, text: `Entre no meu bolão: ${group.name}`, url: inviteLink })
+    } else {
+      copyLink()
+    }
+  }
+
+  useEffect(() => {
+    if (!isOwner || query.trim().length < 2) { setResults([]); return }
     let cancelled = false
-    const timeoutId = window.setTimeout(async () => {
+    const id = window.setTimeout(async () => {
       setSearching(true)
       try {
         const users = await api.get(`/user-groups/users/search?q=${encodeURIComponent(query.trim())}`, token)
@@ -230,10 +289,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
         if (!cancelled) setSearching(false)
       }
     }, 250)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timeoutId)
-    }
+    return () => { cancelled = true; window.clearTimeout(id) }
   }, [query, token, isOwner])
 
   async function cancelInvite(inviteId) {
@@ -285,6 +341,8 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
     }
   }
 
+  const posEmoji = myPosition === 1 ? '🥇' : myPosition === 2 ? '🥈' : myPosition === 3 ? '🥉' : null
+
   return (
     <article className="group-manager-card">
       <header className="group-manager-card__header">
@@ -318,35 +376,103 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
               {deleting ? '...' : '🗑'}
             </button>
           )}
+          {!isOwner && (
+            <button type="button" className="btn btn-ghost btn-sm group-manager-card__danger" onClick={leaveGroup} disabled={leaving} title="Sair do grupo">
+              {leaving ? '...' : 'Sair'}
+            </button>
+          )}
         </div>
       </header>
 
+      {/* My position strip */}
+      <div className="group-my-position">
+        <div className="group-my-position__pos">
+          {posEmoji
+            ? <span style={{ fontSize: 22 }}>{posEmoji}</span>
+            : <span className="group-my-position__num">{myPosition}º</span>
+          }
+        </div>
+        <div className="group-my-position__info">
+          <span className="group-my-position__label">Sua posição</span>
+          <span className="group-my-position__pts">{myPoints} <span>pts</span></span>
+        </div>
+        <div className="group-my-position__exact">
+          <span>{myExact}</span>
+          <span>exatos</span>
+        </div>
+      </div>
+
       <div className="group-manager-card__stats">
-        <GroupStat label="Membros" value={group.members?.length ?? 0} />
+        <GroupStat label="Membros" value={sortedMembers.length} />
         <GroupStat label="Convites" value={group.pending_invites?.length ?? 0} />
         <GroupStat label="Seu papel" value={isOwner ? 'Dono' : 'Membro'} compact />
       </div>
 
       <div className="group-manager-card__body">
+        {/* Members section */}
         <section className="group-manager-section">
           <div className="group-manager-section__header">
             <h3>Membros</h3>
-            {extraMembers > 0 && <span>+{extraMembers}</span>}
+            {extraMembers > 0 && !showAllMembers && <span>+{extraMembers}</span>}
           </div>
           <div className="group-member-preview">
-            {memberPreview.map(member => (
-              <div key={member.user_id} className="group-member-row">
+            {visibleMembers.map((member, i) => (
+              <div key={member.user_id} className={`group-member-row${member.user_id === currentUser?.id ? ' group-member-row--me' : ''}`}>
                 <div className="group-member-row__avatar">{getInitials(member.name)}</div>
                 <div className="group-member-row__identity">
-                  <strong>{member.name}</strong>
+                  <strong>{member.name}{member.user_id === currentUser?.id ? ' (você)' : ''}</strong>
                   <span>{member.email}</span>
+                </div>
+                <div className="group-member-row__pts">
+                  <span className="group-member-row__pts-pos">
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`}
+                  </span>
+                  <span className="group-member-row__pts-val">{member.total_points ?? 0}pts</span>
                 </div>
                 {member.is_owner && <span className="badge badge-group">Dono</span>}
               </div>
             ))}
           </div>
+          {sortedMembers.length > 4 && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ width: '100%', marginTop: 'var(--s2)', fontSize: 12 }}
+              onClick={() => setShowAllMembers(v => !v)}
+            >
+              {showAllMembers ? '▲ Ver menos' : `▼ Ver todos (${sortedMembers.length})`}
+            </button>
+          )}
         </section>
 
+        {/* Invite link section */}
+        <section className="group-manager-section group-manager-section--link">
+          <div className="group-manager-section__header">
+            <h3>Link de convite</h3>
+            {isOwner && <span>Admin</span>}
+          </div>
+          {!inviteLink ? (
+            isOwner ? (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={generateLink} disabled={linkLoading}>
+                {linkLoading ? 'Gerando...' : '🔗 Gerar link de convite'}
+              </button>
+            ) : (
+              <p className="group-tool-note">Nenhum link ativo. Solicite ao dono do grupo.</p>
+            )
+          ) : (
+            <div className="group-link-row">
+              <input readOnly value={inviteLink} className="group-link-row__input" />
+              <button type="button" className="btn btn-primary btn-sm" onClick={shareLink}>
+                {copied ? '✓' : '📤'}
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={copyLink} title="Copiar">
+                📋
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* Pending invites */}
         {group.pending_invites.length > 0 && (
           <section className="group-manager-section">
             <div className="group-manager-section__header">
@@ -371,6 +497,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
           </section>
         )}
 
+        {/* Invite tools (owner only) */}
         {isOwner && (
           <section className="group-manager-section group-manager-section--tools">
             <div className="group-manager-section__header">
@@ -387,7 +514,6 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
               />
-
               {searching && <div className="group-tool-note">Buscando usuários...</div>}
               {results.length > 0 && (
                 <div className="group-search-results">
@@ -402,7 +528,6 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
                   ))}
                 </div>
               )}
-
               <form onSubmit={inviteByEmail} className="group-email-invite">
                 <label className="form-label" htmlFor={`invite-email-${group.id}`}>Convidar por email</label>
                 <div className="group-email-invite__row">
@@ -417,10 +542,13 @@ function UserGroupCard({ group, token, currentUser, onRefresh }) {
                   <button type="submit" className="btn btn-ghost btn-sm" disabled={inviting || !email.trim()}>{inviting ? 'Enviando...' : 'Enviar'}</button>
                 </div>
               </form>
-
               {msg && <div className={`group-tool-message ${msg.startsWith('✓') ? 'is-success' : 'is-error'}`}>{msg}</div>}
             </div>
           </section>
+        )}
+
+        {!isOwner && msg && (
+          <div className={`group-tool-message ${msg.startsWith('✓') ? 'is-success' : 'is-error'}`} style={{ marginTop: 'var(--s3)' }}>{msg}</div>
         )}
       </div>
     </article>
@@ -437,12 +565,5 @@ function GroupStat({ label, value, compact = false }) {
 }
 
 function getInitials(name = '') {
-  const initials = name
-    .split(' ')
-    .filter(Boolean)
-    .map(part => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
-  return initials || '?'
+  return name.split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?'
 }

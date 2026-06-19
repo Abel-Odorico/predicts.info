@@ -1,66 +1,100 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../stores/authStore'
 import { useTrack } from '../hooks/useTrack'
 import { useAdSense } from '../hooks/useAdSense'
 import { api } from '../api'
 
-const NAV = [
-  { to: '/',           icon: '⚽', label: 'Dashboard' },
-  { to: '/torneio',    icon: '🏆', label: 'Torneio' },
-  { to: '/resultados', icon: '📋', label: 'Resultados' },
-  { to: '/grupos',     icon: '🗂', label: 'Grupos' },
-  { to: '/apostas',    icon: '🎯', label: 'Apostas' },
-  { to: '/ranking',    icon: '🏅', label: 'Ranking' },
-  { to: '/meus-grupos', icon: '👥', label: 'Meus Grupos' },
+const THEMES = ['light', 'dark', 'system']
+const THEME_META = {
+  light:  { icon: <SunIcon />,     label: 'Claro'   },
+  dark:   { icon: <MoonIcon />,    label: 'Escuro'  },
+  system: { icon: <SystemIcon />,  label: 'Sistema' },
+}
+
+const NAV_DRAWER = [
+  { to: '/torneio',    icon: '🏆', label: 'Torneio'     },
+  { to: '/resultados', icon: '📋', label: 'Resultados'  },
+  { to: '/grupos',     icon: '🗂',  label: 'Grupos'      },
+  { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos' },
 ]
 
 const ADMIN_NAV = [
-  { to: '/admin',            icon: '🛠', label: 'Painel Admin' },
-  { to: '/admin/analytics',  icon: '📊', label: 'Analytics' },
-  { to: '/admin/options',    icon: '⚙️', label: 'Configurações' },
+  { to: '/admin',           icon: '🛠',  label: 'Painel Admin'   },
+  { to: '/admin/analytics', icon: '📊', label: 'Analytics'      },
+  { to: '/admin/options',   icon: '⚙️', label: 'Configurações'  },
 ]
 
 const LEGAL_NAV = [
   { to: '/privacidade', label: 'Privacidade' },
-  { to: '/termos', label: 'Termos' },
-  { to: '/sobre', label: 'Sobre' },
-  { to: '/contato', label: 'Contato' },
+  { to: '/termos',      label: 'Termos'      },
+  { to: '/sobre',       label: 'Sobre'       },
+  { to: '/contato',     label: 'Contato'     },
 ]
 
+function resolveTheme(mode) {
+  if (mode === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return mode
+}
+
 export default function Layout() {
-  const { user, logout } = useAuth()
+  const { user, logout, setUser } = useAuth()
   const navigate = useNavigate()
-  const [adminOpen, setAdminOpen] = useState(false)
   const [developerCredit, setDeveloperCredit] = useState('PeepConnect - By Abel Odorico')
-  const [theme, setTheme] = useState(() => {
-    if (typeof window === 'undefined') return 'light'
-    return localStorage.getItem('predicts_theme') || 'light'
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const [theme, setThemeState] = useState(() => {
+    return localStorage.getItem('predicts_theme') || 'system'
   })
+
   useTrack()
   useAdSense()
 
+  // Apply theme + OS listener
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', resolveTheme(theme))
+    localStorage.setItem('predicts_theme', theme)
+    if (theme !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => {
+      document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light')
+    }
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [theme])
+
+  // Sync theme from user preference on login
+  useEffect(() => {
+    if (user?.theme && THEMES.includes(user.theme)) {
+      setThemeState(user.theme)
+    }
+  }, [user?.id])
+
   useEffect(() => {
     api.get('/site-config/public')
-      .then(cfg => {
-        if (cfg.developer_credit) setDeveloperCredit(cfg.developer_credit)
-      })
+      .then(cfg => { if (cfg.developer_credit) setDeveloperCredit(cfg.developer_credit) })
       .catch(() => {})
   }, [])
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('predicts_theme', theme)
-  }, [theme])
+  const cycleTheme = useCallback(() => {
+    const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]
+    setThemeState(next)
+    if (user) {
+      api.patch('/auth/theme', { theme: next })
+        .then(updated => setUser(updated))
+        .catch(() => {})
+    }
+  }, [theme, user, setUser])
 
   const handleLogout = () => {
     logout()
     navigate('/login')
+    setDrawerOpen(false)
   }
 
-  const toggleTheme = () => {
-    setTheme(current => current === 'light' ? 'dark' : 'light')
-  }
+  const closeDrawer = () => setDrawerOpen(false)
 
   const initials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -68,49 +102,25 @@ export default function Layout() {
 
   return (
     <>
-      <header className="mobile-topbar">
-        <div className="mobile-topbar__brand">
-          <div className="mobile-topbar__logo">PREDICTS</div>
-          <div className="mobile-topbar__subtitle">World Cup 2026</div>
-        </div>
-        <div className="mobile-topbar__actions">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="btn btn-ghost btn-sm theme-toggle"
-            aria-label={`Ativar tema ${theme === 'light' ? 'escuro' : 'claro'}`}
-          >
-            <span>{theme === 'light' ? '☀️' : '🌙'}</span>
-            <span>{theme === 'light' ? 'Light' : 'Dark'}</span>
-          </button>
-          {user ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="btn btn-ghost btn-sm"
-            >
-              Sair
-            </button>
-          ) : (
-            <NavLink to="/login" className="btn btn-primary btn-sm">
-              Entrar
-            </NavLink>
-          )}
-        </div>
-      </header>
-
+      {/* ── Desktop sidebar ──────────────────────────── */}
       <nav className="sidebar">
         <div className="sidebar__brand">
           <div className="sidebar__logo">PREDICTS</div>
-          <div className="sidebar__subtitle">World Cup 2026</div>
+          <div className="sidebar__subtitle">Simulador Estatístico</div>
         </div>
 
         <div className="sidebar__nav">
-          {NAV.map(n => (
+          {[
+            { to: '/',             icon: '⚽', label: 'Dashboard',    end: true },
+            { to: '/torneio',      icon: '🏆', label: 'Torneio'           },
+            { to: '/resultados',   icon: '📋', label: 'Resultados'        },
+            { to: '/grupos',       icon: '🗂',  label: 'Grupos'            },
+            { to: '/apostas',      icon: '🎯', label: 'Apostas'           },
+            { to: '/ranking',      icon: '🏅', label: 'Ranking'           },
+            { to: '/meus-grupos',  icon: '👥', label: 'Meus Grupos'       },
+          ].map(n => (
             <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.to === '/'}
+              key={n.to} to={n.to} end={n.end}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             >
               <span className="nav-item__icon">{n.icon}</span>
@@ -126,10 +136,7 @@ export default function Layout() {
                 borderTop: '1px solid var(--border)', marginTop: 'var(--s2)',
               }}>Admin</div>
               {ADMIN_NAV.map(n => (
-                <NavLink
-                  key={n.to}
-                  to={n.to}
-                  end
+                <NavLink key={n.to} to={n.to} end
                   className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
                 >
                   <span className="nav-item__icon">{n.icon}</span>
@@ -145,33 +152,22 @@ export default function Layout() {
             <div className="sidebar__account">
               <Link to={`/usuarios/${user.id}/historico`} className="sidebar__user">
                 <div className="sidebar__avatar">{initials}</div>
-                <span className="sidebar__user-name">
-                  {user.name}
-                </span>
+                <span className="sidebar__user-name">{user.name}</span>
               </Link>
               <NavLink to="/perfil" className={({ isActive }) => `btn btn-ghost btn-sm w-full${isActive ? ' active' : ''}`}>
                 ⚙️ Meu Perfil
               </NavLink>
               <NavLink to={`/usuarios/${user.id}/historico`} className={({ isActive }) => `btn btn-ghost btn-sm w-full${isActive ? ' active' : ''}`}>
-                🏅 Histórico
+                📜 Histórico
               </NavLink>
-              <button
-                onClick={handleLogout}
-                className="btn btn-ghost btn-sm w-full"
-              >
-                Sair
-              </button>
+              <button onClick={handleLogout} className="btn btn-ghost btn-sm w-full">Sair</button>
             </div>
           ) : (
-            <NavLink to="/login" className="btn btn-primary btn-sm w-full">
-              Entrar
-            </NavLink>
+            <NavLink to="/login" className="btn btn-primary btn-sm w-full">Entrar</NavLink>
           )}
           <div className="sidebar__legal">
             {LEGAL_NAV.map(item => (
-              <NavLink key={item.to} to={item.to} className="sidebar__legal-link">
-                {item.label}
-              </NavLink>
+              <NavLink key={item.to} to={item.to} className="sidebar__legal-link">{item.label}</NavLink>
             ))}
           </div>
           <div className="sidebar__credit">
@@ -179,94 +175,194 @@ export default function Layout() {
             <span className="sidebar__credit-value">{developerCredit}</span>
           </div>
           <button
-            type="button"
-            onClick={toggleTheme}
+            type="button" onClick={cycleTheme}
             className="btn btn-ghost btn-sm w-full theme-toggle theme-toggle--sidebar"
-            aria-label={`Ativar tema ${theme === 'light' ? 'escuro' : 'claro'}`}
           >
-            <span>{theme === 'light' ? '☀️' : '🌙'}</span>
-            <span>{theme === 'light' ? 'Tema claro ativo' : 'Tema escuro ativo'}</span>
+            <span>{THEME_META[theme].icon}</span>
+            <span>Tema {THEME_META[theme].label}</span>
           </button>
         </div>
       </nav>
 
-      {/* Admin flyup menu (mobile) */}
-      {user?.role === 'admin' && adminOpen && (
-        <div
-          onClick={() => setAdminOpen(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 115,
-            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              position: 'fixed', bottom: 'var(--mobile-nav)', left: 0, right: 0,
-              background: 'var(--bg-surface)', borderTop: '1px solid var(--border)',
-              padding: 'var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s2)',
-              zIndex: 116,
-            }}
-          >
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '0 var(--s2) var(--s1)' }}>Área Admin</div>
-            {ADMIN_NAV.map(n => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end
-                onClick={() => setAdminOpen(false)}
-                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-                style={{ borderRadius: 'var(--r2)' }}
-              >
-                <span className="nav-item__icon">{n.icon}</span>
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13 }}>{n.label}</span>
-              </NavLink>
-            ))}
-          </div>
+      {/* ── Mobile topbar ────────────────────────────── */}
+      <header className="mobile-topbar">
+        <div className="mobile-topbar__brand">
+          <div className="mobile-topbar__logo">PREDICTS</div>
+          <div className="mobile-topbar__subtitle">Simulador Estatístico</div>
         </div>
+        <div className="mobile-topbar__actions">
+          <button
+            type="button" onClick={cycleTheme}
+            className="mobile-topbar__theme-btn"
+            title={`Tema atual: ${THEME_META[theme].label}`}
+          >
+            {THEME_META[theme].icon}
+          </button>
+          {user ? (
+            <Link to="/perfil" className="mobile-topbar__avatar" title={user.name}>
+              {initials}
+            </Link>
+          ) : (
+            <NavLink to="/login" className="btn btn-primary btn-sm">Entrar</NavLink>
+          )}
+        </div>
+      </header>
+
+      {/* ── Mobile drawer backdrop ───────────────────── */}
+      {drawerOpen && (
+        <div className="mobile-drawer-backdrop" onClick={closeDrawer} />
       )}
 
-      <nav className="mobile-bottom-nav" aria-label="Navegacao principal">
-        {NAV.map(n => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            end={n.to === '/'}
-            className={({ isActive }) => `mobile-bottom-nav__item${isActive ? ' active' : ''}`}
-          >
-            <span className="mobile-bottom-nav__icon">{n.icon}</span>
-            <span className="mobile-bottom-nav__label">{n.label}</span>
-          </NavLink>
-        ))}
-        {user && (
-          <NavLink
-            to="/perfil"
-            className={({ isActive }) => `mobile-bottom-nav__item${isActive ? ' active' : ''}`}
-          >
-            <span className="mobile-bottom-nav__icon">⚙️</span>
-            <span className="mobile-bottom-nav__label">Perfil</span>
-          </NavLink>
-        )}
-        {user && (
-          <NavLink
-            to={`/usuarios/${user.id}/historico`}
-            className={({ isActive }) => `mobile-bottom-nav__item${isActive ? ' active' : ''}`}
-          >
-            <span className="mobile-bottom-nav__icon">🏅</span>
-            <span className="mobile-bottom-nav__label">Histórico</span>
-          </NavLink>
-        )}
+      {/* ── Mobile drawer ────────────────────────────── */}
+      <div className={`mobile-drawer${drawerOpen ? ' mobile-drawer--open' : ''}`}>
+        <div className="mobile-drawer__handle" onClick={closeDrawer} />
+
+        <div className="mobile-drawer__grid">
+          {NAV_DRAWER.map(n => (
+            <NavLink
+              key={n.to} to={n.to}
+              onClick={closeDrawer}
+              className={({ isActive }) => `mobile-drawer__item${isActive ? ' active' : ''}`}
+            >
+              <span className="mobile-drawer__item-icon">{n.icon}</span>
+              <span className="mobile-drawer__item-label">{n.label}</span>
+            </NavLink>
+          ))}
+        </div>
+
         {user?.role === 'admin' && (
-          <button
-            onClick={() => setAdminOpen(o => !o)}
-            className={`mobile-bottom-nav__item${adminOpen ? ' active' : ''}`}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%' }}
-          >
-            <span className="mobile-bottom-nav__icon">{adminOpen ? '✕' : '🛠'}</span>
-            <span className="mobile-bottom-nav__label">Admin</span>
-          </button>
+          <>
+            <div className="mobile-drawer__section-label">Admin</div>
+            <div className="mobile-drawer__grid">
+              {ADMIN_NAV.map(n => (
+                <NavLink
+                  key={n.to} to={n.to} end
+                  onClick={closeDrawer}
+                  className={({ isActive }) => `mobile-drawer__item${isActive ? ' active' : ''}`}
+                >
+                  <span className="mobile-drawer__item-icon">{n.icon}</span>
+                  <span className="mobile-drawer__item-label">{n.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </>
         )}
+
+        <div className="mobile-drawer__footer">
+          {user ? (
+            <button onClick={handleLogout} className="mobile-drawer__logout">
+              <LogoutIcon /> Sair da conta
+            </button>
+          ) : (
+            <NavLink to="/login" onClick={closeDrawer} className="btn btn-primary" style={{ flex: 1, textAlign: 'center' }}>
+              Entrar
+            </NavLink>
+          )}
+        </div>
+      </div>
+
+      {/* ── Mobile dock ──────────────────────────────── */}
+      <nav className="mobile-dock" aria-label="Navegação principal">
+        <NavLink to="/" end className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}>
+          <span className="mobile-dock__icon">⚽</span>
+          <span className="mobile-dock__label">Dashboard</span>
+        </NavLink>
+
+        <NavLink to="/apostas" className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}>
+          <span className="mobile-dock__icon">🎯</span>
+          <span className="mobile-dock__label">Apostas</span>
+        </NavLink>
+
+        {/* FAB central */}
+        <div className="mobile-dock__fab-wrap">
+          <button
+            onClick={() => setDrawerOpen(o => !o)}
+            className={`mobile-fab${drawerOpen ? ' mobile-fab--open' : ''}`}
+            aria-label="Menu"
+          >
+            {drawerOpen ? <CloseIcon /> : <GridIcon />}
+          </button>
+        </div>
+
+        <NavLink to="/ranking" className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}>
+          <span className="mobile-dock__icon">🏅</span>
+          <span className="mobile-dock__label">Ranking</span>
+        </NavLink>
+
+        <NavLink
+          to={user ? `/usuarios/${user.id}/historico` : '/login'}
+          className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}
+        >
+          <span className="mobile-dock__icon">📜</span>
+          <span className="mobile-dock__label">Histórico</span>
+        </NavLink>
       </nav>
     </>
+  )
+}
+
+// ── Icon components ────────────────────────────────────────────────────────
+
+function SunIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="12" cy="12" r="4"/>
+      <line x1="12" y1="2" x2="12" y2="4"/>
+      <line x1="12" y1="20" x2="12" y2="22"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="2" y1="12" x2="4" y2="12"/>
+      <line x1="20" y1="12" x2="22" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  )
+}
+
+function SystemIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <line x1="8" y1="21" x2="16" y2="21"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
+    </svg>
+  )
+}
+
+function GridIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+      <rect x="3"  y="3"  width="7" height="7" rx="2"/>
+      <rect x="14" y="3"  width="7" height="7" rx="2"/>
+      <rect x="3"  y="14" width="7" height="7" rx="2"/>
+      <rect x="14" y="14" width="7" height="7" rx="2"/>
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18"/>
+      <line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  )
+}
+
+function LogoutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+      <polyline points="16 17 21 12 16 7"/>
+      <line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
   )
 }

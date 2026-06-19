@@ -141,6 +141,7 @@ class UserResponse(BaseModel):
     phone: str | None = None
     name: str
     role: str
+    theme: str = 'system'
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { api } from '../api'
@@ -306,7 +306,6 @@ export default function Admin() {
       {tab === 'growth' && (
         <div className="adm-pane fade-in-1">
 
-          {/* Period filter */}
           <div className="adm-period-bar">
             {PERIODS.map(p => (
               <button
@@ -320,7 +319,9 @@ export default function Admin() {
           </div>
 
           {growthLoading && (
-            <div style={{ padding: 'var(--s8)', textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>Carregando...</div>
+            <div style={{ padding: 'var(--s8)', textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+              Carregando...
+            </div>
           )}
 
           {!growthLoading && growth && (
@@ -328,133 +329,69 @@ export default function Admin() {
               {/* ── KPI Cards ─────────────────────────── */}
               <div className="adm-growth-cards">
                 {[
-                  { label: 'Total Usuários',    val: growth.summary.total_users,        color: 'var(--text-1)' },
-                  { label: 'Novos Hoje',        val: growth.summary.new_today,           color: 'var(--win)' },
-                  { label: 'Novos na Semana',   val: growth.summary.new_week,            color: 'var(--win)' },
-                  { label: 'Novos no Mês',      val: growth.summary.new_month,           color: 'var(--accent)' },
-                  { label: 'Total Apostas',     val: growth.summary.total_bets,          color: 'var(--text-1)' },
-                  { label: 'Apostas Hoje',      val: growth.summary.bets_today,          color: 'var(--win)' },
-                  { label: 'Apostadores Únicos',val: growth.summary.unique_bettors,      color: 'var(--accent)' },
-                  { label: 'Média Apostas/User',val: growth.summary.avg_bets_per_user,   color: 'var(--text-2)' },
+                  { label: 'Total Usuários',     val: growth.summary.total_users,       accent: false },
+                  { label: 'Novos Hoje',         val: growth.summary.new_today,         accent: 'win' },
+                  { label: 'Novos na Semana',    val: growth.summary.new_week,          accent: 'win' },
+                  { label: 'Novos no Mês',       val: growth.summary.new_month,         accent: 'teal' },
+                  { label: 'Total Apostas',      val: growth.summary.total_bets,        accent: false },
+                  { label: 'Apostas Hoje',       val: growth.summary.bets_today,        accent: 'win' },
+                  { label: 'Apostadores Únicos', val: growth.summary.unique_bettors,    accent: 'teal' },
+                  { label: 'Média Apostas/User', val: growth.summary.avg_bets_per_user, accent: false },
                 ].map(card => (
-                  <div key={card.label} className="adm-growth-card">
-                    <div className="adm-growth-card__val" style={{ color: card.color }}>{card.val}</div>
+                  <div key={card.label} className={`adm-growth-card${card.accent ? ` adm-growth-card--${card.accent}` : ''}`}>
+                    <div className="adm-growth-card__val">{card.val}</div>
                     <div className="adm-growth-card__label">{card.label}</div>
                   </div>
                 ))}
                 {growth.summary.most_active_user && (
-                  <div className="adm-growth-card adm-growth-card--wide">
-                    <div className="adm-growth-card__val" style={{ color: 'var(--accent)', fontSize: 16 }}>
-                      {growth.summary.most_active_user}
-                    </div>
-                    <div className="adm-growth-card__label">Usuário Mais Ativo · {growth.summary.most_active_bets} apostas</div>
+                  <div className="adm-growth-card adm-growth-card--wide adm-growth-card--teal">
+                    <div className="adm-growth-card__badge">Usuário Mais Ativo</div>
+                    <div className="adm-growth-card__name">{growth.summary.most_active_user}</div>
+                    <div className="adm-growth-card__label">{growth.summary.most_active_bets} apostas realizadas</div>
                   </div>
                 )}
                 {growth.summary.most_bet_match && (
                   <div className="adm-growth-card adm-growth-card--wide">
-                    <div className="adm-growth-card__val" style={{ color: 'var(--accent)', fontSize: 16 }}>
-                      {growth.summary.most_bet_match}
-                    </div>
-                    <div className="adm-growth-card__label">Jogo Mais Apostado · {growth.summary.most_bet_match_cnt} apostas</div>
+                    <div className="adm-growth-card__badge">Jogo Mais Apostado</div>
+                    <div className="adm-growth-card__name">{growth.summary.most_bet_match}</div>
+                    <div className="adm-growth-card__label">{growth.summary.most_bet_match_cnt} apostas</div>
                   </div>
                 )}
               </div>
 
               {/* ── Chart: Usuários ───────────────────── */}
-              <div className="adm-card">
-                <div className="adm-card__head">
-                  <span className="adm-card__title">Novos Usuários × Usuários Acumulados</span>
-                  <span className="adm-card__meta">{PERIODS.find(p => p.id === growthPeriod)?.label}</span>
-                </div>
-                {growth.users_series.length === 0 ? (
-                  <div className="adm-table__empty">Nenhum dado para este período.</div>
-                ) : (
-                  <div style={{ padding: 'var(--s4) var(--s2)' }}>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <ComposedChart data={growth.users_series} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(41,75,107,0.15)" />
-                        <XAxis dataKey="label" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
-                        <YAxis yAxisId="left"  tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
-                        <YAxis yAxisId="right" orientation="right" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
-                        <Tooltip
-                          contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'var(--font-cond)', fontSize: 13 }}
-                          labelStyle={{ color: 'var(--text-1)', fontWeight: 700 }}
-                        />
-                        <Legend
-                          onClick={e => toggleSeries(e.dataKey)}
-                          wrapperStyle={{ fontFamily: 'var(--font-cond)', fontSize: 13, cursor: 'pointer' }}
-                        />
-                        <Bar
-                          yAxisId="left"
-                          dataKey="new"
-                          name="Novos usuários"
-                          fill="#0f7a78"
-                          fillOpacity={hiddenSeries['new'] ? 0 : 0.85}
-                          radius={[3,3,0,0]}
-                          hide={hiddenSeries['new']}
-                        />
-                        <Line
-                          yAxisId="right"
-                          dataKey="cumulative"
-                          name="Acumulado"
-                          stroke="#e8c44a"
-                          strokeWidth={2}
-                          dot={false}
-                          hide={hiddenSeries['cumulative']}
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </div>
+              <GrowthChart
+                title="Crescimento de Usuários"
+                subtitle="Novos por período · linha = acumulado"
+                data={growth.users_series}
+                barKey="new"
+                barName="Novos usuários"
+                barGrad="gradTeal"
+                barColor="#0f7a78"
+                areaKey="cumulative"
+                areaName="Acumulado"
+                areaColor="#e8c44a"
+                hiddenSeries={hiddenSeries}
+                onToggle={toggleSeries}
+                emptyMsg="Nenhum registro neste período."
+              />
 
               {/* ── Chart: Apostas ────────────────────── */}
-              <div className="adm-card">
-                <div className="adm-card__head">
-                  <span className="adm-card__title">Apostas por Período × Apostadores Únicos</span>
-                  <span className="adm-card__meta">{PERIODS.find(p => p.id === growthPeriod)?.label}</span>
-                </div>
-                {growth.bets_series.length === 0 ? (
-                  <div className="adm-table__empty">Nenhuma aposta neste período.</div>
-                ) : (
-                  <div style={{ padding: 'var(--s4) var(--s2)' }}>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <ComposedChart data={growth.bets_series} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(41,75,107,0.15)" />
-                        <XAxis dataKey="label" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
-                        <YAxis yAxisId="left"  tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
-                        <YAxis yAxisId="right" orientation="right" tick={{ fontFamily: 'var(--font-data)', fontSize: 11, fill: 'var(--text-3)' }} />
-                        <Tooltip
-                          contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'var(--font-cond)', fontSize: 13 }}
-                          labelStyle={{ color: 'var(--text-1)', fontWeight: 700 }}
-                        />
-                        <Legend
-                          onClick={e => toggleSeries(e.dataKey)}
-                          wrapperStyle={{ fontFamily: 'var(--font-cond)', fontSize: 13, cursor: 'pointer' }}
-                        />
-                        <Bar
-                          yAxisId="left"
-                          dataKey="bets"
-                          name="Apostas"
-                          fill="#2ec980"
-                          fillOpacity={hiddenSeries['bets'] ? 0 : 0.85}
-                          radius={[3,3,0,0]}
-                          hide={hiddenSeries['bets']}
-                        />
-                        <Line
-                          yAxisId="right"
-                          dataKey="unique_users"
-                          name="Apostadores únicos"
-                          stroke="#e85252"
-                          strokeWidth={2}
-                          dot={false}
-                          hide={hiddenSeries['unique_users']}
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </div>
+              <GrowthChart
+                title="Volume de Apostas"
+                subtitle="Total por período · linha = apostadores únicos"
+                data={growth.bets_series}
+                barKey="bets"
+                barName="Apostas"
+                barGrad="gradGreen"
+                barColor="#2ec980"
+                areaKey="unique_users"
+                areaName="Apostadores únicos"
+                areaColor="#9b5de8"
+                hiddenSeries={hiddenSeries}
+                onToggle={toggleSeries}
+                emptyMsg="Nenhuma aposta neste período."
+              />
             </>
           )}
         </div>
@@ -855,6 +792,143 @@ export default function Admin() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Chart sub-components ────────────────────────────────────────────────────
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="chart-tip">
+      <div className="chart-tip__label">{label}</div>
+      {payload.filter(p => !p.hide).map(p => (
+        <div key={p.dataKey} className="chart-tip__row">
+          <span className="chart-tip__dot" style={{ background: p.color }} />
+          <span className="chart-tip__name">{p.name}</span>
+          <span className="chart-tip__val">{Number(p.value).toLocaleString('pt-BR')}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ChartLegend({ payload, hiddenSeries, onToggle }) {
+  if (!payload?.length) return null
+  return (
+    <div className="chart-legend">
+      {payload.map(entry => {
+        const hidden = hiddenSeries[entry.dataKey]
+        return (
+          <button
+            key={entry.dataKey}
+            className={`chart-legend__item${hidden ? ' chart-legend__item--off' : ''}`}
+            onClick={() => onToggle(entry.dataKey)}
+          >
+            <span className="chart-legend__dot" style={{ background: hidden ? 'var(--text-4)' : entry.color }} />
+            {entry.value}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function GrowthChart({ title, subtitle, data, barKey, barName, barGrad, barColor, areaKey, areaName, areaColor, hiddenSeries, onToggle, emptyMsg }) {
+  const gradAreaId = `${barGrad}-area`
+  return (
+    <div className="adm-chart-card">
+      <div className="adm-chart-card__head">
+        <div>
+          <div className="adm-chart-card__title">{title}</div>
+          <div className="adm-chart-card__sub">{subtitle}</div>
+        </div>
+      </div>
+
+      {!data?.length ? (
+        <div className="adm-table__empty">{emptyMsg}</div>
+      ) : (
+        <div className="adm-chart-body">
+          <ChartLegend
+            payload={[
+              { dataKey: barKey,  value: barName,  color: barColor  },
+              { dataKey: areaKey, value: areaName, color: areaColor },
+            ]}
+            hiddenSeries={hiddenSeries}
+            onToggle={onToggle}
+          />
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+              <defs>
+                <linearGradient id={barGrad} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor={barColor}  stopOpacity={0.9} />
+                  <stop offset="100%" stopColor={barColor}  stopOpacity={0.3} />
+                </linearGradient>
+                <linearGradient id={gradAreaId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor={areaColor} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={areaColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid
+                vertical={false}
+                stroke="rgba(41,75,107,0.1)"
+                strokeDasharray="0"
+              />
+              <XAxis
+                dataKey="label"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, fill: '#5f7790' }}
+                dy={8}
+              />
+              <YAxis
+                yAxisId="bar"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, fill: '#5f7790' }}
+                width={36}
+              />
+              <YAxis
+                yAxisId="area"
+                orientation="right"
+                axisLine={false}
+                tickLine={false}
+                tick={false}
+                width={0}
+              />
+              <Tooltip
+                content={<ChartTooltip />}
+                cursor={{ fill: 'rgba(41,75,107,0.06)' }}
+              />
+
+              <Bar
+                yAxisId="bar"
+                dataKey={barKey}
+                name={barName}
+                fill={`url(#${barGrad})`}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={48}
+                hide={hiddenSeries[barKey]}
+                isAnimationActive
+              />
+              <Area
+                yAxisId="area"
+                dataKey={areaKey}
+                name={areaName}
+                stroke={areaColor}
+                strokeWidth={2.5}
+                fill={`url(#${gradAreaId})`}
+                dot={false}
+                activeDot={{ r: 5, fill: areaColor, stroke: 'var(--bg-overlay)', strokeWidth: 2 }}
+                hide={hiddenSeries[areaKey]}
+                isAnimationActive
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
       )}
     </div>

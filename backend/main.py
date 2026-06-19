@@ -78,6 +78,8 @@ def _run_migrations():
             )
             """,
             "CREATE INDEX IF NOT EXISTS ix_prt_token ON password_reset_tokens (token)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR(10) DEFAULT 'system'",
+            "UPDATE users SET theme = 'system' WHERE theme IS NULL",
         ]:
             try:
                 conn.execute(text(ddl))

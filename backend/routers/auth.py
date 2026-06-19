@@ -239,6 +239,23 @@ def change_password(
     return {"status": "ok", "message": "Senha alterada com sucesso"}
 
 
+class ThemeUpdate(BaseModel):
+    theme: str
+
+@router.patch("/theme", response_model=UserResponse)
+def update_theme(
+    payload: ThemeUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if payload.theme not in ('light', 'dark', 'system'):
+        raise HTTPException(400, "Tema inválido — use light, dark ou system")
+    user.theme = payload.theme
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 # ── Forgot / Reset Password ────────────────────────────────────────────────
 
 _RESET_EXPIRE_MINUTES = 60

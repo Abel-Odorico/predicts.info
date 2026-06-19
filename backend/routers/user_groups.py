@@ -23,28 +23,35 @@ class GroupInviteCreate(BaseModel):
     email: EmailStr | None = None
 
 
-def _group_payload(group: UserGroup) -> dict:
+def _group_payload(group: UserGroup, ranking_map: dict | None = None) -> dict:
     accepted_members = sorted(group.members, key=lambda member: (not member.is_owner, member.user.name.lower() if member.user else ""))
     pending_invites = [
         invite for invite in group.invites
         if invite.status == GroupInviteStatus.pending
     ]
+    members_out = []
+    for member in accepted_members:
+        pts = 0
+        exact = 0
+        if ranking_map and member.user_id in ranking_map:
+            pts, exact = ranking_map[member.user_id]
+        members_out.append({
+            "id": member.id,
+            "user_id": member.user_id,
+            "name": member.user.name if member.user else "",
+            "email": member.user.email if member.user else "",
+            "is_owner": member.is_owner,
+            "joined_at": member.joined_at,
+            "total_points": pts,
+            "exact_scores": exact,
+        })
     return {
         "id": group.id,
         "name": group.name,
         "owner_user_id": group.owner_user_id,
         "created_at": group.created_at,
-        "members": [
-            {
-                "id": member.id,
-                "user_id": member.user_id,
-                "name": member.user.name if member.user else "",
-                "email": member.user.email if member.user else "",
-                "is_owner": member.is_owner,
-                "joined_at": member.joined_at,
-            }
-            for member in accepted_members
-        ],
+        "invite_token": group.invite_token,
+        "members": members_out,
         "pending_invites": [
             {
                 "id": invite.id,
@@ -89,7 +96,18 @@ def list_user_groups(
         .filter(UserGroupMember.user_id == user.id)
         .all()
     )
-    groups = [_group_payload(member.group) for member in memberships if member.group]
+    all_member_ids: set[int] = set()
+    for m in memberships:
+        if m.group:
+            for gm in m.group.members:
+                all_member_ids.add(gm.user_id)
+    ranking_rows = (
+        db.query(Ranking.user_id, Ranking.total_points, Ranking.exact_scores)
+        .filter(Ranking.user_id.in_(all_member_ids))
+        .all()
+    ) if all_member_ids else []
+    ranking_map = {r.user_id: (r.total_points or 0, r.exact_scores or 0) for r in ranking_rows}
+    groups = [_group_payload(member.group, ranking_map) for member in memberships if member.group]
 
     invites = (
         db.query(UserGroupInvite)
@@ -443,6 +461,33 @@ def rename_group(
                request.client.host if request.client else None)
     db.commit()
     return {"id": group.id, "name": group.name}
+
+
+# ── Leave group (non-owner) ───────────────────────────────────────────────────
+
+@router.delete("/{group_id}/leave")
+def leave_group(
+    group_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    if group.owner_user_id == user.id:
+        raise HTTPException(400, "O dono não pode sair do grupo — transfira a propriedade ou exclua o grupo")
+    member = db.query(UserGroupMember).filter(
+        UserGroupMember.group_id == group_id,
+        UserGroupMember.user_id == user.id,
+    ).first()
+    if not member:
+        raise HTTPException(404, "Você não faz parte deste grupo")
+    log_action(db, user.id, "group.leave", {"group_id": group_id, "group_name": group.name},
+               request.client.host if request.client else None)
+    db.delete(member)
+    db.commit()
+    return {"status": "left", "group_id": group_id}
 
 
 # ── Delete group ──────────────────────────────────────────────────────────────
