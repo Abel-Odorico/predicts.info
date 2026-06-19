@@ -23,7 +23,7 @@ export default function Groups() {
     <div className="page">
       <div className="fade-in-1">
         <h1 className="page-title">FASE DE GRUPOS</h1>
-        <p className="page-subtitle">12 Grupos · 48 Seleções · Copa do Mundo 2026</p>
+        <p className="page-subtitle">12 Grupos · 48 Seleções · Fase de Grupos</p>
       </div>
 
       <div className="groups-grid mt-8 fade-in-2">

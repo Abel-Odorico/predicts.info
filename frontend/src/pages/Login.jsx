@@ -93,7 +93,7 @@ export default function Login() {
     <div className="page login-shell">
       <div className="login-box">
         <div className="login-brand fade-in-1">
-          <div className="login-brand__logo">COPA 2026</div>
+          <div className="login-brand__logo">PREDICTS</div>
           <div className="login-brand__subtitle">Simulador Estatístico</div>
         </div>
 

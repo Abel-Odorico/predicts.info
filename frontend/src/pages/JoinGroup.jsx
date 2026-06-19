@@ -81,7 +81,7 @@ export default function JoinGroup() {
         <div style={{ fontSize: 48, marginBottom: 'var(--s8)' }}>⚽</div>
         <h1 className="page-title">{group?.group_name}</h1>
         <p className="page-subtitle" style={{ marginBottom: 'var(--s8)' }}>
-          {group?.member_count} participante{group?.member_count !== 1 ? 's' : ''} · Bolão Copa do Mundo 2026
+          {group?.member_count} participante{group?.member_count !== 1 ? 's' : ''} · Bolão Predicts
         </p>
 
         {error && (
