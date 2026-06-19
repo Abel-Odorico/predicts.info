@@ -3,36 +3,36 @@ import { useState, useEffect } from 'react'
 const BASE_URL = 'https://predicts.info'
 
 const FEATURES = [
-  { icon: '⚽', text: 'Simule placares com estatísticas reais' },
   { icon: '🎯', text: 'Aposte nos resultados e ganhe pontos' },
-  { icon: '🏅', text: 'Dispute o ranking com amigos e grupos' },
-  { icon: '📊', text: 'Acompanhe a classificação da Copa 2026' },
+  { icon: '📊', text: 'Simule placares com estatísticas reais' },
+  { icon: '🏅', text: 'Dispute o ranking com amigos e grupos privados' },
+  { icon: '⚡', text: 'Acompanhe ao vivo e compare seus palpites' },
 ]
 
 const SHARE_TARGETS = [
   {
     id: 'bolao',
-    label: 'Bolão',
-    icon: '⚽',
+    label: 'Plataforma',
+    icon: '🎯',
     url: BASE_URL,
-    waText: `⚽ *Copa 2026 — Bolão Predicts*\n\nSimule placares, aposte nos resultados e dispute o ranking com seus amigos!\n\n🔗 ${BASE_URL}`,
-    nativeTitle: 'Predicts — Bolão Copa 2026',
-    nativeText: 'Simule placares, aposte nos resultados e dispute o ranking com seus amigos!',
+    waText: `🎯 *Predicts — Simulador de Bolão*\n\nFaça seus palpites, acumule pontos e dispute o ranking com amigos!\n\n🔗 ${BASE_URL}`,
+    nativeTitle: 'Predicts — Simulador de Bolão',
+    nativeText: 'Faça seus palpites, acumule pontos e dispute o ranking com amigos!',
   },
   {
     id: 'ranking',
     label: 'Ranking',
     icon: '🏅',
     url: `${BASE_URL}/ranking`,
-    waText: `🏅 *Ranking do Bolão — Copa 2026*\n\nVeja quem está liderando o bolão da Copa! Participe e suba no ranking!\n\n🔗 ${BASE_URL}/ranking`,
-    nativeTitle: 'Ranking — Bolão Copa 2026',
-    nativeText: 'Veja quem está liderando o bolão da Copa! Participe e suba no ranking!',
+    waText: `🏅 *Ranking do Bolão — Predicts*\n\nVeja quem está liderando! Participe e suba no ranking.\n\n🔗 ${BASE_URL}/ranking`,
+    nativeTitle: 'Ranking — Predicts',
+    nativeText: 'Veja quem está liderando! Participe e suba no ranking.',
   },
 ]
 
 export default function ShareModal({ onClose }) {
-  const [copied, setCopied]   = useState(false)
-  const [target, setTarget]   = useState('bolao')
+  const [copied, setCopied] = useState(false)
+  const [target, setTarget] = useState('bolao')
 
   const active = SHARE_TARGETS.find(t => t.id === target)
 
@@ -82,81 +82,76 @@ export default function ShareModal({ onClose }) {
           background: 'var(--surface)',
           borderRadius: 20,
           width: '100%',
-          maxWidth: 440,
+          maxWidth: 420,
           overflow: 'hidden',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
           animation: 'slideUp 180ms cubic-bezier(.22,.9,.36,1)',
+          border: '1px solid var(--border)',
         }}
       >
-        {/* Hero */}
+        {/* Hero — fundo sólido escuro para garantir legibilidade */}
         <div style={{
-          background: 'linear-gradient(135deg, var(--accent-strong) 0%, var(--accent) 60%, #0fa896 100%)',
-          padding: '28px 28px 20px',
+          background: '#0a3d3b',
+          padding: '28px 24px 20px',
           position: 'relative',
           textAlign: 'center',
         }}>
           <button
             onClick={onClose}
             style={{
-              position: 'absolute', top: 14, right: 14,
-              background: 'rgba(255,255,255,0.15)', border: 'none',
-              borderRadius: '50%', width: 32, height: 32,
-              cursor: 'pointer', color: '#fff', fontSize: 18, lineHeight: 1,
+              position: 'absolute', top: 12, right: 12,
+              background: 'rgba(255,255,255,0.12)', border: 'none',
+              borderRadius: '50%', width: 30, height: 30,
+              cursor: 'pointer', color: '#fff', fontSize: 16, lineHeight: '30px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >×</button>
 
-          <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 10 }}>⚽</div>
-          <div style={{
-            fontFamily: 'var(--font-display)', fontSize: 24, color: '#fff',
-            letterSpacing: '0.06em', lineHeight: 1.1,
-          }}>
-            BOLÃO COPA 2026
+          <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 10 }}>🎯</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#ffffff', letterSpacing: '0.08em' }}>
+            PREDICTS
           </div>
-          <div style={{
-            fontFamily: 'var(--font-cond)', fontSize: 13, color: 'rgba(255,255,255,0.72)',
-            marginTop: 5, letterSpacing: '0.04em',
-          }}>
-            Convide amigos · Monte grupos · Dispute o ranking
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#8ecfcc', marginTop: 4, letterSpacing: '0.04em' }}>
+            Simulador de bolão · Convide para jogar
           </div>
         </div>
 
         {/* Body */}
-        <div style={{ padding: '20px 24px 24px' }}>
+        <div style={{ padding: '20px 20px 24px' }}>
 
           {/* Target tabs */}
           <div style={{
-            display: 'flex', gap: 8, marginBottom: 20,
-            background: 'var(--bg-overlay)', borderRadius: 12, padding: 4,
+            display: 'flex', gap: 6, marginBottom: 18,
+            background: 'var(--bg-overlay)', borderRadius: 10, padding: 3,
           }}>
             {SHARE_TARGETS.map(t => (
               <button
                 key={t.id}
                 onClick={() => { setTarget(t.id); setCopied(false) }}
                 style={{
-                  flex: 1, padding: '8px', borderRadius: 9, border: 'none',
-                  cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  flex: 1, padding: '7px 6px', borderRadius: 8, border: 'none',
+                  cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                   background: target === t.id ? 'var(--surface)' : 'transparent',
                   color: target === t.id ? 'var(--accent)' : 'var(--text-3)',
-                  boxShadow: target === t.id ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
+                  boxShadow: target === t.id ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
                   transition: 'all .15s',
                 }}
               >
-                <span>{t.icon}</span> Compartilhar {t.label}
+                <span>{t.icon}</span> {t.label}
               </button>
             ))}
           </div>
 
-          {/* Features — só no tab bolão */}
+          {/* Features (plataforma) */}
           {target === 'bolao' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 20 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
               {FEATURES.map(f => (
                 <div key={f.text} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{
-                    fontSize: 16, width: 30, height: 30, borderRadius: 8,
-                    background: 'var(--accent-dim)', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    fontSize: 15, width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                    background: 'var(--accent-dim)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     {f.icon}
                   </span>
@@ -168,15 +163,15 @@ export default function ShareModal({ onClose }) {
             </div>
           )}
 
-          {/* Ranking preview */}
+          {/* Ranking description */}
           {target === 'ranking' && (
             <div style={{
-              marginBottom: 20, padding: '14px 16px',
-              background: 'var(--bg-overlay)', borderRadius: 12,
+              marginBottom: 18, padding: '12px 14px',
+              background: 'var(--accent-dim)', borderRadius: 10,
               fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5,
             }}>
-              <div style={{ fontWeight: 700, color: 'var(--accent)', marginBottom: 4 }}>🏅 O que será compartilhado:</div>
-              <div>Link direto para o ranking público com pontuação geral, % de aproveitamento e placares exatos de todos os participantes.</div>
+              <div style={{ fontWeight: 700, color: 'var(--accent)', marginBottom: 3 }}>🏅 O que será compartilhado</div>
+              Link direto para o ranking público com pontuação geral, % de aproveitamento e placares exatos de todos os participantes.
             </div>
           )}
 
@@ -184,7 +179,7 @@ export default function ShareModal({ onClose }) {
           <div style={{
             display: 'flex', gap: 8, marginBottom: 10,
             background: 'var(--bg-overlay)', borderRadius: 10,
-            padding: '10px 14px', alignItems: 'center',
+            padding: '8px 12px', alignItems: 'center',
           }}>
             <span style={{
               fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)',
@@ -197,26 +192,26 @@ export default function ShareModal({ onClose }) {
               style={{
                 fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
                 letterSpacing: '0.06em', textTransform: 'uppercase',
-                padding: '6px 14px', borderRadius: 8, border: 'none',
+                padding: '5px 12px', borderRadius: 7, border: 'none',
                 cursor: 'pointer', flexShrink: 0,
                 background: copied ? 'var(--win)' : 'var(--accent)',
-                color: copied ? '#fff' : 'var(--on-accent)',
+                color: '#fff',
                 transition: 'background 200ms',
               }}
             >
-              {copied ? '✓ Copiado!' : 'Copiar'}
+              {copied ? '✓ Copiado' : 'Copiar'}
             </button>
           </div>
 
           {/* Share buttons */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={shareWhatsApp}
               style={{
-                flex: 1, padding: '12px', borderRadius: 12, border: 'none',
+                flex: 1, padding: '11px', borderRadius: 10, border: 'none',
                 cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
                 background: '#25D366', color: '#fff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                 transition: 'opacity .15s',
               }}
               onMouseOver={e => e.currentTarget.style.opacity = '.85'}
@@ -229,11 +224,11 @@ export default function ShareModal({ onClose }) {
               <button
                 onClick={shareNative}
                 style={{
-                  flex: 1, padding: '12px', borderRadius: 12,
+                  flex: 1, padding: '11px', borderRadius: 10,
                   border: '1px solid var(--border)', cursor: 'pointer',
                   fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
                   background: 'transparent', color: 'var(--text-2)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                   transition: 'background .15s',
                 }}
                 onMouseOver={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
@@ -245,11 +240,11 @@ export default function ShareModal({ onClose }) {
               <button
                 onClick={() => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(active.waText)}`, '_blank')}
                 style={{
-                  flex: 1, padding: '12px', borderRadius: 12,
+                  flex: 1, padding: '11px', borderRadius: 10,
                   border: '1px solid var(--border)', cursor: 'pointer',
                   fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
                   background: 'transparent', color: 'var(--text-2)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                   transition: 'background .15s',
                 }}
                 onMouseOver={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
