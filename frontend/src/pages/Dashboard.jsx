@@ -84,9 +84,17 @@ export default function Dashboard() {
             <h1 className="page-title">COPA DO MUNDO 2026</h1>
             <p className="page-subtitle">Motor Elo · xG · Poisson · Monte Carlo</p>
           </div>
-          <a href="/" className="btn btn-ghost btn-sm" style={{ flexShrink: 0, fontSize: 12 }}>
-            🌐 Página Inicial
-          </a>
+          <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', flexShrink: 0 }}>
+            <a href="/" className="btn btn-ghost btn-sm" style={{ fontSize: 12 }}>
+              🌐 Página Inicial
+            </a>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => navigate('/grupos')}>
+              🗂 Classificação
+            </button>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => navigate('/meus-grupos')}>
+              👥 Meus Grupos
+            </button>
+          </div>
         </div>
       </div>
 

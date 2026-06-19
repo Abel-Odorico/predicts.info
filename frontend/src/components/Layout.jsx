@@ -15,7 +15,7 @@ const THEME_META = {
 const NAV_DRAWER = [
   { to: '/torneio',    icon: '🏆', label: 'Torneio'     },
   { to: '/resultados', icon: '📋', label: 'Resultados'  },
-  { to: '/grupos',     icon: '🗂',  label: 'Grupos'      },
+  { to: '/grupos',     icon: '🗂',  label: 'Classificação'},
   { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos' },
 ]
 
@@ -114,7 +114,7 @@ export default function Layout() {
             { to: '/',             icon: '⚽', label: 'Dashboard',    end: true },
             { to: '/torneio',      icon: '🏆', label: 'Torneio'           },
             { to: '/resultados',   icon: '📋', label: 'Resultados'        },
-            { to: '/grupos',       icon: '🗂',  label: 'Grupos'            },
+            { to: '/grupos',       icon: '🗂',  label: 'Classificação'     },
             { to: '/apostas',      icon: '🎯', label: 'Apostas'           },
             { to: '/ranking',      icon: '🏅', label: 'Ranking'           },
             { to: '/meus-grupos',  icon: '👥', label: 'Meus Grupos'       },
