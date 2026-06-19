@@ -34,7 +34,7 @@ export default function MatchSim() {
     setLoading(true)
     try {
       const reqs = [api.get(`/matches/${id}`), runSim(n, false)]
-      if (token) reqs.push(api.get('/bets', token))
+      if (token) reqs.push(api.get('/bets/mine', token))
       const [m, , betsData] = await Promise.all(reqs)
       setMatch(m)
       if (betsData) {
