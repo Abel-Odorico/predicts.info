@@ -117,7 +117,7 @@ export default function Layout() {
             { to: '/torneio',      icon: '🏆', label: 'Torneio'           },
             { to: '/resultados',   icon: '📋', label: 'Resultados'        },
             { to: '/grupos',       icon: '🗂',  label: 'Classificação'     },
-            { to: '/apostas',      icon: '🎯', label: 'Apostas'           },
+            { to: '/apostas',      icon: '🎯', label: 'Palpites'          },
             { to: '/ranking',      icon: '🏅', label: 'Ranking'           },
             { to: '/meus-grupos',  icon: '👥', label: 'Meus Grupos'       },
           ].map(n => (
@@ -290,7 +290,7 @@ export default function Layout() {
 
         <NavLink to="/apostas" className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}>
           <span className="mobile-dock__icon">🎯</span>
-          <span className="mobile-dock__label">Apostas</span>
+          <span className="mobile-dock__label">Palpites</span>
         </NavLink>
 
         {/* FAB central */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -14,6 +14,8 @@ export default function Bets() {
   const [tab, setTab]         = useState('open')
   const [shareMsg, setShareMsg] = useState('')
   const [now, setNow]         = useState(Date.now())
+  const [pendingOpenId, setPendingOpenId] = useState(null)
+  const matchRefs = useRef({})
 
   const load = useCallback(() => {
     const reqs = [api.get('/matches?status=scheduled&limit=200')]
@@ -26,13 +28,11 @@ export default function Bets() {
 
   useEffect(() => { load() }, [load])
 
-  // Update clock every second for countdowns
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
 
-  // Re-fetch when a match might have just started (every 60s)
   useEffect(() => {
     const t = setInterval(() => load(), 60_000)
     return () => clearInterval(t)
@@ -59,10 +59,17 @@ export default function Bets() {
     })
   }
 
+  function goToNextMatch(nextId) {
+    setPendingOpenId(nextId)
+    setTimeout(() => {
+      matchRefs.current[nextId]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+  }
+
   const openMatches = matches.filter(m => isMatchOpen(m, now))
   const betsByMatchId = Object.fromEntries(bets.map(b => [b.match_id, b]))
 
-  if (loading) return <Spinner text="Carregando apostas..." />
+  if (loading) return <Spinner text="Carregando palpites..." />
 
   if (!token) {
     return (
@@ -70,8 +77,8 @@ export default function Bets() {
         <GuideBanner onShare={handleShare} shareMsg={shareMsg} />
         <div className="fade-in-1 bet-empty">
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 48, color: 'var(--accent)', marginBottom: 'var(--s4)' }}>🎯</div>
-          <h1 className="page-title" style={{ marginBottom: 'var(--s4)' }}>APOSTAS</h1>
-          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 15, color: 'var(--text-3)', marginBottom: 'var(--s6)' }}>Faça login para apostar nos placares</p>
+          <h1 className="page-title" style={{ marginBottom: 'var(--s4)' }}>PALPITES</h1>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 15, color: 'var(--text-3)', marginBottom: 'var(--s6)' }}>Faça login para dar seus palpites</p>
           <Link to="/login" className="btn btn-primary btn-lg">Entrar</Link>
         </div>
       </div>
@@ -81,8 +88,8 @@ export default function Bets() {
   return (
     <div className="page">
       <div className="fade-in-1">
-        <h1 className="page-title">APOSTAS</h1>
-        <p className="page-subtitle">Aposte até o apito inicial · ao iniciar, a aposta encerra automaticamente</p>
+        <h1 className="page-title">PALPITES</h1>
+        <p className="page-subtitle">Palpite até o apito inicial · ao iniciar, o palpite encerra automaticamente</p>
       </div>
 
       <GuideBanner onShare={handleShare} shareMsg={shareMsg} />
@@ -90,7 +97,7 @@ export default function Bets() {
       <div className="tabs mt-6">
         {[
           { id: 'open',  label: `Partidas Abertas${openMatches.length ? ` (${openMatches.length})` : ''}` },
-          { id: 'mine',  label: `Minhas Apostas${bets.length ? ` (${bets.length})` : ''}` },
+          { id: 'mine',  label: `Meus Palpites${bets.length ? ` (${bets.length})` : ''}` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} className={tab === t.id ? 'active' : ''}>
             {t.label}
@@ -107,16 +114,21 @@ export default function Bets() {
           ) : (
             <div className="bets-list mt-6">
               {openMatches.map((m, i) => (
-                <BettableMatchRow
-                  key={m.id}
-                  match={m}
-                  existingBet={betsByMatchId[m.id]}
-                  token={token}
-                  now={now}
-                  index={i}
-                  onBetPlaced={onBetPlaced}
-                  onOpenSimulation={() => navigate(`/partida/${m.id}`)}
-                />
+                <div key={m.id} ref={el => { matchRefs.current[m.id] = el }}>
+                  <BettableMatchRow
+                    match={m}
+                    existingBet={betsByMatchId[m.id]}
+                    token={token}
+                    now={now}
+                    index={i}
+                    onBetPlaced={onBetPlaced}
+                    onOpenSimulation={() => navigate(`/partida/${m.id}`)}
+                    nextMatch={openMatches[i + 1] || null}
+                    onGoToNextMatch={goToNextMatch}
+                    autoOpen={pendingOpenId === m.id}
+                    onAutoOpenDone={() => setPendingOpenId(null)}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -127,12 +139,12 @@ export default function Bets() {
         <div className="fade-in-1">
           <div className="bet-summary-grid mt-6">
             <SummaryCard label="Abertas Agora"  value={openMatches.length} tone="accent" />
-            <SummaryCard label="Minhas Apostas" value={bets.length} />
-            <SummaryCard label="Já Pontuadas"   value={bets.filter(b => b.result !== null).length} tone="win" />
+            <SummaryCard label="Meus Palpites"  value={bets.length} />
+            <SummaryCard label="Já Pontuados"   value={bets.filter(b => b.result !== null).length} tone="win" />
           </div>
           {bets.length === 0 ? (
             <div className="bet-empty mt-6" style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
-              <p>Sem apostas ainda.</p>
+              <p>Sem palpites ainda.</p>
               <button type="button" className="btn btn-primary btn-sm mt-4" onClick={() => setTab('open')}>Ver Partidas Abertas</button>
             </div>
           ) : (
@@ -154,32 +166,73 @@ export default function Bets() {
 }
 
 // ── Inline bettable match card ────────────────────────────────────────────────
-function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation }) {
-  const [open, setOpen]     = useState(false)
-  const [sa, setSa]         = useState(existingBet?.score_a ?? 0)
-  const [sb, setSb]         = useState(existingBet?.score_b ?? 0)
-  const [msg, setMsg]       = useState('')
-  const [saving, setSaving] = useState(false)
+function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation, nextMatch, onGoToNextMatch, autoOpen, onAutoOpenDone }) {
+  const [open, setOpen]         = useState(false)
+  const [sa, setSa]             = useState(existingBet?.score_a ?? 0)
+  const [sb, setSb]             = useState(existingBet?.score_b ?? 0)
+  const [msg, setMsg]           = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [confirmed, setConfirmed]       = useState(false)
+  const [showNextCard, setShowNextCard] = useState(false)
+
+  const [showOdds, setShowOdds]         = useState(false)
+  const [odds, setOdds]                 = useState(null)
+  const [oddsLoading, setOddsLoading]   = useState(false)
+  const [communityBets, setCommunityBets]     = useState(null)
+  const [communityLoading, setCommunityLoading] = useState(false)
 
   const msBefore  = parseUtcMatchDate(match.match_date).getTime() - now
   const stillOpen = match.is_open !== undefined ? match.is_open : msBefore > 0
 
-  // Close the inline form if match just started
   useEffect(() => {
     if (!stillOpen && open) setOpen(false)
   }, [stillOpen, open])
 
+  useEffect(() => {
+    if (autoOpen) {
+      setOpen(true)
+      onAutoOpenDone?.()
+    }
+  }, [autoOpen])
+
+  async function fetchOdds() {
+    if (odds || oddsLoading) return
+    setOddsLoading(true)
+    try {
+      const data = await api.post(`/matches/${match.id}/simulate?n=100000`, null)
+      setOdds(data)
+    } catch (_) {}
+    finally { setOddsLoading(false) }
+  }
+
+  async function fetchCommunityBets() {
+    if (communityBets || communityLoading) return
+    setCommunityLoading(true)
+    try {
+      const data = await api.get(`/matches/${match.id}/live-bets`)
+      setCommunityBets(data)
+    } catch (_) {}
+    finally { setCommunityLoading(false) }
+  }
+
+  function toggleOdds() {
+    const next = !showOdds
+    setShowOdds(next)
+    if (next) {
+      fetchOdds()
+      fetchCommunityBets()
+    }
+  }
+
   async function placeBet() {
     const scoreA = parseInt(sa)
     const scoreB = parseInt(sb)
-    if (isNaN(scoreA) || isNaN(sb === '' ? NaN : parseInt(sb))) { setMsg('Preencha o placar completo'); return }
     if (isNaN(scoreA) || isNaN(scoreB)) { setMsg('Preencha o placar completo'); return }
     if (scoreA < 0 || scoreB < 0) { setMsg('Placar inválido'); return }
     setSaving(true)
     setMsg('')
     try {
       const data = await api.post('/bets', { match_id: match.id, score_a: scoreA, score_b: scoreB }, token)
-      setMsg(`✓ ${scoreA}×${scoreB} registrado!`)
       onBetPlaced(match.id, {
         ...data,
         match_id: match.id,
@@ -193,6 +246,12 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         official_score_b: null,
         result: null,
       })
+      setConfirmed(true)
+      setOpen(false)
+      if (nextMatch) setShowNextCard(true)
+      // refresh community bets after placing
+      setCommunityBets(null)
+      if (showOdds) fetchCommunityBets()
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -214,7 +273,14 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         </div>
       </div>
 
-      <div className="bet-card__match" style={{ marginTop: 'var(--s4)' }}>
+      {/* Clickable match row → toggle odds panel */}
+      <button
+        type="button"
+        className="bet-card__match bet-card__match--clickable"
+        style={{ marginTop: 'var(--s4)' }}
+        onClick={toggleOdds}
+        title="Ver probabilidades"
+      >
         <div className="bet-card__team">
           {match.team_a?.flag_url && <img src={match.team_a.flag_url} alt={match.team_a.code} className="match-card__flag" />}
           <span>{match.team_a?.code}</span>
@@ -227,36 +293,97 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
           {match.team_b?.flag_url && <img src={match.team_b.flag_url} alt={match.team_b.code} className="match-card__flag" />}
           <span>{match.team_b?.code}</span>
         </div>
-      </div>
-
-      <button
-        type="button"
-        className="bet-card__simulation-link"
-        onClick={onOpenSimulation}
-      >
-        Ver simulação da partida
+        <span className="odds-toggle-icon">{showOdds ? '▲' : '▼'}</span>
       </button>
 
-      {hasBet && (
+      {/* Odds + community bets panel */}
+      {showOdds && (
+        <div className="odds-panel fade-in-1">
+          {oddsLoading ? (
+            <div className="odds-panel__loading">Calculando probabilidades...</div>
+          ) : odds ? (
+            <>
+              <div className="odds-bar">
+                <div
+                  className="odds-bar__segment odds-bar__segment--win"
+                  style={{ flex: odds.prob_a }}
+                  title={`${match.team_a?.code} ${odds.prob_a}%`}
+                />
+                <div
+                  className="odds-bar__segment odds-bar__segment--draw"
+                  style={{ flex: odds.prob_draw }}
+                  title={`Empate ${odds.prob_draw}%`}
+                />
+                <div
+                  className="odds-bar__segment odds-bar__segment--lose"
+                  style={{ flex: odds.prob_b }}
+                  title={`${match.team_b?.code} ${odds.prob_b}%`}
+                />
+              </div>
+              <div className="odds-bar__labels">
+                <span className="odds-label odds-label--win">
+                  <span className="odds-label__team">{match.team_a?.code}</span>
+                  <span className="odds-label__pct">{odds.prob_a}%</span>
+                </span>
+                <span className="odds-label odds-label--draw">
+                  <span className="odds-label__team">Empate</span>
+                  <span className="odds-label__pct">{odds.prob_draw}%</span>
+                </span>
+                <span className="odds-label odds-label--lose">
+                  <span className="odds-label__team">{match.team_b?.code}</span>
+                  <span className="odds-label__pct">{odds.prob_b}%</span>
+                </span>
+              </div>
+            </>
+          ) : null}
+
+          {communityLoading ? (
+            <div className="community-bets__loading">Carregando palpites do bolão...</div>
+          ) : communityBets && communityBets.total_bets > 0 ? (
+            <div className="community-bets">
+              <div className="community-bets__header">
+                Palpites do bolão
+                <span className="community-bets__count">{communityBets.total_bets}</span>
+              </div>
+              <div className="community-bets__list">
+                {communityBets.bets.map((b, i) => (
+                  <div key={i} className="community-bet-row">
+                    <span className="community-bet-row__name">{b.user_name}</span>
+                    <span className="community-bet-row__score">{b.score_a} × {b.score_b}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : communityBets && communityBets.total_bets === 0 ? (
+            <div className="community-bets__empty">Nenhum palpite registrado ainda</div>
+          ) : null}
+        </div>
+      )}
+
+      {confirmed && (
+        <div className="confirmed-badge fade-in-1">
+          <span className="confirmed-badge__icon">✓</span>
+          <span className="confirmed-badge__text">Palpite confirmado!</span>
+          <span className="confirmed-badge__flag">🚩</span>
+        </div>
+      )}
+
+      {!confirmed && hasBet && (
         <div className="bet-placed-label">
-          <span style={{ color: 'var(--win)' }}>✓</span> Aposta registrada
+          <span style={{ color: 'var(--win)' }}>✓</span> Palpite registrado
         </div>
       )}
 
       <div className="bet-card__footer" style={{ marginTop: 'var(--s4)' }}>
         <span className="bet-card__hint">
           {stillOpen
-            ? hasBet ? 'Toque em Alterar para atualizar seu placar' : `Aposte até ${formatKickoffTime(match.match_date)}`
-            : 'Apostas encerradas — partida iniciou'
+            ? hasBet ? 'Toque em Alterar para atualizar seu palpite' : `Palpite até ${formatKickoffTime(match.match_date)}`
+            : 'Palpites encerrados — partida iniciou'
           }
         </span>
         <div className="bet-card__actions">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={onOpenSimulation}
-          >
-            Ver Simulação
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenSimulation}>
+            Simulação
           </button>
           {stillOpen && (
             <button
@@ -264,7 +391,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
               className={`btn btn-sm ${open ? 'btn-ghost' : hasBet ? 'btn-ghost' : 'btn-primary'}`}
               onClick={() => { setOpen(v => !v); setMsg('') }}
             >
-              {open ? 'Cancelar' : hasBet ? 'Alterar' : 'Apostar'}
+              {open ? 'Cancelar' : hasBet ? 'Alterar' : 'Dar Palpite'}
             </button>
           )}
         </div>
@@ -300,7 +427,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
             onClick={placeBet}
             disabled={saving}
           >
-            {saving ? 'Salvando...' : hasBet ? 'Atualizar Aposta' : 'Confirmar Aposta'}
+            {saving ? 'Salvando...' : hasBet ? 'Atualizar Palpite' : 'Confirmar Palpite'}
           </button>
           {msg && (
             <p className="bet-inline-msg" style={{ color: msg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
@@ -309,6 +436,38 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
           )}
         </div>
       )}
+
+      {showNextCard && nextMatch && (
+        <NextMatchCard
+          match={nextMatch}
+          onYes={() => {
+            setShowNextCard(false)
+            onGoToNextMatch(nextMatch.id)
+          }}
+          onNo={() => setShowNextCard(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Next match suggestion card ────────────────────────────────────────────────
+function NextMatchCard({ match, onYes, onNo }) {
+  return (
+    <div className="next-match-card fade-in-1">
+      <div className="next-match-card__label">Próximo jogo</div>
+      <div className="next-match-card__teams">
+        {match.team_a?.flag_url && <img src={match.team_a.flag_url} alt={match.team_a.code} className="match-card__flag" />}
+        <span className="next-match-card__code">{match.team_a?.code}</span>
+        <span className="next-match-card__vs">vs</span>
+        <span className="next-match-card__code">{match.team_b?.code}</span>
+        {match.team_b?.flag_url && <img src={match.team_b.flag_url} alt={match.team_b.code} className="match-card__flag" />}
+      </div>
+      <p className="next-match-card__question">Deseja dar palpite neste jogo?</p>
+      <div className="next-match-card__actions">
+        <button type="button" className="btn btn-primary btn-sm" onClick={onYes}>Sim, próximo jogo</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onNo}>Agora não</button>
+      </div>
     </div>
   )
 }
@@ -371,7 +530,6 @@ function BetRow({ bet, index, onOpenSimulation }) {
         </div>
       </div>
 
-      {/* Teams + scores comparison */}
       <div className="bet-card__match" style={{ marginTop: 'var(--s4)' }}>
         <div className="bet-card__team">{bet.team_a_code}</div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -383,7 +541,6 @@ function BetRow({ bet, index, onOpenSimulation }) {
         <div className="bet-card__team bet-card__team--right">{bet.team_b_code}</div>
       </div>
 
-      {/* Score comparison: palpite vs oficial */}
       {hasOfficial && (
         <div className="score-compare">
           <div className="score-compare__block">
@@ -433,7 +590,7 @@ function GuideBanner({ onShare, shareMsg }) {
     <div className="card mt-6 fade-in-2 bet-guide bet-guide--minimal">
       <div className="bet-guide-minimal">
         <div className="bet-guide-minimal__main">
-          <div className="bet-guide-minimal__title">Regras do bolao</div>
+          <div className="bet-guide-minimal__title">Regras do bolão</div>
           <div className="bet-guide-minimal__chips">
             <span className="bet-guide-chip"><strong>3 pts</strong> Placar exato</span>
             <span className="bet-guide-chip"><strong>1 pt</strong> Resultado correto</span>
@@ -452,15 +609,6 @@ function SummaryCard({ label, value, tone }) {
     <div className={`bet-summary-card${tone ? ` bet-summary-card--${tone}` : ''}`}>
       <div className="bet-summary-card__label">{label}</div>
       <div className="bet-summary-card__value">{value}</div>
-    </div>
-  )
-}
-
-function Metric({ label, value, accent }) {
-  return (
-    <div className="bet-metric">
-      <div className="bet-metric__label">{label}</div>
-      <div className={`bet-metric__value${accent ? ' bet-metric__value--accent' : ''}`}>{value}</div>
     </div>
   )
 }
