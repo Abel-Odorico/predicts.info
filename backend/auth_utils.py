@@ -49,6 +49,16 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
+def get_optional_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    from models import User
+    if not token:
+        return None
+    payload = _decode(token)
+    if not payload:
+        return None
+    return db.query(User).filter(User.id == int(payload["sub"])).first()
+
+
 def require_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     from models import User, UserRole
     if not token:

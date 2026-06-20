@@ -18,6 +18,8 @@ const NAV_DRAWER = [
   { to: '/resultados', icon: '📋', label: 'Resultados'  },
   { to: '/grupos',     icon: '🗂',  label: 'Classificação'},
   { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos' },
+  { to: '/votacao',    icon: '🗳',  label: 'Votação'     },
+  { to: '/regras',     icon: '📜', label: 'Regras'      },
 ]
 
 const ADMIN_NAV = [

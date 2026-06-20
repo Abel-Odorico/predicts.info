@@ -16,6 +16,7 @@ from routers import config as config_router
 from routers import analytics as analytics_router
 from routers import user_groups as user_groups_router
 from routers import audit as audit_router
+from routers import poll as poll_router
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
 
@@ -80,6 +81,98 @@ def _run_migrations():
             "CREATE INDEX IF NOT EXISTS ix_prt_token ON password_reset_tokens (token)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR(10) DEFAULT 'system'",
             "UPDATE users SET theme = 'system' WHERE theme IS NULL",
+            # Consulta pública / votação
+            """
+            CREATE TABLE IF NOT EXISTS polls (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(200) NOT NULL,
+                description TEXT,
+                status VARCHAR(20) DEFAULT 'active',
+                opens_at TIMESTAMP NOT NULL,
+                closes_at TIMESTAMP NOT NULL,
+                closed_at TIMESTAMP,
+                report JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS poll_options (
+                id SERIAL PRIMARY KEY,
+                poll_id INTEGER REFERENCES polls(id) ON DELETE CASCADE,
+                label VARCHAR(300) NOT NULL,
+                order_num INTEGER DEFAULT 0
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS poll_votes (
+                id SERIAL PRIMARY KEY,
+                poll_id INTEGER REFERENCES polls(id),
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                option_id INTEGER REFERENCES poll_options(id),
+                suggestion VARCHAR(500),
+                ip VARCHAR(45),
+                user_agent VARCHAR(500),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                CONSTRAINT uq_poll_user_vote UNIQUE (poll_id, user_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS poll_vote_history (
+                id SERIAL PRIMARY KEY,
+                vote_id INTEGER REFERENCES poll_votes(id) ON DELETE CASCADE,
+                poll_id INTEGER REFERENCES polls(id),
+                user_id INTEGER REFERENCES users(id),
+                option_id INTEGER REFERENCES poll_options(id),
+                changed_at TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            # Seed da consulta inicial (prazo: domingo 22/06/2026 23:59:59 BRT = UTC-3)
+            """
+            INSERT INTO polls (title, description, status, opens_at, closes_at)
+            SELECT
+                'Consulta Pública — Sistema de Pontuação do Bolão',
+                'Ajude a definir como será a pontuação dos próximos campeonatos. Esta é uma consulta oficial e transparente para todos os participantes.',
+                'active',
+                '2026-06-20 00:00:00',
+                '2026-06-23 02:59:59'
+            WHERE NOT EXISTS (SELECT 1 FROM polls LIMIT 1)
+            """,
+            """
+            INSERT INTO poll_options (poll_id, label, order_num)
+            SELECT p.id, 'Sim, prefiro o novo sistema (Pontuação por Precisão)', 1
+            FROM polls p
+            WHERE p.id = (SELECT MIN(id) FROM polls)
+              AND NOT EXISTS (SELECT 1 FROM poll_options WHERE poll_id = p.id AND order_num = 1)
+            """,
+            """
+            INSERT INTO poll_options (poll_id, label, order_num)
+            SELECT p.id, 'Não, prefiro manter o sistema atual', 2
+            FROM polls p
+            WHERE p.id = (SELECT MIN(id) FROM polls)
+              AND NOT EXISTS (SELECT 1 FROM poll_options WHERE poll_id = p.id AND order_num = 2)
+            """,
+            """
+            INSERT INTO poll_options (poll_id, label, order_num)
+            SELECT p.id, 'Gostaria de testar em um próximo campeonato', 3
+            FROM polls p
+            WHERE p.id = (SELECT MIN(id) FROM polls)
+              AND NOT EXISTS (SELECT 1 FROM poll_options WHERE poll_id = p.id AND order_num = 3)
+            """,
+            """
+            INSERT INTO poll_options (poll_id, label, order_num)
+            SELECT p.id, 'Prefiro o Sistema Inteligente por Proximidade', 4
+            FROM polls p
+            WHERE p.id = (SELECT MIN(id) FROM polls)
+              AND NOT EXISTS (SELECT 1 FROM poll_options WHERE poll_id = p.id AND order_num = 4)
+            """,
+            """
+            INSERT INTO poll_options (poll_id, label, order_num)
+            SELECT p.id, 'Não tenho opinião', 5
+            FROM polls p
+            WHERE p.id = (SELECT MIN(id) FROM polls)
+              AND NOT EXISTS (SELECT 1 FROM poll_options WHERE poll_id = p.id AND order_num = 5)
+            """,
         ]:
             try:
                 conn.execute(text(ddl))
@@ -133,6 +226,7 @@ app.include_router(config_router.router,    prefix="/api")
 app.include_router(analytics_router.router, prefix="/api")
 app.include_router(user_groups_router.router, prefix="/api")
 app.include_router(audit_router.router,       prefix="/api")
+app.include_router(poll_router.router,        prefix="/api")
 
 
 @app.get("/api")

@@ -279,6 +279,71 @@ class UserGroupInvite(Base):
     invitee = relationship("User", back_populates="received_group_invites", foreign_keys=[invitee_user_id])
 
 
+class Poll(Base):
+    __tablename__ = "polls"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text)
+    status = Column(String(20), default="active")  # active | closed
+    opens_at = Column(DateTime, nullable=False)
+    closes_at = Column(DateTime, nullable=False)
+    closed_at = Column(DateTime, nullable=True)
+    report = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    options = relationship(
+        "PollOption", back_populates="poll",
+        order_by="PollOption.order_num", cascade="all, delete-orphan"
+    )
+    votes = relationship("PollVote", back_populates="poll", cascade="all, delete-orphan")
+
+
+class PollOption(Base):
+    __tablename__ = "poll_options"
+
+    id = Column(Integer, primary_key=True)
+    poll_id = Column(Integer, ForeignKey("polls.id", ondelete="CASCADE"), nullable=False)
+    label = Column(String(300), nullable=False)
+    order_num = Column(Integer, default=0)
+
+    poll = relationship("Poll", back_populates="options")
+    votes = relationship("PollVote", back_populates="option")
+
+
+class PollVote(Base):
+    __tablename__ = "poll_votes"
+    __table_args__ = (UniqueConstraint("poll_id", "user_id", name="uq_poll_user_vote"),)
+
+    id = Column(Integer, primary_key=True)
+    poll_id = Column(Integer, ForeignKey("polls.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    option_id = Column(Integer, ForeignKey("poll_options.id"), nullable=False)
+    suggestion = Column(String(500), nullable=True)
+    ip = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    poll = relationship("Poll", back_populates="votes")
+    option = relationship("PollOption", back_populates="votes")
+    user = relationship("User")
+    history = relationship("PollVoteHistory", back_populates="vote", cascade="all, delete-orphan")
+
+
+class PollVoteHistory(Base):
+    __tablename__ = "poll_vote_history"
+
+    id = Column(Integer, primary_key=True)
+    vote_id = Column(Integer, ForeignKey("poll_votes.id", ondelete="CASCADE"), nullable=False)
+    poll_id = Column(Integer, ForeignKey("polls.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    option_id = Column(Integer, ForeignKey("poll_options.id"), nullable=False)
+    changed_at = Column(DateTime, default=_utcnow)
+
+    vote = relationship("PollVote", back_populates="history")
+
+
 class GroupMessage(Base):
     __tablename__ = "group_messages"
 

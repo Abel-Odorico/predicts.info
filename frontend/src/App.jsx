@@ -23,6 +23,9 @@ import JoinGroup      from './pages/JoinGroup'
 import Profile        from './pages/Profile'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword  from './pages/ResetPassword'
+import Votacao        from './pages/Votacao'
+import Regras         from './pages/Regras'
+import VotacaoBanner  from './components/VotacaoBanner'
 import { useAuth } from './stores/authStore'
 import { api } from './api'
 
@@ -32,6 +35,7 @@ export default function App() {
       <div className="app">
         <Layout />
         <main className="main">
+          <VotacaoBanner />
           <ProfileCompletionNotice />
           <Routes>
             <Route path="/"            element={<Dashboard />} />
@@ -57,6 +61,8 @@ export default function App() {
             <Route path="/perfil"         element={<Profile />} />
             <Route path="/esqueci-senha"  element={<ForgotPassword />} />
             <Route path="/redefinir-senha" element={<ResetPassword />} />
+            <Route path="/votacao"         element={<Votacao />} />
+            <Route path="/regras"          element={<Regras />} />
           </Routes>
         </main>
       </div>
