@@ -21,9 +21,13 @@ export default function Regras() {
         <h2 className="regras-section__title">1. Sistema de Pontuação</h2>
         <p className="regras-section__desc">
           O sistema atual é simples: você é recompensado por acertar o resultado ou o placar exato.
-          Um novo sistema está em consulta pública — veja{' '}
-          <Link to="/votacao">a votação ativa</Link>.
         </p>
+        <div className="regras-alert">
+          🗳 <strong>Consulta ativa:</strong> um novo sistema está em votação e, se aprovado,
+          entrará em vigor ainda neste campeonato (Copa 2026) para as partidas ainda não realizadas.
+          Partidas já encerradas não serão recalculadas.{' '}
+          <Link to="/votacao">Participe da votação</Link>.
+        </div>
 
         <div className="regras-table-wrap">
           <table className="regras-table">

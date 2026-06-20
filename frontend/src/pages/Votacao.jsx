@@ -199,9 +199,14 @@ export default function Votacao() {
     <div className="page poll-page fade-in-1">
       {/* ── Hero ─────────────────────────────────────── */}
       <div className="poll-hero">
-        <div className="poll-hero__eyebrow">Consulta Oficial</div>
+        <div className="poll-hero__eyebrow">Consulta Oficial — Copa 2026</div>
         <h1 className="poll-hero__title">VOTAÇÃO: SISTEMA DE PONTUAÇÃO</h1>
         <p className="poll-hero__desc">{poll.description}</p>
+        <div className="poll-urgency-note">
+          ⚡ Se aprovada, a mudança vale para as partidas ainda não realizadas deste campeonato.
+          Palpites já feitos serão avaliados pelo novo sistema a partir da implementação.
+          Partidas já encerradas <strong>não serão recalculadas</strong>.
+        </div>
 
         <div className="poll-hero__meta">
           <span className={`poll-status-badge ${isOpen ? 'open' : 'closed'}`}>
