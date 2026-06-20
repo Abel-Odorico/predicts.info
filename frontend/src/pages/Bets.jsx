@@ -167,7 +167,6 @@ export default function Bets() {
 
 // ── Inline bettable match card ────────────────────────────────────────────────
 function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation, nextMatch, onGoToNextMatch, autoOpen, onAutoOpenDone }) {
-  const isMobile = window.matchMedia('(max-width: 767px)').matches
   const initStillOpen = match.is_open !== undefined
     ? match.is_open
     : (() => {
@@ -176,7 +175,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         return new Date(d).getTime() > Date.now()
       })()
 
-  const [open, setOpen]         = useState(isMobile && initStillOpen)
+  const [open, setOpen]         = useState(initStillOpen)
   const [sa, setSa]             = useState(existingBet?.score_a ?? 0)
   const [sb, setSb]             = useState(existingBet?.score_b ?? 0)
   const [msg, setMsg]           = useState('')
