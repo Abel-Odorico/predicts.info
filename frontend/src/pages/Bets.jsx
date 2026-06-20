@@ -215,18 +215,19 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
     finally { setCommunityLoading(false) }
   }
 
-  function toggleOdds() {
+  function toggleExpand() {
     const next = !showOdds
     setShowOdds(next)
     if (next) {
       fetchOdds()
       fetchCommunityBets()
+      if (stillOpen && !confirmed) setOpen(true)
     }
   }
 
   async function placeBet() {
-    const scoreA = parseInt(sa)
-    const scoreB = parseInt(sb)
+    const scoreA = Number(sa)
+    const scoreB = Number(sb)
     if (isNaN(scoreA) || isNaN(scoreB)) { setMsg('Preencha o placar completo'); return }
     if (scoreA < 0 || scoreB < 0) { setMsg('Placar inválido'); return }
     setSaving(true)
@@ -249,7 +250,6 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
       setConfirmed(true)
       setOpen(false)
       if (nextMatch) setShowNextCard(true)
-      // refresh community bets after placing
       setCommunityBets(null)
       if (showOdds) fetchCommunityBets()
     } catch (e) {
@@ -259,9 +259,13 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
     }
   }
 
-  const hasBet    = !!existingBet
-  const urgentMs  = 30 * 60 * 1000
-  const isUrgent  = msBefore > 0 && msBefore < urgentMs
+  const hasBet   = !!existingBet
+  const urgentMs = 30 * 60 * 1000
+  const isUrgent = msBefore > 0 && msBefore < urgentMs
+
+  const communityStats = communityBets && communityBets.total_bets > 0
+    ? computeCommunityStats(communityBets.bets)
+    : null
 
   return (
     <div className={`bet-card bet-card--open fade-in${isUrgent ? ' bet-card--urgent' : ''}`} style={{ animationDelay: `${index * 30}ms` }}>
@@ -273,13 +277,13 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         </div>
       </div>
 
-      {/* Clickable match row → toggle odds panel */}
+      {/* Clickable match row → expand odds + form */}
       <button
         type="button"
         className="bet-card__match bet-card__match--clickable"
         style={{ marginTop: 'var(--s4)' }}
-        onClick={toggleOdds}
-        title="Ver probabilidades"
+        onClick={toggleExpand}
+        title="Ver probabilidades e dar palpite"
       >
         <div className="bet-card__team">
           {match.team_a?.flag_url && <img src={match.team_a.flag_url} alt={match.team_a.code} className="match-card__flag" />}
@@ -296,29 +300,19 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         <span className="odds-toggle-icon">{showOdds ? '▲' : '▼'}</span>
       </button>
 
-      {/* Odds + community bets panel */}
+      {/* Odds + community stats panel */}
       {showOdds && (
         <div className="odds-panel fade-in-1">
+          {/* Statistical odds */}
           {oddsLoading ? (
             <div className="odds-panel__loading">Calculando probabilidades...</div>
           ) : odds ? (
             <>
+              <div className="odds-section-label">Probabilidade estatística</div>
               <div className="odds-bar">
-                <div
-                  className="odds-bar__segment odds-bar__segment--win"
-                  style={{ flex: odds.prob_a }}
-                  title={`${match.team_a?.code} ${odds.prob_a}%`}
-                />
-                <div
-                  className="odds-bar__segment odds-bar__segment--draw"
-                  style={{ flex: odds.prob_draw }}
-                  title={`Empate ${odds.prob_draw}%`}
-                />
-                <div
-                  className="odds-bar__segment odds-bar__segment--lose"
-                  style={{ flex: odds.prob_b }}
-                  title={`${match.team_b?.code} ${odds.prob_b}%`}
-                />
+                <div className="odds-bar__segment odds-bar__segment--win"  style={{ flex: odds.prob_a }}   title={`${match.team_a?.code} ${odds.prob_a}%`} />
+                <div className="odds-bar__segment odds-bar__segment--draw" style={{ flex: odds.prob_draw }} title={`Empate ${odds.prob_draw}%`} />
+                <div className="odds-bar__segment odds-bar__segment--lose" style={{ flex: odds.prob_b }}   title={`${match.team_b?.code} ${odds.prob_b}%`} />
               </div>
               <div className="odds-bar__labels">
                 <span className="odds-label odds-label--win">
@@ -337,21 +331,46 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
             </>
           ) : null}
 
+          {/* Community sentiment */}
           {communityLoading ? (
             <div className="community-bets__loading">Carregando palpites do bolão...</div>
-          ) : communityBets && communityBets.total_bets > 0 ? (
+          ) : communityStats ? (
             <div className="community-bets">
               <div className="community-bets__header">
-                Palpites do bolão
-                <span className="community-bets__count">{communityBets.total_bets}</span>
+                Tendência do bolão
+                <span className="community-bets__count">{communityBets.total_bets} palpite{communityBets.total_bets !== 1 ? 's' : ''}</span>
               </div>
-              <div className="community-bets__list">
-                {communityBets.bets.map((b, i) => (
-                  <div key={i} className="community-bet-row">
-                    <span className="community-bet-row__name">{b.user_name}</span>
-                    <span className="community-bet-row__score">{b.score_a} × {b.score_b}</span>
-                  </div>
-                ))}
+              {/* Sentiment bar */}
+              <div className="odds-bar">
+                <div className="odds-bar__segment odds-bar__segment--win"  style={{ flex: communityStats.pct_a }}    title={`${match.team_a?.code} ${communityStats.pct_a}%`} />
+                <div className="odds-bar__segment odds-bar__segment--draw" style={{ flex: communityStats.pct_draw }} title={`Empate ${communityStats.pct_draw}%`} />
+                <div className="odds-bar__segment odds-bar__segment--lose" style={{ flex: communityStats.pct_b }}    title={`${match.team_b?.code} ${communityStats.pct_b}%`} />
+              </div>
+              <div className="odds-bar__labels">
+                <span className="odds-label odds-label--win">
+                  <span className="odds-label__team">{match.team_a?.code}</span>
+                  <span className="odds-label__pct">{communityStats.pct_a}%</span>
+                </span>
+                <span className="odds-label odds-label--draw">
+                  <span className="odds-label__team">Empate</span>
+                  <span className="odds-label__pct">{communityStats.pct_draw}%</span>
+                </span>
+                <span className="odds-label odds-label--lose">
+                  <span className="odds-label__team">{match.team_b?.code}</span>
+                  <span className="odds-label__pct">{communityStats.pct_b}%</span>
+                </span>
+              </div>
+              {/* Top scores */}
+              <div className="community-top-scores">
+                <span className="community-top-scores__label">Placares mais votados</span>
+                <div className="community-top-scores__chips">
+                  {communityStats.topScores.map(({ score, pct }) => (
+                    <span key={score} className="community-score-chip">
+                      <span className="community-score-chip__score">{score.replace('x', ' × ')}</span>
+                      <span className="community-score-chip__pct">{pct}%</span>
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           ) : communityBets && communityBets.total_bets === 0 ? (
@@ -402,22 +421,9 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
           <div className="bet-inline-teams">
             <span>{match.team_a?.code}</span>
             <div className="bet-inline-inputs">
-              <input
-                type="number" min="0" max="20"
-                className="score-input"
-                value={sa}
-                onChange={e => setSa(e.target.value)}
-                placeholder="0"
-                autoFocus
-              />
+              <ScoreInput value={sa} onChange={setSa} autoFocus />
               <span className="score-sep">×</span>
-              <input
-                type="number" min="0" max="20"
-                className="score-input"
-                value={sb}
-                onChange={e => setSb(e.target.value)}
-                placeholder="0"
-              />
+              <ScoreInput value={sb} onChange={setSb} />
             </div>
             <span style={{ textAlign: 'right' }}>{match.team_b?.code}</span>
           </div>
@@ -449,6 +455,50 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
       )}
     </div>
   )
+}
+
+// ── Score stepper input ───────────────────────────────────────────────────────
+function ScoreInput({ value, onChange, autoFocus }) {
+  const v = Number(value) || 0
+  return (
+    <div className="score-stepper">
+      <button type="button" className="score-stepper__btn" onClick={() => onChange(Math.max(0, v - 1))}>−</button>
+      <input
+        type="number" min="0" max="20"
+        className="score-input"
+        value={v}
+        onChange={e => onChange(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+        autoFocus={autoFocus}
+      />
+      <button type="button" className="score-stepper__btn score-stepper__btn--plus" onClick={() => onChange(Math.min(20, v + 1))}>+</button>
+    </div>
+  )
+}
+
+// ── Community stats helper ────────────────────────────────────────────────────
+function computeCommunityStats(bets) {
+  const total = bets.length
+  if (!total) return null
+  const winA = bets.filter(b => b.score_a > b.score_b).length
+  const draw = bets.filter(b => b.score_a === b.score_b).length
+  const winB = bets.filter(b => b.score_b > b.score_a).length
+
+  const scoreCount = {}
+  bets.forEach(b => {
+    const k = `${b.score_a}x${b.score_b}`
+    scoreCount[k] = (scoreCount[k] || 0) + 1
+  })
+  const topScores = Object.entries(scoreCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([score, count]) => ({ score, count, pct: Math.round(count / total * 100) }))
+
+  return {
+    pct_a:    Math.round(winA / total * 100),
+    pct_draw: Math.round(draw / total * 100),
+    pct_b:    Math.round(winB / total * 100),
+    topScores,
+  }
 }
 
 // ── Next match suggestion card ────────────────────────────────────────────────

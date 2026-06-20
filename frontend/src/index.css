@@ -2221,6 +2221,16 @@ img {
   gap: var(--s4);
 }
 
+.odds-section-label {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: calc(-1 * var(--s2));
+}
+
 .odds-panel__loading,
 .community-bets__loading,
 .community-bets__empty {
@@ -2340,6 +2350,74 @@ img {
   color: var(--accent);
   white-space: nowrap;
 }
+
+/* ── Community top scores ───────────────────────────────────────────────────── */
+.community-top-scores {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+.community-top-scores__label {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.community-top-scores__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.community-score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-overlay);
+}
+.community-score-chip__score {
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.community-score-chip__pct {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Score stepper ──────────────────────────────────────────────────────────── */
+.score-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.score-stepper__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r2);
+  border: 1px solid var(--border);
+  background: var(--bg-overlay);
+  color: var(--text-2);
+  font-size: 16px;
+  font-family: var(--font-data);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.score-stepper__btn:hover { background: var(--bg-surface); color: var(--text-1); }
+.score-stepper__btn--plus { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.score-stepper__btn--plus:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
 /* ── Confirmed badge ─────────────────────────────────────────────────────────── */
 .confirmed-badge {
