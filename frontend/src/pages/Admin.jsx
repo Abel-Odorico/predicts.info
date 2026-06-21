@@ -1184,7 +1184,7 @@ export default function Admin() {
                   ✂️ Selecionar e editar imagem
                 </label>
 
-                <a href="/api/admin/pwa/icon"
+                <a href={`/icon-192.png?t=${iconTimestamp}`} download="icon-192.png"
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 8,
                     background: 'var(--bg-2)', color: 'var(--text-2)',
