@@ -22,6 +22,7 @@ from routers import push as push_router
 from routers import achievements as achievements_router
 from routers import match_comments as match_comments_router
 from routers import version as version_router
+from routers import pwa_icon as pwa_icon_router
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
 
@@ -281,6 +282,7 @@ app.include_router(push_router.router,          prefix="/api")
 app.include_router(achievements_router.router,  prefix="/api")
 app.include_router(match_comments_router.router, prefix="/api")
 app.include_router(version_router.router,        prefix="/api")
+app.include_router(pwa_icon_router.router,       prefix="/api")
 
 
 @app.get("/api")

@@ -17,6 +17,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - ./frontend/dist:/frontend_dist
     networks:
       - predicts_net
 
