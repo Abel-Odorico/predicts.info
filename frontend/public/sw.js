@@ -1,11 +1,11 @@
-const CACHE = 'predicts-v2'
+const CACHE = 'predicts-v3'
 const ICON  = '/icon-192.png'
 const BADGE = '/favicon-32x32.png'
 
 const SHELL = [
   '/icon-192.png',
   '/icon-512.png',
-  '/favicon.svg',
+  '/favicon.ico',
   '/favicon-32x32.png',
   '/favicon-16x16.png',
   '/manifest.json',
