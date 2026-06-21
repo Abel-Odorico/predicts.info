@@ -232,6 +232,37 @@ def close_poll(
     return {"closed": True, "report": report}
 
 
+@router.post("/admin/poll/notify-pending")
+def notify_pending_voters(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    from routers.notifications import create_notification
+
+    poll = db.query(Poll).filter(Poll.status == "active").order_by(Poll.id.desc()).first()
+    if not poll:
+        raise HTTPException(404, "Nenhuma pesquisa ativa")
+    if not _is_open(poll):
+        raise HTTPException(409, "Pesquisa encerrada")
+
+    voted_ids = db.query(PollVote.user_id).filter(PollVote.poll_id == poll.id).subquery()
+    pending = db.query(User).filter(User.id.notin_(voted_ids)).all()
+
+    count = 0
+    for user in pending:
+        create_notification(
+            db, user.id,
+            type_="poll_reminder",
+            title="📊 Participe da pesquisa!",
+            body=poll.title,
+            meta={"poll_id": poll.id},
+        )
+        count += 1
+
+    db.commit()
+    return {"sent": count, "poll_id": poll.id, "total_pending": len(pending)}
+
+
 @router.get("/admin/poll/suggestions")
 def poll_suggestions(
     db: Session = Depends(get_db),

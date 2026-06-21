@@ -272,6 +272,15 @@ export default function Admin() {
     finally { setSuggestionsLoading(false) }
   }
 
+  async function notifyPollPending() {
+    if (!poll) return
+    setPollMsg('')
+    try {
+      const r = await api.post('/admin/poll/notify-pending', {}, token)
+      setPollMsg(`✓ ${r.sent} notificação${r.sent !== 1 ? 'ões' : ''} enviada${r.sent !== 1 ? 's' : ''} (${r.total_pending} pendentes)`)
+    } catch (e) { setPollMsg(e.message || 'Erro ao notificar') }
+  }
+
   async function closePoll() {
     if (!poll || !window.confirm('Encerrar a pesquisa agora?')) return
     setPollMsg('')
@@ -799,11 +808,16 @@ export default function Admin() {
                       {poll.status === 'active' ? '● ATIVA' : '■ ENCERRADA'}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
                     <button className="btn btn-ghost btn-sm" onClick={loadPoll}>↻</button>
+                    {poll.status === 'active' && poll.is_open && (
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--accent)' }} onClick={notifyPollPending} title="Notificar quem ainda não respondeu">
+                        🔔 Notificar pendentes
+                      </button>
+                    )}
                     {poll.status === 'active' && (
                       <button className="btn btn-sm" style={{ background: 'var(--lose)', color: '#fff' }} onClick={closePoll}>
-                        Encerrar Pesquisa
+                        Encerrar
                       </button>
                     )}
                   </div>
