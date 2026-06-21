@@ -15,11 +15,12 @@ router = APIRouter(tags=["pwa"])
 DIST = "/frontend_dist"
 
 SIZES = {
+    "icon-512.png":          (512, 512, "PNG"),
     "icon-192.png":          (192, 192, "PNG"),
     "apple-touch-icon.png":  (180, 180, "PNG"),
     "favicon-32x32.png":     (32,  32,  "PNG"),
     "favicon-16x16.png":     (16,  16,  "PNG"),
-    "favicon.ico":           (None, None, "ICO"),  # multi-size ICO
+    "favicon.ico":           (None, None, "ICO"),
 }
 
 
