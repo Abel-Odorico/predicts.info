@@ -27,17 +27,9 @@ from routers.notifications import create_notification
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-SCORING_V2_SINCE = datetime(2026, 6, 21, 16, 0, 0)
-
-
 def _calc_points(match_date, bet_a: int, bet_b: int, res_a: int, res_b: int) -> tuple[int, bool, bool]:
+    """V2 (Precisão) — applied to all matches regardless of date."""
     exact = bet_a == res_a and bet_b == res_b
-    if isinstance(match_date, str):
-        match_date = datetime.fromisoformat(match_date)
-    if match_date is None or match_date < SCORING_V2_SINCE:
-        correct = (bet_a > bet_b) == (res_a > res_b) and (bet_a == bet_b) == (res_a == res_b)
-        return (3 if exact else (1 if correct else 0)), exact, correct
-    # V2 — Precisão
     if exact:
         return 25, True, False
     bet_w = 'a' if bet_a > bet_b else ('b' if bet_b > bet_a else 'draw')
@@ -248,6 +240,48 @@ def force_recalculate(
         cleared = 0
 
     return {"status": "cache_cleared", "keys_removed": cleared, "message": "Next /tournament/simulate call will recompute from scratch"}
+
+
+@router.post("/recalculate-bets-v2")
+def recalculate_all_bets_v2(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Re-evaluate every evaluated bet using V2 scoring. Rebuilds Ranking from scratch. No new notifications."""
+    # Reset all rankings
+    db.query(Ranking).update({"total_points": 0, "exact_scores": 0, "correct_results": 0})
+
+    evaluated_bets = (
+        db.query(Bet)
+        .join(MatchResult, MatchResult.match_id == Bet.match_id)
+        .join(Match, Match.id == Bet.match_id)
+        .filter(Bet.evaluated_at.isnot(None))
+        .all()
+    )
+
+    results_map = {r.match_id: r for r in db.query(MatchResult).all()}
+    updated = 0
+
+    for bet in evaluated_bets:
+        result = results_map.get(bet.match_id)
+        if not result:
+            continue
+        points, exact, correct_result = _calc_points(
+            None, bet.score_a, bet.score_b, result.score_a, result.score_b
+        )
+        bet.points_earned = points
+
+        ranking = db.query(Ranking).filter(Ranking.user_id == bet.user_id).first()
+        if not ranking:
+            ranking = Ranking(user_id=bet.user_id, total_points=0, exact_scores=0, correct_results=0)
+            db.add(ranking)
+        ranking.total_points    = (ranking.total_points    or 0) + points
+        ranking.exact_scores    = (ranking.exact_scores    or 0) + (1 if exact else 0)
+        ranking.correct_results = (ranking.correct_results or 0) + (1 if correct_result else 0)
+        updated += 1
+
+    db.commit()
+    return {"status": "ok", "bets_recalculated": updated}
 
 
 @router.get("/users")

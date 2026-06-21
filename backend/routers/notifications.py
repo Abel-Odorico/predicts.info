@@ -4,6 +4,7 @@ GET  /notifications/unread-count — total não lidas
 PATCH /notifications/{id}/read — marca uma como lida
 PATCH /notifications/read-all  — marca todas como lidas
 POST /admin/notifications/remind — envia lembretes de jogos sem aposta (admin)
+POST /admin/notifications/champion-remind — notifica usuários sem palpite de campeão (admin)
 """
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
@@ -173,6 +174,45 @@ def send_reminders(
 
     db.commit()
     return {"sent": sent, "matches": len(upcoming)}
+
+
+@router.post("/admin/notifications/champion-remind", status_code=200)
+def send_champion_reminders(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Notifica usuários que ainda não fizeram palpite de campeão."""
+    from routers.champion import ChampionPick, DEADLINE
+    now = _utcnow()
+    if now >= DEADLINE:
+        return {"sent": 0, "reason": "deadline_passed"}
+
+    picked_ids = {p.user_id for p in db.query(ChampionPick.user_id).all()}
+    all_users = db.query(User).all()
+    sent = 0
+
+    for user in all_users:
+        if user.id in picked_ids:
+            continue
+        already = db.query(Notification).filter(
+            Notification.user_id == user.id,
+            Notification.type == "champion_remind",
+        ).first()
+        if already:
+            continue
+        create_notification(
+            db,
+            user_id=user.id,
+            type_="champion_remind",
+            title="🏆 Você ainda não escolheu o campeão!",
+            body="Acerte o campeão da Copa e ganhe +100 pts. Prazo: 26/06 às 09h.",
+            meta={"url": "/campeao"},
+            push=True,
+        )
+        sent += 1
+
+    db.commit()
+    return {"sent": sent, "total_users": len(all_users), "already_picked": len(picked_ids)}
 
 
 def _serialize(n: Notification) -> dict:

@@ -177,9 +177,7 @@ def _score_points_v2(score_a: int, score_b: int, result_a: int, result_b: int) -
 
 
 def _score_points(score_a: int, score_b: int, result_a: int, result_b: int, match_date=None) -> tuple[int, bool, bool]:
-    if match_date is not None and match_date >= SCORING_V2_SINCE:
-        return _score_points_v2(score_a, score_b, result_a, result_b)
-    return _score_points_v1(score_a, score_b, result_a, result_b)
+    return _score_points_v2(score_a, score_b, result_a, result_b)
 
 
 def _clean_links(text: str) -> str:
