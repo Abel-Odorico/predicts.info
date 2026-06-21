@@ -414,7 +414,7 @@ img {
 .page {
   width: min(100%, var(--page-max));
   margin: 0 auto;
-  padding: var(--s5) var(--s4) calc(var(--mobile-nav) + var(--s5));
+  padding: var(--s5) var(--s4) calc(var(--mobile-nav) + env(safe-area-inset-bottom) + var(--s5));
 }
 
 /* ── Mobile Dock ─────────────────────────────────────── */
@@ -425,7 +425,7 @@ img {
   display: grid;
   grid-template-columns: 1fr 1fr 64px 1fr 1fr;
   align-items: end;
-  height: var(--mobile-nav);
+  height: calc(var(--mobile-nav) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
   border-top: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
@@ -464,11 +464,11 @@ img {
 .mobile-dock__item:hover   { color: var(--text-1); }
 
 .mobile-dock__icon {
-  font-size: 22px;
+  font-size: 28px;
   line-height: 1;
   transition: transform 150ms;
 }
-.mobile-dock__item.active .mobile-dock__icon { transform: scale(1.12); }
+.mobile-dock__item.active .mobile-dock__icon { transform: scale(1.15); }
 
 .mobile-dock__label {
   font-family: var(--font-cond);
@@ -538,7 +538,7 @@ img {
 .mobile-drawer {
   position: fixed;
   left: 0; right: 0;
-  bottom: var(--mobile-nav);
+  bottom: calc(var(--mobile-nav) + env(safe-area-inset-bottom));
   z-index: 117;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
@@ -3741,7 +3741,7 @@ img {
 
 @media (min-width: 640px) {
   .page {
-    padding: var(--s6) var(--s5) calc(var(--mobile-nav) + var(--s6));
+    padding: var(--s6) var(--s5) calc(var(--mobile-nav) + env(safe-area-inset-bottom) + var(--s6));
   }
 
   .featured-teams {
