@@ -73,7 +73,7 @@ export default function Bets() {
     if (Date.now() >= CHAMPION_DEADLINE.getTime()) return
     if (sessionStorage.getItem('champion_banner_dismissed')) return
     api.get('/champion/pick', token)
-      .then(() => {}) // already picked
+      .then(pick => { if (!pick?.champion || !pick?.runner_up) setShowChampionBanner(true) })
       .catch(() => setShowChampionBanner(true))
   }, [token])
 
@@ -158,10 +158,10 @@ export default function Bets() {
           <span style={{ fontSize: 28 }}>🏆</span>
           <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)' }}>
-              Você ainda não escolheu o campeão!
+              Escolha campeão e vice-campeão!
             </div>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              Acerte e ganhe <strong style={{ color: 'var(--accent)' }}>+100 pts</strong> · prazo: 26/06 às 09h
+              Acerte e ganhe <strong style={{ color: 'var(--accent)' }}>+100 pts</strong> (campeão) ou <strong style={{ color: '#d4af37' }}>+50 pts</strong> (vice) · prazo: 26/06 às 09h
             </div>
           </div>
           <button

@@ -18,17 +18,96 @@ function useCountdown() {
   return `${h}h ${m}m ${s}s`
 }
 
+function TeamGrid({ teams, myTeamId, blockedTeamId, statMap, onPick, saving, canPick, accentColor }) {
+  const [filter, setFilter] = useState('')
+  const filtered = teams.filter(t =>
+    !filter || t.name.toLowerCase().includes(filter.toLowerCase()) || t.code.toLowerCase().includes(filter.toLowerCase())
+  )
+  return (
+    <>
+      <input
+        className="form-input"
+        placeholder="🔍 Buscar seleção..."
+        value={filter}
+        onChange={e => setFilter(e.target.value)}
+        style={{ marginBottom: 'var(--s3)', fontFamily: 'var(--font-cond)' }}
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8 }}>
+        {filtered.map(team => {
+          const isMyPick  = myTeamId === team.id
+          const isBlocked = blockedTeamId === team.id
+          const stat      = statMap[team.id]
+          return (
+            <button
+              key={team.id}
+              onClick={() => canPick && !isBlocked && onPick(team)}
+              disabled={saving || !canPick || isBlocked}
+              title={isBlocked ? 'Já escolhido no outro palpite' : undefined}
+              style={{
+                background: isMyPick ? `${accentColor}22` : isBlocked ? 'var(--bg-overlay)' : 'var(--bg-surface)',
+                border: `2px solid ${isMyPick ? accentColor : 'var(--border)'}`,
+                borderRadius: 10, padding: '10px 8px',
+                cursor: canPick && !isBlocked ? 'pointer' : 'default',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                transition: 'border-color 0.15s, background 0.15s',
+                opacity: (saving || isBlocked) ? 0.45 : 1,
+              }}
+              onMouseEnter={e => { if (!isMyPick && canPick && !isBlocked) e.currentTarget.style.borderColor = accentColor }}
+              onMouseLeave={e => { if (!isMyPick) e.currentTarget.style.borderColor = 'var(--border)' }}
+            >
+              <img src={team.flag_url} alt={team.code} style={{ width: 38, height: 27, objectFit: 'cover', borderRadius: 3 }} />
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
+                {team.code}
+              </span>
+              {stat && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: accentColor }}>{stat.pct}%</span>
+              )}
+              {isMyPick && (
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: accentColor, fontWeight: 700 }}>✓ seu pick</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+function CurrentPickBadge({ pick, label, color }) {
+  if (!pick) return (
+    <div style={{
+      background: 'var(--bg-overlay)', border: '1.5px dashed var(--border)',
+      borderRadius: 10, padding: '12px 16px', marginBottom: 'var(--s3)',
+      fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)',
+    }}>
+      {label} — clique em um time abaixo
+    </div>
+  )
+  return (
+    <div style={{
+      background: `${color}12`, border: `2px solid ${color}`,
+      borderRadius: 10, padding: '12px 16px', marginBottom: 'var(--s3)',
+      display: 'flex', alignItems: 'center', gap: 12,
+    }}>
+      <img src={pick.flag} alt={pick.code} style={{ width: 38, height: 27, objectFit: 'cover', borderRadius: 3 }} />
+      <div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color, letterSpacing: '0.08em' }}>{label.toUpperCase()}</div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{pick.name || pick.code}</div>
+      </div>
+    </div>
+  )
+}
+
 export default function ChampionPick() {
   const { user, token } = useAuth()
   const countdown = useCountdown()
 
-  const [teams, setTeams]     = useState([])
-  const [stats, setStats]     = useState([])
-  const [myPick, setMyPick]   = useState(null)
+  const [teams, setTeams]   = useState([])
+  const [stats, setStats]   = useState({ champion: [], runner_up: [] })
+  const [myPick, setMyPick] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
   const [msg, setMsg]         = useState('')
-  const [filter, setFilter]   = useState('')
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -49,28 +128,33 @@ export default function ChampionPick() {
     fetchAll()
   }, [token])
 
-  async function pick(team) {
-    if (!token) return
-    if (!countdown) return
+  async function pickTeam(team, type) {
+    if (!token || !countdown) return
     setSaving(true)
     setMsg('')
     try {
-      const res = await api.post('/champion/pick', { team_id: team.id }, token)
+      const body = type === 'champion'
+        ? { team_id: team.id }
+        : { runner_up_team_id: team.id }
+      const res = await api.post('/champion/pick', body, token)
       setMyPick(res)
-      setMsg(`✓ Palpite salvo — ${res.name || res.code}`)
+      const label = type === 'champion' ? 'Campeão' : 'Vice-campeão'
+      setMsg(`✓ ${label} salvo — ${team.name || team.code}`)
       const statsData = await api.get('/champion/picks/stats')
       setStats(statsData)
-    } catch {
-      setMsg('Erro ao salvar palpite')
+    } catch (e) {
+      const detail = e?.response?.data?.detail || e?.message || ''
+      setMsg(detail || 'Erro ao salvar palpite')
     } finally {
       setSaving(false)
     }
   }
 
-  const statMap = Object.fromEntries(stats.map(s => [s.team_id, s]))
-  const filtered = teams.filter(t =>
-    !filter || t.name.toLowerCase().includes(filter.toLowerCase()) || t.code.toLowerCase().includes(filter.toLowerCase())
-  )
+  const champStatMap   = Object.fromEntries((stats.champion  || []).map(s => [s.team_id, s]))
+  const ruStatMap      = Object.fromEntries((stats.runner_up || []).map(s => [s.team_id, s]))
+  const myChampId      = myPick?.champion?.team_id
+  const myRunnerUpId   = myPick?.runner_up?.team_id
+  const canPick        = !!user && !!countdown
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner /></div>
 
@@ -83,15 +167,15 @@ export default function ChampionPick() {
           🏆 CAMPEÃO DA COPA
         </h1>
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', margin: '4px 0 0' }}>
-          Quem vai ganhar a Copa do Mundo 2026?
+          Escolha o campeão e o vice-campeão da Copa do Mundo 2026
         </p>
       </div>
 
       {/* Bonuses */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 'var(--s4)', flexWrap: 'wrap' }}>
         {[
-          { label: 'Acertar o campeão', pts: '+100 pts', color: 'var(--accent)' },
-          { label: 'Acertar o vice-campeão', pts: '+50 pts', color: 'var(--amber)' },
+          { label: 'Acertar o campeão',      pts: '+100 pts', color: 'var(--accent)' },
+          { label: 'Acertar o vice-campeão', pts: '+50 pts',  color: '#d4af37' },
         ].map(({ label, pts, color }) => (
           <div key={label} style={{
             flex: 1, minWidth: 140, background: 'var(--bg-surface)', border: '1px solid var(--border)',
@@ -103,7 +187,7 @@ export default function ChampionPick() {
         ))}
       </div>
 
-      {/* Countdown / deadline */}
+      {/* Countdown */}
       <div style={{
         background: countdown ? 'rgba(15,122,120,0.08)' : 'rgba(232,82,82,0.08)',
         border: `1px solid ${countdown ? 'rgba(15,122,120,0.25)' : 'rgba(232,82,82,0.25)'}`,
@@ -113,35 +197,11 @@ export default function ChampionPick() {
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)' }}>
           {countdown ? '⏳ Prazo para palpitar' : '🔒 Prazo encerrado'}
         </span>
-        {countdown && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>
-            {countdown}
-          </span>
-        )}
-        {!countdown && (
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>Palpites encerrados</span>
-        )}
+        {countdown
+          ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{countdown}</span>
+          : <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>Palpites encerrados</span>
+        }
       </div>
-
-      {/* My pick */}
-      {myPick && (
-        <div style={{
-          background: 'var(--bg-surface)', border: '2px solid var(--accent)',
-          borderRadius: 12, padding: '14px 18px', marginBottom: 'var(--s4)',
-          display: 'flex', alignItems: 'center', gap: 14,
-        }}>
-          <img src={myPick.flag} alt={myPick.code} style={{ width: 40, height: 28, objectFit: 'cover', borderRadius: 3 }} />
-          <div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em' }}>SEU PALPITE</div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 17, fontWeight: 700, color: 'var(--text-1)' }}>{myPick.name || myPick.code}</div>
-          </div>
-          {myPick.can_change && (
-            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
-              clique em outro time para alterar
-            </span>
-          )}
-        </div>
-      )}
 
       {msg && (
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: msg.startsWith('✓') ? 'var(--win)' : 'var(--lose)', margin: '0 0 var(--s3)' }}>
@@ -149,91 +209,102 @@ export default function ChampionPick() {
         </p>
       )}
 
-      {/* Stats top picks */}
-      {stats.length > 0 && (
-        <div style={{ marginBottom: 'var(--s4)' }}>
-          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 10 }}>
-            FAVORITOS DO BOLÃO
-          </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {stats.slice(0, 5).map(s => (
-              <div key={s.team_id} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                background: 'var(--bg-2)', borderRadius: 8, padding: '6px 12px',
-              }}>
-                <img src={s.flag} alt={s.code} style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} />
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{s.code}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)' }}>{s.pct}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {!user && (
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', marginBottom: 'var(--s3)' }}>
+          <a href="/login" style={{ color: 'var(--accent)' }}>Entre</a> para registrar seu palpite.
+        </p>
       )}
 
-      {/* Team grid */}
       {(!countdown && !myPick) ? (
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6) 0' }}>
           Prazo encerrado. Aguarde os resultados do mata-mata.
         </p>
       ) : (
         <>
-          {!user && (
-            <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', marginBottom: 'var(--s3)' }}>
-              <a href="/login" style={{ color: 'var(--accent)' }}>Entre</a> para registrar seu palpite.
-            </p>
-          )}
+          {/* ── Seção Campeão ── */}
+          <div style={{ marginBottom: 'var(--s6)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--s3)' }}>
+              <span style={{ fontSize: 22 }}>🏆</span>
+              <div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, color: 'var(--text-1)' }}>Campeão</div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>Acerte e ganhe +100 pts</div>
+              </div>
+            </div>
 
-          <input
-            className="form-input"
-            placeholder="🔍 Buscar seleção..."
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            style={{ marginBottom: 'var(--s3)', fontFamily: 'var(--font-cond)' }}
-          />
+            <CurrentPickBadge pick={myPick?.champion} label="Seu palpite de campeão" color="var(--accent)" />
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-            gap: 8,
-          }}>
-            {filtered.map(team => {
-              const isMyPick = myPick?.team_id === team.id
-              const stat = statMap[team.id]
-              return (
-                <button
-                  key={team.id}
-                  onClick={() => user && countdown && pick(team)}
-                  disabled={saving || !user || !countdown}
-                  style={{
-                    background: isMyPick ? 'rgba(15,122,120,0.15)' : 'var(--bg-surface)',
-                    border: `2px solid ${isMyPick ? 'var(--accent)' : 'var(--border)'}`,
-                    borderRadius: 10, padding: '10px 8px',
-                    cursor: user && countdown ? 'pointer' : 'default',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                    transition: 'border-color 0.15s, background 0.15s',
-                    opacity: saving ? 0.6 : 1,
-                  }}
-                  onMouseEnter={e => { if (!isMyPick && user && countdown) e.currentTarget.style.borderColor = 'var(--accent)' }}
-                  onMouseLeave={e => { if (!isMyPick) e.currentTarget.style.borderColor = 'var(--border)' }}
-                >
-                  <img src={team.flag_url} alt={team.code}
-                    style={{ width: 40, height: 28, objectFit: 'cover', borderRadius: 3 }} />
-                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>
-                    {team.code}
-                  </span>
-                  {stat && (
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)' }}>
-                      {stat.pct}%
-                    </span>
-                  )}
-                  {isMyPick && (
-                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--accent)', fontWeight: 700 }}>
-                      ✓ seu pick
-                    </span>
-                  )}
-                </button>
-              )
-            })}
+            {stats.champion?.length > 0 && (
+              <div style={{ marginBottom: 'var(--s3)' }}>
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 8 }}>FAVORITOS DO BOLÃO</p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {stats.champion.slice(0, 5).map(s => (
+                    <div key={s.team_id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-2)', borderRadius: 8, padding: '5px 10px' }}>
+                      <img src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{s.code}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>{s.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {canPick && (
+              <TeamGrid
+                teams={teams}
+                myTeamId={myChampId}
+                blockedTeamId={myRunnerUpId}
+                statMap={champStatMap}
+                onPick={t => pickTeam(t, 'champion')}
+                saving={saving}
+                canPick={canPick}
+                accentColor="var(--accent)"
+              />
+            )}
+          </div>
+
+          {/* ── Seção Vice-Campeão ── */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--s3)' }}>
+              <span style={{ fontSize: 22 }}>🥈</span>
+              <div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, color: 'var(--text-1)' }}>Vice-Campeão</div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>Acerte e ganhe +50 pts</div>
+              </div>
+            </div>
+
+            <CurrentPickBadge pick={myPick?.runner_up} label="Seu palpite de vice-campeão" color="#d4af37" />
+
+            {stats.runner_up?.length > 0 && (
+              <div style={{ marginBottom: 'var(--s3)' }}>
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 8 }}>FAVORITOS DO BOLÃO</p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {stats.runner_up.slice(0, 5).map(s => (
+                    <div key={s.team_id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-2)', borderRadius: 8, padding: '5px 10px' }}>
+                      <img src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{s.code}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#d4af37' }}>{s.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {canPick && (myChampId ? (
+              <TeamGrid
+                teams={teams}
+                myTeamId={myRunnerUpId}
+                blockedTeamId={myChampId}
+                statMap={ruStatMap}
+                onPick={t => pickTeam(t, 'runner_up')}
+                saving={saving}
+                canPick={canPick}
+                accentColor="#d4af37"
+              />
+            ) : (
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', padding: 'var(--s3) 0' }}>
+                Escolha o campeão primeiro para liberar o vice.
+              </div>
+            ))}
           </div>
         </>
       )}
