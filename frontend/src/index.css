@@ -3071,40 +3071,40 @@ img {
 /* ── Tab Bar ──────────────────────────────────────────────── */
 .adm-tabs {
   display: flex;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 4px;
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--s4);
-  overflow-x: auto;
-  scrollbar-width: none;
+  padding-bottom: var(--s3);
+  row-gap: var(--s2);
 }
-.adm-tabs::-webkit-scrollbar { display: none; }
 
 .adm-tab {
   display: flex;
   align-items: center;
   gap: var(--s2);
-  padding: var(--s3) var(--s4);
+  padding: var(--s2) var(--s3);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 6px;
   color: var(--text-3);
   font-family: var(--font-cond);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
   cursor: pointer;
-  transition: color 150ms, border-color 150ms;
+  transition: color 150ms, background 150ms;
   white-space: nowrap;
-  margin-bottom: -1px;
 }
 
 .adm-tab:hover {
   color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
 }
 
 .adm-tab--active {
   color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .adm-tab__icon {
@@ -3461,20 +3461,22 @@ img {
     font-size: 9px;
   }
 
-  /* Tabs — ícone + label pequeno */
+  /* Tabs — ícone + label pequeno, 2 linhas */
   .adm-tabs {
-    gap: 0;
+    gap: 3px;
+    row-gap: 3px;
     margin-bottom: var(--s3);
+    padding-bottom: var(--s2);
   }
   .adm-tab {
-    flex: 1;
+    flex: 0 0 auto;
     flex-direction: column;
     gap: 2px;
-    padding: var(--s2) var(--s1);
+    padding: var(--s2) var(--s3);
     font-size: 10px;
     justify-content: center;
     text-align: center;
-    min-width: 0;
+    min-width: 52px;
   }
   .adm-tab__icon {
     font-size: 16px;
