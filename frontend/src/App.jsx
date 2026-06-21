@@ -1,36 +1,38 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
-import Layout from './components/Layout'
-import Dashboard   from './pages/Dashboard'
-import MatchSim    from './pages/MatchSim'
-import Tournament  from './pages/Tournament'
-import Groups      from './pages/Groups'
-import Ranking     from './pages/Ranking'
-import Bets        from './pages/Bets'
-import Admin       from './pages/Admin'
-import Login       from './pages/Login'
-import UserHistory    from './pages/UserHistory'
-import Results        from './pages/Results'
-import AdminOptions   from './pages/AdminOptions'
-import Analytics      from './pages/Analytics'
-import Privacy        from './pages/Privacy'
-import Terms          from './pages/Terms'
-import About          from './pages/About'
-import Contact        from './pages/Contact'
-import UserGroups     from './pages/UserGroups'
-import GroupRanking   from './pages/GroupRanking'
-import JoinGroup      from './pages/JoinGroup'
-import Profile        from './pages/Profile'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword  from './pages/ResetPassword'
-import Votacao        from './pages/Votacao'
-import Regras         from './pages/Regras'
-import Changelog      from './pages/Changelog'
-import ChampionPick   from './pages/ChampionPick'
-import VotacaoBanner  from './components/VotacaoBanner'
-import Onboarding from './components/Onboarding'
-import { useAuth } from './stores/authStore'
-import { api } from './api'
+import Layout        from './components/Layout'
+import VotacaoBanner from './components/VotacaoBanner'
+import Onboarding    from './components/Onboarding'
+import Spinner       from './components/Spinner'
+import { useAuth }   from './stores/authStore'
+import { api }       from './api'
+
+const Dashboard     = lazy(() => import('./pages/Dashboard'))
+const MatchSim      = lazy(() => import('./pages/MatchSim'))
+const Tournament    = lazy(() => import('./pages/Tournament'))
+const Groups        = lazy(() => import('./pages/Groups'))
+const Ranking       = lazy(() => import('./pages/Ranking'))
+const Bets          = lazy(() => import('./pages/Bets'))
+const Admin         = lazy(() => import('./pages/Admin'))
+const Login         = lazy(() => import('./pages/Login'))
+const UserHistory   = lazy(() => import('./pages/UserHistory'))
+const Results       = lazy(() => import('./pages/Results'))
+const AdminOptions  = lazy(() => import('./pages/AdminOptions'))
+const Analytics     = lazy(() => import('./pages/Analytics'))
+const Privacy       = lazy(() => import('./pages/Privacy'))
+const Terms         = lazy(() => import('./pages/Terms'))
+const About         = lazy(() => import('./pages/About'))
+const Contact       = lazy(() => import('./pages/Contact'))
+const UserGroups    = lazy(() => import('./pages/UserGroups'))
+const GroupRanking  = lazy(() => import('./pages/GroupRanking'))
+const JoinGroup     = lazy(() => import('./pages/JoinGroup'))
+const Profile       = lazy(() => import('./pages/Profile'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
+const Votacao       = lazy(() => import('./pages/Votacao'))
+const Regras        = lazy(() => import('./pages/Regras'))
+const Changelog     = lazy(() => import('./pages/Changelog'))
+const ChampionPick  = lazy(() => import('./pages/ChampionPick'))
 
 export default function App() {
   return (
@@ -41,35 +43,37 @@ export default function App() {
           <VotacaoBanner />
           <ProfileCompletionNotice />
           <Onboarding />
-          <Routes>
-            <Route path="/"            element={<Dashboard />} />
-            <Route path="/dashboard"   element={<Dashboard />} />
-            <Route path="/partida/:id" element={<MatchSim />} />
-            <Route path="/torneio"     element={<Tournament />} />
-            <Route path="/grupos"      element={<Groups />} />
-            <Route path="/resultados"  element={<Results />} />
-            <Route path="/apostas"     element={<Bets />} />
-            <Route path="/ranking"     element={<Ranking />} />
-            <Route path="/meus-grupos" element={<UserGroups />} />
-            <Route path="/meus-grupos/:groupId" element={<GroupRanking />} />
-            <Route path="/bolao/:token" element={<JoinGroup />} />
-            <Route path="/usuarios/:userId/historico" element={<UserHistory />} />
-            <Route path="/admin"         element={<Admin />} />
-            <Route path="/admin/options"    element={<AdminOptions />} />
-            <Route path="/admin/analytics"  element={<Analytics />} />
-            <Route path="/login"       element={<Login />} />
-            <Route path="/privacidade" element={<Privacy />} />
-            <Route path="/termos"      element={<Terms />} />
-            <Route path="/sobre"       element={<About />} />
-            <Route path="/contato"     element={<Contact />} />
-            <Route path="/perfil"         element={<Profile />} />
-            <Route path="/esqueci-senha"  element={<ForgotPassword />} />
-            <Route path="/redefinir-senha" element={<ResetPassword />} />
-            <Route path="/votacao"         element={<Votacao />} />
-            <Route path="/regras"          element={<Regras />} />
-            <Route path="/changelog"       element={<Changelog />} />
-            <Route path="/campeao"         element={<ChampionPick />} />
-          </Routes>
+          <Suspense fallback={<Spinner />}>
+            <Routes>
+              <Route path="/"            element={<Dashboard />} />
+              <Route path="/dashboard"   element={<Dashboard />} />
+              <Route path="/partida/:id" element={<MatchSim />} />
+              <Route path="/torneio"     element={<Tournament />} />
+              <Route path="/grupos"      element={<Groups />} />
+              <Route path="/resultados"  element={<Results />} />
+              <Route path="/apostas"     element={<Bets />} />
+              <Route path="/ranking"     element={<Ranking />} />
+              <Route path="/meus-grupos" element={<UserGroups />} />
+              <Route path="/meus-grupos/:groupId" element={<GroupRanking />} />
+              <Route path="/bolao/:token" element={<JoinGroup />} />
+              <Route path="/usuarios/:userId/historico" element={<UserHistory />} />
+              <Route path="/admin"            element={<Admin />} />
+              <Route path="/admin/options"    element={<AdminOptions />} />
+              <Route path="/admin/analytics"  element={<Analytics />} />
+              <Route path="/login"            element={<Login />} />
+              <Route path="/privacidade"      element={<Privacy />} />
+              <Route path="/termos"           element={<Terms />} />
+              <Route path="/sobre"            element={<About />} />
+              <Route path="/contato"          element={<Contact />} />
+              <Route path="/perfil"           element={<Profile />} />
+              <Route path="/esqueci-senha"    element={<ForgotPassword />} />
+              <Route path="/redefinir-senha"  element={<ResetPassword />} />
+              <Route path="/votacao"          element={<Votacao />} />
+              <Route path="/regras"           element={<Regras />} />
+              <Route path="/changelog"        element={<Changelog />} />
+              <Route path="/campeao"          element={<ChampionPick />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </BrowserRouter>
