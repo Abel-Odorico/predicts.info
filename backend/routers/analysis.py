@@ -46,16 +46,17 @@ OPENROUTER_FREE_MODELS = [
 ]
 
 GEMINI_MODELS = [
+    {"id": "gemini-3.5-flash",                "label": "Gemini 3.5 Flash (mais novo)"},
     {"id": "gemini-2.5-pro",                  "label": "Gemini 2.5 Pro (mais capaz)"},
     {"id": "gemini-2.5-pro-preview-06-05",    "label": "Gemini 2.5 Pro Preview jun/25"},
-    {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash (rápido)"},
+    {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash"},
     {"id": "gemini-2.5-flash-preview-05-20",  "label": "Gemini 2.5 Flash Preview mai/25"},
     {"id": "gemini-2.0-flash",                "label": "Gemini 2.0 Flash"},
     {"id": "gemini-2.0-flash-lite",           "label": "Gemini 2.0 Flash Lite"},
 ]
 
 DEFAULT_OR_MODEL    = "nvidia/nemotron-3-ultra-550b-a55b:free"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_PROVIDER    = "openrouter"
 
 CONFIG_KEYS = (
@@ -145,18 +146,33 @@ def _call_openrouter(api_key: str, model: str, prompt: str) -> dict:
 
 
 def _call_gemini(api_key: str, model: str, prompt: str) -> dict:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    resp = http_requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.7},
-        },
-        timeout=90,
-    )
-    resp.raise_for_status()
-    text_out = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=8192,
+                temperature=0.7,
+            ),
+        )
+        text_out = response.text
+    except Exception:
+        # Fallback para REST se SDK não disponível ou der erro
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        resp = http_requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.7},
+            },
+            timeout=90,
+        )
+        resp.raise_for_status()
+        text_out = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
     return json.loads(_strip_fences(text_out))
 
 
