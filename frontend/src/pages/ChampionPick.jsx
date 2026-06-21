@@ -159,7 +159,8 @@ export default function ChampionPick() {
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner /></div>
 
   return (
-    <div className="page-container fade-in-1" style={{ maxWidth: 720, margin: '0 auto', padding: '0 var(--s4) var(--s6)' }}>
+    <div className="page fade-in-1">
+    <div style={{ maxWidth: 720, margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ padding: 'var(--s5) 0 var(--s4)' }}>
@@ -308,6 +309,7 @@ export default function ChampionPick() {
           </div>
         </>
       )}
+    </div>
     </div>
   )
 }
