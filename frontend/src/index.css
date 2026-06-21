@@ -8068,3 +8068,39 @@ strong.pts {
   margin-bottom: 6px;
 }
 .pwa-install-tip strong { color: var(--accent); }
+
+/* ── Knockout phase badge ────────────────────────────────────────────────── */
+.badge-knockout {
+  background: linear-gradient(135deg, rgba(15,122,120,0.18), rgba(15,122,120,0.08));
+  color: var(--accent);
+  border: 1px solid rgba(15,122,120,0.3);
+}
+
+/* ── Admin modal (edit match) ────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--s5);
+}
+.modal-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 100%; max-width: 440px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.45);
+}
+.modal-box__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-cond); font-weight: 700; font-size: 15px;
+  color: var(--text-1);
+}
+.modal-box__head button {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-4); font-size: 18px; line-height: 1;
+  padding: 2px 6px; border-radius: 4px;
+}
+.modal-box__head button:hover { color: var(--text-1); background: var(--bg-2); }

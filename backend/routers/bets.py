@@ -49,6 +49,7 @@ def _bet_dict(b: Bet) -> dict:
         "created_at": b.created_at,
         "locked_at": b.locked_at,
         "group_name": match.group_name if match else None,
+        "match_phase": match.phase.value if match and match.phase else None,
         "match_status": match.status.value if match and match.status else None,
         "match_date": match.match_date if match else None,
         "team_a_code": match.team_a.code if match and match.team_a else None,

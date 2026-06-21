@@ -57,7 +57,12 @@ const TABS = [
   { id: 'poll',        label: 'Pesquisa',     icon: '📊' },
   { id: 'versions',   label: 'Versões',      icon: '🔖' },
   { id: 'pwa',        label: 'Ícone PWA',    icon: '🖼' },
+  { id: 'knockout',   label: 'Mata-Mata',    icon: '⚔️' },
 ]
+
+const PHASE_LABELS_ADMIN = {
+  r32: 'Round of 32', r16: 'Oitavas', qf: 'Quartas', sf: 'Semifinal', '3rd': '3º Lugar', final: 'Final',
+}
 
 const PERIODS = [
   { id: 'day',      label: 'Dia' },
@@ -133,6 +138,73 @@ export default function Admin() {
   const [iconEditorSrc, setIconEditorSrc] = useState(null)
   const [iconTimestamp, setIconTimestamp] = useState(Date.now())
 
+  // Knockout
+  const [knockoutMatches, setKnockoutMatches] = useState(null)
+  const [knockoutLoading, setKnockoutLoading] = useState(false)
+  const [knockoutMsg, setKnockoutMsg] = useState('')
+  const [knockoutSyncing, setKnockoutSyncing] = useState(false)
+  const [allTeams, setAllTeams] = useState([])
+  const [knockoutForm, setKnockoutForm] = useState({ phase: 'r32', team_a_id: '', team_b_id: '', match_date: '', venue: '', city: '', match_number: '' })
+  const [editMatch, setEditMatch] = useState(null)
+  const [editForm, setEditForm] = useState({})
+
+  async function loadKnockout() {
+    setKnockoutLoading(true)
+    try { setKnockoutMatches(await api.get('/admin/knockout/matches', token)) }
+    catch { setKnockoutMatches([]) }
+    finally { setKnockoutLoading(false) }
+  }
+
+  async function loadAllTeams() {
+    try { setAllTeams(await api.get('/teams')) } catch {}
+  }
+
+  async function syncKnockout() {
+    setKnockoutSyncing(true); setKnockoutMsg('')
+    try {
+      const r = await api.post('/admin/knockout/sync', {}, token)
+      setKnockoutMsg(`✓ Criadas: ${r.created} · Atualizadas: ${r.updated} · Pendentes: ${r.pending}`)
+      loadKnockout()
+    } catch (e) {
+      setKnockoutMsg(`✗ Erro: ${e?.message || 'falha'}`)
+    } finally { setKnockoutSyncing(false) }
+  }
+
+  async function createKnockoutMatch(e) {
+    e.preventDefault()
+    const payload = {
+      phase: knockoutForm.phase,
+      team_a_id: parseInt(knockoutForm.team_a_id),
+      team_b_id: parseInt(knockoutForm.team_b_id),
+      match_date: knockoutForm.match_date || null,
+      venue: knockoutForm.venue || null,
+      city: knockoutForm.city || null,
+      match_number: knockoutForm.match_number ? parseInt(knockoutForm.match_number) : null,
+    }
+    try {
+      await api.post('/admin/matches', payload, token)
+      setKnockoutMsg('✓ Partida criada')
+      setKnockoutForm({ phase: 'r32', team_a_id: '', team_b_id: '', match_date: '', venue: '', city: '', match_number: '' })
+      loadKnockout()
+    } catch { setKnockoutMsg('✗ Erro ao criar') }
+  }
+
+  async function saveEditMatch(e) {
+    e.preventDefault()
+    const payload = {}
+    if (editForm.team_a_id) payload.team_a_id = parseInt(editForm.team_a_id)
+    if (editForm.team_b_id) payload.team_b_id = parseInt(editForm.team_b_id)
+    if (editForm.match_date) payload.match_date = editForm.match_date
+    if (editForm.venue) payload.venue = editForm.venue
+    if (editForm.city) payload.city = editForm.city
+    try {
+      await api.patch(`/admin/matches/${editMatch.id}`, payload, token)
+      setKnockoutMsg('✓ Partida atualizada')
+      setEditMatch(null)
+      loadKnockout()
+    } catch { setKnockoutMsg('✗ Erro ao atualizar') }
+  }
+
   function openIconEditor(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -188,6 +260,8 @@ export default function Admin() {
     if (tab === 'coverage' && !betCoverage && !coverageLoading) loadCoverage('scheduled')
     if (tab === 'poll' && !poll && !pollLoading) loadPoll()
     if (tab === 'versions' && !versions && !versionsLoading) loadVersions()
+    if (tab === 'knockout' && !knockoutMatches && !knockoutLoading) loadKnockout()
+    if (tab === 'knockout' && allTeams.length === 0) loadAllTeams()
   }, [tab])
 
   useEffect(() => {
@@ -1208,6 +1282,158 @@ export default function Admin() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Tab: Mata-Mata ───────────────────────────── */}
+      {tab === 'knockout' && (
+        <div className="adm-pane fade-in-1">
+          {knockoutMsg && (
+            <div className="adm-feedback" style={{ color: knockoutMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)', marginBottom: 'var(--s4)' }}>
+              {knockoutMsg}
+            </div>
+          )}
+
+          {/* Sync + criar */}
+          <div className="adm-pane--two-col" style={{ gap: 'var(--s5)', marginBottom: 'var(--s5)' }}>
+
+            {/* Sincronizar */}
+            <div className="adm-card">
+              <div className="adm-card__head"><span className="adm-card__title">Sincronizar via Wikipedia</span></div>
+              <div style={{ padding: 'var(--s5)' }}>
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', marginBottom: 'var(--s4)' }}>
+                  Busca o calendário oficial do mata-mata e tenta resolver os times pelas classificações dos grupos.
+                </p>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={syncKnockout}
+                  disabled={knockoutSyncing}
+                >
+                  {knockoutSyncing ? '⏳ Sincronizando...' : '🔄 Sincronizar Agora'}
+                </button>
+              </div>
+            </div>
+
+            {/* Criar manual */}
+            <div className="adm-card">
+              <div className="adm-card__head"><span className="adm-card__title">Criar Partida Manual</span></div>
+              <form onSubmit={createKnockoutMatch} style={{ padding: 'var(--s5)', display: 'grid', gap: 'var(--s3)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s3)' }}>
+                  <select
+                    className="form-input"
+                    value={knockoutForm.phase}
+                    onChange={e => setKnockoutForm(f => ({ ...f, phase: e.target.value }))}
+                  >
+                    {Object.entries(PHASE_LABELS_ADMIN).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <input
+                    className="form-input"
+                    placeholder="Nº da partida"
+                    value={knockoutForm.match_number}
+                    onChange={e => setKnockoutForm(f => ({ ...f, match_number: e.target.value }))}
+                  />
+                </div>
+                <select
+                  className="form-input"
+                  value={knockoutForm.team_a_id}
+                  onChange={e => setKnockoutForm(f => ({ ...f, team_a_id: e.target.value }))}
+                  required
+                >
+                  <option value="">Time A</option>
+                  {allTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                </select>
+                <select
+                  className="form-input"
+                  value={knockoutForm.team_b_id}
+                  onChange={e => setKnockoutForm(f => ({ ...f, team_b_id: e.target.value }))}
+                  required
+                >
+                  <option value="">Time B</option>
+                  {allTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                </select>
+                <input
+                  className="form-input"
+                  type="datetime-local"
+                  value={knockoutForm.match_date}
+                  onChange={e => setKnockoutForm(f => ({ ...f, match_date: e.target.value }))}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s3)' }}>
+                  <input className="form-input" placeholder="Estádio" value={knockoutForm.venue} onChange={e => setKnockoutForm(f => ({ ...f, venue: e.target.value }))} />
+                  <input className="form-input" placeholder="Cidade" value={knockoutForm.city} onChange={e => setKnockoutForm(f => ({ ...f, city: e.target.value }))} />
+                </div>
+                <button type="submit" className="btn btn-primary btn-sm">➕ Criar</button>
+              </form>
+            </div>
+          </div>
+
+          {/* Lista de partidas */}
+          <div className="adm-card">
+            <div className="adm-card__head"><span className="adm-card__title">Partidas Mata-Mata</span></div>
+            {knockoutLoading && <div style={{ padding: 'var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>Carregando...</div>}
+            {!knockoutLoading && knockoutMatches?.length === 0 && (
+              <div style={{ padding: 'var(--s5)', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                Nenhuma partida criada ainda. Use "Sincronizar" ou "Criar Manual".
+              </div>
+            )}
+            {!knockoutLoading && knockoutMatches?.length > 0 && (
+              <div className="adm-table-wrap">
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th>Nº</th><th>Fase</th><th>Time A</th><th>Time B</th><th>Data (BRT)</th><th>Status</th><th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {knockoutMatches.map(m => (
+                      <tr key={m.id}>
+                        <td style={{ fontFamily: 'var(--font-data)', fontSize: 12 }}>{m.match_number || '—'}</td>
+                        <td><span className="badge badge-knockout">{m.phase_label}</span></td>
+                        <td style={{ fontFamily: 'var(--font-cond)', fontWeight: 600 }}>{m.team_a ? `${m.team_a.code}` : <span style={{ color: 'var(--lose)' }}>Pendente</span>}</td>
+                        <td style={{ fontFamily: 'var(--font-cond)', fontWeight: 600 }}>{m.team_b ? `${m.team_b.code}` : <span style={{ color: 'var(--lose)' }}>Pendente</span>}</td>
+                        <td style={{ fontFamily: 'var(--font-data)', fontSize: 11 }}>{m.match_date ? new Date(m.match_date + 'Z').toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</td>
+                        <td><span style={{ color: m.status === 'finished' ? 'var(--win)' : m.status === 'live' ? 'var(--amber)' : 'var(--text-3)', fontFamily: 'var(--font-data)', fontSize: 11 }}>{m.status}</span></td>
+                        <td>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => { setEditMatch(m); setEditForm({ team_a_id: m.team_a?.id || '', team_b_id: m.team_b?.id || '', match_date: m.match_date ? m.match_date.slice(0, 16) : '', venue: m.venue || '', city: m.city || '' }) }}
+                          >✏️</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Edit modal */}
+          {editMatch && (
+            <div className="modal-backdrop" onClick={() => setEditMatch(null)}>
+              <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <div className="modal-box__head">
+                  <span>Editar Partida #{editMatch.id}</span>
+                  <button onClick={() => setEditMatch(null)}>✕</button>
+                </div>
+                <form onSubmit={saveEditMatch} style={{ display: 'grid', gap: 'var(--s3)', padding: 'var(--s5)' }}>
+                  <select className="form-input" value={editForm.team_a_id} onChange={e => setEditForm(f => ({ ...f, team_a_id: e.target.value }))}>
+                    <option value="">Time A</option>
+                    {allTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                  </select>
+                  <select className="form-input" value={editForm.team_b_id} onChange={e => setEditForm(f => ({ ...f, team_b_id: e.target.value }))}>
+                    <option value="">Time B</option>
+                    {allTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                  </select>
+                  <input className="form-input" type="datetime-local" value={editForm.match_date} onChange={e => setEditForm(f => ({ ...f, match_date: e.target.value }))} />
+                  <input className="form-input" placeholder="Estádio" value={editForm.venue} onChange={e => setEditForm(f => ({ ...f, venue: e.target.value }))} />
+                  <input className="form-input" placeholder="Cidade" value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} />
+                  <div style={{ display: 'flex', gap: 'var(--s3)' }}>
+                    <button type="submit" className="btn btn-primary btn-sm">✓ Salvar</button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditMatch(null)}>Cancelar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

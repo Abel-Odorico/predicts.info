@@ -6,6 +6,26 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
 
+const PHASE_LABELS = {
+  r32:   'Round of 32',
+  r16:   'Oitavas de Final',
+  qf:    'Quartas de Final',
+  sf:    'Semifinal',
+  '3rd': '3º Lugar',
+  final: 'Final',
+}
+
+function PhaseBadge({ phase, groupName }) {
+  const isKnockout = phase && phase !== 'group'
+  const label = isKnockout ? PHASE_LABELS[phase] || phase : groupName ? `Grupo ${groupName}` : null
+  if (!label) return null
+  return (
+    <span className={`badge ${isKnockout ? 'badge-knockout' : 'badge-group'}`}>
+      {isKnockout ? '⚔️ ' : ''}{label}
+    </span>
+  )
+}
+
 function TeamLabel({ code, name, flagUrl, compact = false }) {
   const label = compact ? code : (PT_NAMES[code] || name || code)
   return (
@@ -322,7 +342,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
   return (
     <div className={`bet-card bet-card--open fade-in${isUrgent ? ' bet-card--urgent' : ''}`} style={{ animationDelay: `${index * 30}ms` }}>
       <div className="bet-card__top">
-        <span className="badge badge-group">Grupo {match.group_name}</span>
+        <PhaseBadge phase={match.phase} groupName={match.group_name} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           {stillOpen && <Countdown ms={msBefore} />}
           <span className="bet-card__time">{formatMatchDate(match.match_date)}</span>
@@ -722,7 +742,7 @@ function BetRow({ bet, index, onOpenSimulation }) {
     <>
     <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${index * 30}ms` }}>
       <div className="bet-card__top">
-        <span className="badge badge-group">Grupo {bet.group_name}</span>
+        <PhaseBadge phase={bet.match_phase} groupName={bet.group_name} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <span className="bet-card__time">{formatMatchDate(bet.match_date)}</span>
           <span className={`pts-badge ${ptsVariant}`}>{ptsValue}</span>
@@ -911,7 +931,7 @@ function FinishedNoBetRow({ match, index, onOpenSimulation }) {
   return (
     <div className="bet-card fade-in" style={{ animationDelay: `${index * 30}ms`, opacity: 0.65 }}>
       <div className="bet-card__top">
-        <span className="badge badge-group">Grupo {match.group_name}</span>
+        <PhaseBadge phase={match.phase} groupName={match.group_name} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <span className="bet-card__time">{formatMatchDate(match.match_date)}</span>
           <span className="pts-badge pts-badge--wrong">sem palpite</span>
