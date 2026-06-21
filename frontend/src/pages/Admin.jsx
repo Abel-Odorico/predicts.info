@@ -2174,7 +2174,7 @@ export default function Admin() {
                         <button
                           className="btn btn-ghost btn-sm"
                           style={{ fontSize: 11, padding: '4px 10px' }}
-                          disabled={generatingId === r.match_id || !analysisConfig?.has_key}
+                          disabled={generatingId === r.match_id || !(analysisConfig?.openrouter_has_key || analysisConfig?.gemini_has_key)}
                           onClick={() => generateOne(r.match_id)}
                         >
                           {generatingId === r.match_id ? '…' : r.has_analysis ? '↻' : '⚡'}

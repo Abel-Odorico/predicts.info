@@ -26,14 +26,23 @@ router = APIRouter(tags=["analysis"])
 # ─── Provider catalogs ────────────────────────────────────────────────────────
 
 OPENROUTER_FREE_MODELS = [
-    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free",       "label": "Nvidia Nemotron Ultra 550B (free)"},
-    {"id": "nousresearch/hermes-3-llama-3.1-405b:free",    "label": "Hermes 3 Llama 405B (free)"},
-    {"id": "openai/gpt-oss-120b:free",                     "label": "GPT OSS 120B (free)"},
-    {"id": "nvidia/nemotron-3-super-120b-a12b:free",       "label": "Nvidia Nemotron Super 120B (free)"},
-    {"id": "qwen/qwen3-next-80b-a3b-instruct:free",        "label": "Qwen3 80B (free)"},
-    {"id": "meta-llama/llama-3.3-70b-instruct:free",       "label": "Llama 3.3 70B (free)"},
-    {"id": "google/gemma-4-31b-it:free",                   "label": "Gemma 4 31B (free)"},
-    {"id": "qwen/qwen3-coder:free",                        "label": "Qwen3 Coder (free)"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free",       "label": "🆓 Nvidia Nemotron Ultra 550B"},
+    {"id": "nousresearch/hermes-3-llama-3.1-405b:free",    "label": "🆓 Hermes 3 Llama 405B"},
+    {"id": "openai/gpt-oss-120b:free",                     "label": "🆓 GPT OSS 120B"},
+    {"id": "nvidia/nemotron-3-super-120b-a12b:free",       "label": "🆓 Nvidia Nemotron Super 120B"},
+    {"id": "qwen/qwen3-next-80b-a3b-instruct:free",        "label": "🆓 Qwen3 Next 80B"},
+    {"id": "meta-llama/llama-3.3-70b-instruct:free",       "label": "🆓 Llama 3.3 70B"},
+    {"id": "google/gemma-4-31b-it:free",                   "label": "🆓 Gemma 4 31B"},
+    # Pagos — melhores modelos
+    {"id": "anthropic/claude-opus-4",                      "label": "💎 Claude Opus 4"},
+    {"id": "anthropic/claude-sonnet-4-5",                  "label": "💎 Claude Sonnet 4.5"},
+    {"id": "openai/gpt-4o",                                "label": "💎 GPT-4o"},
+    {"id": "openai/gpt-4.1",                               "label": "💎 GPT-4.1"},
+    {"id": "google/gemini-2.5-pro",                        "label": "💎 Gemini 2.5 Pro (via OR)"},
+    {"id": "google/gemini-2.5-flash",                      "label": "💎 Gemini 2.5 Flash (via OR)"},
+    {"id": "deepseek/deepseek-r1",                         "label": "💎 DeepSeek R1"},
+    {"id": "meta-llama/llama-4-maverick",                  "label": "💎 Llama 4 Maverick"},
+    {"id": "x-ai/grok-3",                                  "label": "💎 Grok 3"},
 ]
 
 GEMINI_MODELS = [
