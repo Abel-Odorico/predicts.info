@@ -46,13 +46,14 @@ function formatCountdown(value, nowMs) {
 }
 
 const TABS = [
-  { id: 'growth',   label: 'Crescimento',  icon: '📈' },
-  { id: 'users',    label: 'Usuários',     icon: '👥' },
-  { id: 'results',  label: 'Resultados',   icon: '⚽' },
-  { id: 'sync',     label: 'Sincronização', icon: '🔄' },
-  { id: 'bets',     label: 'Apostas',      icon: '🎯' },
-  { id: 'coverage', label: 'Cobertura',    icon: '📋' },
-  { id: 'poll',     label: 'Pesquisa',     icon: '📊' },
+  { id: 'growth',      label: 'Crescimento',  icon: '📈' },
+  { id: 'engagement',  label: 'Engajamento',  icon: '🔥' },
+  { id: 'users',       label: 'Usuários',     icon: '👥' },
+  { id: 'results',     label: 'Resultados',   icon: '⚽' },
+  { id: 'sync',        label: 'Sincronização', icon: '🔄' },
+  { id: 'bets',        label: 'Apostas',      icon: '🎯' },
+  { id: 'coverage',    label: 'Cobertura',    icon: '📋' },
+  { id: 'poll',        label: 'Pesquisa',     icon: '📊' },
 ]
 
 const PERIODS = [
@@ -111,6 +112,11 @@ export default function Admin() {
   const [suggestions, setSuggestions] = useState(null)
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
 
+  // Engagement
+  const [engagement, setEngagement] = useState(null)
+  const [engagementLoading, setEngagementLoading] = useState(false)
+  const [engSegment, setEngSegment] = useState(null) // 'today'|'7d'|'30d'|'never'|'inactive'|'top'
+
   function toggleSeries(key) {
     setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -123,7 +129,8 @@ export default function Admin() {
 
   // Tab-driven lazy loading
   useEffect(() => {
-    if (tab === 'growth')   loadGrowth(growthPeriod)
+    if (tab === 'growth')      loadGrowth(growthPeriod)
+    if (tab === 'engagement' && !engagement && !engagementLoading) loadEngagement()
     if (tab === 'results' && matches.length === 0 && !matchesLoading) loadMatches()
     if (tab === 'bets' && !allBets && !betsLoading) loadBets()
     if (tab === 'coverage' && !betCoverage && !coverageLoading) loadCoverage('scheduled')
@@ -245,6 +252,12 @@ export default function Admin() {
     setPollLoading(true)
     try { setPoll(await api.get('/poll/active')) } catch {}
     finally { setPollLoading(false) }
+  }
+
+  async function loadEngagement() {
+    setEngagementLoading(true)
+    try { setEngagement(await api.get('/admin/engagement', token)) } catch {}
+    finally { setEngagementLoading(false) }
   }
 
   async function loadSuggestions() {
@@ -871,6 +884,253 @@ export default function Admin() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Tab: Engajamento ─────────────────────────── */}
+      {tab === 'engagement' && (
+        <div className="adm-pane fade-in-1">
+          {engagementLoading && <p style={{ padding: 'var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando...</p>}
+
+          {!engagementLoading && engagement && (() => {
+            const s = engagement.summary
+            const segUsers = {
+              today:    engagement.bettors_today,
+              never:    engagement.never_bet,
+              inactive: engagement.inactive_7d,
+              top:      engagement.top_bettors,
+            }
+            const segList = engSegment ? (segUsers[engSegment] || []) : []
+
+            function UserRow({ u, extra }) {
+              return (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--s2) var(--s4)', borderBottom: '1px solid var(--border)', fontSize: 12, fontFamily: 'var(--font-cond)' }}>
+                  <div>
+                    <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{u.name}</span>
+                    {u.username && <span style={{ color: 'var(--text-3)', marginLeft: 4 }}>@{u.username}</span>}
+                    <span style={{ color: 'var(--text-3)', marginLeft: 6, fontSize: 11 }}>{u.email}</span>
+                  </div>
+                  {extra && <span style={{ color: 'var(--text-3)', fontSize: 11 }}>{extra}</span>}
+                </div>
+              )
+            }
+
+            const KPIS = [
+              { label: 'Total usuários',   val: s.total_users,       seg: null,     color: 'var(--text-1)' },
+              { label: 'Apostaram hoje',   val: s.bettors_today,     seg: 'today',  color: 'var(--win)' },
+              { label: 'Ativos 7 dias',    val: s.active_7d,         seg: null,     color: 'var(--accent)' },
+              { label: 'Ativos 30 dias',   val: s.active_30d,        seg: null,     color: 'var(--accent)' },
+              { label: 'Nunca apostaram',  val: s.never_bet,         seg: 'never',  color: 'var(--lose)' },
+              { label: 'Views hoje',       val: s.page_views_today,  seg: null,     color: 'var(--amber)' },
+            ]
+
+            return (
+              <>
+                {/* KPI Strip */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 'var(--s3)', marginBottom: 'var(--s4)' }}>
+                  {KPIS.map(k => (
+                    <div
+                      key={k.label}
+                      className="adm-card"
+                      onClick={() => k.seg ? setEngSegment(engSegment === k.seg ? null : k.seg) : null}
+                      style={{ cursor: k.seg ? 'pointer' : 'default', padding: 'var(--s4)', outline: engSegment === k.seg ? '2px solid var(--accent)' : 'none', transition: 'outline 0.15s' }}
+                    >
+                      <div style={{ fontSize: 26, fontFamily: 'var(--font-display)', color: k.color, lineHeight: 1 }}>{k.val}</div>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--font-cond)', color: 'var(--text-3)', marginTop: 4, letterSpacing: '0.04em' }}>{k.label.toUpperCase()}</div>
+                      {k.seg && <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2 }}>→ ver lista</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Expanded segment list */}
+                {engSegment && (
+                  <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
+                    <div className="adm-card__head">
+                      <span className="adm-card__title">
+                        {engSegment === 'today' && `Apostaram hoje (${segList.length})`}
+                        {engSegment === 'never' && `Nunca apostaram (${segList.length})`}
+                        {engSegment === 'inactive' && `Inativos +7 dias (${segList.length})`}
+                        {engSegment === 'top' && `Top apostadores (${segList.length})`}
+                      </span>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEngSegment(null)}>✕</button>
+                    </div>
+                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                      {segList.length === 0 && <p style={{ padding: 'var(--s4)', color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>Nenhum usuário.</p>}
+                      {engSegment === 'today' && segList.map(u => <UserRow key={u.id} u={u} />)}
+                      {engSegment === 'never' && segList.map(u => <UserRow key={u.id} u={u} extra={`cadastro: ${u.joined_at ? fmtShort(u.joined_at) : '—'}`} />)}
+                      {engSegment === 'inactive' && segList.map(u => <UserRow key={u.id} u={u} extra={`última aposta há ${u.days_inactive}d · ${u.bets_count} palpites`} />)}
+                      {engSegment === 'top' && segList.map(u => <UserRow key={u.id} u={u} extra={`${u.bets_count} palpites · ${u.points} pts`} />)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Activity 7d + Inativos */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
+                  <div className="adm-card">
+                    <div className="adm-card__head"><span className="adm-card__title">Apostas — últimos 7 dias</span></div>
+                    <div style={{ height: 160 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={engagement.activity_7d} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                          <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} tickLine={false} axisLine={false}
+                            tickFormatter={v => { const d = new Date(v + 'T00:00:00'); return `${d.getDate()}/${d.getMonth()+1}` }} />
+                          <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)' }} tickLine={false} axisLine={false} />
+                          <Tooltip contentStyle={{ background: '#0d1b2a', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-mono)' }} />
+                          <Bar dataKey="bets" name="Apostas" fill="var(--accent)" radius={[3,3,0,0]} />
+                          <Area dataKey="unique_users" name="Usuários únicos" stroke="var(--win)" fill="rgba(46,201,128,0.08)" strokeWidth={2} dot={false} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="adm-card" style={{ cursor: 'pointer' }} onClick={() => setEngSegment(engSegment === 'inactive' ? null : 'inactive')}>
+                    <div className="adm-card__head">
+                      <span className="adm-card__title" style={{ color: engagement.inactive_7d.length > 0 ? 'var(--amber)' : 'var(--text-1)' }}>
+                        Inativos +7 dias
+                      </span>
+                      <span className="badge" style={{ background: 'rgba(232,196,74,0.15)', color: 'var(--amber)' }}>{engagement.inactive_7d.length}</span>
+                    </div>
+                    <div style={{ maxHeight: 130, overflowY: 'auto' }}>
+                      {engagement.inactive_7d.slice(0, 5).map(u => (
+                        <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ color: 'var(--text-2)' }}>{u.name}</span>
+                          <span style={{ color: 'var(--text-3)' }}>há {u.days_inactive}d</span>
+                        </div>
+                      ))}
+                      {engagement.inactive_7d.length > 5 && (
+                        <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-cond)' }}>
+                          + {engagement.inactive_7d.length - 5} mais — clique para ver todos
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Última partida finalizada */}
+                {engagement.last_finished_match && (
+                  <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
+                    <div className="adm-card__head">
+                      <div>
+                        <span className="adm-card__title">Última partida finalizada</span>
+                        <span style={{ marginLeft: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+                          {engagement.last_finished_match.label} · G{engagement.last_finished_match.group}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--s2)' }}>
+                        <span className="badge badge-win">{engagement.last_finished_match.total_bets} apostas</span>
+                        <span className="badge badge-group">{engagement.last_finished_match.coverage_pct}%</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s3)' }}>
+                      <div>
+                        <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-cond)', letterSpacing: '0.06em' }}>APOSTARAM ({engagement.last_finished_match.bettors.length})</div>
+                        <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                          {engagement.last_finished_match.bettors.map(b => (
+                            <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)' }}>
+                              <span style={{ color: 'var(--text-2)' }}>{b.name}</span>
+                              <span style={{ color: b.points === 3 ? 'var(--win)' : b.points === 1 ? 'var(--accent)' : b.evaluated ? 'var(--lose)' : 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                                {b.score_a}–{b.score_b} {b.evaluated ? `(${b.points === 3 ? '+3🎯' : b.points === 1 ? '+1✅' : '0❌'})` : '⏳'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--lose)', fontFamily: 'var(--font-cond)', letterSpacing: '0.06em' }}>NÃO APOSTARAM ({engagement.last_finished_match.non_bettors.length})</div>
+                        <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                          {engagement.last_finished_match.non_bettors.map(u => (
+                            <div key={u.id} style={{ padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                              {u.name}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Próxima partida */}
+                {engagement.next_match && (
+                  <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
+                    <div className="adm-card__head">
+                      <div>
+                        <span className="adm-card__title">Próxima partida</span>
+                        <span style={{ marginLeft: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+                          {engagement.next_match.label} · {engagement.next_match.match_date ? fmtShort(engagement.next_match.match_date) : '—'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--s2)' }}>
+                        <span className="badge badge-win">{engagement.next_match.total_bets} apostas</span>
+                        <span className="badge badge-group">{engagement.next_match.coverage_pct}%</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s3)' }}>
+                      <div>
+                        <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-cond)', letterSpacing: '0.06em' }}>JÁ APOSTARAM ({engagement.next_match.bettors.length})</div>
+                        <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                          {engagement.next_match.bettors.map(b => (
+                            <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)' }}>
+                              <span style={{ color: 'var(--text-2)' }}>{b.name}</span>
+                              <span style={{ color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{b.score_a}–{b.score_b}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--amber)', fontFamily: 'var(--font-cond)', letterSpacing: '0.06em' }}>AGUARDANDO PALPITE ({engagement.next_match.non_bettors.length})</div>
+                        <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                          {engagement.next_match.non_bettors.map(u => (
+                            <div key={u.id} style={{ padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                              {u.name}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Top bettors */}
+                <div className="adm-card" style={{ cursor: 'pointer' }} onClick={() => setEngSegment(engSegment === 'top' ? null : 'top')}>
+                  <div className="adm-card__head">
+                    <span className="adm-card__title">Top Apostadores</span>
+                    <span style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-cond)' }}>clique para lista completa</span>
+                  </div>
+                  <div className="adm-table-wrap">
+                    <table className="adm-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Nome</th>
+                          <th className="adm-table__num">Palpites</th>
+                          <th className="adm-table__num">Pts</th>
+                          <th>Último</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {engagement.top_bettors.slice(0, 8).map((u, i) => (
+                          <tr key={u.id}>
+                            <td style={{ color: i < 3 ? 'var(--amber)' : 'var(--text-3)', fontWeight: 700 }}>{i + 1}</td>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>{u.name}</div>
+                              {u.username && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>@{u.username}</div>}
+                            </td>
+                            <td className="adm-table__num" style={{ fontFamily: 'var(--font-mono)' }}>{u.bets_count}</td>
+                            <td className="adm-table__num" style={{ fontFamily: 'var(--font-mono)', color: 'var(--win)' }}>{u.points}</td>
+                            <td style={{ color: 'var(--text-3)', fontSize: 11 }}>{u.last_bet_at ? fmtShort(u.last_bet_at) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right', marginTop: 'var(--s3)' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={loadEngagement}>↻ Atualizar</button>
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
 

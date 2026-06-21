@@ -19,7 +19,7 @@ from config import settings
 from auth_utils import require_admin
 from models import (
     Match, MatchResult, MatchStatus, Team, Player,
-    Bet, Ranking, TournamentSimulation, User, UserRole, Notification
+    Bet, Ranking, TournamentSimulation, User, UserRole, Notification, PageView
 )
 from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate
 from engine.elo import update_ratings
@@ -507,4 +507,193 @@ def stats_growth(
             "most_bet_match":     most_bet_match.match_label if most_bet_match else None,
             "most_bet_match_cnt": int(most_bet_match.cnt) if most_bet_match else 0,
         },
+    }
+
+
+# ── Engagement ─────────────────────────────────────────────────────────────
+
+def _match_snapshot(match: Match, all_users: list, db: Session) -> dict:
+    """Returns bettors + non_bettors for a match."""
+    bets = (
+        db.query(Bet)
+        .filter(Bet.match_id == match.id)
+        .options(joinedload(Bet.user))
+        .all()
+    )
+    bettor_ids = {b.user_id for b in bets}
+    label = (
+        f"{match.team_a.name if match.team_a else '?'} × "
+        f"{match.team_b.name if match.team_b else '?'}"
+    )
+    total_users = len(all_users)
+    return {
+        "match_id": match.id,
+        "label": label,
+        "group": match.group_name,
+        "match_date": match.match_date.isoformat() if match.match_date else None,
+        "status": match.status.value if match.status else None,
+        "total_bets": len(bets),
+        "total_users": total_users,
+        "coverage_pct": round(len(bets) / total_users * 100, 1) if total_users else 0,
+        "bettors": [
+            {
+                "id": b.user_id,
+                "name": b.user.name if b.user else "?",
+                "username": b.user.username if b.user else None,
+                "email": b.user.email if b.user else None,
+                "score_a": b.score_a,
+                "score_b": b.score_b,
+                "points": b.points_earned,
+                "evaluated": b.evaluated_at is not None,
+                "bet_at": b.created_at.isoformat() if b.created_at else None,
+            }
+            for b in sorted(bets, key=lambda x: x.created_at or datetime.min)
+        ],
+        "non_bettors": [
+            {"id": u.id, "name": u.name, "username": u.username, "email": u.email}
+            for u in all_users if u.id not in bettor_ids
+        ],
+    }
+
+
+@router.get("/engagement")
+def engagement(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    ago7  = now - timedelta(days=7)
+    ago30 = now - timedelta(days=30)
+
+    all_users = db.query(User).order_by(User.name.asc()).all()
+    total_users = len(all_users)
+
+    # ── Summary KPIs ──────────────────────────────────────────────
+    bettors_today_ids = {
+        r[0] for r in db.query(Bet.user_id).filter(Bet.created_at >= today).distinct()
+    }
+    bets_today = db.query(func.count(Bet.id)).filter(Bet.created_at >= today).scalar() or 0
+    active_7d_ids = {
+        r[0] for r in db.query(Bet.user_id).filter(Bet.created_at >= ago7).distinct()
+    }
+    active_30d_ids = {
+        r[0] for r in db.query(Bet.user_id).filter(Bet.created_at >= ago30).distinct()
+    }
+    users_with_bets = {r[0] for r in db.query(Bet.user_id).distinct()}
+    never_bet_ids = {u.id for u in all_users} - users_with_bets
+    page_views_today = (
+        db.query(func.count(PageView.id)).filter(PageView.created_at >= today).scalar() or 0
+    )
+
+    # ── Activity 7d (bets per day) ────────────────────────────────
+    activity_rows = db.execute(text("""
+        SELECT
+            DATE(created_at) AS day,
+            COUNT(*) AS bets,
+            COUNT(DISTINCT user_id) AS unique_users
+        FROM bets
+        WHERE created_at >= :since
+        GROUP BY day
+        ORDER BY day
+    """), {"since": ago7}).fetchall()
+    activity_7d = [
+        {"date": str(r.day), "bets": int(r.bets), "unique_users": int(r.unique_users)}
+        for r in activity_rows
+    ]
+
+    # ── Top bettors (by bets count) ───────────────────────────────
+    top_rows = db.execute(text("""
+        SELECT
+            u.id, u.name, u.username, u.email,
+            COUNT(b.id) AS bets_count,
+            COALESCE(SUM(b.points_earned), 0) AS points,
+            MAX(b.created_at) AS last_bet_at
+        FROM users u
+        JOIN bets b ON b.user_id = u.id
+        GROUP BY u.id, u.name, u.username, u.email
+        ORDER BY bets_count DESC
+        LIMIT 15
+    """)).fetchall()
+    top_bettors = [
+        {
+            "id": r.id, "name": r.name, "username": r.username, "email": r.email,
+            "bets_count": int(r.bets_count), "points": int(r.points),
+            "last_bet_at": r.last_bet_at.isoformat() if r.last_bet_at else None,
+        }
+        for r in top_rows
+    ]
+
+    # ── Inactive 7d (have bets but none in last 7 days) ──────────
+    inactive_rows = db.execute(text("""
+        SELECT
+            u.id, u.name, u.username, u.email,
+            COUNT(b.id) AS bets_count,
+            MAX(b.created_at) AS last_bet_at
+        FROM users u
+        JOIN bets b ON b.user_id = u.id
+        GROUP BY u.id, u.name, u.username, u.email
+        HAVING MAX(b.created_at) < :ago7
+        ORDER BY last_bet_at DESC
+    """), {"ago7": ago7}).fetchall()
+    inactive_7d = [
+        {
+            "id": r.id, "name": r.name, "username": r.username, "email": r.email,
+            "bets_count": int(r.bets_count),
+            "last_bet_at": r.last_bet_at.isoformat() if r.last_bet_at else None,
+            "days_inactive": (now - r.last_bet_at).days if r.last_bet_at else None,
+        }
+        for r in inactive_rows
+    ]
+
+    # ── Never bet ─────────────────────────────────────────────────
+    never_bet_users = [
+        {"id": u.id, "name": u.name, "username": u.username, "email": u.email,
+         "joined_at": u.created_at.isoformat() if u.created_at else None}
+        for u in all_users if u.id in never_bet_ids
+    ]
+
+    # ── Bettors today ─────────────────────────────────────────────
+    bettors_today_users = [
+        {"id": u.id, "name": u.name, "username": u.username, "email": u.email}
+        for u in all_users if u.id in bettors_today_ids
+    ]
+
+    # ── Last finished match ───────────────────────────────────────
+    last_finished = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .filter(Match.status == MatchStatus.finished)
+        .order_by(Match.match_date.desc().nullslast(), Match.id.desc())
+        .first()
+    )
+    last_finished_data = _match_snapshot(last_finished, all_users, db) if last_finished else None
+
+    # ── Next scheduled match ──────────────────────────────────────
+    next_match = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .filter(Match.status == MatchStatus.scheduled)
+        .order_by(Match.match_date.asc().nullslast(), Match.id.asc())
+        .first()
+    )
+    next_match_data = _match_snapshot(next_match, all_users, db) if next_match else None
+
+    return {
+        "summary": {
+            "total_users": total_users,
+            "bettors_today": len(bettors_today_ids),
+            "bets_today": int(bets_today),
+            "active_7d": len(active_7d_ids),
+            "active_30d": len(active_30d_ids),
+            "never_bet": len(never_bet_ids),
+            "page_views_today": int(page_views_today),
+        },
+        "bettors_today": bettors_today_users,
+        "never_bet": never_bet_users,
+        "last_finished_match": last_finished_data,
+        "next_match": next_match_data,
+        "activity_7d": activity_7d,
+        "top_bettors": top_bettors,
+        "inactive_7d": inactive_7d,
     }
