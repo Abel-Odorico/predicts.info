@@ -14,7 +14,8 @@ export default function Dashboard() {
   const [liveGames, setLiveGames]     = useState([])
   const [calendar, setCalendar]       = useState([])
   const [topBettors, setTopBettors]   = useState([])
-  const [liveBets, setLiveBets]       = useState({}) // { [match_id]: bets[] }
+  const [liveBets, setLiveBets]       = useState({})
+  const [appVersion, setAppVersion]   = useState(null)
   const [loading, setLoading]         = useState(true)
   const navigate = useNavigate()
 
@@ -41,6 +42,7 @@ export default function Dashboard() {
           if (!mounted) return
           setTopBettors(Array.isArray(bettors) ? bettors.filter(b => b.total_points > 0) : [])
         }).catch(() => {})
+        api.get('/version/latest').then(v => { if (mounted) setAppVersion(v) }).catch(() => {})
         if (token) {
           api.get('/bets/mine', token).then(myBets => {
             if (!mounted || !Array.isArray(myBets)) return
@@ -120,7 +122,23 @@ export default function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap' }}>
           <div>
             <h1 className="page-title">COPA DO MUNDO 2026</h1>
-            <p className="page-subtitle">Motor Elo · xG · Poisson · Monte Carlo</p>
+            <p className="page-subtitle">
+              Motor Elo · xG · Poisson · Monte Carlo
+              {appVersion?.version && (
+                <span style={{
+                  marginLeft: 10, fontFamily: 'var(--font-mono)', fontSize: 10,
+                  color: 'var(--accent)', background: 'rgba(15,122,120,0.12)',
+                  border: '1px solid rgba(15,122,120,0.25)',
+                  padding: '1px 7px', borderRadius: 4, letterSpacing: '0.04em',
+                }}>v{appVersion.version}</span>
+              )}
+            </p>
+            {appVersion?.title && appVersion.version !== '1.0.0' && (
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 2, letterSpacing: '0.04em' }}>
+                🚀 {appVersion.title}
+                <span style={{ marginLeft: 8, color: 'var(--text-4)' }}>· by Peep</span>
+              </p>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', flexShrink: 0 }}>
             <a href="/" className="btn btn-ghost btn-sm" style={{ fontSize: 12 }}>

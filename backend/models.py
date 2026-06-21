@@ -407,3 +407,15 @@ class Notification(Base):
     created_at = Column(DateTime, default=_utcnow, index=True)
 
     user = relationship("User")
+
+
+class AppVersion(Base):
+    __tablename__ = "app_versions"
+
+    id          = Column(Integer, primary_key=True)
+    version     = Column(String(20), nullable=False)
+    title       = Column(String(200), nullable=False)
+    description = Column(String(1000), nullable=True)
+    changes     = Column(JSONB, nullable=True)
+    notified_at = Column(DateTime, nullable=True)
+    created_at  = Column(DateTime, default=_utcnow, index=True)

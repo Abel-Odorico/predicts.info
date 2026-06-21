@@ -54,6 +54,7 @@ const TABS = [
   { id: 'bets',        label: 'Apostas',      icon: '🎯' },
   { id: 'coverage',    label: 'Cobertura',    icon: '📋' },
   { id: 'poll',        label: 'Pesquisa',     icon: '📊' },
+  { id: 'versions',   label: 'Versões',      icon: '🔖' },
 ]
 
 const PERIODS = [
@@ -105,6 +106,12 @@ export default function Admin() {
   const [growthPeriod, setGrowthPeriod] = useState('month')
   const [hiddenSeries, setHiddenSeries] = useState({})
 
+  // Versions
+  const [versions, setVersions]           = useState(null)
+  const [versionsLoading, setVLoading]    = useState(false)
+  const [versionMsg, setVersionMsg]       = useState('')
+  const [vForm, setVForm]                 = useState({ version: '', title: '', description: '', changes: '' })
+
   // Poll
   const [poll, setPoll] = useState(null)
   const [pollLoading, setPollLoading] = useState(false)
@@ -136,6 +143,7 @@ export default function Admin() {
     if (tab === 'bets' && !allBets && !betsLoading) loadBets()
     if (tab === 'coverage' && !betCoverage && !coverageLoading) loadCoverage('scheduled')
     if (tab === 'poll' && !poll && !pollLoading) loadPoll()
+    if (tab === 'versions' && !versions && !versionsLoading) loadVersions()
   }, [tab])
 
   useEffect(() => {
@@ -270,6 +278,39 @@ export default function Admin() {
     setSuggestionsLoading(true)
     try { setSuggestions(await api.get('/admin/poll/suggestions', token)) } catch {}
     finally { setSuggestionsLoading(false) }
+  }
+
+  async function loadVersions() {
+    setVLoading(true)
+    try { setVersions(await api.get('/version/list')) } catch {}
+    finally { setVLoading(false) }
+  }
+
+  async function createVersion() {
+    const changes = vForm.changes.split('\n').map(s => s.trim()).filter(Boolean)
+    if (!vForm.version.trim() || !vForm.title.trim()) { setVersionMsg('Versão e título obrigatórios'); return }
+    setVersionMsg('')
+    try {
+      const v = await api.post('/admin/version', {
+        version: vForm.version.trim(),
+        title: vForm.title.trim(),
+        description: vForm.description.trim() || null,
+        changes,
+      }, token)
+      setVersionMsg(`✓ v${v.version} criada`)
+      setVForm({ version: '', title: '', description: '', changes: '' })
+      setVersions(null)
+      loadVersions()
+    } catch (e) { setVersionMsg(e.message || 'Erro ao criar versão') }
+  }
+
+  async function notifyVersion(id) {
+    setVersionMsg('')
+    try {
+      const r = await api.post(`/admin/version/${id}/notify`, {}, token)
+      setVersionMsg(`✓ ${r.sent} notificação${r.sent !== 1 ? 'ões' : ''} enviada${r.sent !== 1 ? 's' : ''} (v${r.version})`)
+      loadVersions()
+    } catch (e) { setVersionMsg(e.message || 'Erro ao notificar') }
   }
 
   async function notifyPollPending() {
@@ -904,6 +945,123 @@ export default function Admin() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Tab: Versões ─────────────────────────────── */}
+      {tab === 'versions' && (
+        <div className="adm-pane fade-in-1">
+          {/* Form: Nova versão */}
+          <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
+            <div className="adm-card__head"><span className="adm-card__title">Nova versão</span></div>
+            <div style={{ padding: 'var(--s4)', display: 'grid', gap: 'var(--s3)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 'var(--s3)' }}>
+                <div>
+                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>VERSÃO</label>
+                  <input
+                    className="form-input"
+                    placeholder="ex: 1.5.0"
+                    value={vForm.version}
+                    onChange={e => setVForm(f => ({ ...f, version: e.target.value }))}
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>TÍTULO DA ATUALIZAÇÃO</label>
+                  <input
+                    className="form-input"
+                    placeholder="ex: Forma recente das seleções"
+                    value={vForm.title}
+                    onChange={e => setVForm(f => ({ ...f, title: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>DESCRIÇÃO (opcional)</label>
+                <input
+                  className="form-input"
+                  placeholder="Breve descrição da melhoria"
+                  value={vForm.description}
+                  onChange={e => setVForm(f => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>MUDANÇAS (uma por linha)</label>
+                <textarea
+                  className="form-input"
+                  rows={4}
+                  placeholder={"Últimos jogos das seleções no painel de apostas\nFiltros por período no engajamento\nBadge de resultado no dashboard"}
+                  value={vForm.changes}
+                  onChange={e => setVForm(f => ({ ...f, changes: e.target.value }))}
+                  style={{ resize: 'vertical', fontFamily: 'var(--font-cond)', fontSize: 13 }}
+                />
+              </div>
+              {versionMsg && (
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: versionMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)', margin: 0 }}>{versionMsg}</p>
+              )}
+              <button className="btn btn-primary btn-sm" style={{ width: 'fit-content' }} onClick={createVersion}>
+                + Registrar versão
+              </button>
+            </div>
+          </div>
+
+          {/* Histórico */}
+          <div className="adm-card">
+            <div className="adm-card__head">
+              <span className="adm-card__title">Histórico de versões</span>
+              <button className="btn btn-ghost btn-sm" onClick={loadVersions}>↻</button>
+            </div>
+            {versionsLoading && <p style={{ padding: 'var(--s4)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando...</p>}
+            {!versionsLoading && versions?.length === 0 && (
+              <p style={{ padding: 'var(--s4)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Nenhuma versão registrada.</p>
+            )}
+            {versions?.map((v, i) => (
+              <div key={v.id} style={{
+                padding: 'var(--s4) var(--s5)',
+                borderBottom: i < versions.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--s3)', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', flexWrap: 'wrap', marginBottom: 4 }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--accent)', background: 'rgba(15,122,120,0.12)', border: '1px solid rgba(15,122,120,0.25)', padding: '2px 8px', borderRadius: 4 }}>
+                        v{v.version}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{v.title}</span>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                        {v.created_at ? new Date(v.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+                      </span>
+                    </div>
+                    {v.description && (
+                      <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', margin: '0 0 6px' }}>{v.description}</p>
+                    )}
+                    {v.changes?.length > 0 && (
+                      <ul style={{ margin: 0, paddingLeft: 18, listStyle: 'none' }}>
+                        {v.changes.map((c, j) => (
+                          <li key={j} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 2 }}>
+                            <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }}>›</span>{c}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {v.notified_at && (
+                      <div style={{ marginTop: 6, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--win)' }}>
+                        ✓ Notificado em {new Date(v.notified_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
+                  </div>
+                  {!v.notified_at && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--accent)', flexShrink: 0 }}
+                      onClick={() => notifyVersion(v.id)}
+                    >
+                      🔔 Notificar usuários
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

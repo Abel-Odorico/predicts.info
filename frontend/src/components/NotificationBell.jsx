@@ -4,11 +4,13 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 
 const TYPE_META = {
-  bet_exact:    { icon: '🎯', color: '#0f7a78', label: 'Aposta' },
-  bet_correct:  { icon: '✅', color: '#2ec980', label: 'Aposta' },
-  bet_wrong:    { icon: '❌', color: '#e85252', label: 'Aposta' },
-  ranking_top3: { icon: '🏆', color: '#f59e0b', label: 'Ranking' },
-  bet_reminder: { icon: '⏰', color: '#a78bfa', label: 'Lembrete' },
+  bet_exact:      { icon: '🎯', color: '#0f7a78', label: 'Aposta' },
+  bet_correct:    { icon: '✅', color: '#2ec980', label: 'Aposta' },
+  bet_wrong:      { icon: '❌', color: '#e85252', label: 'Aposta' },
+  ranking_top3:   { icon: '🏆', color: '#f59e0b', label: 'Ranking' },
+  bet_reminder:   { icon: '⏰', color: '#a78bfa', label: 'Lembrete' },
+  poll_reminder:  { icon: '📊', color: '#06b6d4', label: 'Pesquisa' },
+  version_update: { icon: '🚀', color: '#10b981', label: 'Update' },
 }
 
 const FILTERS = [
@@ -16,6 +18,7 @@ const FILTERS = [
   { id: 'bet',      label: '⚽ Apostas' },
   { id: 'ranking',  label: '🏆 Ranking' },
   { id: 'reminder', label: '⏰ Lembretes' },
+  { id: 'update',   label: '🚀 Updates' },
 ]
 
 function relTime(iso) {
@@ -39,7 +42,8 @@ function filterByType(items, filter) {
   if (filter === 'all') return items
   if (filter === 'bet')      return items.filter(n => n.type.startsWith('bet_e') || n.type.startsWith('bet_c') || n.type.startsWith('bet_w'))
   if (filter === 'ranking')  return items.filter(n => n.type === 'ranking_top3')
-  if (filter === 'reminder') return items.filter(n => n.type === 'bet_reminder')
+  if (filter === 'reminder') return items.filter(n => n.type === 'bet_reminder' || n.type === 'poll_reminder')
+  if (filter === 'update')   return items.filter(n => n.type === 'version_update')
   return items
 }
 

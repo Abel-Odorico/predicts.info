@@ -21,6 +21,7 @@ from routers import notifications as notifications_router
 from routers import push as push_router
 from routers import achievements as achievements_router
 from routers import match_comments as match_comments_router
+from routers import version as version_router
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
 
@@ -210,6 +211,17 @@ def _run_migrations():
             )
             """,
             "CREATE INDEX IF NOT EXISTS ix_match_comments_match ON match_comments (match_id)",
+            """
+            CREATE TABLE IF NOT EXISTS app_versions (
+                id SERIAL PRIMARY KEY,
+                version VARCHAR(20) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                description VARCHAR(1000),
+                changes JSONB,
+                notified_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+            """,
         ]:
             try:
                 conn.execute(text(ddl))
@@ -268,6 +280,7 @@ app.include_router(notifications_router.router, prefix="/api")
 app.include_router(push_router.router,          prefix="/api")
 app.include_router(achievements_router.router,  prefix="/api")
 app.include_router(match_comments_router.router, prefix="/api")
+app.include_router(version_router.router,        prefix="/api")
 
 
 @app.get("/api")
