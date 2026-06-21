@@ -63,6 +63,7 @@ CONFIG_KEYS = (
     "analysis_provider",
     "openrouter_api_key", "openrouter_model",
     "gemini_api_key",     "gemini_model",
+    "analysis_prompt_template",
 )
 
 
@@ -91,6 +92,7 @@ def _get_config(db: Session) -> dict:
         "openrouter_model":  c.get("openrouter_model", DEFAULT_OR_MODEL),
         "gemini_key":        c.get("gemini_api_key", ""),
         "gemini_model":      c.get("gemini_model", DEFAULT_GEMINI_MODEL),
+        "prompt_template":   c.get("analysis_prompt_template", "") or "",
     }
 
 
@@ -190,84 +192,134 @@ def _call_llm(cfg: dict, prompt: str) -> tuple[dict, str]:
         return _call_openrouter(cfg["openrouter_key"], model, prompt), f"openrouter/{model}"
 
 
+DEFAULT_PROMPT_TEMPLATE = (
+    "Você é um jornalista esportivo sênior especializado em futebol internacional, "
+    "com décadas de cobertura de Copas do Mundo e profundo conhecimento tático.\n"
+    "Analise a partida {team_a_name} × {team_b_name} com rigor técnico e paixão futebolística.\n\n"
+    "REGRAS OBRIGATÓRIAS:\n"
+    "- Escreva em PORTUGUÊS BRASILEIRO fluente, estilo ESPN/Globo Esporte\n"
+    "- Use os DADOS FORNECIDOS como base factual; enriqueça com conhecimento tático real de cada seleção\n"
+    "- Cite jogadores específicos da convocação com posição e função real (ex: 'Vinicius Jr., ponta-esquerda veloz que explora espaços')\n"
+    "- Mencione sistemas táticos concretos (4-3-3, 4-2-3-1, 3-5-2, etc.) com base no estilo reconhecido de cada CT\n"
+    "- Contextualize no grupo/fase: classificação atual, o que cada resultado significa\n"
+    "- Seja CIRÚRGICO em predições: placar, quem marca, em que fase do jogo\n"
+    "- Fale de duelos individuais relevantes: qual zagueiro vai marcar qual atacante\n\n"
+    "## DADOS DA PARTIDA\n"
+    "Fase: {phase} | Grupo: {group_name} | Data: {match_date}\n\n"
+    "## {team_a_name} ({team_a_code}) — ELO {team_a_elo}\n"
+    "Histórico Copa: {team_a_wc_apps} participações | Melhor: {team_a_best}\n"
+    "Ataque: {team_a_avg_gf} gols/jogo | xG {team_a_xg} | Defesa: {team_a_avg_ga} sofridos | xGA {team_a_xga}\n"
+    "Forma — últimos 5: {team_a_form5} | últimos 10: {team_a_form10}\n"
+    "Convocados:\n{team_a_players}\n"
+    "Resultados nesta Copa:\n{team_a_results}\n\n"
+    "## {team_b_name} ({team_b_code}) — ELO {team_b_elo}\n"
+    "Histórico Copa: {team_b_wc_apps} participações | Melhor: {team_b_best}\n"
+    "Ataque: {team_b_avg_gf} gols/jogo | xG {team_b_xg} | Defesa: {team_b_avg_ga} sofridos | xGA {team_b_xga}\n"
+    "Forma — últimos 5: {team_b_form5} | últimos 10: {team_b_form10}\n"
+    "Convocados:\n{team_b_players}\n"
+    "Resultados nesta Copa:\n{team_b_results}\n"
+    "{mc_probs}\n"
+    "## SAÍDA — JSON PURO (sem markdown, sem ```):\n"
+    '{{\n'
+    '  "overview": "3 parágrafos: (1) contexto e o que está em jogo — mencione pontos na tabela, situação de classificação; '
+    '(2) histórico entre as seleções em Copas — confrontos anteriores, rivalidade, surpresas históricas; '
+    '(3) estado atual neste torneio — quem entrou bem, quem decepcionou até aqui",\n'
+    '  "team_a": {{\n'
+    '    "tactical": "Sistema tático específico com nome (ex: 4-3-3 de pressão alta), como se organizam defensiva e ofensivamente, '
+    'transição, posse ou contra-ataque, set-pieces",\n'
+    '    "key_players": [\n'
+    '      "Nome Completo (posição real) — papel específico neste jogo e por que é determinante",\n'
+    '      "Nome Completo (posição) — função tática e ameaça concreta",\n'
+    '      "Nome Completo (posição) — impacto esperado"\n'
+    '    ],\n'
+    '    "form": "Desempenho nos jogos desta Copa: gols, assistências, consistência defensiva, '
+    'lesões confirmadas ou dúvidas, rotação de titulares esperada",\n'
+    '    "strengths": "3-4 qualidades concretas no contexto deste confronto — o que fazem melhor que o adversário",\n'
+    '    "weaknesses": "2-3 vulnerabilidades reais que {team_b_name} pode explorar hoje — seja cirúrgico"\n'
+    '  }},\n'
+    '  "team_b": {{\n'
+    '    "tactical": "...",\n'
+    '    "key_players": ["...", "...", "..."],\n'
+    '    "form": "...",\n'
+    '    "strengths": "...",\n'
+    '    "weaknesses": "2-3 vulnerabilidades que {team_a_name} pode explorar"\n'
+    '  }},\n'
+    '  "matchup": "2 parágrafos: (1) batalha tática principal — onde o jogo será decidido '
+    '(duelos no meio, velocidade vs. bloco defensivo, bola aérea, bola parada), cite duelos individuais concretos; '
+    '(2) fator X — o que pode mudar o jogo inesperadamente (substituição, expulsão, gol contra, árbitro)",\n'
+    '  "prediction": "2 parágrafos: (1) como o jogo deve se desenvolver fase por fase — '
+    'quem controla o início, quando surge a primeira grande chance, como o placar tende a se abrir; '
+    '(2) placar mais provável com justificativa estatística, citar quem marca e em que período do jogo",\n'
+    '  "verdict": "Uma frase direta e opinativa: ex. \'{team_a_name} favorita por qualidade no meio-campo\' | '
+    '\'Equilíbrio total — clássico pode terminar no detalhe\' | \'{team_b_name} surpreende com velocidade no contra-ataque\'"\n'
+    '}}'
+)
+
+
 # ─── Prompt builder ───────────────────────────────────────────────────────────
 
-def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, recent_a, recent_b, mc_prob) -> str:
+def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, recent_a, recent_b, mc_prob, custom_template: str = "") -> str:
     def fmt_players(players):
         pos_order = {"GK": 0, "DF": 1, "MF": 2, "FW": 3}
+        pos_label = {"GK": "GOL", "DF": "DEF", "MF": "MEI", "FW": "ATA"}
         sorted_p = sorted(players, key=lambda p: pos_order.get(p.position, 9))
-        return "\n".join(f"  - {p.name} ({p.position})" for p in sorted_p[:12])
+        lines, cur_pos = [], None
+        for p in sorted_p[:16]:
+            lbl = pos_label.get(p.position, p.position)
+            if lbl != cur_pos:
+                lines.append(f"  [{lbl}]")
+                cur_pos = lbl
+            lines.append(f"    • {p.name}")
+        return "\n".join(lines)
 
     def fmt_results(results):
         if not results:
-            return "  Sem dados disponíveis"
-        return "\n".join(f"  - {r['date']}: {r['team_a']} {r['score_a']}x{r['score_b']} {r['team_b']}" for r in results[:5])
-
-    prob_str = ""
-    if mc_prob:
-        prob_str = (
-            f"\n## Probabilidades Monte Carlo (1M simulações)\n"
-            f"  - Vitória {team_a.name}: {mc_prob.get('prob_a', 0):.1f}%\n"
-            f"  - Empate: {mc_prob.get('prob_draw', 0):.1f}%\n"
-            f"  - Vitória {team_b.name}: {mc_prob.get('prob_b', 0):.1f}%\n"
+            return "  Sem dados disponíveis nesta Copa"
+        return "\n".join(
+            f"  {r['date']}: {r['team_a']} {r['score_a']}–{r['score_b']} {r['team_b']}"
+            for r in results[:5]
         )
 
-    return f"""Você é um especialista em futebol com profundo conhecimento da Copa do Mundo 2026. Analise a partida abaixo com base nos dados estruturados fornecidos e no seu conhecimento atual dos times.
+    mc_probs = ""
+    if mc_prob:
+        mc_probs = (
+            f"## Probabilidades Monte Carlo (1.000.000 simulações)\n"
+            f"  {team_a.name} {mc_prob.get('prob_a', 0):.1f}% | "
+            f"Empate {mc_prob.get('prob_draw', 0):.1f}% | "
+            f"{team_b.name} {mc_prob.get('prob_b', 0):.1f}%\n"
+        )
 
-Produza uma análise RICA, DETALHADA e APAIXONANTE em PORTUGUÊS BRASILEIRO, como se fosse um artigo de pré-jogo de alto nível. Use os dados para embasar a análise, mas vá além — cite jogadores-chave reais, estilo de jogo, tendências recentes, contexto histórico.
-
-## DADOS DA PARTIDA
-Fase: {match_row.get('phase','group')}
-Grupo: {match_row.get('group_name') or 'mata-mata'}
-Data: {match_row.get('match_date')}
-
-## {team_a.name.upper()} ({team_a.code})
-- Elo: {team_a.elo_rating or 'N/D'} | Conf: {team_a.confederation}
-- Aparições em Copas: {team_a.world_cup_appearances or 'N/D'} | Melhor resultado: {team_a.best_wc_result or 'N/D'}
-- Média gols marcados: {team_a.avg_goals_for or 'N/D'} | Média sofridos: {team_a.avg_goals_against or 'N/D'}
-- xG médio: {team_a.xg_for or 'N/D'} | xGA: {team_a.xg_against or 'N/D'}
-- Forma recente (últimos 5): {team_a.form_5 or 'N/D'} | últimos 10: {team_a.form_10 or 'N/D'}
-Convocados:
-{fmt_players(players_a)}
-
-Resultados recentes:
-{fmt_results(recent_a)}
-
-## {team_b.name.upper()} ({team_b.code})
-- Elo: {team_b.elo_rating or 'N/D'} | Conf: {team_b.confederation}
-- Aparições em Copas: {team_b.world_cup_appearances or 'N/D'} | Melhor resultado: {team_b.best_wc_result or 'N/D'}
-- Média gols marcados: {team_b.avg_goals_for or 'N/D'} | Média sofridos: {team_b.avg_goals_against or 'N/D'}
-- xG médio: {team_b.xg_for or 'N/D'} | xGA: {team_b.xg_against or 'N/D'}
-- Forma recente (últimos 5): {team_b.form_5 or 'N/D'} | últimos 10: {team_b.form_10 or 'N/D'}
-Convocados:
-{fmt_players(players_b)}
-
-Resultados recentes:
-{fmt_results(recent_b)}
-{prob_str}
-## FORMATO DE SAÍDA OBRIGATÓRIO (JSON puro, sem markdown, sem ```):
-{{
-  "overview": "2-3 parágrafos apresentando o confronto, contexto histórico, o que está em jogo",
-  "team_a": {{
-    "tactical": "Análise tática profunda — sistema, estilo, como se comporta defensiva e ofensivamente",
-    "key_players": ["Nome (posição) — por que é crucial neste jogo", "..."],
-    "form": "Análise da forma recente, moral, lesões, contexto",
-    "strengths": "Pontos fortes principais no contexto deste jogo",
-    "weaknesses": "Vulnerabilidades que o adversário pode explorar"
-  }},
-  "team_b": {{
-    "tactical": "...",
-    "key_players": ["..."],
-    "form": "...",
-    "strengths": "...",
-    "weaknesses": "..."
-  }},
-  "matchup": "2 parágrafos: como o estilo de cada time interage, qual é o fator X, como tende a ser o jogo",
-  "prediction": "2 parágrafos de predição fundamentada. Seja específico: mencione placar mais provável, como tende a acontecer os gols",
-  "verdict": "Frase curta: ex. 'Favorito claro: {team_a.name}' ou 'Equilíbrio técnico' ou 'Desequilíbrio técnico'"
-}}
-
-Retorne SOMENTE o JSON. Nenhum outro texto."""
+    template = custom_template.strip() if custom_template else DEFAULT_PROMPT_TEMPLATE
+    return template.format(
+        team_a_name=team_a.name, team_a_code=team_a.code,
+        team_a_elo=team_a.elo_rating or "N/D",
+        team_a_wc_apps=team_a.world_cup_appearances or "N/D",
+        team_a_best=team_a.best_wc_result or "N/D",
+        team_a_avg_gf=team_a.avg_goals_for or "N/D",
+        team_a_avg_ga=team_a.avg_goals_against or "N/D",
+        team_a_xg=team_a.xg_for or "N/D",
+        team_a_xga=team_a.xg_against or "N/D",
+        team_a_form5=team_a.form_5 or "N/D",
+        team_a_form10=team_a.form_10 or "N/D",
+        team_a_players=fmt_players(players_a),
+        team_a_results=fmt_results(recent_a),
+        team_b_name=team_b.name, team_b_code=team_b.code,
+        team_b_elo=team_b.elo_rating or "N/D",
+        team_b_wc_apps=team_b.world_cup_appearances or "N/D",
+        team_b_best=team_b.best_wc_result or "N/D",
+        team_b_avg_gf=team_b.avg_goals_for or "N/D",
+        team_b_avg_ga=team_b.avg_goals_against or "N/D",
+        team_b_xg=team_b.xg_for or "N/D",
+        team_b_xga=team_b.xg_against or "N/D",
+        team_b_form5=team_b.form_5 or "N/D",
+        team_b_form10=team_b.form_10 or "N/D",
+        team_b_players=fmt_players(players_b),
+        team_b_results=fmt_results(recent_b),
+        phase=match_row.get("phase", "group"),
+        group_name=match_row.get("group_name") or "mata-mata",
+        match_date=str(match_row.get("match_date", ""))[:10],
+        mc_probs=mc_probs,
+    )
 
 
 # ─── Core generator ───────────────────────────────────────────────────────────
@@ -328,7 +380,8 @@ def _generate_one(match_id: int, db: Session, cfg: dict) -> dict:
     prompt          = _build_prompt(match_row, team_a, team_b, players_a, players_b,
                                     _get_recent_results(db, team_a.code),
                                     _get_recent_results(db, team_b.code),
-                                    _get_mc_prob(db, match_id))
+                                    _get_mc_prob(db, match_id),
+                                    cfg.get("prompt_template", ""))
     content, model_tag = _call_llm(cfg, prompt)
 
     db.execute(
@@ -404,21 +457,55 @@ def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require
         "gemini_has_key":         bool(cfg["gemini_key"]),
         "gemini_model":           cfg["gemini_model"],
         "gemini_models":          GEMINI_MODELS,
+        "prompt_template":        cfg["prompt_template"],
+        "default_prompt":         DEFAULT_PROMPT_TEMPLATE,
     }
 
 
 class AnalysisConfigIn(BaseModel):
-    provider:       str = DEFAULT_PROVIDER
-    openrouter_key: str = ""
+    provider:        str = DEFAULT_PROVIDER
+    openrouter_key:  str = ""
     openrouter_model: str = DEFAULT_OR_MODEL
-    gemini_key:     str = ""
-    gemini_model:   str = DEFAULT_GEMINI_MODEL
+    gemini_key:      str = ""
+    gemini_model:    str = DEFAULT_GEMINI_MODEL
+    prompt_template: str = ""
+
+
+def _save_config_full(db: Session, body: "AnalysisConfigIn"):
+    pairs = [
+        ("analysis_provider",        body.provider),
+        ("openrouter_model",         body.openrouter_model),
+        ("gemini_model",             body.gemini_model),
+        ("analysis_prompt_template", body.prompt_template),
+    ]
+    if body.openrouter_key:
+        pairs.append(("openrouter_api_key", body.openrouter_key))
+    if body.gemini_key:
+        pairs.append(("gemini_api_key", body.gemini_key))
+    for key, val in pairs:
+        db.execute(
+            text("INSERT INTO site_config (key,value) VALUES (:k,:v) ON CONFLICT (key) DO UPDATE SET value=:v"),
+            {"k": key, "v": val},
+        )
+    db.commit()
 
 
 @router.post("/admin/analysis/config")
 def save_analysis_config(body: AnalysisConfigIn, db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    _save_config(db, body.provider, body.openrouter_key, body.openrouter_model, body.gemini_key, body.gemini_model)
+    _save_config_full(db, body)
     return {"ok": True}
+
+
+@router.get("/admin/analysis/{match_id}/content")
+def get_analysis_content(match_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    row = db.execute(
+        text("SELECT content, model_used, generated_at FROM match_analyses WHERE match_id = :mid"),
+        {"mid": match_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Sem análise para esta partida")
+    content = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+    return {"match_id": match_id, "content": content, "model_used": row[1], "generated_at": str(row[2])}
 
 
 @router.get("/admin/analysis/status")

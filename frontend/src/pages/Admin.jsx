@@ -162,18 +162,34 @@ export default function Admin() {
   const [analysisMsg, setAnalysisMsg]         = useState('')
   const [generatingId, setGeneratingId]       = useState(null)
   const [generatingAll, setGeneratingAll]     = useState(false)
+  const [viewingAnalysis, setViewingAnalysis] = useState(null)  // { match_id, content, model_used }
+  const [promptOpen, setPromptOpen]           = useState(false)
   const [aForm, setAForm] = useState({
     provider: 'openrouter',
     openrouter_key: '', openrouter_model: '',
     gemini_key: '',     gemini_model: '',
+    prompt_template: '',
   })
 
   async function loadAnalysisConfig() {
     try {
       const cfg = await api.get('/admin/analysis/config', token)
       setAnalysisConfig(cfg)
-      setAForm(f => ({ ...f, provider: cfg.provider, openrouter_model: cfg.openrouter_model, gemini_model: cfg.gemini_model }))
+      setAForm(f => ({
+        ...f,
+        provider: cfg.provider,
+        openrouter_model: cfg.openrouter_model,
+        gemini_model: cfg.gemini_model,
+        prompt_template: cfg.prompt_template || '',
+      }))
     } catch {}
+  }
+
+  async function viewAnalysis(matchId) {
+    try {
+      const d = await api.get(`/admin/analysis/${matchId}/content`, token)
+      setViewingAnalysis({ match_id: matchId, ...d })
+    } catch (err) { alert(err.message) }
   }
 
   async function loadAnalysisStatus() {
@@ -2116,6 +2132,40 @@ export default function Admin() {
                   </div>
                 </div>
 
+                {/* Prompt editor */}
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                  <button type="button"
+                    onClick={() => setPromptOpen(v => !v)}
+                    style={{ width: '100%', background: 'var(--bg-overlay)', border: 'none', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>
+                    <span>📝 Editor de Prompt</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{promptOpen ? '▲ fechar' : '▼ editar'}</span>
+                  </button>
+                  {promptOpen && (
+                    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', lineHeight: 1.5 }}>
+                        Customize o prompt enviado ao modelo. Variáveis disponíveis: <code style={{ background: 'var(--bg-overlay)', padding: '1px 4px', borderRadius: 3 }}>{'{{team_a_name}}'}</code>, <code style={{ background: 'var(--bg-overlay)', padding: '1px 4px', borderRadius: 3 }}>{'{{team_b_name}}'}</code>, <code style={{ background: 'var(--bg-overlay)', padding: '1px 4px', borderRadius: 3 }}>{'{{team_a_elo}}'}</code>, <code style={{ background: 'var(--bg-overlay)', padding: '1px 4px', borderRadius: 3 }}>{'{{mc_probs}}'}</code>, etc. Deixe vazio para usar o prompt padrão.
+                      </div>
+                      <textarea
+                        rows={14}
+                        value={aForm.prompt_template}
+                        onChange={e => setAForm(f => ({ ...f, prompt_template: e.target.value }))}
+                        placeholder="Deixe vazio para usar prompt padrão…"
+                        style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.6, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+                      />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" className="btn btn-ghost btn-sm"
+                          onClick={() => setAForm(f => ({ ...f, prompt_template: analysisConfig?.default_prompt || '' }))}>
+                          📋 Copiar prompt padrão
+                        </button>
+                        <button type="button" className="btn btn-ghost btn-sm"
+                          onClick={() => setAForm(f => ({ ...f, prompt_template: '' }))}>
+                          🔄 Resetar (usar padrão)
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button className="btn btn-primary btn-sm" disabled={analysisSaving} type="submit">
                     {analysisSaving ? 'Salvando…' : '💾 Salvar'}
@@ -2128,6 +2178,53 @@ export default function Admin() {
               </form>
             </div>
           </div>
+
+          {/* Modal: visualizar análise */}
+          {viewingAnalysis && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, overflowY: 'auto', padding: '24px 16px' }}
+              onClick={e => { if (e.target === e.currentTarget) setViewingAnalysis(null) }}>
+              <div style={{ maxWidth: 720, margin: '0 auto', background: 'var(--bg-card)', borderRadius: 12, padding: 24, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, color: 'var(--text-1)' }}>Análise — Partida #{viewingAnalysis.match_id}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>{viewingAnalysis.model_used} · {viewingAnalysis.generated_at?.slice(0,19)}</div>
+                  </div>
+                  <button type="button" onClick={() => setViewingAnalysis(null)}
+                    style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-3)' }}>✕</button>
+                </div>
+                {viewingAnalysis.content && (() => {
+                  const c = viewingAnalysis.content
+                  const sH = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4, marginTop: 14 }
+                  const sT = { fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }
+                  return (
+                    <div>
+                      {c.verdict && <div style={{ background: 'rgba(15,122,120,0.12)', border: '1px solid rgba(15,122,120,0.35)', borderRadius: 8, padding: '8px 14px', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--accent)', marginBottom: 12 }}>{c.verdict}</div>}
+                      {c.overview && <><div style={sH}>📋 Panorama</div><div style={sT}>{c.overview}</div></>}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
+                        {[['team_a', 'Time A'], ['team_b', 'Time B']].map(([key, label]) => c[key] ? (
+                          <div key={key} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
+                            <div style={{ ...sH, marginTop: 0 }}>{label}</div>
+                            {c[key].tactical && <><div style={{ ...sH, fontSize: 10 }}>Tática</div><div style={sT}>{c[key].tactical}</div></>}
+                            {c[key].strengths && <><div style={{ ...sH, fontSize: 10 }}>✅ Forças</div><div style={sT}>{c[key].strengths}</div></>}
+                            {c[key].weaknesses && <><div style={{ ...sH, fontSize: 10 }}>⚠️ Fraquezas</div><div style={sT}>{c[key].weaknesses}</div></>}
+                            {c[key].form && <><div style={{ ...sH, fontSize: 10 }}>📈 Forma</div><div style={sT}>{c[key].form}</div></>}
+                            {c[key].key_players?.length > 0 && <>
+                              <div style={{ ...sH, fontSize: 10 }}>⭐ Jogadores-chave</div>
+                              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                                {c[key].key_players.map((p, i) => <li key={i} style={sT}>{p}</li>)}
+                              </ul>
+                            </>}
+                          </div>
+                        ) : null)}
+                      </div>
+                      {c.matchup && <><div style={sH}>⚔️ Confronto tático</div><div style={sT}>{c.matchup}</div></>}
+                      {c.prediction && <><div style={sH}>🔮 Predição</div><div style={sT}>{c.prediction}</div></>}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
 
           {/* Status table */}
           <div className="adm-card">
@@ -2146,12 +2243,13 @@ export default function Admin() {
                     <th>Fase</th>
                     <th>Status</th>
                     <th>Modelo</th>
-                    <th></th>
+                    <th style={{ width: 90 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {(analysisStatus || []).map(r => (
-                    <tr key={r.match_id}>
+                    <tr key={r.match_id} style={{ cursor: r.has_analysis ? 'pointer' : 'default' }}
+                      onClick={() => r.has_analysis && viewAnalysis(r.match_id)}>
                       <td style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, whiteSpace: 'nowrap' }}>
                         {r.team_a_code} × {r.team_b_code}
                       </td>
@@ -2167,10 +2265,10 @@ export default function Admin() {
                           : <span style={{ color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>pendente</span>
                         }
                       </td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {r.model_used?.split('/').pop() || '—'}
                       </td>
-                      <td>
+                      <td onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 4 }}>
                         <button
                           className="btn btn-ghost btn-sm"
                           style={{ fontSize: 11, padding: '4px 10px' }}
@@ -2179,6 +2277,12 @@ export default function Admin() {
                         >
                           {generatingId === r.match_id ? '…' : r.has_analysis ? '↻' : '⚡'}
                         </button>
+                        {r.has_analysis && (
+                          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 8px' }}
+                            onClick={() => viewAnalysis(r.match_id)}>
+                            👁
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
