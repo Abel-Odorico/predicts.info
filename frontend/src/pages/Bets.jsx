@@ -257,7 +257,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
   const [communityLoading, setCommunityLoading] = useState(false)
   const [analysis, setAnalysis]         = useState(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
-  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(true)
 
   const msBefore  = parseUtcMatchDate(match.match_date).getTime() - now
   const stillOpen = match.is_open !== undefined ? match.is_open : msBefore > 0
@@ -482,11 +482,19 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
           </div>
 
           {/* Análise IA */}
-          {analysisLoading ? (
-            <div style={{ padding: '10px 0', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Carregando análise…</div>
-          ) : analysis ? (
-            <MatchAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
-          ) : null}
+          <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            {analysisLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span> Carregando análise IA…
+              </div>
+            ) : analysis ? (
+              <MatchAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
+            ) : (
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                🤖 <span>Análise IA não disponível para esta partida</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -917,7 +925,7 @@ function MatchAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
   const s = { fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }
   const h = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--accent)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 4 }
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+    <div>
       <button onClick={onToggle} style={{
         display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
         cursor: 'pointer', padding: 0, fontFamily: 'var(--font-cond)', fontSize: 13,

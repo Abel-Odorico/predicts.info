@@ -28,17 +28,20 @@ export default function MatchSim() {
   const [betMsg, setBetMsg] = useState('')
   const [existingBet, setExistingBet] = useState(null)
   const [n, setN] = useState(1000000)
-  const [analysis, setAnalysis]   = useState(null)
-  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [analysis, setAnalysis]         = useState(null)
+  const [analysisLoading, setAnalysisLoading] = useState(true)
+  const [showAnalysis, setShowAnalysis] = useState(true)
   const betRef = useRef(null)
 
   useEffect(() => { fetchAll() }, [id])
 
   useEffect(() => {
     if (!id) return
+    setAnalysisLoading(true)
     api.get(`/matches/${id}/analysis`)
       .then(d => setAnalysis(d.content))
       .catch(() => setAnalysis(null))
+      .finally(() => setAnalysisLoading(false))
   }, [id])
 
   async function fetchAll() {
@@ -289,11 +292,15 @@ export default function MatchSim() {
           )}
         </div>
       </div>
-      {analysis && (
-        <div style={{ marginTop: 'var(--s4)' }}>
+      <div style={{ marginTop: 'var(--s4)', borderTop: '1px solid var(--border)', paddingTop: 'var(--s4)' }}>
+        {analysisLoading ? (
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>⏳ Carregando análise IA…</div>
+        ) : analysis ? (
           <SimAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
-        </div>
-      )}
+        ) : (
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>🤖 Análise IA não disponível para esta partida</div>
+        )}
+      </div>
       <MatchComments matchId={match?.id} />
     </div>
   )
