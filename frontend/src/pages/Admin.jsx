@@ -7,6 +7,7 @@ import {
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
+import ImageEditorModal from '../components/ImageEditorModal'
 
 function normalizeDate(value) {
   if (!value) return null
@@ -129,28 +130,42 @@ export default function Admin() {
   const [iconUploading, setIconUploading] = useState(false)
   const [iconMsg, setIconMsg] = useState('')
   const [iconPreview, setIconPreview] = useState(null)
+  const [iconEditorSrc, setIconEditorSrc] = useState(null)
+  const [iconTimestamp, setIconTimestamp] = useState(Date.now())
 
-  async function uploadIcon(e) {
+  function openIconEditor(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    setIconPreview(URL.createObjectURL(file))
+    e.target.value = ''
+    const url = URL.createObjectURL(file)
+    setIconEditorSrc(url)
+    setIconMsg('')
+  }
+
+  async function saveIcon(blob) {
     setIconUploading(true)
     setIconMsg('')
     try {
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', new File([blob], 'icon.png', { type: 'image/png' }))
       const res = await fetch('/api/admin/pwa/icon', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
       })
       const data = await res.json()
-      if (res.ok) setIconMsg('✓ Ícone atualizado com sucesso')
-      else setIconMsg(`Erro: ${data.detail || 'falha no upload'}`)
+      if (res.ok) {
+        setIconMsg(`✓ Ícone salvo — ${data.sizes?.length || 0} arquivos gerados`)
+        setIconPreview(URL.createObjectURL(blob))
+        setIconTimestamp(Date.now())
+      } else {
+        setIconMsg(`Erro: ${data.detail || 'falha no upload'}`)
+      }
     } catch {
       setIconMsg('Erro ao enviar arquivo')
     } finally {
       setIconUploading(false)
+      setIconEditorSrc(null)
     }
   }
 
@@ -1105,78 +1120,91 @@ export default function Admin() {
       {/* ── Tab: Ícone PWA ───────────────────────────── */}
       {tab === 'pwa' && (
         <div className="adm-pane fade-in-1">
+          {iconEditorSrc && (
+            <ImageEditorModal
+              src={iconEditorSrc}
+              loading={iconUploading}
+              onConfirm={saveIcon}
+              onClose={() => { setIconEditorSrc(null); setIconMsg('') }}
+            />
+          )}
           <div className="adm-card">
             <div className="adm-card__head">
-              <span className="adm-card__title">Ícone PWA (tela inicial)</span>
+              <span className="adm-card__title">Ícone — PWA, favicon e logo</span>
             </div>
             <div style={{ padding: 'var(--s5)', display: 'grid', gap: 'var(--s5)' }}>
 
-              {/* Preview atual */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s5)', flexWrap: 'wrap' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.06em', marginBottom: 8 }}>ATUAL</p>
-                  <img
-                    src={`/icon-192.png?t=${Date.now()}`}
-                    alt="Ícone atual"
-                    style={{ width: 96, height: 96, borderRadius: 20, border: '2px solid var(--border)', display: 'block' }}
-                  />
-                </div>
+              {/* Previews */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--s5)', flexWrap: 'wrap' }}>
+                {[
+                  { label: 'PWA 192px', size: 96, radius: 20, src: `/icon-192.png?t=${iconTimestamp}` },
+                  { label: 'iOS 180px', size: 80, radius: 18, src: `/apple-touch-icon.png?t=${iconTimestamp}` },
+                  { label: 'Favicon 32px', size: 48, radius: 6, src: `/favicon-32x32.png?t=${iconTimestamp}` },
+                  { label: 'Favicon 16px', size: 32, radius: 4, src: `/favicon-16x16.png?t=${iconTimestamp}` },
+                ].map(({ label, size, radius, src }) => (
+                  <div key={label} style={{ textAlign: 'center' }}>
+                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.06em', marginBottom: 6 }}>{label}</p>
+                    <img src={src} alt={label}
+                      style={{ width: size, height: size, borderRadius: radius, border: '1px solid var(--border)', display: 'block', background: 'var(--bg-2)' }} />
+                  </div>
+                ))}
                 {iconPreview && (
                   <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.06em', marginBottom: 8 }}>NOVO</p>
-                    <img
-                      src={iconPreview}
-                      alt="Preview novo ícone"
-                      style={{ width: 96, height: 96, borderRadius: 20, border: '2px solid var(--accent)', display: 'block' }}
-                    />
+                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--accent)', letterSpacing: '0.06em', marginBottom: 6 }}>✓ NOVO</p>
+                    <img src={iconPreview} alt="Novo ícone"
+                      style={{ width: 96, height: 96, borderRadius: 20, border: '2px solid var(--accent)', display: 'block' }} />
                   </div>
                 )}
               </div>
 
-              {/* Instruções */}
-              <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '12px 14px', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
-                <strong style={{ color: 'var(--text-2)' }}>Formato recomendado:</strong> PNG quadrado, mínimo 192×192px, fundo opaco (sem transparência no iOS).
-                O sistema redimensiona automaticamente para 192px e 180px.
+              {/* Arquivos gerados */}
+              <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '10px 14px' }}>
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.7 }}>
+                  Um upload gera automaticamente:{' '}
+                  {['icon-192.png', 'apple-touch-icon.png', 'favicon-32x32.png', 'favicon-16x16.png', 'favicon.ico'].map((f, i, arr) => (
+                    <span key={f}>
+                      <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>{f}</code>
+                      {i < arr.length - 1 ? ' · ' : ''}
+                    </span>
+                  ))}
+                </p>
               </div>
 
-              {/* Upload */}
+              {/* Ações */}
               <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap', alignItems: 'center' }}>
-                <label
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                    background: 'var(--accent)', color: 'var(--on-accent)',
-                    fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
-                    padding: '8px 18px', borderRadius: 8, cursor: iconUploading ? 'wait' : 'pointer',
-                    opacity: iconUploading ? 0.7 : 1,
-                  }}
-                >
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadIcon} disabled={iconUploading} />
-                  {iconUploading ? '⏳ Enviando...' : '⬆ Fazer upload do ícone'}
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  background: 'var(--accent)', color: 'var(--on-accent)',
+                  fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
+                  padding: '10px 20px', borderRadius: 8,
+                  cursor: iconUploading ? 'wait' : 'pointer', opacity: iconUploading ? 0.7 : 1,
+                }}>
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={openIconEditor} disabled={iconUploading} />
+                  ✂️ Selecionar e editar imagem
                 </label>
 
-                <a
-                  href="/api/admin/pwa/icon"
-                  download="icon-192.png"
+                <a href="/api/admin/pwa/icon"
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 8,
                     background: 'var(--bg-2)', color: 'var(--text-2)',
                     fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 13,
-                    padding: '8px 18px', borderRadius: 8, textDecoration: 'none',
+                    padding: '10px 20px', borderRadius: 8, textDecoration: 'none',
                     border: '1px solid var(--border)',
-                  }}
-                >
-                  ⬇ Baixar ícone atual
+                  }}>
+                  ⬇ Baixar modelo atual
                 </a>
               </div>
 
               {iconMsg && (
-                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: iconMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)', margin: 0 }}>
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, margin: 0,
+                  color: iconMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
                   {iconMsg}
                 </p>
               )}
 
-              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', margin: 0 }}>
-                Após o upload, remova e adicione novamente o app à tela inicial no iPhone para o iOS atualizar o ícone em cache.
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', margin: 0 }}>
+                Após salvar, remova e adicione o app novamente na tela inicial para o iOS limpar o cache do ícone.
               </p>
             </div>
           </div>
