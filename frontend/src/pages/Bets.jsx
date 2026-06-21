@@ -785,6 +785,79 @@ function BetRow({ bet, index, onOpenSimulation }) {
 }
 
 // ── Team recent form (inside odds panel) ─────────────────────────────────────
+const _fRColor = r => r === 'V' ? 'var(--win)' : r === 'D' ? 'var(--lose)' : 'var(--text-3)'
+const _fRBg    = r => r === 'V' ? 'rgba(46,201,128,0.18)' : r === 'D' ? 'rgba(232,82,82,0.18)' : 'rgba(255,255,255,0.07)'
+
+function FormBlock({ team, games, role }) {
+  return (
+    <div>
+      {/* Team header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+        {team?.flag_url && (
+          <img src={team.flag_url} alt={team.code}
+            style={{ width: 22, height: 15, objectFit: 'cover', borderRadius: 2, flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.45)' }}
+          />
+        )}
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+          {PT_NAMES[team?.code] || team?.code}
+        </span>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {role}
+        </span>
+      </div>
+
+      {games.length === 0 ? (
+        <div style={{ fontSize: 11, color: 'var(--text-4)', fontFamily: 'var(--font-cond)', padding: '2px 0 4px' }}>Sem jogos recentes</div>
+      ) : games.map((g, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '5px 6px',
+          borderRadius: 6,
+          background: i % 2 === 0 ? 'rgba(255,255,255,0.025)' : 'transparent',
+          marginBottom: 2,
+        }}>
+          {/* V/E/D badge */}
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+            fontSize: 10, fontWeight: 800, fontFamily: 'var(--font-mono)',
+            background: _fRBg(g.outcome), color: _fRColor(g.outcome),
+          }}>{g.outcome}</span>
+
+          {/* Opponent flag */}
+          {g.opp?.flag_url ? (
+            <img src={g.opp.flag_url} alt={g.opp.code}
+              style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2, flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+            />
+          ) : <span style={{ width: 18, flexShrink: 0 }} />}
+
+          {/* Opponent name — full if fits, code fallback */}
+          <span style={{
+            fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600,
+            color: 'var(--text-2)', flex: 1, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {PT_NAMES[g.opp?.code] || g.opp?.code}
+          </span>
+
+          {/* Score — colored by outcome, pushed right */}
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700,
+            color: _fRColor(g.outcome), flexShrink: 0, letterSpacing: '0.02em',
+          }}>{g.my} – {g.them}</span>
+
+          {/* Date muted */}
+          {g.dateStr && (
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', flexShrink: 0, minWidth: 30, textAlign: 'right' }}>
+              {g.dateStr}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function TeamFormSection({ teamA, teamB, recentMatches }) {
   if (!recentMatches?.length) return null
 
@@ -811,96 +884,14 @@ function TeamFormSection({ teamA, teamB, recentMatches }) {
   const formB = getForm(teamB?.code)
   if (!formA.length && !formB.length) return null
 
-  const rColor = r => r === 'V' ? 'var(--win)' : r === 'D' ? 'var(--lose)' : 'var(--text-3)'
-  const rBg    = r => r === 'V' ? 'rgba(46,201,128,0.18)' : r === 'D' ? 'rgba(232,82,82,0.18)' : 'rgba(255,255,255,0.07)'
-  const rLabel = r => r === 'V' ? 'V' : r === 'D' ? 'D' : 'E'
-
-  function FormCol({ team, games }) {
-    return (
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Team header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          marginBottom: 8, paddingBottom: 6,
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
-        }}>
-          {team?.flag_url && (
-            <img
-              src={team.flag_url} alt={team.code}
-              style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 2, flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
-            />
-          )}
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '0.06em' }}>
-            {team?.code}
-          </span>
-        </div>
-
-        {games.length === 0 ? (
-          <div style={{ fontSize: 11, color: 'var(--text-4)', fontFamily: 'var(--font-cond)', padding: '4px 0' }}>Sem jogos</div>
-        ) : games.map((g, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '6px 0',
-            borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-          }}>
-            {/* V/E/D badge */}
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 22, height: 22, borderRadius: 5, flexShrink: 0,
-              fontSize: 10, fontWeight: 800, fontFamily: 'var(--font-mono)',
-              background: rBg(g.outcome), color: rColor(g.outcome),
-              letterSpacing: 0,
-            }}>{rLabel(g.outcome)}</span>
-
-            {/* Opponent flag */}
-            {g.opp?.flag_url ? (
-              <img
-                src={g.opp.flag_url} alt={g.opp.code}
-                style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2, flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
-              />
-            ) : (
-              <span style={{ width: 16, flexShrink: 0 }} />
-            )}
-
-            {/* Opponent code */}
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
-              color: 'var(--text-2)', flexShrink: 0,
-            }}>{g.opp?.code}</span>
-
-            {/* Score — pushed right, colored by outcome */}
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-              color: rColor(g.outcome),
-              marginLeft: 'auto', flexShrink: 0,
-            }}>{g.my}–{g.them}</span>
-
-            {/* Date — muted, very small */}
-            {g.dateStr && (
-              <span style={{
-                fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)',
-                flexShrink: 0, letterSpacing: '0.04em',
-              }}>{g.dateStr}</span>
-            )}
-          </div>
-        ))}
-      </div>
-    )
-  }
-
   return (
     <div style={{ marginTop: 'var(--s4)', paddingTop: 'var(--s3)', borderTop: '1px solid var(--border)' }}>
-      <div style={{
-        fontSize: 9, fontFamily: 'var(--font-cond)', color: 'var(--text-4)',
-        letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10,
-      }}>
+      <div style={{ fontSize: 9, fontFamily: 'var(--font-cond)', color: 'var(--text-4)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
         Últimos jogos
       </div>
-      <div style={{ display: 'flex', gap: 12 }}>
-        <FormCol team={teamA} games={formA} />
-        <div style={{ width: 1, background: 'var(--border)', flexShrink: 0, alignSelf: 'stretch' }} />
-        <FormCol team={teamB} games={formB} />
-      </div>
+      <FormBlock team={teamA} games={formA} role="mandante" />
+      <div style={{ height: 1, background: 'var(--border)', margin: '10px 0' }} />
+      <FormBlock team={teamB} games={formB} role="visitante" />
     </div>
   )
 }
