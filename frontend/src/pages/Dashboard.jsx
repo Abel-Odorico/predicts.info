@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
+import { PT_NAMES } from '../utils/teamNames'
 
 export default function Dashboard() {
   const [matches, setMatches]         = useState([])
@@ -191,6 +192,7 @@ export default function Dashboard() {
                 {liveNow.map((game, index) => (
                   <div key={`live-${game.team_a}-${game.team_b}-${index}`} className="now-playing-card" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={{ ...(index > 0 ? { marginTop: 'var(--s3)', paddingTop: 'var(--s3)', borderTop: '1px solid var(--border)' } : {}), ...(game.match_id ? { cursor: 'pointer' } : {}) }}>
                     <div className="now-playing-card__team">
+                      {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
                       <span>{game.team_a}</span>
                     </div>
                     <div className="now-playing-card__center">
@@ -201,6 +203,7 @@ export default function Dashboard() {
                     </div>
                     <div className="now-playing-card__team now-playing-card__team--right">
                       <span>{game.team_b}</span>
+                      {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
                     </div>
                   </div>
                 ))}
@@ -219,9 +222,12 @@ export default function Dashboard() {
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
                 {todaysGames.map((game, index) => (
                   <div key={`${game.team_a}-${game.team_b}-today-${index}`} className="live-score-row" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_a}</div>
-                      <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.time_label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+                      {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_a}</div>
+                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.time_label}</div>
+                      </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div className="live-score-row__score">
@@ -231,9 +237,12 @@ export default function Dashboard() {
                         <StatusBadge game={game} />
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_b}</div>
-                      <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.channels?.map(c => c.nome).filter(Boolean).join(' · ') || 'Sem canal'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--s2)' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_b}</div>
+                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.channels?.map(c => c.nome).filter(Boolean).join(' · ') || 'Sem canal'}</div>
+                      </div>
+                      {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
                     </div>
                   </div>
                 ))}
@@ -265,9 +274,12 @@ export default function Dashboard() {
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
                 {liveGames.map((game, index) => (
                   <div key={`${game.team_a}-${game.team_b}-${index}`} className="live-score-row" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_a}</div>
-                      <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.date_label} · {game.time_label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+                      {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_a}</div>
+                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.date_label} · {game.time_label}</div>
+                      </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div className="live-score-row__score">
@@ -277,9 +289,12 @@ export default function Dashboard() {
                         <StatusBadge game={game} />
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_b}</div>
-                      <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.channels?.map(c => c.nome).filter(Boolean).join(' · ') || 'Sem canal'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--s2)' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_b}</div>
+                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.channels?.map(c => c.nome).filter(Boolean).join(' · ') || 'Sem canal'}</div>
+                      </div>
+                      {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
                     </div>
                   </div>
                 ))}
@@ -345,9 +360,10 @@ export default function Dashboard() {
                     color: i === 0 ? 'var(--accent)' : 'var(--text-4)',
                     minWidth: 24
                   }}>{i + 1}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 15 }}>
-                      {t.name}
+                  {t.flag_url && <img src={t.flag_url} alt={t.code} className="match-card__flag" style={{ flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {PT_NAMES[t.code] || t.name}
                     </div>
                     <div style={{
                       height: 4, background: 'var(--bg-overlay)',
@@ -412,7 +428,13 @@ export default function Dashboard() {
                     <div className="stack gap-2" style={{ marginTop: 'var(--s2)' }}>
                       {day.matches.map(match => (
                         <div key={match.id} className="calendar-row" onClick={() => typeof match.id === 'number' && navigate(`/partida/${match.id}`)}>
-                          <div className="calendar-row__teams">{match.team_a.code} vs {match.team_b.code}</div>
+                          <div className="calendar-row__teams">
+                            {match.team_a.flag_url && <img src={match.team_a.flag_url} alt={match.team_a.code} className="match-card__flag" />}
+                            {PT_NAMES[match.team_a.code] || match.team_a.code}
+                            {' vs '}
+                            {PT_NAMES[match.team_b.code] || match.team_b.code}
+                            {match.team_b.flag_url && <img src={match.team_b.flag_url} alt={match.team_b.code} className="match-card__flag" />}
+                          </div>
                           <div className="calendar-row__meta">{match.city} · {match.venue}</div>
                           <div className="calendar-row__status">
                             {match.live_score_a != null || match.live_score_b != null
@@ -439,7 +461,7 @@ function TeamBig({ team }) {
       {team.flag_url && (
         <img src={team.flag_url} alt={team.code} className="team-big__flag" />
       )}
-      <div className="team-big__code">{team.code}</div>
+      <div className="team-big__code">{PT_NAMES[team.code] || team.code}</div>
       <div className="team-big__meta">Elo {Math.round(team.elo_rating)}</div>
     </div>
   )
@@ -463,7 +485,7 @@ function MatchRow({ match, done }) {
           {match.team_a.flag_url && (
             <img src={match.team_a.flag_url} alt={match.team_a.code} className="match-card__flag" />
           )}
-          <span>{match.team_a.code}</span>
+          <span>{PT_NAMES[match.team_a.code] || match.team_a.code}</span>
         </div>
         <span className="match-card__sep">
           {scoreLabel}
@@ -472,7 +494,7 @@ function MatchRow({ match, done }) {
           {match.team_b.flag_url && (
             <img src={match.team_b.flag_url} alt={match.team_b.code} className="match-card__flag" />
           )}
-          <span>{match.team_b.code}</span>
+          <span>{PT_NAMES[match.team_b.code] || match.team_b.code}</span>
         </div>
       </div>
       {done ? <span className="badge badge-done">FIM</span> : isLive ? <span className="badge badge-live">{match.status_raw || 'Ao vivo'}</span> : <span className="match-card__arrow">›</span>}

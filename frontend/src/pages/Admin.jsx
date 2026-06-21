@@ -19,6 +19,7 @@ function fmt(value) {
   return new Date(normalizeDate(value)).toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
   })
 }
 
@@ -27,6 +28,7 @@ function fmtShort(value) {
   return new Date(normalizeDate(value)).toLocaleString('pt-BR', {
     day: '2-digit', month: 'short',
     hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
   })
 }
 
@@ -50,6 +52,7 @@ const TABS = [
   { id: 'sync',     label: 'Sincronização', icon: '🔄' },
   { id: 'bets',     label: 'Apostas',      icon: '🎯' },
   { id: 'coverage', label: 'Cobertura',    icon: '📋' },
+  { id: 'poll',     label: 'Pesquisa',     icon: '📊' },
 ]
 
 const PERIODS = [
@@ -101,6 +104,13 @@ export default function Admin() {
   const [growthPeriod, setGrowthPeriod] = useState('month')
   const [hiddenSeries, setHiddenSeries] = useState({})
 
+  // Poll
+  const [poll, setPoll] = useState(null)
+  const [pollLoading, setPollLoading] = useState(false)
+  const [pollMsg, setPollMsg] = useState('')
+  const [suggestions, setSuggestions] = useState(null)
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+
   function toggleSeries(key) {
     setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -117,6 +127,7 @@ export default function Admin() {
     if (tab === 'results' && matches.length === 0 && !matchesLoading) loadMatches()
     if (tab === 'bets' && !allBets && !betsLoading) loadBets()
     if (tab === 'coverage' && !betCoverage && !coverageLoading) loadCoverage('scheduled')
+    if (tab === 'poll' && !poll && !pollLoading) loadPoll()
   }, [tab])
 
   useEffect(() => {
@@ -228,6 +239,28 @@ export default function Admin() {
       const res = await api.post('/admin/recalculate', {}, token)
       setCacheMsg(`✓ ${res.keys_removed} chaves removidas`)
     } catch (e) { setCacheMsg(`✗ ${e.message}`) }
+  }
+
+  async function loadPoll() {
+    setPollLoading(true)
+    try { setPoll(await api.get('/poll/active')) } catch {}
+    finally { setPollLoading(false) }
+  }
+
+  async function loadSuggestions() {
+    setSuggestionsLoading(true)
+    try { setSuggestions(await api.get('/admin/poll/suggestions', token)) } catch {}
+    finally { setSuggestionsLoading(false) }
+  }
+
+  async function closePoll() {
+    if (!poll || !window.confirm('Encerrar a pesquisa agora?')) return
+    setPollMsg('')
+    try {
+      await api.post(`/admin/poll/close/${poll.id}`, {}, token)
+      setPollMsg('✓ Pesquisa encerrada com sucesso')
+      await loadPoll()
+    } catch (e) { setPollMsg(`✗ ${e.message}`) }
   }
 
   if (!user) return null
@@ -667,16 +700,16 @@ export default function Admin() {
                 <span className="adm-card__title">Histórico</span>
                 <span className="badge badge-group">{syncStatus.history.length} runs</span>
               </div>
-              <div style={{ padding: 'var(--s2) 0' }}>
+              <div style={{ padding: 'var(--s2) 0', maxHeight: 320, overflowY: 'auto' }}>
                 {syncStatus.history.map((run, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--s2) var(--s4)', borderBottom: i < syncStatus.history.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 12, fontFamily: 'var(--font-cond)' }}>
                     <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center' }}>
                       <span style={{ color: run.ok ? 'var(--win)' : 'var(--lose)' }}>{run.ok ? '✓' : '✗'}</span>
                       <span className="badge badge-group" style={{ fontSize: 10 }}>{run.trigger || 'manual'}</span>
-                      <span style={{ color: 'var(--text-3)' }}>{run.started_at ? new Date(run.started_at + 'Z').toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '—'}</span>
+                      <span style={{ color: 'var(--text-3)' }}>{run.started_at ? new Date(run.started_at + 'Z').toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }) : '—'}</span>
                     </div>
-                    <span style={{ color: run.ok ? 'var(--text-2)' : 'var(--lose)', fontSize: 11 }}>
-                      {run.ok ? `${run.updated} seleções` : run.errors?.join(', ')}
+                    <span style={{ color: run.ok ? 'var(--text-2)' : 'var(--lose)', fontSize: 11 }} title={!run.ok && run.summary ? run.summary : undefined}>
+                      {run.ok ? `${run.updated} seleções` : (run.summary?.replace(/^[✗●]\s*/, '') || run.errors?.join(', '))}
                     </span>
                   </div>
                 ))}
@@ -732,6 +765,115 @@ export default function Admin() {
         </div>
       )}
 
+      {/* ── Tab: Pesquisa ─────────────────────────────── */}
+      {tab === 'poll' && (
+        <div className="adm-pane fade-in-1">
+          {pollLoading && <p style={{ padding: 'var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando...</p>}
+          {!pollLoading && !poll && <p style={{ padding: 'var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Nenhuma pesquisa encontrada.</p>}
+          {poll && (
+            <>
+              <div className="adm-card">
+                <div className="adm-card__head">
+                  <div>
+                    <span className="adm-card__title">{poll.title}</span>
+                    <span style={{ marginLeft: 'var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 11, letterSpacing: '0.08em', padding: '2px 8px', borderRadius: 4, background: poll.status === 'active' ? 'rgba(15,122,120,0.15)' : 'rgba(100,100,100,0.15)', color: poll.status === 'active' ? 'var(--accent)' : 'var(--text-3)' }}>
+                      {poll.status === 'active' ? '● ATIVA' : '■ ENCERRADA'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center' }}>
+                    <button className="btn btn-ghost btn-sm" onClick={loadPoll}>↻</button>
+                    {poll.status === 'active' && (
+                      <button className="btn btn-sm" style={{ background: 'var(--lose)', color: '#fff' }} onClick={closePoll}>
+                        Encerrar Pesquisa
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {pollMsg && <p style={{ padding: 'var(--s3) var(--s5)', fontFamily: 'var(--font-cond)', fontSize: 13, color: pollMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>{pollMsg}</p>}
+
+                <div style={{ padding: 'var(--s4) var(--s5)' }}>
+                  <div style={{ display: 'flex', gap: 'var(--s6)', marginBottom: 'var(--s5)', flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Votos', value: poll.total_votes },
+                      { label: 'Usuários', value: poll.total_users },
+                      { label: 'Participação', value: poll.total_users > 0 ? `${Math.round(poll.total_votes / poll.total_users * 100)}%` : '0%' },
+                      { label: 'Sugestões', value: poll.suggestion_count },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ textAlign: 'center' }}>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 900, color: 'var(--accent)', lineHeight: 1 }}>{value}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>{label}</div>
+                      </div>
+                    ))}
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.4 }}>
+                        {poll.opens_at ? new Date(poll.opens_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'} →{' '}
+                        {poll.closes_at ? new Date(poll.closes_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>Período</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+                    {poll.options.map((opt, i) => {
+                      const maxCount = Math.max(...poll.options.map(o => o.count), 1)
+                      const isWinner = opt.count === maxCount && opt.count > 0
+                      return (
+                        <div key={opt.id}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: isWinner ? 'var(--win)' : 'var(--text-1)', fontWeight: isWinner ? 700 : 400 }}>
+                              {isWinner && '🏆 '}{opt.label}
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: 'var(--text-2)', whiteSpace: 'nowrap', marginLeft: 'var(--s3)' }}>
+                              {opt.count} votos · {opt.pct}%
+                            </span>
+                          </div>
+                          <div style={{ height: 10, background: 'var(--bg-overlay)', borderRadius: 5, overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${opt.pct}%`, height: '100%', borderRadius: 5, transition: 'width 500ms',
+                              background: isWinner ? 'var(--win)' : 'var(--accent)',
+                            }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="adm-card" style={{ marginTop: 'var(--s4)' }}>
+                <div className="adm-card__head">
+                  <span className="adm-card__title">Sugestões ({poll.suggestion_count})</span>
+                  <button className="btn btn-ghost btn-sm" onClick={loadSuggestions} disabled={suggestionsLoading}>
+                    {suggestionsLoading ? '⏳' : 'Carregar'}
+                  </button>
+                </div>
+                {suggestions === null && !suggestionsLoading && (
+                  <p style={{ padding: 'var(--s4) var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Clique em "Carregar" para ver as sugestões dos usuários.</p>
+                )}
+                {suggestionsLoading && <p style={{ padding: 'var(--s4) var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando...</p>}
+                {suggestions?.length === 0 && <p style={{ padding: 'var(--s4) var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Nenhuma sugestão enviada.</p>}
+                {suggestions?.length > 0 && (
+                  <div style={{ padding: '0 var(--s5) var(--s4)' }}>
+                    {suggestions.map((s, i) => (
+                      <div key={i} style={{ borderBottom: '1px solid var(--border)', padding: 'var(--s3) 0', display: 'flex', gap: 'var(--s3)', alignItems: 'flex-start' }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', minWidth: 24 }}>#{i + 1}</span>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', margin: 0 }}>{s.suggestion}</p>
+                          <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 4 }}>
+                            user #{s.user_id} · opção #{s.option_id} · {s.updated_at ? new Date(s.updated_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── Tab: Cobertura ────────────────────────────── */}
       {tab === 'coverage' && (
         <div className="adm-pane fade-in-1">
@@ -758,7 +900,7 @@ export default function Admin() {
                   <div>
                     <div className="adm-coverage-row__teams">{match.team_a_code} × {match.team_b_code}</div>
                     <div className="adm-coverage-row__meta">
-                      G{match.group_name || '—'} · #{match.match_id} · {match.match_date ? new Date(match.match_date).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Sem data'}
+                      G{match.group_name || '—'} · #{match.match_id} · {match.match_date ? new Date(match.match_date).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : 'Sem data'}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 'var(--s2)' }}>

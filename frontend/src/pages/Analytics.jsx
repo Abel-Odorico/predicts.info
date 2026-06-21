@@ -7,13 +7,24 @@ const DEVICE_ICON = { mobile: '📱', tablet: '📟', desktop: '🖥️' }
 const BROWSER_ICON = { Chrome: '🟡', Firefox: '🦊', Safari: '🧭', Edge: '🔵', Opera: '🔴', Bot: '🤖', Other: '⚪' }
 const OS_ICON = { Windows: '🪟', Android: '🤖', iOS: '🍎', macOS: '🍎', Linux: '🐧', Other: '⚪' }
 const PERIODS = [
-  { value: 1, label: 'Hoje', short: '1d' },
-  { value: 7, label: '7 dias', short: '7d' },
-  { value: 14, label: '14 dias', short: '14d' },
-  { value: 30, label: '30 dias', short: '30d' },
-  { value: 90, label: '90 dias', short: '90d' },
-  { value: 365, label: '1 ano', short: '1a' },
+  { value: 1,   label: 'Hoje',    short: '1d' },
+  { value: 7,   label: '7 dias',  short: '7d' },
+  { value: 14,  label: '14 dias', short: '14d' },
+  { value: 30,  label: '30 dias', short: '30d' },
+  { value: 90,  label: '90 dias', short: '90d' },
+  { value: 365, label: '1 ano',   short: '1a' },
 ]
+
+const FLAG = code => code ? `https://flagcdn.com/24x18/${code.toLowerCase()}.png` : null
+
+const ACTION_LABEL = {
+  'profile.update':          '✏️ Perfil editado',
+  'profile.password_change': '🔑 Senha alterada',
+  'group.rename':            '📝 Grupo renomeado',
+  'group.delete':            '🗑 Grupo excluído',
+  'group.remove_member':     '👤 Membro removido',
+  'group.join':              '➕ Entrou no grupo',
+}
 
 function MiniBar({ value, max, color = 'var(--accent)' }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0
@@ -27,31 +38,49 @@ function MiniBar({ value, max, color = 'var(--accent)' }) {
   )
 }
 
-function StatCard({ label, value, sub, color }) {
+function KpiCard({ label, value, sub, color, icon }) {
   return (
     <div className="card" style={{ padding: 'var(--s5)' }}>
-      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 'var(--s2)' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: color || 'var(--accent)', lineHeight: 1 }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--s2)' }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>{label}</div>
+        {icon && <span style={{ fontSize: 16, opacity: 0.6 }}>{icon}</span>}
+      </div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 900, color: color || 'var(--accent)', lineHeight: 1 }}>
+        {typeof value === 'number' ? value.toLocaleString('pt-BR') : value}
+      </div>
       {sub && <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginTop: 'var(--s2)' }}>{sub}</div>}
     </div>
   )
 }
 
-function DayChart({ data }) {
-  if (!data || data.length === 0) return <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6)' }}>Sem dados</div>
-  const max = Math.max(...data.map(d => d.views), 1)
+function DualChart({ viewsData, regsData, showRegs }) {
+  if (!viewsData || viewsData.length === 0) return <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6)' }}>Sem dados</div>
+  const data = viewsData
+  const maxV = Math.max(...data.map(d => d.views), 1)
+  const maxR = showRegs && regsData?.length ? Math.max(...regsData.map(d => d.count), 1) : 1
+  const regMap = Object.fromEntries((regsData || []).map(d => [d.date, d.count]))
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80, padding: '0 var(--s2)' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 100, padding: '0 var(--s2)' }}>
       {data.map(d => {
-        const pct = (d.views / max) * 100
+        const pct = (d.views / maxV) * 100
+        const regPct = showRegs ? ((regMap[d.date] || 0) / maxR) * 100 : 0
         return (
-          <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
-            <div title={`${d.date}: ${d.views}`} style={{
-              width: '100%', height: `${Math.max(pct, 4)}%`,
-              background: `color-mix(in srgb, var(--accent) ${40 + Math.round(pct * 0.6)}%, transparent)`,
-              borderRadius: '3px 3px 0 0', cursor: 'default',
-              border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-            }} />
+          <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flex: 1, justifyContent: 'flex-end' }}>
+              {showRegs && regMap[d.date] > 0 && (
+                <div title={`${d.date}: ${regMap[d.date]} cadastros`} style={{
+                  width: '60%', height: `${Math.max(regPct * 0.6, 3)}px`,
+                  background: 'var(--win)', borderRadius: '2px 2px 0 0', opacity: 0.9,
+                }} />
+              )}
+              <div title={`${d.date}: ${d.views} views`} style={{
+                width: '100%', height: `${Math.max(pct, 4)}%`,
+                background: `color-mix(in srgb, var(--accent) ${40 + Math.round(pct * 0.6)}%, transparent)`,
+                borderRadius: '3px 3px 0 0',
+                border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+              }} />
+            </div>
             <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--font-data)', transform: 'rotate(-45deg)', transformOrigin: 'center', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 28 }}>
               {d.date.slice(5)}
             </span>
@@ -62,17 +91,6 @@ function DayChart({ data }) {
   )
 }
 
-const FLAG = code => code ? `https://flagcdn.com/16x12/${code.toLowerCase()}.png` : null
-
-const ACTION_LABEL = {
-  'profile.update':          '✏️ Perfil editado',
-  'profile.password_change': '🔑 Senha alterada',
-  'group.rename':            '📝 Grupo renomeado',
-  'group.delete':            '🗑 Grupo excluído',
-  'group.remove_member':     '👤 Membro removido',
-  'group.join':              '➕ Entrou no grupo',
-}
-
 export default function Analytics() {
   const { token } = useAuth()
   const [stats, setStats]   = useState(null)
@@ -80,6 +98,7 @@ export default function Analytics() {
   const [days, setDays]     = useState(7)
   const [loading, setLoading] = useState(true)
   const [tab, setTab]       = useState('overview')
+  const [chartOverlay, setChartOverlay] = useState(false)
 
   const [auditLogs, setAuditLogs]       = useState(null)
   const [auditLoading, setAuditLoading] = useState(false)
@@ -121,6 +140,7 @@ export default function Analytics() {
 
   const TABS = [
     { id: 'overview',  label: '📊 Visão Geral' },
+    { id: 'usuarios',  label: '👥 Usuários' },
     { id: 'pages',     label: '📄 Páginas' },
     { id: 'geo',       label: '🌍 Localidade' },
     { id: 'tech',      label: '💻 Tecnologia' },
@@ -130,64 +150,58 @@ export default function Analytics() {
 
   return (
     <div className="page">
-      <div className="fade-in-1">
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--s3)' }}>
-          <div>
-            <h1 className="page-title">ANALYTICS</h1>
-            <p className="page-subtitle">Tráfego · Dispositivos · Localidade · Navegadores · Período: {selectedPeriod.label}</p>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {PERIODS.map(period => (
-              <button key={period.value} onClick={() => setDays(period.value)}
-                className={`btn btn-ghost btn-sm${days === period.value ? ' btn-ghost--active' : ''}`}
-                style={{ fontSize: 12 }}>
-                {period.short}
-              </button>
-            ))}
-          </div>
+      {/* Header */}
+      <div className="fade-in-1" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--s3)' }}>
+        <div>
+          <h1 className="page-title">ANALYTICS</h1>
+          <p className="page-subtitle">Tráfego · Usuários · Conversão · {selectedPeriod.label}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {PERIODS.map(period => (
+            <button key={period.value} onClick={() => setDays(period.value)}
+              className={`btn btn-ghost btn-sm${days === period.value ? ' btn-ghost--active' : ''}`}
+              style={{ fontSize: 12 }}>
+              {period.short}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* KPIs row 1 — tráfego */}
+      <div className="fade-in-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s5)' }}>
+        <KpiCard label="Page Views"      value={stats.total_views}  color="var(--accent)"  icon="👁" />
+        <KpiCard label="Visitantes únicos" value={stats.unique_ips} color="var(--win)"     icon="🙋" />
+        <KpiCard label="Novos visitantes" value={stats.new_visitors ?? stats.unique_ips} color="#f59e0b" icon="🆕" sub={`${stats.returning_visitors ?? 0} retornantes`} />
+        <KpiCard label="Páginas únicas"   value={stats.unique_pages} color="#a78bfa"      icon="📄" />
+      </div>
+
+      {/* KPIs row 2 — engajamento e conversão */}
+      <div className="fade-in-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s3)' }}>
+        <KpiCard label="Novos Cadastros"  value={stats.new_users ?? 0}    color="var(--win)"  icon="✅" sub={`de ${stats.total_users ?? '?'} total`} />
+        <KpiCard label="Taxa de Conversão" value={`${stats.conversion_rate ?? 0}%`} color="#10b981" icon="🎯" sub="visitantes → cadastros" />
+        <KpiCard label="Bounce Rate"      value={`${stats.bounce_rate ?? 0}%`}      color={stats.bounce_rate > 60 ? 'var(--lose)' : '#f59e0b'} icon="↩️" sub="visitas de 1 página" />
+        <KpiCard label="Páginas/Visita"   value={stats.avg_pages ?? 0}    color="var(--accent)" icon="📈" sub="engajamento médio" />
+      </div>
+
+      {/* Day chart + legenda */}
       <div className="card fade-in-2" style={{ marginTop: 'var(--s4)' }}>
-        <div className="card__body" style={{ paddingTop: 'var(--s4)', paddingBottom: 'var(--s4)' }}>
-          <div className="stack gap-3">
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-              Filtros por Período
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap' }}>
-              {PERIODS.map(period => (
-                <button
-                  key={`period-card-${period.value}`}
-                  onClick={() => setDays(period.value)}
-                  className={`btn btn-ghost btn-sm${days === period.value ? ' btn-ghost--active' : ''}`}
-                >
-                  {period.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📈 Views por Dia</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={chartOverlay} onChange={e => setChartOverlay(e.target.checked)} />
+            <span style={{ color: 'var(--win)' }}>+ cadastros</span>
+          </label>
         </div>
-      </div>
-
-      {/* KPI cards */}
-      <div className="fade-in-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--s4)', marginTop: 'var(--s6)' }}>
-        <StatCard label="Page Views"    value={stats.total_views}  color="var(--accent)" />
-        <StatCard label="IPs únicos"    value={stats.unique_ips}   color="var(--win)" />
-        <StatCard label="Páginas únicas" value={stats.unique_pages} color="#f59e0b" />
-        <StatCard label="Período"       value={selectedPeriod.short} color="var(--text-2)" sub={selectedPeriod.label} />
-      </div>
-
-      {/* Day chart */}
-      <div className="card fade-in-2" style={{ marginTop: 'var(--s4)' }}>
-        <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📈 Views por Dia</span></div>
-        <div className="card__body"><DayChart data={stats.views_per_day} /></div>
+        <div className="card__body">
+          <DualChart viewsData={stats.views_per_day} regsData={stats.registrations_per_day} showRegs={chartOverlay} />
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="phase-nav fade-in-3" style={{ marginTop: 'var(--s6)' }}>
+      <div className="phase-nav fade-in-3" style={{ marginTop: 'var(--s5)' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`phase-nav__btn${tab === t.id ? ' phase-nav__btn--active' : ''}`}>
+            className={`phase-nav__tab${tab === t.id ? ' active' : ''}`}>
             {t.label}
           </button>
         ))}
@@ -196,7 +210,6 @@ export default function Analytics() {
       {/* Overview */}
       {tab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--s4)', marginTop: 'var(--s4)' }} className="fade-in-1">
-          {/* Top pages mini */}
           <div className="card">
             <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📄 Top Páginas</span></div>
             <div className="card__body">
@@ -211,7 +224,6 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Devices */}
           <div className="card">
             <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📱 Dispositivos</span></div>
             <div className="card__body">
@@ -226,7 +238,6 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Browsers */}
           <div className="card">
             <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🌐 Navegadores</span></div>
             <div className="card__body">
@@ -241,7 +252,6 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Top countries mini */}
           <div className="card">
             <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🌍 Top Países</span></div>
             <div className="card__body">
@@ -258,6 +268,106 @@ export default function Analytics() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Usuários tab */}
+      {tab === 'usuarios' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--s4)', marginTop: 'var(--s4)' }} className="fade-in-1">
+          {/* Funil de conversão */}
+          <div className="card">
+            <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🎯 Funil de Conversão</span></div>
+            <div className="card__body">
+              <div className="stack gap-4">
+                {[
+                  { label: 'Visitantes únicos', value: stats.unique_ips, color: 'var(--accent)', pct: 100 },
+                  { label: 'Novos visitantes',  value: stats.new_visitors ?? stats.unique_ips, color: '#f59e0b', pct: stats.unique_ips ? Math.round(((stats.new_visitors ?? stats.unique_ips) / stats.unique_ips) * 100) : 0 },
+                  { label: 'Novos cadastros',   value: stats.new_users ?? 0, color: 'var(--win)', pct: stats.unique_ips ? Math.round(((stats.new_users ?? 0) / stats.unique_ips) * 100) : 0 },
+                ].map(row => (
+                  <div key={row.label} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>{row.label}</span>
+                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: row.color, fontWeight: 700 }}>{row.value.toLocaleString('pt-BR')} <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({row.pct}%)</span></span>
+                    </div>
+                    <div style={{ height: 8, background: 'var(--bg-overlay)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${row.pct}%`, height: '100%', background: row.color, borderRadius: 4, transition: 'width 500ms' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Visitantes novos vs retornantes */}
+          <div className="card">
+            <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🔄 Visitantes</span></div>
+            <div className="card__body">
+              <div className="stack gap-4">
+                {[
+                  { label: 'Novos',       value: stats.new_visitors ?? 0,       color: 'var(--accent)' },
+                  { label: 'Retornantes', value: stats.returning_visitors ?? 0,  color: '#a78bfa' },
+                ].map(row => {
+                  const total = (stats.new_visitors ?? 0) + (stats.returning_visitors ?? 0)
+                  const pct = total > 0 ? Math.round((row.value / total) * 100) : 0
+                  return (
+                    <div key={row.label} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>{row.label}</span>
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: row.color }}>{row.value.toLocaleString('pt-BR')} ({pct}%)</span>
+                      </div>
+                      <div style={{ height: 8, background: 'var(--bg-overlay)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: row.color, borderRadius: 4, transition: 'width 500ms' }} />
+                      </div>
+                    </div>
+                  )
+                })}
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--s3)' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Engajamento</div>
+                  <div style={{ display: 'flex', gap: 'var(--s4)' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900, color: 'var(--accent)' }}>{stats.avg_pages ?? 0}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>páginas/visita</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900, color: stats.bounce_rate > 60 ? 'var(--lose)' : '#f59e0b' }}>{stats.bounce_rate ?? 0}%</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>bounce rate</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cadastros por dia */}
+          {stats.registrations_per_day?.length > 0 && (
+            <div className="card" style={{ gridColumn: '1 / -1' }}>
+              <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>✅ Cadastros por Dia</span></div>
+              <div className="card__body">
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80, padding: '0 var(--s2)' }}>
+                  {stats.registrations_per_day.map(d => {
+                    const max = Math.max(...stats.registrations_per_day.map(x => x.count), 1)
+                    const pct = (d.count / max) * 100
+                    return (
+                      <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                        <div title={`${d.date}: ${d.count} cadastros`} style={{
+                          width: '100%', height: `${Math.max(pct, 4)}%`,
+                          background: `color-mix(in srgb, var(--win) ${40 + Math.round(pct * 0.6)}%, transparent)`,
+                          borderRadius: '3px 3px 0 0',
+                          border: '1px solid color-mix(in srgb, var(--win) 40%, transparent)',
+                        }} />
+                        <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--font-data)', transform: 'rotate(-45deg)', transformOrigin: 'center', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 28 }}>
+                          {d.date.slice(5)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textAlign: 'center', marginTop: 'var(--s3)' }}>
+                  {stats.new_users} novos usuários · total {stats.total_users}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -300,7 +410,7 @@ export default function Analytics() {
             {stats.top_countries.length === 0
               ? <p style={{ color: 'var(--text-3)', fontSize: 13 }}>Nenhum dado de localidade ainda. O geo-lookup popula com novos acessos.</p>
               : (
-                <div className="stack gap-4">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)', maxHeight: 420, overflowY: 'auto' }}>
                   {stats.top_countries.map((c, i) => (
                     <div key={c.code} style={{ display: 'grid', gridTemplateColumns: '24px 28px 1fr 120px', alignItems: 'center', gap: 'var(--s3)' }}>
                       <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>#{i + 1}</span>
@@ -395,9 +505,7 @@ export default function Analytics() {
             </div>
             {auditLoading && <p style={{ color: 'var(--text-3)', fontSize: 12, fontFamily: 'var(--font-cond)' }}>Carregando...</p>}
             {!auditLoading && auditLogs?.logs?.length === 0 && (
-              <p style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>
-                Nenhum log ainda — ações de usuários aparecerão aqui.
-              </p>
+              <p style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>Nenhum log ainda.</p>
             )}
             {!auditLoading && auditLogs?.logs?.length > 0 && (
               <div style={{ overflowX: 'auto' }}>
@@ -469,7 +577,7 @@ export default function Analytics() {
                     <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{r.ip || '—'}</td>
                     <td style={{ padding: 'var(--s2) var(--s3)', whiteSpace: 'nowrap' }}>
                       {r.country && FLAG(r.country) && <img src={FLAG(r.country)} alt={r.country} style={{ width: 16, height: 11, marginRight: 4, borderRadius: 1, verticalAlign: 'middle' }} />}
-                      <span style={{ color: 'var(--text-2)' }}>{r.country || '—'}</span>
+                      <span style={{ color: 'var(--text-2)' }}>{r.country_name || r.country || '—'}</span>
                     </td>
                     <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-3)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.city || '—'}</td>
                     <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-2)', textTransform: 'capitalize' }}>{DEVICE_ICON[r.device]} {r.device || '—'}</td>

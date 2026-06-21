@@ -45,16 +45,18 @@ function pctExato(r) {
 }
 
 export default function Ranking() {
-  const [data,      setData]     = useState([])
-  const [todayTop,  setTodayTop] = useState(null)
-  const [loading,   setLoad]     = useState(true)
-  const [group,     setGroup]    = useState('')
-  const [period,    setPeriod]   = useState('all')
-  const [dateFrom,  setDateFrom] = useState('')
-  const [dateTo,    setDateTo]   = useState('')
+  const [data,        setData]      = useState([])
+  const [todayTop,    setTodayTop]  = useState(null)
+  const [loading,     setLoad]      = useState(true)
+  const [group,       setGroup]     = useState('')
+  const [period,      setPeriod]    = useState('all')
+  const [dateFrom,    setDateFrom]  = useState('')
+  const [dateTo,      setDateTo]    = useState('')
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const [flashUpdate, setFlashUpdate] = useState(false)
 
-  const load = useCallback(() => {
-    setLoad(true)
+  const loadSilent = useCallback((silent = false) => {
+    if (!silent) setLoad(true)
     const params = new URLSearchParams()
     if (group) params.set('group', group)
     const { date_from, date_to } = period === 'custom'
@@ -71,12 +73,20 @@ export default function Ranking() {
       .then(([main, today]) => {
         setData(main)
         setTodayTop(today?.[0] || null)
+        setLastUpdated(new Date())
+        if (silent) { setFlashUpdate(true); setTimeout(() => setFlashUpdate(false), 2500) }
       })
       .catch(console.error)
-      .finally(() => setLoad(false))
+      .finally(() => { if (!silent) setLoad(false) })
   }, [group, period, dateFrom, dateTo])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { loadSilent(false) }, [loadSilent])
+
+  // Auto-refresh every 30s silently
+  useEffect(() => {
+    const iv = setInterval(() => loadSilent(true), 30000)
+    return () => clearInterval(iv)
+  }, [loadSilent])
 
   const isFiltered = group || period !== 'all'
 
@@ -88,11 +98,26 @@ export default function Ranking() {
     ? [...data].filter(r => r.total_bets >= 3).sort((a,b) => (aproveitamento(b)||0) - (aproveitamento(a)||0))[0]
     : null
 
+  function relUpdated() {
+    if (!lastUpdated) return ''
+    const s = Math.floor((Date.now() - lastUpdated.getTime()) / 1000)
+    if (s < 5)  return 'agora'
+    if (s < 60) return `há ${s}s`
+    return `há ${Math.floor(s/60)}min`
+  }
+
   return (
     <div className="page">
-      <div className="fade-in-1">
-        <h1 className="page-title">RANKING</h1>
-        <p className="page-subtitle">Placar exato = 3 pts · Resultado correto = 1 pt</p>
+      <div className="fade-in-1" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--s4)' }}>
+        <div>
+          <h1 className="page-title">RANKING</h1>
+          <p className="page-subtitle">Placar exato = 3 pts · Resultado correto = 1 pt</p>
+        </div>
+        {lastUpdated && (
+          <span className={`ranking-live-badge${flashUpdate ? ' ranking-live-badge--flash' : ''}`}>
+            🟢 atualizado {relUpdated()}
+          </span>
+        )}
       </div>
 
       {/* ── Cards de destaque ─────────────────────────────────────────── */}

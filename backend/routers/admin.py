@@ -19,10 +19,11 @@ from config import settings
 from auth_utils import require_admin
 from models import (
     Match, MatchResult, MatchStatus, Team, Player,
-    Bet, Ranking, TournamentSimulation, User, UserRole
+    Bet, Ranking, TournamentSimulation, User, UserRole, Notification
 )
 from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate
 from engine.elo import update_ratings
+from routers.notifications import create_notification
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -42,7 +43,41 @@ def _invalidate_match_cache(match_id: int) -> None:
         pass
 
 
+def _notify_ranking_top3(db: Session) -> None:
+    top3 = (
+        db.query(Ranking)
+        .order_by(Ranking.total_points.desc())
+        .limit(3)
+        .all()
+    )
+    medals = ["🥇", "🥈", "🥉"]
+    for pos, ranking in enumerate(top3, start=1):
+        medal = medals[pos - 1]
+        # Only notify if user doesn't already have a top3 notification for this exact position today
+        from datetime import date
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        already = db.query(Notification).filter(
+            Notification.user_id == ranking.user_id,
+            Notification.type == "ranking_top3",
+            Notification.meta["position"].astext == str(pos),
+            Notification.created_at >= today_start,
+        ).first()
+        if not already:
+            create_notification(
+                db,
+                ranking.user_id,
+                "ranking_top3",
+                f"{medal} Você está em {pos}º lugar!",
+                f"Com {ranking.total_points} pontos no ranking geral.",
+                {"position": pos, "points": ranking.total_points},
+            )
+
+
 def _evaluate_bets(match: Match, result: MatchResult, db: Session) -> None:
+    team_a = match.team_a.name if match.team_a else "?"
+    team_b = match.team_b.name if match.team_b else "?"
+    match_label = f"{team_a} × {team_b}"
+
     bets = db.query(Bet).filter(Bet.match_id == match.id).all()
     for bet in bets:
         if bet.evaluated_at:
@@ -62,6 +97,25 @@ def _evaluate_bets(match: Match, result: MatchResult, db: Session) -> None:
         ranking.total_points   = (ranking.total_points   or 0) + bet.points_earned
         ranking.exact_scores   = (ranking.exact_scores   or 0) + (1 if exact else 0)
         ranking.correct_results = (ranking.correct_results or 0) + (1 if correct_result and not exact else 0)
+
+        # Notificação de resultado
+        meta = {
+            "match_id": match.id,
+            "team_a": team_a,
+            "team_b": team_b,
+            "score": f"{result.score_a}–{result.score_b}",
+            "bet": f"{bet.score_a}–{bet.score_b}",
+            "points": bet.points_earned,
+        }
+        if exact:
+            create_notification(db, bet.user_id, "bet_exact",
+                f"🎯 Placar exato! +3 pts", f"{match_label} · {bet.score_a}–{bet.score_b}", meta)
+        elif correct_result:
+            create_notification(db, bet.user_id, "bet_correct",
+                f"✅ Resultado certo! +1 pt", f"{match_label} · placar: {result.score_a}–{result.score_b}", meta)
+        else:
+            create_notification(db, bet.user_id, "bet_wrong",
+                f"❌ Resultado errado", f"{match_label} · seu palpite: {bet.score_a}–{bet.score_b}", meta)
 
 
 @router.post("/results", status_code=201)
@@ -105,6 +159,7 @@ def insert_result(
 
     db.flush()
     _evaluate_bets(match, result, db)
+    _notify_ranking_top3(db)
     db.commit()
 
     _invalidate_match_cache(match.id)

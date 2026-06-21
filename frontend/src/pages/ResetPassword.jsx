@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import Spinner from '../components/Spinner'
 
 export default function ResetPassword() {
   const [params] = useSearchParams()
@@ -43,8 +44,14 @@ export default function ResetPassword() {
 
   if (validating) return (
     <div className="page login-shell">
-      <div className="login-box" style={{ textAlign: 'center', padding: 'var(--s12)' }}>
-        <div style={{ fontFamily: 'var(--font-cond)', color: 'var(--text-3)' }}>Verificando link...</div>
+      <div className="login-box">
+        <div className="login-brand fade-in-1">
+          <div className="login-brand__logo">PREDICTS</div>
+          <div className="login-brand__subtitle">Simulador Estatístico</div>
+        </div>
+        <div className="card card--accent fade-in-2" style={{ padding: 'var(--s8)', textAlign: 'center' }}>
+          <Spinner text="Verificando link..." />
+        </div>
       </div>
     </div>
   )

@@ -4,6 +4,17 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
+import { PT_NAMES } from '../utils/teamNames'
+
+function TeamLabel({ code, name, flagUrl, compact = false }) {
+  const label = compact ? code : (PT_NAMES[code] || name || code)
+  return (
+    <span className="team-label">
+      {flagUrl && <img src={flagUrl} alt={code} className="match-card__flag" />}
+      <span className="team-label__text">{label}</span>
+    </span>
+  )
+}
 
 export default function Bets() {
   const { token } = useAuth()
@@ -247,6 +258,8 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         match_id: match.id,
         team_a_code: match.team_a?.code,
         team_b_code: match.team_b?.code,
+        team_a_flag: match.team_a?.flag_url,
+        team_b_flag: match.team_b?.flag_url,
         match_date: match.match_date,
         group_name: match.group_name,
         match_status: match.status,
@@ -294,16 +307,14 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         title="Ver probabilidades e dar palpite"
       >
         <div className="bet-card__team">
-          {match.team_a?.flag_url && <img src={match.team_a.flag_url} alt={match.team_a.code} className="match-card__flag" />}
-          <span>{match.team_a?.code}</span>
+          <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} />
         </div>
         {hasBet
           ? <div className="bet-current-score">{existingBet.score_a} – {existingBet.score_b}</div>
           : <div className="bet-card__versus">vs</div>
         }
         <div className="bet-card__team bet-card__team--right">
-          {match.team_b?.flag_url && <img src={match.team_b.flag_url} alt={match.team_b.code} className="match-card__flag" />}
-          <span>{match.team_b?.code}</span>
+          <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} />
         </div>
         <span className="odds-toggle-icon">{showOdds ? '▲' : '▼'}</span>
       </button>
@@ -324,7 +335,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
               </div>
               <div className="odds-bar__labels">
                 <span className="odds-label odds-label--win">
-                  <span className="odds-label__team">{match.team_a?.code}</span>
+                  <span className="odds-label__team"><TeamLabel code={match.team_a?.code} flagUrl={match.team_a?.flag_url} compact /></span>
                   <span className="odds-label__pct">{odds.prob_a}%</span>
                 </span>
                 <span className="odds-label odds-label--draw">
@@ -332,7 +343,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
                   <span className="odds-label__pct">{odds.prob_draw}%</span>
                 </span>
                 <span className="odds-label odds-label--lose">
-                  <span className="odds-label__team">{match.team_b?.code}</span>
+                  <span className="odds-label__team"><TeamLabel code={match.team_b?.code} flagUrl={match.team_b?.flag_url} compact /></span>
                   <span className="odds-label__pct">{odds.prob_b}%</span>
                 </span>
               </div>
@@ -356,7 +367,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
               </div>
               <div className="odds-bar__labels">
                 <span className="odds-label odds-label--win">
-                  <span className="odds-label__team">{match.team_a?.code}</span>
+                  <span className="odds-label__team"><TeamLabel code={match.team_a?.code} flagUrl={match.team_a?.flag_url} compact /></span>
                   <span className="odds-label__pct">{communityStats.pct_a}%</span>
                 </span>
                 <span className="odds-label odds-label--draw">
@@ -364,7 +375,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
                   <span className="odds-label__pct">{communityStats.pct_draw}%</span>
                 </span>
                 <span className="odds-label odds-label--lose">
-                  <span className="odds-label__team">{match.team_b?.code}</span>
+                  <span className="odds-label__team"><TeamLabel code={match.team_b?.code} flagUrl={match.team_b?.flag_url} compact /></span>
                   <span className="odds-label__pct">{communityStats.pct_b}%</span>
                 </span>
               </div>
@@ -427,13 +438,15 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
       {open && stillOpen && (
         <div className="bet-inline-form fade-in-1">
           <div className="bet-inline-teams">
-            <span>{match.team_a?.code}</span>
+            <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} compact />
             <div className="bet-inline-inputs">
               <ScoreInput value={sa} onChange={setSa} autoFocus />
               <span className="score-sep">×</span>
               <ScoreInput value={sb} onChange={setSb} />
             </div>
-            <span style={{ textAlign: 'right' }}>{match.team_b?.code}</span>
+            <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} compact />
+            </span>
           </div>
           <button
             type="button"
@@ -515,11 +528,13 @@ function NextMatchCard({ match, onYes, onNo }) {
     <div className="next-match-card fade-in-1">
       <div className="next-match-card__label">Próximo jogo</div>
       <div className="next-match-card__teams">
-        {match.team_a?.flag_url && <img src={match.team_a.flag_url} alt={match.team_a.code} className="match-card__flag" />}
-        <span className="next-match-card__code">{match.team_a?.code}</span>
+        <span className="next-match-card__code">
+          <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} />
+        </span>
         <span className="next-match-card__vs">vs</span>
-        <span className="next-match-card__code">{match.team_b?.code}</span>
-        {match.team_b?.flag_url && <img src={match.team_b.flag_url} alt={match.team_b.code} className="match-card__flag" />}
+        <span className="next-match-card__code">
+          <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} />
+        </span>
       </div>
       <p className="next-match-card__question">Deseja dar palpite neste jogo?</p>
       <div className="next-match-card__actions">
@@ -552,8 +567,87 @@ function Countdown({ ms }) {
   )
 }
 
+// ── Share modal ───────────────────────────────────────────────────────────────
+function BetShareModal({ bet, onClose }) {
+  const [copied, setCopied] = useState(false)
+
+  const teamA = bet.team_a_name || bet.team_a_code || 'Time A'
+  const teamB = bet.team_b_name || bet.team_b_code || 'Time B'
+  const flagA = bet.team_a_flag ? `<img src="${bet.team_a_flag}" style="width:20px;vertical-align:middle" /> ` : ''
+  const flagB = bet.team_b_flag ? ` <img src="${bet.team_b_flag}" style="width:20px;vertical-align:middle" />` : ''
+
+  const resultLine = bet.result === 'exact'   ? `🎯 Placar exato! +${bet.points_earned ?? 10} pts`
+                   : bet.result === 'correct'  ? `✅ Resultado correto! +${bet.points_earned ?? 5} pts`
+                   : bet.result === 'wrong'    ? `❌ Sem acerto desta vez.`
+                   : '⏳ Aguardando resultado...'
+
+  const shareText = [
+    `🏆 Meu palpite no Predicts — Copa 2026`,
+    ``,
+    `⚽ ${teamA} × ${teamB}`,
+    `🎯 Meu palpite: ${bet.score_a}–${bet.score_b}`,
+    bet.official_score_a != null ? `📊 Resultado: ${bet.official_score_a}–${bet.official_score_b}` : null,
+    bet.result ? resultLine : null,
+    ``,
+    `📱 predicts.info`,
+  ].filter(Boolean).join('\n')
+
+  async function copy() {
+    await navigator.clipboard.writeText(shareText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function share() {
+    if (navigator.share) {
+      await navigator.share({ title: 'Meu palpite — Predicts', text: shareText })
+    } else {
+      copy()
+    }
+  }
+
+  return (
+    <div className="bet-share-backdrop" onClick={onClose}>
+      <div className="bet-share-modal" onClick={e => e.stopPropagation()}>
+        <div className="bet-share-modal__header">
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, letterSpacing: '0.06em' }}>Compartilhar Palpite</span>
+          <button onClick={onClose} className="notif-close">✕</button>
+        </div>
+        <div className="bet-share-modal__card">
+          <div className="bet-share-modal__match">
+            {bet.team_a_flag && <img src={bet.team_a_flag} alt={teamA} style={{ width: 28, borderRadius: 2 }} />}
+            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{teamA}</span>
+            <span style={{ fontFamily: 'var(--font-data)', fontWeight: 900, fontSize: 22 }}>{bet.score_a}–{bet.score_b}</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{teamB}</span>
+            {bet.team_b_flag && <img src={bet.team_b_flag} alt={teamB} style={{ width: 28, borderRadius: 2 }} />}
+          </div>
+          {bet.official_score_a != null && (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', textAlign: 'center', marginTop: 4 }}>
+              Resultado oficial: {bet.official_score_a}–{bet.official_score_b}
+            </div>
+          )}
+          {bet.result && (
+            <div className="bet-share-modal__result">{resultLine}</div>
+          )}
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', textAlign: 'center', marginTop: 8, letterSpacing: '0.08em' }}>predicts.info</div>
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--s3)', padding: 'var(--s4)' }}>
+          <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={copy}>
+            {copied ? '✓ Copiado!' : '📋 Copiar texto'}
+          </button>
+          <button className="btn btn-primary btn-sm" style={{ flex: 1, background: 'var(--accent)' }} onClick={share}>
+            📤 Compartilhar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Placed bet row (Mine tab) ─────────────────────────────────────────────────
 function BetRow({ bet, index, onOpenSimulation }) {
+  const [showShare, setShowShare] = useState(false)
+
   const resultClass = bet.result === 'exact'   ? 'bet-card--result-exact'
                     : bet.result === 'correct'  ? 'bet-card--result-correct'
                     : bet.result === 'wrong'    ? 'bet-card--result-wrong'
@@ -579,6 +673,7 @@ function BetRow({ bet, index, onOpenSimulation }) {
   const hasOfficial = bet.official_score_a != null && bet.official_score_b != null
 
   return (
+    <>
     <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${index * 30}ms` }}>
       <div className="bet-card__top">
         <span className="badge badge-group">Grupo {bet.group_name}</span>
@@ -589,14 +684,18 @@ function BetRow({ bet, index, onOpenSimulation }) {
       </div>
 
       <div className="bet-card__match" style={{ marginTop: 'var(--s4)' }}>
-        <div className="bet-card__team">{bet.team_a_code}</div>
+        <div className="bet-card__team">
+          <TeamLabel code={bet.team_a_code} flagUrl={bet.team_a_flag} />
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           <div className="bet-card__score">{bet.score_a} – {bet.score_b}</div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-4)', textTransform: 'uppercase' }}>
             seu palpite
           </div>
         </div>
-        <div className="bet-card__team bet-card__team--right">{bet.team_b_code}</div>
+        <div className="bet-card__team bet-card__team--right">
+          <TeamLabel code={bet.team_b_code} flagUrl={bet.team_b_flag} />
+        </div>
       </div>
 
       {hasOfficial && (
@@ -633,12 +732,17 @@ function BetRow({ bet, index, onOpenSimulation }) {
       <div className="bet-card__footer" style={{ marginTop: 'var(--s4)' }}>
         <span className="bet-card__status" style={{ color: statusColor }}>{statusLabel}</span>
         <div className="bet-card__actions">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowShare(true)} title="Compartilhar">
+            📤
+          </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenSimulation}>
             Ver Simulação
           </button>
         </div>
       </div>
     </div>
+    {showShare && <BetShareModal bet={bet} onClose={() => setShowShare(false)} />}
+    </>
   )
 }
 

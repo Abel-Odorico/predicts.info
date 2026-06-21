@@ -1,12 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { Link } from 'react-router-dom'
+import { usePushNotifications } from '../hooks/usePushNotifications'
+
+function relDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 export default function Profile() {
   const { user, token, setUser } = useAuth()
   const [tab, setTab] = useState('profile')
+  const push = usePushNotifications(token)
+  const [achievements, setAchievements] = useState([])
+  const [achLoading, setAchLoading] = useState(false)
+
+  useEffect(() => {
+    if (!token) return
+    setAchLoading(true)
+    api.get('/achievements', token).then(setAchievements).catch(() => {}).finally(() => setAchLoading(false))
+  }, [token])
 
   const [name, setName]         = useState(user?.name ?? '')
   const [username, setUsername] = useState(user?.username ?? '')
@@ -225,6 +241,59 @@ export default function Profile() {
           </div>
         </form>
       )}
+
+      {/* ── Push Notifications ─────────────────────────────────── */}
+      {push.supported && (
+        <div className="card mt-6 fade-in-3">
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🔔 Notificações Push</span>
+          </div>
+          <div className="card__body">
+            <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', marginBottom: 'var(--s4)' }}>
+              Receba alertas mesmo com o site fechado: resultados de apostas, ranking e lembretes de jogos.
+            </p>
+            {push.permission === 'denied' ? (
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>
+                Notificações bloqueadas no navegador. Desbloqueie nas configurações do site.
+              </p>
+            ) : push.subscribed ? (
+              <button className="btn btn-ghost btn-sm" onClick={push.unregister}>
+                ✓ Notificações ativas — Desativar
+              </button>
+            ) : (
+              <button className="btn btn-primary btn-sm" onClick={push.register}>
+                🔔 Ativar notificações neste dispositivo
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Conquistas ────────────────────────────────────────── */}
+      <div className="card mt-6 fade-in-3">
+        <div className="card__header">
+          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🏅 Conquistas</span>
+        </div>
+        <div className="card__body">
+          {achLoading ? (
+            <Spinner text="Carregando conquistas..." />
+          ) : (
+            <div className="achievements-grid">
+              {achievements.map(a => (
+                <div key={a.code} className={`achievement-card${a.unlocked ? ' achievement-card--unlocked' : ''}`}>
+                  <div className="achievement-card__icon">{a.icon}</div>
+                  <div className="achievement-card__title">{a.title}</div>
+                  <div className="achievement-card__desc">{a.desc}</div>
+                  {a.unlocked && a.unlocked_at && (
+                    <div className="achievement-card__date">{relDate(a.unlocked_at)}</div>
+                  )}
+                  {!a.unlocked && <div className="achievement-card__lock">🔒</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

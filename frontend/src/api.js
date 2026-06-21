@@ -19,6 +19,7 @@ async function req(method, path, body, token) {
     error.detail = detail;
     throw error;
   }
+  if (res.status === 204 || res.headers.get('content-length') === '0') return null;
   return res.json();
 }
 

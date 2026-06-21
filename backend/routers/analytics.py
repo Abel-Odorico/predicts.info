@@ -141,7 +141,8 @@ def stats(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(days=days)
     rows = db.query(PageView).filter(PageView.created_at >= since).all()
 
     total_views   = len(rows)
@@ -184,6 +185,41 @@ def stats(
     ref_counter: Counter = Counter(r.referrer for r in rows if r.referrer and r.referrer != "direct")
     top_refs = [{"referrer": r, "views": c} for r, c in ref_counter.most_common(8)]
 
+    # Bounce rate — IPs with only 1 page view in period
+    ip_views: Counter = Counter(r.ip for r in rows if r.ip)
+    single_view_ips = sum(1 for c in ip_views.values() if c == 1)
+    bounce_rate = round((single_view_ips / unique_ips * 100) if unique_ips else 0, 1)
+
+    # Avg pages per visitor
+    avg_pages = round(total_views / unique_ips, 2) if unique_ips else 0
+
+    # Returning visitors — IPs seen before the current period
+    ips_in_period = {r.ip for r in rows if r.ip}
+    returning_ips_count = 0
+    if ips_in_period:
+        older_ips = {
+            r.ip for r in db.query(PageView.ip)
+            .filter(PageView.created_at < since, PageView.ip.in_(ips_in_period))
+            .all()
+        }
+        returning_ips_count = len(older_ips)
+    new_visitor_ips = unique_ips - returning_ips_count
+
+    # New user registrations in period
+    new_users_rows = db.query(User).filter(User.created_at >= since).all()
+    new_users = len(new_users_rows)
+    conversion_rate = round((new_users / unique_ips * 100) if unique_ips else 0, 2)
+
+    # Registrations per day
+    reg_day_counter: Counter = Counter()
+    for u in new_users_rows:
+        if u.created_at:
+            reg_day_counter[u.created_at.strftime("%Y-%m-%d")] += 1
+    registrations_per_day = [{"date": d, "count": c} for d, c in sorted(reg_day_counter.items())]
+
+    # Total users
+    total_users = db.query(func.count(User.id)).scalar() or 0
+
     return {
         "days": days,
         "total_views": total_views,
@@ -196,6 +232,14 @@ def stats(
         "browsers": browsers,
         "os": os_list,
         "top_referrers": top_refs,
+        "bounce_rate": bounce_rate,
+        "avg_pages": avg_pages,
+        "returning_visitors": returning_ips_count,
+        "new_visitors": new_visitor_ips,
+        "new_users": new_users,
+        "total_users": total_users,
+        "conversion_rate": conversion_rate,
+        "registrations_per_day": registrations_per_day,
     }
 
 

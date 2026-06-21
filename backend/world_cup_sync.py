@@ -19,6 +19,7 @@ from models import (
     MatchPhase,
     MatchResult,
     MatchStatus,
+    Notification,
     Player,
     Ranking,
     SimulationCache,
@@ -517,6 +518,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         finished_count = 0
         new_matches = 0
         result_by_match_id: dict[int, tuple[int, int]] = {}
+        match_label_by_id: dict[int, str] = {}
 
         for match_number, item in enumerate(match_rows, start=1):
             key = _bet_match_key(
@@ -553,6 +555,10 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 db.flush()
                 new_matches += 1
 
+            team_a_name = team_by_code[item["team_a_code"]].name
+            team_b_name = team_by_code[item["team_b_code"]].name
+            match_label_by_id[match.id] = f"{team_a_name} × {team_b_name}"
+
             if item["score_a"] is not None and item["score_b"] is not None:
                 result_by_match_id[match.id] = (item["score_a"], item["score_b"])
                 db.add(
@@ -571,6 +577,11 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
 
         db.flush()
 
+        # Bets already evaluated before this sync (don't re-notify)
+        already_evaluated_bet_ids = {
+            b.id for b in db.query(Bet.id).filter(Bet.evaluated_at.isnot(None))
+        }
+
         # Re-evaluate all existing bets against updated results.
         # Rebuild ranking from scratch based on current bets.
         db.query(Ranking).delete()
@@ -578,6 +589,8 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
 
         ranking_totals: dict[int, dict[str, int]] = {}
         evaluated_count = 0
+        notif_count = 0
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
         for bet in db.query(Bet).all():
             result_scores = result_by_match_id.get(bet.match_id)
             if result_scores is not None:
@@ -585,7 +598,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                     bet.score_a, bet.score_b, result_scores[0], result_scores[1]
                 )
                 bet.points_earned = points
-                bet.evaluated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                bet.evaluated_at = now_utc
                 evaluated_count += 1
                 stats = ranking_totals.setdefault(
                     bet.user_id,
@@ -596,6 +609,29 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                     stats["exact_scores"] += 1
                 elif correct_result:
                     stats["correct_results"] += 1
+
+                if bet.id not in already_evaluated_bet_ids:
+                    label = match_label_by_id.get(bet.match_id, f"Jogo #{bet.match_id}")
+                    score_str = f"{result_scores[0]}–{result_scores[1]}"
+                    meta = {
+                        "match_id": bet.match_id,
+                        "score": score_str,
+                        "bet": f"{bet.score_a}–{bet.score_b}",
+                        "points": points,
+                    }
+                    if exact:
+                        db.add(Notification(user_id=bet.user_id, type="bet_exact",
+                            title="🎯 Placar exato! +3 pts",
+                            body=f"{label} · {bet.score_a}–{bet.score_b}", meta=meta))
+                    elif correct_result:
+                        db.add(Notification(user_id=bet.user_id, type="bet_correct",
+                            title="✅ Resultado certo! +1 pt",
+                            body=f"{label} · placar: {score_str}", meta=meta))
+                    else:
+                        db.add(Notification(user_id=bet.user_id, type="bet_wrong",
+                            title="❌ Resultado errado",
+                            body=f"{label} · seu palpite: {bet.score_a}–{bet.score_b}", meta=meta))
+                    notif_count += 1
             else:
                 # Match not yet played — keep bet but clear stale evaluation
                 bet.points_earned = 0
@@ -611,7 +647,36 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 )
             )
 
+        # Notify top 3 ranking (once per day per position)
+        db.flush()
+        top3 = (
+            db.query(Ranking)
+            .order_by(Ranking.total_points.desc())
+            .limit(3)
+            .all()
+        )
+        medals = ["🥇", "🥈", "🥉"]
+        from datetime import date
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        for pos, ranking in enumerate(top3, start=1):
+            already = db.query(Notification).filter(
+                Notification.user_id == ranking.user_id,
+                Notification.type == "ranking_top3",
+                Notification.meta["position"].astext == str(pos),
+                Notification.created_at >= today_start,
+            ).first()
+            if not already:
+                db.add(Notification(
+                    user_id=ranking.user_id,
+                    type="ranking_top3",
+                    title=f"{medals[pos - 1]} Você está em {pos}º lugar!",
+                    body=f"Com {ranking.total_points} pontos no ranking geral.",
+                    meta={"position": pos, "points": ranking.total_points},
+                ))
+
         db.commit()
+        if notif_count:
+            _log(log, f"✓ Notificações criadas: {notif_count} apostas")
 
     _log(
         log,

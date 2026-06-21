@@ -4,7 +4,6 @@ import { api } from '../api'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../stores/authStore'
 
-const FLAG = code => code ? `https://flagcdn.com/24x18/${code.toLowerCase()}.png` : null
 
 const RESULT_META = {
   exact:   { label: 'Exato',   color: 'var(--accent)', hex: '#0f7a78' },
@@ -260,7 +259,7 @@ function PointsChart({ bets }) {
       let cum = 0
       return evaluated.map(b => {
         cum += b.points_earned ?? 0
-        return { label: `${b.team_a_code}×${b.team_b_code}`, pts: b.points_earned ?? 0, cum, result: b.result }
+        return { label: `${b.team_a_name || b.team_a_code}×${b.team_b_name || b.team_b_code}`, pts: b.points_earned ?? 0, cum, result: b.result }
       })
     }
     const map = new Map()
@@ -279,15 +278,16 @@ function PointsChart({ bets }) {
 
   if (points.length < 1) return null
 
-  const W = 400, H = 160, BAR_H = 28, PADL = 32, PADR = 8, PADT = 10, PADB = 20
-  const chartH = H - BAR_H - PADB
+  const W = 400, H = 200, BAR_H = 52, PADL = 32, PADR = 8, PADT = 10, PADB = 16
+  const SEP = 6
+  const chartH = H - BAR_H - PADB - SEP
   const maxCum = Math.max(...points.map(p => p.cum), 1)
   const maxPts = Math.max(...points.map(p => p.pts), 1)
   const totalPts = points[points.length - 1].cum
 
-  const toX  = i => PADL + (points.length === 1 ? (W - PADL - PADR) / 2 : (i / (points.length - 1)) * (W - PADL - PADR))
-  const toY  = v => PADT + ((1 - v / maxCum) * (chartH - PADT))
-  const barY = chartH + 4
+  const toX    = i => PADL + (points.length === 1 ? (W - PADL - PADR) / 2 : (i / (points.length - 1)) * (W - PADL - PADR))
+  const toY    = v => PADT + ((1 - v / maxCum) * (chartH - PADT))
+  const barBot = H - PADB
   const barMaxH = BAR_H - 8
 
   const coords = points.map((p, i) => [toX(i), toY(p.cum)])
@@ -296,8 +296,8 @@ function PointsChart({ bets }) {
   const yTicks = [0, Math.round(maxCum / 2), maxCum]
 
   const barW = points.length > 1
-    ? Math.max(2, ((W - PADL - PADR) / points.length) * 0.6)
-    : 12
+    ? Math.max(3, ((W - PADL - PADR) / points.length) * 0.65)
+    : 16
 
   return (
     <div className="uh-chart-card">
@@ -321,7 +321,7 @@ function PointsChart({ bets }) {
           onMouseLeave={() => setTooltip(null)}>
           <defs>
             <linearGradient id="pts-area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="var(--accent)" stopOpacity="0.2" />
+              <stop offset="0%"   stopColor="var(--accent)" stopOpacity="0.18" />
               <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.01" />
             </linearGradient>
           </defs>
@@ -338,33 +338,51 @@ function PointsChart({ bets }) {
             )
           })}
 
-          {/* Separator line between chart and bars */}
-          <line x1={PADL} y1={chartH + 2} x2={W - PADR} y2={chartH + 2} stroke="currentColor" strokeOpacity="0.08" />
+          {/* Separator line between chart area and bars */}
+          <line x1={PADL} y1={chartH + SEP} x2={W - PADR} y2={chartH + SEP} stroke="currentColor" strokeOpacity="0.1" strokeDasharray="2 3" />
 
           {/* Area + Line */}
           <path d={areaD} fill="url(#pts-area)" />
           <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
-          {/* Per-game bars */}
+          {/* Per-game bars + connector lines */}
           {points.map((p, i) => {
-            const x = toX(i)
-            const bh = Math.max(2, (p.pts / maxPts) * barMaxH)
-            const col = RESULT_COLOR[p.result] || '#3d5a78'
+            const x      = toX(i)
+            const bh     = p.pts > 0 ? Math.max(4, (p.pts / maxPts) * barMaxH) : 2
+            const col    = RESULT_COLOR[p.result] || '#3d5a78'
+            const barTop = barBot - bh
+            const dotY   = coords[i][1]
+            const active = tooltip?.idx === i
             return (
-              <rect key={i}
-                x={x - barW / 2} y={barY + barMaxH - bh}
-                width={barW} height={bh}
-                fill={col} opacity="0.75" rx="1"
-              />
+              <g key={i}
+                onMouseEnter={() => setTooltip({ x, y: dotY, idx: i, ...points[i] })}
+                style={{ cursor: 'crosshair' }}>
+                {/* Connector always visible: dot bottom → bar top */}
+                <line
+                  x1={x} y1={dotY + 4} x2={x} y2={barTop - 1}
+                  stroke={col}
+                  strokeOpacity={active ? 0.7 : 0.22}
+                  strokeWidth={active ? 1.5 : 1}
+                  strokeDasharray={active ? '3 3' : '2 4'}
+                />
+                {/* Bar */}
+                <rect
+                  x={x - barW / 2} y={barTop}
+                  width={barW} height={bh}
+                  fill={col} opacity={active ? 1 : 0.72} rx="2"
+                />
+                {/* Hover hit area (full column height) */}
+                <rect x={x - Math.max(barW, 10) / 2} y={PADT} width={Math.max(barW, 10)} height={H - PADT - PADB}
+                  fill="transparent" />
+              </g>
             )
           })}
 
-          {/* Dots (on top of everything) */}
+          {/* Dots on line */}
           {coords.map(([x, y], i) => {
             const active = tooltip?.idx === i
             return (
-              <g key={i} onMouseEnter={() => setTooltip({ x, y, idx: i, ...points[i] })} style={{ cursor: 'crosshair' }}>
-                <circle cx={x} cy={y} r={10} fill="transparent" />
+              <g key={i} style={{ pointerEvents: 'none' }}>
                 <circle cx={x} cy={y} r={active ? 5 : 3}
                   fill={active ? 'var(--accent)' : 'var(--bg-surface)'}
                   stroke="var(--accent)" strokeWidth={active ? 2 : 1.5}
@@ -386,34 +404,40 @@ function PointsChart({ bets }) {
         </svg>
 
         {/* Tooltip */}
-        {tooltip && (
-          <div style={{
-            position: 'absolute',
-            left: `${(tooltip.x / W) * 100}%`,
-            top: `${(tooltip.y / H) * 100}%`,
-            transform: 'translate(-50%, calc(-100% - 10px))',
-            background: 'var(--bg-overlay)',
-            border: `1px solid ${RESULT_COLOR[tooltip.result] || 'var(--border)'}`,
-            borderRadius: 'var(--r2)', padding: '6px 12px',
-            pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 20,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          }}>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', marginBottom: 2 }}>
-              {tooltip.label}
-            </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent)', lineHeight: 1 }}>
-              {tooltip.cum} pts
-              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: RESULT_COLOR[tooltip.result] || 'var(--text-4)', marginLeft: 8 }}>
-                +{tooltip.pts}
-              </span>
-            </div>
-            {tooltip.result && (
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: RESULT_COLOR[tooltip.result], letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
-                {RESULT_META[tooltip.result]?.label}
+        {tooltip && (() => {
+          const leftPct = (tooltip.x / W) * 100
+          const flipLeft = leftPct > 75
+          return (
+            <div style={{
+              position: 'absolute',
+              left: `${leftPct}%`,
+              top: `${(tooltip.y / H) * 100}%`,
+              transform: `translate(${flipLeft ? 'calc(-100% - 8px)' : '8px'}, calc(-50%))`,
+              background: 'var(--bg-overlay)',
+              border: `1px solid ${RESULT_COLOR[tooltip.result] || 'var(--border)'}`,
+              borderRadius: 'var(--r2)', padding: '6px 12px',
+              pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 20,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', marginBottom: 2 }}>
+                {tooltip.label}
               </div>
-            )}
-          </div>
-        )}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent)', lineHeight: 1 }}>
+                  {tooltip.cum} pts
+                </span>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: RESULT_COLOR[tooltip.result] || 'var(--text-4)', fontWeight: 700 }}>
+                  +{tooltip.pts}
+                </span>
+              </div>
+              {tooltip.result && (
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: RESULT_COLOR[tooltip.result], letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2 }}>
+                  {RESULT_META[tooltip.result]?.label}
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Bar legend */}
@@ -458,12 +482,12 @@ function BetCard({ bet, idx }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 'var(--s3)', marginTop: 'var(--s3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
-          {FLAG(bet.team_a_code) && (
-            <img src={FLAG(bet.team_a_code)} alt={bet.team_a_code}
+          {bet.team_a_flag && (
+            <img src={bet.team_a_flag} alt={bet.team_a_name || bet.team_a_code}
               style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }} />
           )}
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
-            {bet.team_a_code}
+            {bet.team_a_name || bet.team_a_code}
           </span>
         </div>
 
@@ -478,10 +502,10 @@ function BetCard({ bet, idx }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', justifyContent: 'flex-end' }}>
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
-            {bet.team_b_code}
+            {bet.team_b_name || bet.team_b_code}
           </span>
-          {FLAG(bet.team_b_code) && (
-            <img src={FLAG(bet.team_b_code)} alt={bet.team_b_code}
+          {bet.team_b_flag && (
+            <img src={bet.team_b_flag} alt={bet.team_b_name || bet.team_b_code}
               style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }} />
           )}
         </div>

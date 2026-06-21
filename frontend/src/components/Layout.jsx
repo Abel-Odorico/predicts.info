@@ -5,6 +5,7 @@ import { useTrack } from '../hooks/useTrack'
 import { useAdSense } from '../hooks/useAdSense'
 import { api } from '../api'
 import ShareModal from './ShareModal'
+import NotificationBell from './NotificationBell'
 
 const THEMES = ['light', 'dark', 'system']
 const THEME_META = {
@@ -158,6 +159,7 @@ export default function Layout() {
                 <div className="sidebar__avatar">{initials}</div>
                 <span className="sidebar__user-name">{user.name}</span>
               </Link>
+              <div style={{ padding: '0 0 4px' }}><NotificationBell /></div>
               <NavLink to="/perfil" className={({ isActive }) => `btn btn-ghost btn-sm w-full${isActive ? ' active' : ''}`}>
                 ⚙️ Meu Perfil
               </NavLink>
@@ -210,6 +212,7 @@ export default function Layout() {
           >
             {THEME_META[theme].icon}
           </button>
+          {user && <NotificationBell />}
           {user ? (
             <Link to="/perfil" className="mobile-topbar__avatar" title={user.name}>
               {initials}
@@ -261,6 +264,11 @@ export default function Layout() {
         )}
 
         <div className="mobile-drawer__footer" style={{ flexDirection: 'column', gap: 8 }}>
+          {user && (
+            <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 4 }}>
+              <NotificationBell />
+            </div>
+          )}
           <button
             onClick={() => { setShareOpen(true); closeDrawer() }}
             className="btn btn-sm w-full"

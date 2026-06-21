@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api, CONF_HEX, heatClass } from '../api'
 import Spinner from '../components/Spinner'
+import { PT_NAMES } from '../utils/teamNames'
 
 const PHASES = [
   { key: 'prob_title',  label: 'Título' },
@@ -64,7 +65,8 @@ export default function Tournament() {
     let t = [...data.teams]
     if (filter) t = t.filter(x =>
       x.name.toLowerCase().includes(filter.toLowerCase()) ||
-      x.code.toLowerCase().includes(filter.toLowerCase())
+      x.code.toLowerCase().includes(filter.toLowerCase()) ||
+      (PT_NAMES[x.code] || '').toLowerCase().includes(filter.toLowerCase())
     )
     if (confFilter) t = t.filter(x => x.confederation === confFilter)
     // sortDir 1 = descending (b-a), -1 = ascending (a-b)
@@ -123,7 +125,7 @@ export default function Tournament() {
                         objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)'
                       }} />
                     )}
-                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: rank === 1 ? 15 : 13 }}>{t.name}</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: rank === 1 ? 15 : 13 }}>{PT_NAMES[t.code] || t.name}</div>
                     <div style={{
                       fontFamily: 'var(--font-display)', fontSize: rank === 1 ? 28 : 20,
                       color: rank === 1 ? 'var(--accent)' : 'var(--text-2)'
@@ -231,7 +233,7 @@ export default function Tournament() {
                         borderRadius: 1, border: '1px solid var(--border)'
                       }} />
                     )}
-                    <span style={{ fontWeight: 500 }}>{t.name}</span>
+                    <span style={{ fontWeight: 500 }}>{PT_NAMES[t.code] || t.name}</span>
                     <span style={{
                       fontFamily: 'var(--font-cond)', fontSize: 10,
                       color: CONF_HEX[t.confederation] || 'var(--text-3)',
@@ -349,7 +351,7 @@ function TeamChip({ code, name, flag, prob, side }) {
       {flag && <img src={flag} alt={code} className="team-chip__flag" />}
       <div className="team-chip__info">
         <span className="team-chip__code">{code}</span>
-        <span className="team-chip__name">{name}</span>
+        <span className="team-chip__name">{PT_NAMES[code] || name}</span>
       </div>
       {prob != null && (
         <span className="team-chip__prob" style={{ color: prob >= 55 ? 'var(--accent)' : 'var(--text-3)' }}>
@@ -374,7 +376,7 @@ function TopSFView({ sfList }) {
               {sf.teams.map(t => (
                 <div key={t.code} className="proj-sf-team">
                   {t.flag_url && <img src={t.flag_url} alt={t.code} className="team-chip__flag" />}
-                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>{t.code}</span>
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>{PT_NAMES[t.code] || t.code}</span>
                 </div>
               ))}
             </div>
@@ -404,7 +406,7 @@ function TopChampionsView({ teams }) {
             {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`}
           </span>
           {t.flag_url && <img src={t.flag_url} alt={t.code} className="team-chip__flag" />}
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, flex: 1 }}>{t.name}</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, flex: 1 }}>{PT_NAMES[t.code] || t.name}</span>
           <div className="proj-champ-bar-track">
             <div className="proj-champ-bar-fill" style={{ width: `${(t.prob_title / maxProb) * 100}%` }} />
           </div>
@@ -535,7 +537,7 @@ function GroupsView({ groups, bracket }) {
                       ? <img src={t.flag_url} alt={t.code} className="comp-group-row__flag" />
                       : <span className="comp-group-row__flag-ph" />
                     }
-                    <span className="comp-group-row__name">{t.name}</span>
+                    <span className="comp-group-row__name">{PT_NAMES[t.code] || t.name}</span>
                     <span className="comp-group-row__stat">{t.played}</span>
                     <span className="comp-group-row__stat">{t.wins}</span>
                     <span className="comp-group-row__stat">{t.draws}</span>
@@ -622,7 +624,7 @@ function KoTeamRow({ team, label, candidates, matchLookup, winProb }) {
           : <span className="ko-team__flag-ph" />
         }
         <div className="ko-team__info">
-          <span className="ko-team__name">{team.name}</span>
+          <span className="ko-team__name">{PT_NAMES[team.code] || team.name}</span>
           <span className="ko-team__code">{team.code} · G{team.group_name}{team.position}</span>
         </div>
         <div className="ko-team__elo-wrap">

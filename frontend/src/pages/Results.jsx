@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
+import { PT_NAMES } from '../utils/teamNames'
 
 const TOTAL_MATCHES = 104
 
@@ -153,8 +154,7 @@ function ResultCard({ match }) {
         {/* Team A */}
         <div className={`result-card__team ${outcome === 'a' ? 'winner' : outcome === 'draw' ? '' : 'loser'}`}>
           {ta.flag_url && <img src={ta.flag_url} alt={ta.code} className="result-card__flag" />}
-          <span className="result-card__name">{ta.name}</span>
-          <span className="result-card__code">{ta.code}</span>
+          <span className="result-card__name">{PT_NAMES[ta.code] || ta.name}</span>
         </div>
 
         {/* Score */}
@@ -166,8 +166,7 @@ function ResultCard({ match }) {
 
         {/* Team B */}
         <div className={`result-card__team result-card__team--right ${outcome === 'b' ? 'winner' : outcome === 'draw' ? '' : 'loser'}`}>
-          <span className="result-card__code">{tb.code}</span>
-          <span className="result-card__name">{tb.name}</span>
+          <span className="result-card__name">{PT_NAMES[tb.code] || tb.name}</span>
           {tb.flag_url && <img src={tb.flag_url} alt={tb.code} className="result-card__flag" />}
         </div>
       </div>

@@ -5,6 +5,7 @@ import ProbBar from '../components/ProbBar'
 import ScoreGrid from '../components/ScoreGrid'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../stores/authStore'
+import MatchComments from '../components/MatchComments'
 
 const WEIGHT_LABELS = {
   elo:          'Elo Rating (35%)',
@@ -279,6 +280,7 @@ export default function MatchSim() {
           )}
         </div>
       </div>
+      <MatchComments matchId={match?.id} />
     </div>
   )
 }

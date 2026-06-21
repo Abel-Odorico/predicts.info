@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
+import { PT_NAMES } from '../utils/teamNames'
 
 export default function Groups() {
   const [groups, setGroups]     = useState({})
@@ -193,7 +194,7 @@ export default function Groups() {
                         }} />
                       )}
                       <span className="group-team-row__name" style={{ flex: 1 }}>
-                        {t.name}
+                        {PT_NAMES[t.code] || t.name}
                       </span>
                       {statusLabel && (
                         <span style={{
@@ -321,8 +322,8 @@ function QualifiedGroup({ title, teams, color, navigate }) {
             {t.flag_url && (
               <img src={t.flag_url} alt={t.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} />
             )}
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>
-              {t.code}
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
+              {PT_NAMES[t.code] || t.code}
             </span>
             <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)' }}>
               G{t.group_name}
@@ -345,7 +346,7 @@ function BracketSlot({ team, label, right }) {
           <img src={team.flag_url} alt={team.code} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} />
         )}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start' }}>
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{team.code}</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{PT_NAMES[team.code] || team.code}</span>
           <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>{team.points}pts G{team.group_name}</span>
         </div>
         {right && team.flag_url && (
@@ -398,7 +399,10 @@ function GroupMatchLinks({ groupName, navigate }) {
           onClick={() => navigate(`/partida/${m.id}`)}
           className="group-links__item"
         >
-          <span>{m.team_a.code}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            {m.team_a.flag_url && <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} />}
+            {m.team_a.code}
+          </span>
           <span style={{ color: 'var(--text-4)' }}>
             {m.status === 'finished' && m.result
               ? `${m.result.score_a}–${m.result.score_b}`
@@ -406,7 +410,10 @@ function GroupMatchLinks({ groupName, navigate }) {
                 ? `${m.live_score_a ?? '-'}–${m.live_score_b ?? '-'}`
               : 'vs'}
           </span>
-          <span>{m.team_b.code}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            {m.team_b.code}
+            {m.team_b.flag_url && <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} />}
+          </span>
           {m.status === 'finished' && <span className="badge badge-done" style={{ marginLeft: 4 }}>FIM</span>}
           {m.status === 'live' && <span className="badge badge-live" style={{ marginLeft: 4 }}>{m.status_raw || 'AO VIVO'}</span>}
         </div>

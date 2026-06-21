@@ -26,6 +26,7 @@ import ResetPassword  from './pages/ResetPassword'
 import Votacao        from './pages/Votacao'
 import Regras         from './pages/Regras'
 import VotacaoBanner  from './components/VotacaoBanner'
+import Onboarding from './components/Onboarding'
 import { useAuth } from './stores/authStore'
 import { api } from './api'
 
@@ -37,6 +38,7 @@ export default function App() {
         <main className="main">
           <VotacaoBanner />
           <ProfileCompletionNotice />
+          <Onboarding />
           <Routes>
             <Route path="/"            element={<Dashboard />} />
             <Route path="/dashboard"   element={<Dashboard />} />

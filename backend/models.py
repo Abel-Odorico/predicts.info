@@ -392,3 +392,18 @@ class PageView(Base):
     os         = Column(String(40))
     referrer   = Column(String(500))
     created_at = Column(DateTime, default=_utcnow, index=True)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id         = Column(Integer, primary_key=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    type       = Column(String(50), nullable=False)
+    title      = Column(String(200), nullable=False)
+    body       = Column(String(500), nullable=True)
+    meta       = Column(JSONB, nullable=True)
+    read_at    = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+
+    user = relationship("User")

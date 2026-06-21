@@ -17,6 +17,10 @@ from routers import analytics as analytics_router
 from routers import user_groups as user_groups_router
 from routers import audit as audit_router
 from routers import poll as poll_router
+from routers import notifications as notifications_router
+from routers import push as push_router
+from routers import achievements as achievements_router
+from routers import match_comments as match_comments_router
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
 
@@ -173,6 +177,39 @@ def _run_migrations():
             WHERE p.id = (SELECT MIN(id) FROM polls)
               AND NOT EXISTS (SELECT 1 FROM poll_options WHERE poll_id = p.id AND order_num = 5)
             """,
+            # Push subscriptions
+            """
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                endpoint TEXT NOT NULL,
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                CONSTRAINT uq_push_endpoint UNIQUE (endpoint)
+            )
+            """,
+            # Persistent achievements
+            """
+            CREATE TABLE IF NOT EXISTS user_achievements (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                code VARCHAR(50) NOT NULL,
+                unlocked_at TIMESTAMP DEFAULT NOW(),
+                CONSTRAINT uq_user_achievement UNIQUE (user_id, code)
+            )
+            """,
+            # Match comments
+            """
+            CREATE TABLE IF NOT EXISTS match_comments (
+                id SERIAL PRIMARY KEY,
+                match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                content VARCHAR(280) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_match_comments_match ON match_comments (match_id)",
         ]:
             try:
                 conn.execute(text(ddl))
@@ -227,6 +264,10 @@ app.include_router(analytics_router.router, prefix="/api")
 app.include_router(user_groups_router.router, prefix="/api")
 app.include_router(audit_router.router,       prefix="/api")
 app.include_router(poll_router.router,        prefix="/api")
+app.include_router(notifications_router.router, prefix="/api")
+app.include_router(push_router.router,          prefix="/api")
+app.include_router(achievements_router.router,  prefix="/api")
+app.include_router(match_comments_router.router, prefix="/api")
 
 
 @app.get("/api")
