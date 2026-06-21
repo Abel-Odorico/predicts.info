@@ -3,8 +3,8 @@ GET  /matches/{id}/analysis              — análise pública (cache DB)
 POST /admin/analysis/{match_id}/generate — gera/regenera uma partida
 POST /admin/analysis/generate-all        — gera todas as pendentes (bg task)
 GET  /admin/analysis/status              — lista partidas + status análise
-GET  /admin/analysis/config              — lê config OpenRouter
-POST /admin/analysis/config              — salva config OpenRouter
+GET  /admin/analysis/config              — lê config providers
+POST /admin/analysis/config              — salva config providers
 """
 import json
 import logging
@@ -16,62 +16,153 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from auth_utils import require_admin, get_current_user
+from auth_utils import require_admin
 from database import get_db
-from models import Match, Team, SiteConfig, User
+from models import Team, User
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["analysis"])
 
-ANALYSIS_TABLE_DDL = """
-CREATE TABLE IF NOT EXISTS match_analyses (
-    id           SERIAL PRIMARY KEY,
-    match_id     INTEGER NOT NULL UNIQUE REFERENCES matches(id) ON DELETE CASCADE,
-    content      JSONB   NOT NULL,
-    model_used   VARCHAR(120),
-    generated_at TIMESTAMP DEFAULT NOW()
-)
-"""
+# ─── Provider catalogs ────────────────────────────────────────────────────────
 
-AVAILABLE_MODELS = [
-    {"id": "google/gemini-2.5-pro-preview",       "label": "Gemini 2.5 Pro (recomendado)"},
-    {"id": "google/gemini-2.5-flash-preview",      "label": "Gemini 2.5 Flash"},
-    {"id": "anthropic/claude-sonnet-4-5",          "label": "Claude Sonnet 4.5"},
-    {"id": "anthropic/claude-opus-4",              "label": "Claude Opus 4"},
-    {"id": "openai/gpt-4o",                        "label": "GPT-4o"},
-    {"id": "openai/gpt-4.1",                       "label": "GPT-4.1"},
-    {"id": "meta-llama/llama-4-maverick",          "label": "Llama 4 Maverick"},
-    {"id": "deepseek/deepseek-r2",                 "label": "DeepSeek R2"},
+OPENROUTER_FREE_MODELS = [
+    {"id": "google/gemini-2.5-pro-exp-03-25:free",    "label": "Gemini 2.5 Pro Exp (free)"},
+    {"id": "google/gemini-2.0-flash-exp:free",         "label": "Gemini 2.0 Flash Exp (free)"},
+    {"id": "deepseek/deepseek-r1:free",                "label": "DeepSeek R1 (free)"},
+    {"id": "deepseek/deepseek-chat-v3-0324:free",      "label": "DeepSeek V3 (free)"},
+    {"id": "meta-llama/llama-3.3-70b-instruct:free",   "label": "Llama 3.3 70B (free)"},
+    {"id": "qwen/qwen3-235b-a22b:free",                "label": "Qwen3 235B (free)"},
+    {"id": "mistralai/mistral-7b-instruct:free",       "label": "Mistral 7B (free)"},
 ]
-DEFAULT_MODEL = "google/gemini-2.5-pro-preview"
+
+GEMINI_MODELS = [
+    {"id": "gemini-2.5-pro",          "label": "Gemini 2.5 Pro"},
+    {"id": "gemini-2.5-flash",        "label": "Gemini 2.5 Flash"},
+    {"id": "gemini-2.0-flash",        "label": "Gemini 2.0 Flash"},
+    {"id": "gemini-2.0-flash-lite",   "label": "Gemini 2.0 Flash Lite"},
+]
+
+DEFAULT_OR_MODEL    = "google/gemini-2.5-pro-exp-03-25:free"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_PROVIDER    = "openrouter"
+
+CONFIG_KEYS = (
+    "analysis_provider",
+    "openrouter_api_key", "openrouter_model",
+    "gemini_api_key",     "gemini_model",
+)
 
 
 def _utcnow():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _mask(key: str) -> str:
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "•" * len(key)
+    return key[:6] + "•" * 20 + key[-4:]
+
+
+# ─── Config helpers ───────────────────────────────────────────────────────────
+
 def _get_config(db: Session) -> dict:
     rows = db.execute(
-        text("SELECT key, value FROM site_config WHERE key IN ('openrouter_api_key','openrouter_model')")
+        text(f"SELECT key, value FROM site_config WHERE key IN {CONFIG_KEYS}")
     ).fetchall()
-    cfg = {r[0]: r[1] for r in rows}
+    c = {r[0]: r[1] for r in rows}
     return {
-        "api_key": cfg.get("openrouter_api_key", ""),
-        "model":   cfg.get("openrouter_model", DEFAULT_MODEL),
+        "provider":          c.get("analysis_provider", DEFAULT_PROVIDER),
+        "openrouter_key":    c.get("openrouter_api_key", ""),
+        "openrouter_model":  c.get("openrouter_model", DEFAULT_OR_MODEL),
+        "gemini_key":        c.get("gemini_api_key", ""),
+        "gemini_model":      c.get("gemini_model", DEFAULT_GEMINI_MODEL),
     }
 
 
-def _save_config(db: Session, api_key: str, model: str):
-    for key, val in [("openrouter_api_key", api_key), ("openrouter_model", model)]:
-        db.execute(
-            text("""
-                INSERT INTO site_config (key, value) VALUES (:k, :v)
-                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-            """),
-            {"k": key, "v": val},
-        )
+def _upsert(db: Session, key: str, val: str):
+    db.execute(
+        text("INSERT INTO site_config (key, value) VALUES (:k, :v) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"),
+        {"k": key, "v": val},
+    )
+
+
+def _save_config(db: Session, provider: str, or_key: str, or_model: str, g_key: str, g_model: str):
+    _upsert(db, "analysis_provider",  provider)
+    _upsert(db, "openrouter_model",   or_model)
+    _upsert(db, "gemini_model",       g_model)
+    if or_key and not or_key.startswith("•"):
+        _upsert(db, "openrouter_api_key", or_key)
+    if g_key and not g_key.startswith("•"):
+        _upsert(db, "gemini_api_key", g_key)
     db.commit()
 
+
+# ─── LLM callers ─────────────────────────────────────────────────────────────
+
+def _strip_fences(text_out: str) -> str:
+    text_out = text_out.strip()
+    if text_out.startswith("```"):
+        parts = text_out.split("```")
+        text_out = parts[1] if len(parts) > 1 else text_out
+        if text_out.startswith("json"):
+            text_out = text_out[4:]
+    return text_out.strip()
+
+
+def _call_openrouter(api_key: str, model: str, prompt: str) -> dict:
+    resp = http_requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://predicts.info",
+            "X-Title": "Predicts Copa 2026",
+        },
+        json={
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": 3000,
+        },
+        timeout=90,
+    )
+    resp.raise_for_status()
+    return json.loads(_strip_fences(resp.json()["choices"][0]["message"]["content"]))
+
+
+def _call_gemini(api_key: str, model: str, prompt: str) -> dict:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    resp = http_requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 3000, "temperature": 0.7},
+        },
+        timeout=90,
+    )
+    resp.raise_for_status()
+    text_out = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    return json.loads(_strip_fences(text_out))
+
+
+def _call_llm(cfg: dict, prompt: str) -> tuple[dict, str]:
+    provider = cfg["provider"]
+    if provider == "gemini":
+        if not cfg["gemini_key"]:
+            raise ValueError("Gemini API key não configurada")
+        model = cfg["gemini_model"]
+        return _call_gemini(cfg["gemini_key"], model, prompt), f"gemini/{model}"
+    else:
+        if not cfg["openrouter_key"]:
+            raise ValueError("OpenRouter API key não configurada")
+        model = cfg["openrouter_model"]
+        return _call_openrouter(cfg["openrouter_key"], model, prompt), f"openrouter/{model}"
+
+
+# ─── Prompt builder ───────────────────────────────────────────────────────────
 
 def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, recent_a, recent_b, mc_prob) -> str:
     def fmt_players(players):
@@ -82,10 +173,7 @@ def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, r
     def fmt_results(results):
         if not results:
             return "  Sem dados disponíveis"
-        lines = []
-        for r in results[:5]:
-            lines.append(f"  - {r['date']}: {r['team_a']} {r['score_a']}x{r['score_b']} {r['team_b']}")
-        return "\n".join(lines)
+        return "\n".join(f"  - {r['date']}: {r['team_a']} {r['score_a']}x{r['score_b']} {r['team_b']}" for r in results[:5])
 
     prob_str = ""
     if mc_prob:
@@ -154,46 +242,19 @@ Resultados recentes:
 Retorne SOMENTE o JSON. Nenhum outro texto."""
 
 
-def _call_openrouter(api_key: str, model: str, prompt: str) -> dict:
-    resp = http_requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://predicts.info",
-            "X-Title": "Predicts Copa 2026",
-        },
-        json={
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-            "max_tokens": 3000,
-        },
-        timeout=90,
-    )
-    resp.raise_for_status()
-    text_out = resp.json()["choices"][0]["message"]["content"].strip()
-    # strip markdown fences if model ignores instruction
-    if text_out.startswith("```"):
-        text_out = text_out.split("```")[1]
-        if text_out.startswith("json"):
-            text_out = text_out[4:]
-    return json.loads(text_out)
-
+# ─── Core generator ───────────────────────────────────────────────────────────
 
 def _get_recent_results(db: Session, team_code: str, limit: int = 5) -> list:
     rows = db.execute(
         text("""
-            SELECT ta.code AS team_a, tb.code AS team_b,
-                   mr.score_a, mr.score_b,
+            SELECT ta.code, tb.code, mr.score_a, mr.score_b,
                    TO_CHAR(m.match_date, 'DD/MM') AS date
             FROM matches m
             JOIN teams ta ON ta.id = m.team_a_id
             JOIN teams tb ON tb.id = m.team_b_id
             JOIN match_results mr ON mr.match_id = m.id
             WHERE ta.code = :code OR tb.code = :code
-            ORDER BY m.match_date DESC
-            LIMIT :lim
+            ORDER BY m.match_date DESC LIMIT :lim
         """),
         {"code": team_code, "lim": limit},
     ).fetchall()
@@ -218,11 +279,10 @@ def _get_mc_prob(db: Session, match_id: int) -> dict | None:
         return None
 
 
-def _generate_one(match_id: int, db: Session, api_key: str, model: str) -> dict:
+def _generate_one(match_id: int, db: Session, cfg: dict) -> dict:
     row = db.execute(
         text("""
-            SELECT m.id, ta.id AS ta_id, tb.id AS tb_id,
-                   m.match_date, m.phase, ta.group_name
+            SELECT m.id, ta.id, tb.id, m.match_date, m.phase, ta.group_name
             FROM matches m
             JOIN teams ta ON ta.id = m.team_a_id
             JOIN teams tb ON tb.id = m.team_b_id
@@ -241,12 +301,11 @@ def _generate_one(match_id: int, db: Session, api_key: str, model: str) -> dict:
     players_a = db.query(Player).filter_by(team_id=row[1]).all()
     players_b = db.query(Player).filter_by(team_id=row[2]).all()
 
-    recent_a = _get_recent_results(db, team_a.code)
-    recent_b = _get_recent_results(db, team_b.code)
-    mc_prob  = _get_mc_prob(db, match_id)
-
-    prompt  = _build_prompt(match_row, team_a, team_b, players_a, players_b, recent_a, recent_b, mc_prob)
-    content = _call_openrouter(api_key, model, prompt)
+    prompt          = _build_prompt(match_row, team_a, team_b, players_a, players_b,
+                                    _get_recent_results(db, team_a.code),
+                                    _get_recent_results(db, team_b.code),
+                                    _get_mc_prob(db, match_id))
+    content, model_tag = _call_llm(cfg, prompt)
 
     db.execute(
         text("""
@@ -257,37 +316,33 @@ def _generate_one(match_id: int, db: Session, api_key: str, model: str) -> dict:
                   model_used = EXCLUDED.model_used,
                   generated_at = EXCLUDED.generated_at
         """),
-        {"mid": match_id, "content": json.dumps(content), "model": model, "now": _utcnow()},
+        {"mid": match_id, "content": json.dumps(content), "model": model_tag, "now": _utcnow()},
     )
     db.commit()
     return content
 
 
-def _generate_all_bg(db_url: str, api_key: str, model: str):
+def _generate_all_bg(db_url: str, cfg: dict):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     engine = create_engine(db_url)
-    Session = sessionmaker(bind=engine)
-    db = Session()
+    Sess = sessionmaker(bind=engine)
+    db = Sess()
     try:
         pending = db.execute(
-            text("""
-                SELECT m.id FROM matches m
-                WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)
-                ORDER BY m.match_date
-            """)
+            text("SELECT m.id FROM matches m WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id) ORDER BY m.match_date")
         ).fetchall()
         for (mid,) in pending:
             try:
-                _generate_one(mid, db, api_key, model)
-                log.info("analysis generated match_id=%s", mid)
+                _generate_one(mid, db, cfg)
+                log.info("analysis ok match_id=%s", mid)
             except Exception as e:
-                log.error("analysis failed match_id=%s: %s", mid, e)
+                log.error("analysis fail match_id=%s: %s", mid, e)
     finally:
         db.close()
 
 
-# ─── Public ────────────────────────────────────────────────────────────────────
+# ─── Public endpoints ─────────────────────────────────────────────────────────
 
 @router.get("/matches/{match_id}/analysis")
 def get_analysis(match_id: int, db: Session = Depends(get_db)):
@@ -301,29 +356,35 @@ def get_analysis(match_id: int, db: Session = Depends(get_db)):
     return {"match_id": match_id, "content": content, "model_used": row[1], "generated_at": row[2]}
 
 
-# ─── Admin ─────────────────────────────────────────────────────────────────────
+# ─── Admin endpoints ──────────────────────────────────────────────────────────
 
 @router.get("/admin/analysis/config")
 def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     cfg = _get_config(db)
-    # mask key for display
-    key = cfg["api_key"]
-    masked = ("sk-or-" + "•" * 20 + key[-4:]) if len(key) > 8 else ("•" * len(key) if key else "")
-    return {"api_key_masked": masked, "has_key": bool(key), "model": cfg["model"], "available_models": AVAILABLE_MODELS}
+    return {
+        "provider":               cfg["provider"],
+        "openrouter_key_masked":  _mask(cfg["openrouter_key"]),
+        "openrouter_has_key":     bool(cfg["openrouter_key"]),
+        "openrouter_model":       cfg["openrouter_model"],
+        "openrouter_models":      OPENROUTER_FREE_MODELS,
+        "gemini_key_masked":      _mask(cfg["gemini_key"]),
+        "gemini_has_key":         bool(cfg["gemini_key"]),
+        "gemini_model":           cfg["gemini_model"],
+        "gemini_models":          GEMINI_MODELS,
+    }
 
 
 class AnalysisConfigIn(BaseModel):
-    api_key: str = ""
-    model: str = DEFAULT_MODEL
+    provider:       str = DEFAULT_PROVIDER
+    openrouter_key: str = ""
+    openrouter_model: str = DEFAULT_OR_MODEL
+    gemini_key:     str = ""
+    gemini_model:   str = DEFAULT_GEMINI_MODEL
 
 
 @router.post("/admin/analysis/config")
 def save_analysis_config(body: AnalysisConfigIn, db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    if body.api_key and not body.api_key.startswith("•"):
-        _save_config(db, body.api_key, body.model)
-    else:
-        cfg = _get_config(db)
-        _save_config(db, cfg["api_key"], body.model)
+    _save_config(db, body.provider, body.openrouter_key, body.openrouter_model, body.gemini_key, body.gemini_model)
     return {"ok": True}
 
 
@@ -341,18 +402,10 @@ def analysis_status(db: Session = Depends(get_db), _: User = Depends(require_adm
         """)
     ).fetchall()
     return [
-        {
-            "match_id":     r[0],
-            "team_a_code":  r[1],
-            "team_a_name":  r[2],
-            "team_b_code":  r[3],
-            "team_b_name":  r[4],
-            "match_date":   r[5],
-            "phase":        r[6],
-            "has_analysis": r[7] is not None,
-            "generated_at": r[7],
-            "model_used":   r[8],
-        }
+        {"match_id": r[0], "team_a_code": r[1], "team_a_name": r[2],
+         "team_b_code": r[3], "team_b_name": r[4], "match_date": r[5],
+         "phase": r[6], "has_analysis": r[7] is not None,
+         "generated_at": r[7], "model_used": r[8]}
         for r in rows
     ]
 
@@ -360,9 +413,11 @@ def analysis_status(db: Session = Depends(get_db), _: User = Depends(require_adm
 @router.post("/admin/analysis/{match_id}/generate")
 def generate_one(match_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     cfg = _get_config(db)
-    if not cfg["api_key"]:
+    if cfg["provider"] == "gemini" and not cfg["gemini_key"]:
+        raise HTTPException(400, "Gemini API key não configurada")
+    if cfg["provider"] == "openrouter" and not cfg["openrouter_key"]:
         raise HTTPException(400, "OpenRouter API key não configurada")
-    content = _generate_one(match_id, db, cfg["api_key"], cfg["model"])
+    content = _generate_one(match_id, db, cfg)
     return {"ok": True, "match_id": match_id, "content": content}
 
 
@@ -378,9 +433,10 @@ def generate_all(
     _: User = Depends(require_admin),
 ):
     cfg = _get_config(db)
-    if not cfg["api_key"]:
+    if cfg["provider"] == "gemini" and not cfg["gemini_key"]:
+        raise HTTPException(400, "Gemini API key não configurada")
+    if cfg["provider"] == "openrouter" and not cfg["openrouter_key"]:
         raise HTTPException(400, "OpenRouter API key não configurada")
-
     from config import settings
-    background_tasks.add_task(_generate_all_bg, settings.database_url, cfg["api_key"], cfg["model"])
+    background_tasks.add_task(_generate_all_bg, settings.database_url, cfg)
     return {"ok": True, "message": "Geração iniciada em background"}

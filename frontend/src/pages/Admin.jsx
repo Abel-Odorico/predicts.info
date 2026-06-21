@@ -158,17 +158,21 @@ export default function Admin() {
   // ── Análises IA ──────────────────────────────────────────────────────────────
   const [analysisConfig, setAnalysisConfig]   = useState(null)
   const [analysisStatus, setAnalysisStatus]   = useState(null)
-  const [analysisConfigForm, setAnalysisConfigForm] = useState({ api_key: '', model: '' })
   const [analysisSaving, setAnalysisSaving]   = useState(false)
   const [analysisMsg, setAnalysisMsg]         = useState('')
   const [generatingId, setGeneratingId]       = useState(null)
   const [generatingAll, setGeneratingAll]     = useState(false)
+  const [aForm, setAForm] = useState({
+    provider: 'openrouter',
+    openrouter_key: '', openrouter_model: '',
+    gemini_key: '',     gemini_model: '',
+  })
 
   async function loadAnalysisConfig() {
     try {
       const cfg = await api.get('/admin/analysis/config', token)
       setAnalysisConfig(cfg)
-      setAnalysisConfigForm({ api_key: '', model: cfg.model })
+      setAForm(f => ({ ...f, provider: cfg.provider, openrouter_model: cfg.openrouter_model, gemini_model: cfg.gemini_model }))
     } catch {}
   }
 
@@ -180,7 +184,7 @@ export default function Admin() {
     e.preventDefault()
     setAnalysisSaving(true); setAnalysisMsg('')
     try {
-      await api.post('/admin/analysis/config', analysisConfigForm, token)
+      await api.post('/admin/analysis/config', aForm, token)
       setAnalysisMsg('✓ Configuração salva')
       loadAnalysisConfig()
     } catch { setAnalysisMsg('Erro ao salvar') }
@@ -191,9 +195,9 @@ export default function Admin() {
     setGeneratingId(matchId); setAnalysisMsg('')
     try {
       await api.post(`/admin/analysis/${matchId}/generate`, {}, token)
-      setAnalysisMsg(`✓ Análise gerada para partida #${matchId}`)
+      setAnalysisMsg(`✓ Análise gerada — partida #${matchId}`)
       loadAnalysisStatus()
-    } catch (err) { setAnalysisMsg(`Erro: ${err.message || 'falha na geração'}`) }
+    } catch (err) { setAnalysisMsg(`Erro: ${err.message || 'falha'}`) }
     finally { setGeneratingId(null) }
   }
 
@@ -201,7 +205,7 @@ export default function Admin() {
     setGeneratingAll(true); setAnalysisMsg('')
     try {
       await api.post('/admin/analysis/generate-all', { only_pending: true }, token)
-      setAnalysisMsg('✓ Geração em background iniciada. Atualize a lista em alguns minutos.')
+      setAnalysisMsg('✓ Background iniciado — atualize a lista em alguns minutos.')
     } catch { setAnalysisMsg('Erro ao iniciar geração') }
     finally { setGeneratingAll(false) }
   }
@@ -2039,7 +2043,7 @@ export default function Admin() {
           {/* Config card */}
           <div className="adm-card">
             <div className="adm-card__header">
-              <span className="adm-card__title">🤖 Configuração OpenRouter</span>
+              <span className="adm-card__title">🤖 Configuração Provedores IA</span>
             </div>
             <div className="adm-card__body">
               {analysisMsg && (
@@ -2051,39 +2055,73 @@ export default function Admin() {
                   {analysisMsg}
                 </div>
               )}
-              <form onSubmit={saveAnalysisConfig} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <form onSubmit={saveAnalysisConfig} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Provider selector */}
                 <div>
-                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>
-                    API Key OpenRouter {analysisConfig?.has_key && <span style={{ color: 'var(--win)' }}>✓ configurada ({analysisConfig?.api_key_masked})</span>}
-                  </label>
-                  <input
-                    type="password"
-                    placeholder={analysisConfig?.has_key ? '••••••••• (deixe vazio para manter)' : 'sk-or-...'}
-                    value={analysisConfigForm.api_key}
-                    onChange={e => setAnalysisConfigForm(p => ({ ...p, api_key: e.target.value }))}
-                    style={{ width: '100%', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 13 }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>Modelo</label>
-                  <select
-                    value={analysisConfigForm.model}
-                    onChange={e => setAnalysisConfigForm(p => ({ ...p, model: e.target.value }))}
-                    style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13, width: '100%' }}
-                  >
-                    {(analysisConfig?.available_models || []).map(m => (
-                      <option key={m.id} value={m.id}>{m.label}</option>
+                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', display: 'block', marginBottom: 6 }}>PROVEDOR ATIVO</label>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {[{ id: 'openrouter', label: '🔀 OpenRouter (free)' }, { id: 'gemini', label: '✦ Gemini (Google)' }].map(p => (
+                      <button type="button" key={p.id}
+                        onClick={() => setAForm(f => ({ ...f, provider: p.id }))}
+                        style={{
+                          flex: 1, padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                          fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
+                          border: `2px solid ${aForm.provider === p.id ? 'var(--accent)' : 'var(--border)'}`,
+                          background: aForm.provider === p.id ? 'rgba(15,122,120,0.12)' : 'var(--bg-overlay)',
+                          color: aForm.provider === p.id ? 'var(--accent)' : 'var(--text-3)',
+                        }}
+                      >{p.label}</button>
                     ))}
-                  </select>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10 }}>
+
+                {/* OpenRouter section */}
+                <div style={{ border: `1px solid ${aForm.provider === 'openrouter' ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    🔀 OPENROUTER
+                    {analysisConfig?.openrouter_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ key: {analysisConfig.openrouter_key_masked}</span>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <input type="password"
+                      placeholder={analysisConfig?.openrouter_has_key ? '••• (vazio = manter)' : 'sk-or-v1-...'}
+                      value={aForm.openrouter_key}
+                      onChange={e => setAForm(f => ({ ...f, openrouter_key: e.target.value }))}
+                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
+                    />
+                    <select value={aForm.openrouter_model} onChange={e => setAForm(f => ({ ...f, openrouter_model: e.target.value }))}
+                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                      {(analysisConfig?.openrouter_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Gemini section */}
+                <div style={{ border: `1px solid ${aForm.provider === 'gemini' ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    ✦ GEMINI (GOOGLE AI)
+                    {analysisConfig?.gemini_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ key: {analysisConfig.gemini_key_masked}</span>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <input type="password"
+                      placeholder={analysisConfig?.gemini_has_key ? '••• (vazio = manter)' : 'AIzaSy...'}
+                      value={aForm.gemini_key}
+                      onChange={e => setAForm(f => ({ ...f, gemini_key: e.target.value }))}
+                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
+                    />
+                    <select value={aForm.gemini_model} onChange={e => setAForm(f => ({ ...f, gemini_model: e.target.value }))}
+                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                      {(analysisConfig?.gemini_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button className="btn btn-primary btn-sm" disabled={analysisSaving} type="submit">
                     {analysisSaving ? 'Salvando…' : '💾 Salvar'}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus() }}>
-                    ↻ Atualizar
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={generateAll} disabled={generatingAll || !analysisConfig?.has_key}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus() }}>↻ Atualizar</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={generateAll} disabled={generatingAll}>
                     {generatingAll ? 'Iniciando…' : '⚡ Gerar todas pendentes'}
                   </button>
                 </div>
