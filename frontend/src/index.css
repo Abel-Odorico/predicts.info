@@ -8022,3 +8022,49 @@ strong.pts {
   font-family: var(--font-data);
   font-size: 10px;
 }
+
+/* ── PWA: Offline banner ─────────────────────────────────────────────────── */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: #b45309;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-family: var(--font-cond);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ── PWA: Install button ─────────────────────────────────────────────────── */
+.pwa-install-btn {
+  background: linear-gradient(135deg, #0f7a78 0%, #0a5a58 100%);
+  color: #fff;
+  font-weight: 700;
+  border: 1px solid rgba(15,122,120,0.4);
+  margin-bottom: 6px;
+}
+.pwa-install-btn:hover {
+  background: linear-gradient(135deg, #0a5a58 0%, #074543 100%);
+}
+
+/* ── PWA: iOS install tip ────────────────────────────────────────────────── */
+.pwa-install-tip {
+  background: rgba(15,122,120,0.12);
+  border: 1px solid rgba(15,122,120,0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: var(--font-cond);
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+.pwa-install-tip strong { color: var(--accent); }

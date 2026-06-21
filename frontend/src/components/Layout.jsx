@@ -3,6 +3,7 @@ import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../stores/authStore'
 import { useTrack } from '../hooks/useTrack'
 import { useAdSense } from '../hooks/useAdSense'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { api } from '../api'
 import ShareModal from './ShareModal'
 import NotificationBell from './NotificationBell'
@@ -51,6 +52,8 @@ export default function Layout() {
   const [developerCredit, setDeveloperCredit] = useState('PeepConnect - By Abel Odorico')
   const [drawerOpen, setDrawerOpen]   = useState(false)
   const [shareOpen,  setShareOpen]    = useState(false)
+  const [offline, setOffline]         = useState(!navigator.onLine)
+  const { canInstall, install, isIOS } = useInstallPrompt()
 
   const [theme, setThemeState] = useState(() => {
     return localStorage.getItem('predicts_theme') || 'system'
@@ -58,6 +61,14 @@ export default function Layout() {
 
   useTrack()
   useAdSense()
+
+  useEffect(() => {
+    const on  = () => setOffline(false)
+    const off = () => setOffline(true)
+    window.addEventListener('online',  on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
 
   // Apply theme + OS listener
   useEffect(() => {
@@ -109,6 +120,14 @@ export default function Layout() {
 
   return (
     <>
+      {/* ── Offline banner ───────────────────────────── */}
+      {offline && (
+        <div className="offline-banner" role="alert">
+          <span>📶</span>
+          <span>Você está offline — dados podem estar desatualizados</span>
+        </div>
+      )}
+
       {/* ── Desktop sidebar ──────────────────────────── */}
       <nav className="sidebar">
         <div className="sidebar__brand">
@@ -182,6 +201,21 @@ export default function Layout() {
             <span className="sidebar__credit-label">Desenvolvido por</span>
             <span className="sidebar__credit-value">{developerCredit}</span>
           </div>
+          {canInstall && (
+            isIOS ? (
+              <div className="pwa-install-tip">
+                📲 Instalar: toque em <strong>compartilhar</strong> → <strong>Adicionar à Tela Inicial</strong>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={install}
+                className="btn btn-sm w-full pwa-install-btn"
+              >
+                📲 Instalar App
+              </button>
+            )
+          )}
           <button
             type="button"
             onClick={() => setShareOpen(true)}
@@ -270,6 +304,20 @@ export default function Layout() {
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 4 }}>
               <NotificationBell />
             </div>
+          )}
+          {canInstall && (
+            isIOS ? (
+              <div className="pwa-install-tip">
+                📲 Toque em compartilhar → <strong>Adicionar à Tela Inicial</strong>
+              </div>
+            ) : (
+              <button
+                onClick={() => { install(); closeDrawer() }}
+                className="btn btn-sm w-full pwa-install-btn"
+              >
+                📲 Instalar App
+              </button>
+            )
           )}
           <button
             onClick={() => { setShareOpen(true); closeDrawer() }}
