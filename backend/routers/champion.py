@@ -2,7 +2,8 @@
 GET  /champion/pick         — palpite atual do usuário (auth)
 POST /champion/pick         — registrar/atualizar palpite (auth, antes do deadline)
 GET  /champion/picks/stats  — distribuição de palpites (público)
-POST /admin/champion/award  — credita +100 campeão / +50 vice (admin)
+GET  /admin/champion/award  — status do award (admin)
+POST /admin/champion/award  — credita +100 campeão / +50 vice (admin, idempotente)
 """
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +12,7 @@ from sqlalchemy import Column, Integer, DateTime, ForeignKey, func
 
 from database import Base, get_db
 from auth_utils import get_current_user, require_admin
-from models import User, Team, Ranking
+from models import User, Team, Ranking, Notification
 
 router = APIRouter(tags=["champion"])
 
@@ -31,6 +32,18 @@ class ChampionPick(Base):
     team_id    = Column(Integer, ForeignKey("teams.id"), nullable=False)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class ChampionAward(Base):
+    """Tracks a completed award run — prevents double-crediting."""
+    __tablename__ = "champion_awards"
+    id                = Column(Integer, primary_key=True)
+    champion_team_id  = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    runner_up_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    awarded_by        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    champion_users    = Column(Integer, default=0)
+    runner_up_users   = Column(Integer, default=0)
+    awarded_at        = Column(DateTime, default=_utcnow)
 
 
 def _can_change() -> bool:
@@ -64,7 +77,7 @@ def set_pick(body: dict, db: Session = Depends(get_db), user: User = Depends(get
         raise HTTPException(404, "Time não encontrado")
     pick = db.query(ChampionPick).filter(ChampionPick.user_id == user.id).first()
     if pick:
-        pick.team_id   = team_id
+        pick.team_id    = team_id
         pick.updated_at = _utcnow()
     else:
         pick = ChampionPick(user_id=user.id, team_id=team_id)
@@ -90,29 +103,85 @@ def picks_stats(db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/admin/champion/award")
+def award_status(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    award = db.query(ChampionAward).order_by(ChampionAward.id.desc()).first()
+    if not award:
+        return {"awarded": False}
+    champion  = db.query(Team).filter(Team.id == award.champion_team_id).first()
+    runner_up = db.query(Team).filter(Team.id == award.runner_up_team_id).first()
+    return {
+        "awarded": True,
+        "champion":  _team_dict(champion)  if champion  else None,
+        "runner_up": _team_dict(runner_up) if runner_up else None,
+        "champion_users":  award.champion_users,
+        "runner_up_users": award.runner_up_users,
+        "awarded_at": award.awarded_at,
+    }
+
+
 @router.post("/admin/champion/award")
-def award_champion(body: dict, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def award_champion(
+    body: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
     champion_id  = body.get("champion_team_id")
     runner_up_id = body.get("runner_up_team_id")
     if not champion_id or not runner_up_id:
         raise HTTPException(400, "champion_team_id e runner_up_team_id obrigatórios")
 
+    # Idempotency: block if already awarded
+    existing = db.query(ChampionAward).first()
+    if existing:
+        raise HTTPException(409, "Bônus já creditado. Use /admin/champion/award (GET) para ver o status.")
+
+    champion  = db.query(Team).filter(Team.id == champion_id).first()
+    runner_up = db.query(Team).filter(Team.id == runner_up_id).first()
+    if not champion or not runner_up:
+        raise HTTPException(404, "Time não encontrado")
+
     champion_picks  = db.query(ChampionPick).filter(ChampionPick.team_id == champion_id).all()
     runner_up_picks = db.query(ChampionPick).filter(ChampionPick.team_id == runner_up_id).all()
 
-    def _credit(picks, bonus):
+    def _credit(picks, bonus, notif_title, notif_body):
         for p in picks:
             r = db.query(Ranking).filter(Ranking.user_id == p.user_id).first()
             if not r:
                 r = Ranking(user_id=p.user_id, total_points=0, exact_scores=0, correct_results=0)
                 db.add(r)
             r.total_points = (r.total_points or 0) + bonus
-        db.commit()
+            db.add(Notification(
+                user_id=p.user_id,
+                type="champion_bonus",
+                title=notif_title,
+                body=notif_body,
+                meta={"team_id": p.team_id, "bonus": bonus},
+            ))
 
-    _credit(champion_picks,  CHAMPION_BONUS)
-    _credit(runner_up_picks, RUNNER_UP_BONUS)
+    _credit(
+        champion_picks, CHAMPION_BONUS,
+        f"🏆 +{CHAMPION_BONUS} pts! {champion.name} é campeão!",
+        f"Seu palpite de campeão estava certo. Parabéns!",
+    )
+    _credit(
+        runner_up_picks, RUNNER_UP_BONUS,
+        f"🥈 +{RUNNER_UP_BONUS} pts! {runner_up.name} é vice-campeão!",
+        f"Seu palpite de vice-campeão estava certo. Bom trabalho!",
+    )
+
+    award = ChampionAward(
+        champion_team_id=champion_id,
+        runner_up_team_id=runner_up_id,
+        awarded_by=admin.id,
+        champion_users=len(champion_picks),
+        runner_up_users=len(runner_up_picks),
+    )
+    db.add(award)
+    db.commit()
 
     return {
-        "champion_bonus":  {"team_id": champion_id,  "users": len(champion_picks),  "pts_each": CHAMPION_BONUS},
-        "runner_up_bonus": {"team_id": runner_up_id, "users": len(runner_up_picks), "pts_each": RUNNER_UP_BONUS},
+        "champion_bonus":  {"team_id": champion_id,  "name": champion.name,  "users": len(champion_picks),  "pts_each": CHAMPION_BONUS},
+        "runner_up_bonus": {"team_id": runner_up_id, "name": runner_up.name, "users": len(runner_up_picks), "pts_each": RUNNER_UP_BONUS},
+        "awarded_at": award.awarded_at,
     }

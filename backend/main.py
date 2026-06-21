@@ -25,6 +25,7 @@ from routers import version as version_router
 from routers import pwa_icon as pwa_icon_router
 from routers import champion as champion_router
 from routers import knockout as knockout_router
+from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
 
@@ -232,6 +233,17 @@ def _run_migrations():
                 team_id INTEGER NOT NULL REFERENCES teams(id),
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS champion_awards (
+                id SERIAL PRIMARY KEY,
+                champion_team_id INTEGER REFERENCES teams(id),
+                runner_up_team_id INTEGER REFERENCES teams(id),
+                awarded_by INTEGER REFERENCES users(id),
+                champion_users INTEGER DEFAULT 0,
+                runner_up_users INTEGER DEFAULT 0,
+                awarded_at TIMESTAMP DEFAULT NOW()
             )
             """,
         ]:

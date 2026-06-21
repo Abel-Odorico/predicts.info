@@ -91,6 +91,9 @@ def _run_sync(db_url: str, trigger: str = "manual"):
 
         _append_log("● Limpando cache de simulação...")
         invalidate_simulation_cache(log=_append_log)
+
+        from routers.knockout import run_knockout_sync
+        run_knockout_sync(db_url, log=_append_log)
     except Exception as exc:
         errors.append("sync_failed")
         _append_log(f"✗ Falha geral: {exc}")

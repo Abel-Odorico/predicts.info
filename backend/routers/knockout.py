@@ -7,7 +7,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from auth_utils import require_admin
 from database import get_db
@@ -87,6 +88,73 @@ def _resolve_team(label: str, table: dict, db: Session) -> Optional[Team]:
     if not slot:
         return None
     return db.query(Team).filter(Team.id == slot["id"]).first()
+
+
+def run_knockout_sync(db_url: str, log=None) -> dict:
+    """Standalone function callable from the auto-sync cron loop."""
+    def _log(msg):
+        if log:
+            log(msg)
+
+    engine = create_engine(db_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    try:
+        _log("● Sincronizando partidas mata-mata (Wikipedia)...")
+        schedule = fetch_official_knockout_schedule()
+        table = _build_group_table(db)
+        created = updated = 0
+        pending = []
+        for entry in schedule:
+            match_number = entry.get("match_number")
+            phase_str = entry.get("phase", "r32")
+            try:
+                phase = MatchPhase(phase_str)
+            except ValueError:
+                phase = MatchPhase.r32
+            team_a = _resolve_team(entry.get("team_a_label", ""), table, db)
+            team_b = _resolve_team(entry.get("team_b_label", ""), table, db)
+            existing = None
+            if match_number:
+                existing = db.query(Match).filter(Match.match_number == match_number).first()
+            if not existing and team_a and team_b:
+                existing = db.query(Match).filter(
+                    Match.phase == phase,
+                    Match.team_a_id == team_a.id,
+                    Match.team_b_id == team_b.id,
+                ).first()
+            if existing:
+                if entry.get("match_date"):
+                    existing.match_date = entry["match_date"]
+                    existing.bet_deadline = entry["match_date"]
+                if entry.get("venue"):
+                    existing.venue = entry["venue"]
+                if entry.get("city"):
+                    existing.city = entry["city"]
+                if team_a:
+                    existing.team_a_id = team_a.id
+                if team_b:
+                    existing.team_b_id = team_b.id
+                updated += 1
+            else:
+                if not team_a or not team_b:
+                    pending.append(entry.get("section"))
+                    continue
+                db.add(Match(
+                    phase=phase, team_a_id=team_a.id, team_b_id=team_b.id,
+                    match_date=entry.get("match_date"), bet_deadline=entry.get("match_date"),
+                    venue=entry.get("venue"), city=entry.get("city"),
+                    match_number=match_number, is_neutral=True, status=MatchStatus.scheduled,
+                ))
+                created += 1
+        db.commit()
+        _log(f"✓ Mata-mata: {created} criadas, {updated} atualizadas, {len(pending)} pendentes")
+        return {"created": created, "updated": updated, "pending": len(pending)}
+    except Exception as e:
+        _log(f"✗ Mata-mata sync falhou: {e}")
+        return {"error": str(e)}
+    finally:
+        db.close()
 
 
 @router.get("/knockout/matches")

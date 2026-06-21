@@ -147,6 +147,31 @@ export default function Admin() {
   const [knockoutForm, setKnockoutForm] = useState({ phase: 'r32', team_a_id: '', team_b_id: '', match_date: '', venue: '', city: '', match_number: '' })
   const [editMatch, setEditMatch] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [awardStatus, setAwardStatus] = useState(null)
+  const [awardForm, setAwardForm] = useState({ champion_team_id: '', runner_up_team_id: '' })
+  const [awardMsg, setAwardMsg] = useState('')
+  const [awarding, setAwarding] = useState(false)
+
+  async function loadAwardStatus() {
+    try { setAwardStatus(await api.get('/admin/champion/award', token)) } catch {}
+  }
+
+  async function submitAward(e) {
+    e.preventDefault()
+    if (!awardForm.champion_team_id || !awardForm.runner_up_team_id) return
+    setAwarding(true); setAwardMsg('')
+    try {
+      const r = await api.post('/admin/champion/award', {
+        champion_team_id: parseInt(awardForm.champion_team_id),
+        runner_up_team_id: parseInt(awardForm.runner_up_team_id),
+      }, token)
+      setAwardMsg(`✓ Campeão: ${r.champion_bonus.name} (${r.champion_bonus.users} usuários +${r.champion_bonus.pts_each}pts) · Vice: ${r.runner_up_bonus.name} (${r.runner_up_bonus.users} usuários +${r.runner_up_bonus.pts_each}pts)`)
+      loadAwardStatus()
+    } catch (e) {
+      const msg = e?.body?.detail || e?.message || 'Erro'
+      setAwardMsg(`✗ ${msg}`)
+    } finally { setAwarding(false) }
+  }
 
   async function loadKnockout() {
     setKnockoutLoading(true)
@@ -262,6 +287,7 @@ export default function Admin() {
     if (tab === 'versions' && !versions && !versionsLoading) loadVersions()
     if (tab === 'knockout' && !knockoutMatches && !knockoutLoading) loadKnockout()
     if (tab === 'knockout' && allTeams.length === 0) loadAllTeams()
+    if (tab === 'knockout' && !awardStatus) loadAwardStatus()
   }, [tab])
 
   useEffect(() => {
@@ -1404,6 +1430,42 @@ export default function Admin() {
                 </table>
               </div>
             )}
+          </div>
+
+          {/* Bônus Campeão/Vice */}
+          <div className="adm-card" style={{ marginTop: 'var(--s5)' }}>
+            <div className="adm-card__head"><span className="adm-card__title">🏆 Bônus Campeão / Vice-Campeão</span></div>
+            <div style={{ padding: 'var(--s5)' }}>
+              {awardMsg && (
+                <div className="adm-feedback" style={{ color: awardMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)', marginBottom: 'var(--s4)' }}>
+                  {awardMsg}
+                </div>
+              )}
+              {awardStatus?.awarded ? (
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--win)' }}>
+                  ✓ Bônus já creditado em {awardStatus.awarded_at ? new Date(awardStatus.awarded_at + 'Z').toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}
+                  <br />🏆 {awardStatus.champion?.name} — {awardStatus.champion_users} usuário(s) +100pts
+                  <br />🥈 {awardStatus.runner_up?.name} — {awardStatus.runner_up_users} usuário(s) +50pts
+                </div>
+              ) : (
+                <form onSubmit={submitAward} style={{ display: 'grid', gap: 'var(--s3)', maxWidth: 360 }}>
+                  <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+                    Credita +100pts para quem acertou o campeão e +50pts para quem acertou o vice. Operação irreversível.
+                  </p>
+                  <select className="form-input" value={awardForm.champion_team_id} onChange={e => setAwardForm(f => ({ ...f, champion_team_id: e.target.value }))} required>
+                    <option value="">🏆 Selecione o Campeão</option>
+                    {allTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                  </select>
+                  <select className="form-input" value={awardForm.runner_up_team_id} onChange={e => setAwardForm(f => ({ ...f, runner_up_team_id: e.target.value }))} required>
+                    <option value="">🥈 Selecione o Vice-Campeão</option>
+                    {allTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                  </select>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={awarding}>
+                    {awarding ? '⏳ Creditando...' : '🏆 Creditar Bônus'}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
 
           {/* Edit modal */}
