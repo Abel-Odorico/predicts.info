@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     mail_from_address: str = ""
     mail_from_name: str = "Predicts"
 
+    # Web Push (VAPID)
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_claims_email: str = "noreplypeep@gmail.com"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

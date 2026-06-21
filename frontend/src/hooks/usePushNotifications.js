@@ -1,18 +1,37 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api'
+
+function _urlB64ToUint8(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+}
 
 export function usePushNotifications(token) {
   const [supported,  setSupported]  = useState(false)
   const [permission, setPermission] = useState('default')
   const [subscribed, setSubscribed] = useState(false)
+  const [vapidKey,   setVapidKey]   = useState('')
 
   useEffect(() => {
     setSupported('serviceWorker' in navigator && 'PushManager' in window)
     if (typeof Notification !== 'undefined') setPermission(Notification.permission)
+    api.get('/push/vapid-key').then(r => setVapidKey(r.publicKey || '')).catch(() => {})
   }, [])
 
-  async function register() {
-    if (!supported || !token) return
+  // Detect if already subscribed
+  useEffect(() => {
+    if (!supported) return
+    navigator.serviceWorker.getRegistration().then(async reg => {
+      if (!reg) return
+      const sub = await reg.pushManager?.getSubscription()
+      setSubscribed(!!sub)
+    }).catch(() => {})
+  }, [supported])
+
+  const register = useCallback(async () => {
+    if (!supported || !token || !vapidKey) return
     const perm = await Notification.requestPermission()
     setPermission(perm)
     if (perm !== 'granted') return
@@ -22,7 +41,10 @@ export function usePushNotifications(token) {
 
     let sub = await reg.pushManager.getSubscription()
     if (!sub) {
-      sub = await reg.pushManager.subscribe({ userVisibleOnly: true })
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _urlB64ToUint8(vapidKey),
+      })
     }
     if (sub) {
       const key  = sub.getKey('p256dh')
@@ -32,11 +54,11 @@ export function usePushNotifications(token) {
         p256dh:  key  ? btoa(String.fromCharCode(...new Uint8Array(key)))  : '',
         auth:    auth ? btoa(String.fromCharCode(...new Uint8Array(auth))) : '',
       }, token)
+      setSubscribed(true)
     }
-    setSubscribed(true)
-  }
+  }, [supported, token, vapidKey])
 
-  async function unregister() {
+  const unregister = useCallback(async () => {
     try {
       const reg = await navigator.serviceWorker.getRegistration()
       const sub = await reg?.pushManager?.getSubscription()
@@ -46,7 +68,7 @@ export function usePushNotifications(token) {
       }
     } catch {}
     setSubscribed(false)
-  }
+  }, [token])
 
-  return { supported, permission, subscribed, register, unregister }
+  return { supported, permission, subscribed, register, unregister, vapidKey }
 }

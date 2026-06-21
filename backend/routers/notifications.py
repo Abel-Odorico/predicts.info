@@ -28,6 +28,7 @@ def create_notification(
     title: str,
     body: str | None = None,
     meta: dict | None = None,
+    push: bool = True,
 ) -> Notification:
     n = Notification(
         user_id=user_id,
@@ -37,6 +38,12 @@ def create_notification(
         meta=meta,
     )
     db.add(n)
+    if push:
+        try:
+            from routers.push import send_push_to_users
+            send_push_to_users(db, [user_id], title, body or "", url="/apostas")
+        except Exception:
+            pass
     return n
 
 

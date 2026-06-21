@@ -243,31 +243,49 @@ export default function Profile() {
       )}
 
       {/* ── Push Notifications ─────────────────────────────────── */}
-      {push.supported && (
-        <div className="card mt-6 fade-in-3">
-          <div className="card__header">
-            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🔔 Notificações Push</span>
-          </div>
-          <div className="card__body">
-            <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', marginBottom: 'var(--s4)' }}>
-              Receba alertas mesmo com o site fechado: resultados de apostas, ranking e lembretes de jogos.
-            </p>
-            {push.permission === 'denied' ? (
-              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>
-                Notificações bloqueadas no navegador. Desbloqueie nas configurações do site.
+      {(() => {
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+        return (
+          <div className="card mt-6 fade-in-3">
+            <div className="card__header">
+              <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🔔 Notificações Push</span>
+            </div>
+            <div className="card__body">
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', marginBottom: 'var(--s4)' }}>
+                Receba alertas mesmo com o site fechado: resultados de apostas, ranking e lembretes de jogos.
               </p>
-            ) : push.subscribed ? (
-              <button className="btn btn-ghost btn-sm" onClick={push.unregister}>
-                ✓ Notificações ativas — Desativar
-              </button>
-            ) : (
-              <button className="btn btn-primary btn-sm" onClick={push.register}>
-                🔔 Ativar notificações neste dispositivo
-              </button>
-            )}
+              {!push.supported && isIOS && !isStandalone ? (
+                <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '12px 14px', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                  <p style={{ color: 'var(--text-2)', marginBottom: 8, fontWeight: 600 }}>📱 Como ativar no iPhone / iPad:</p>
+                  <ol style={{ color: 'var(--text-3)', paddingLeft: 18, lineHeight: 1.7, margin: 0 }}>
+                    <li>Abra <strong>predicts.info</strong> no <strong>Safari</strong></li>
+                    <li>Toque em <strong>Compartilhar</strong> <span style={{ fontSize: 15 }}>⎙</span> na barra inferior</li>
+                    <li>Selecione <strong>"Adicionar à Tela de Início"</strong></li>
+                    <li>Abra o app instalado e volte aqui para ativar</li>
+                  </ol>
+                </div>
+              ) : !push.supported ? (
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>
+                  Seu navegador não suporta notificações push. Use Chrome, Firefox ou Edge.
+                </p>
+              ) : push.permission === 'denied' ? (
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>
+                  Notificações bloqueadas no navegador. Desbloqueie nas configurações do site.
+                </p>
+              ) : push.subscribed ? (
+                <button className="btn btn-ghost btn-sm" onClick={push.unregister}>
+                  ✓ Notificações ativas — Desativar
+                </button>
+              ) : (
+                <button className="btn btn-primary btn-sm" onClick={push.register}>
+                  🔔 Ativar notificações neste dispositivo
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Conquistas ────────────────────────────────────────── */}
       <div className="card mt-6 fade-in-3">
