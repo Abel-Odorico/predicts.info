@@ -1049,15 +1049,23 @@ export default function Admin() {
                       </div>
                     )}
                   </div>
-                  {!v.notified_at && (
+                  <div style={{ display: 'flex', gap: 'var(--s2)', flexShrink: 0, flexWrap: 'wrap' }}>
                     <button
                       className="btn btn-ghost btn-sm"
-                      style={{ color: 'var(--accent)', flexShrink: 0 }}
-                      onClick={() => notifyVersion(v.id)}
+                      onClick={() => window.open('/changelog', '_blank')}
                     >
-                      🔔 Notificar usuários
+                      🔗 Compartilhar
                     </button>
-                  )}
+                    {!v.notified_at && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--accent)' }}
+                        onClick={() => notifyVersion(v.id)}
+                      >
+                        🔔 Notificar usuários
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

@@ -25,6 +25,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword  from './pages/ResetPassword'
 import Votacao        from './pages/Votacao'
 import Regras         from './pages/Regras'
+import Changelog      from './pages/Changelog'
 import VotacaoBanner  from './components/VotacaoBanner'
 import Onboarding from './components/Onboarding'
 import { useAuth } from './stores/authStore'
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/redefinir-senha" element={<ResetPassword />} />
             <Route path="/votacao"         element={<Votacao />} />
             <Route path="/regras"          element={<Regras />} />
+            <Route path="/changelog"       element={<Changelog />} />
           </Routes>
         </main>
       </div>

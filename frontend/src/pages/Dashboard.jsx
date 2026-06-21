@@ -150,6 +150,9 @@ export default function Dashboard() {
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => navigate('/meus-grupos')}>
               👥 Meus Grupos
             </button>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => navigate('/changelog')}>
+              📋 Changelog
+            </button>
           </div>
         </div>
       </div>

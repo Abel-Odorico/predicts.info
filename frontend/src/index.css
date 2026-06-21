@@ -2798,7 +2798,7 @@ img {
 /* KPI Cards */
 .adm-growth-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
@@ -2982,11 +2982,6 @@ img {
 }
 
 /* Responsive */
-@media (max-width: 900px) {
-  .adm-growth-cards { grid-template-columns: repeat(2, 1fr); }
-  .adm-growth-card--wide { grid-column: span 2; }
-}
-
 @media (max-width: 640px) {
   .adm-growth-cards { grid-template-columns: repeat(2, 1fr); }
   .adm-growth-card__val { font-size: 24px; }
@@ -3534,23 +3529,31 @@ img {
   }
 }
 
-@media (min-width: 1024px) {
-  /* Shell: padding generoso — sidebar consome 220px, compensar */
-  .adm-shell {
-    padding: var(--s8) var(--s10) var(--s10);
-  }
-
-  /* Tabs: padding menor para caber 7 tabs sem scroll visível */
+/* Medium: hide tab labels, icon-only bar (9 tabs fit) */
+@media (max-width: 1100px) and (min-width: 641px) {
+  .adm-tab__label { display: none; }
   .adm-tab {
     padding: var(--s3) var(--s3);
+    gap: 0;
   }
+  .adm-tab__icon { font-size: 18px; }
+  .adm-kpi-strip { grid-template-columns: repeat(3, 1fr); }
+}
 
-  /* Resultados two-col: coluna direita menor para caber com sidebar */
+@media (max-width: 768px) {
+  .adm-pane--two-col { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 1024px) {
+  .adm-shell {
+    padding: var(--s6) var(--s6) var(--s10);
+  }
+  .adm-tab {
+    padding: var(--s3) var(--s4);
+  }
   .adm-pane--two-col {
     grid-template-columns: 1fr 300px;
   }
-
-  /* Sync grid: 3 colunas explícitas no desktop */
   .adm-sync-grid {
     grid-template-columns: repeat(3, 1fr);
   }
