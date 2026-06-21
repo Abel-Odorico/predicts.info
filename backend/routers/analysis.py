@@ -26,23 +26,26 @@ router = APIRouter(tags=["analysis"])
 # ─── Provider catalogs ────────────────────────────────────────────────────────
 
 OPENROUTER_FREE_MODELS = [
-    {"id": "google/gemini-2.5-pro-exp-03-25:free",    "label": "Gemini 2.5 Pro Exp (free)"},
-    {"id": "google/gemini-2.0-flash-exp:free",         "label": "Gemini 2.0 Flash Exp (free)"},
-    {"id": "deepseek/deepseek-r1:free",                "label": "DeepSeek R1 (free)"},
-    {"id": "deepseek/deepseek-chat-v3-0324:free",      "label": "DeepSeek V3 (free)"},
-    {"id": "meta-llama/llama-3.3-70b-instruct:free",   "label": "Llama 3.3 70B (free)"},
-    {"id": "qwen/qwen3-235b-a22b:free",                "label": "Qwen3 235B (free)"},
-    {"id": "mistralai/mistral-7b-instruct:free",       "label": "Mistral 7B (free)"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free",       "label": "Nvidia Nemotron Ultra 550B (free)"},
+    {"id": "nousresearch/hermes-3-llama-3.1-405b:free",    "label": "Hermes 3 Llama 405B (free)"},
+    {"id": "openai/gpt-oss-120b:free",                     "label": "GPT OSS 120B (free)"},
+    {"id": "nvidia/nemotron-3-super-120b-a12b:free",       "label": "Nvidia Nemotron Super 120B (free)"},
+    {"id": "qwen/qwen3-next-80b-a3b-instruct:free",        "label": "Qwen3 80B (free)"},
+    {"id": "meta-llama/llama-3.3-70b-instruct:free",       "label": "Llama 3.3 70B (free)"},
+    {"id": "google/gemma-4-31b-it:free",                   "label": "Gemma 4 31B (free)"},
+    {"id": "qwen/qwen3-coder:free",                        "label": "Qwen3 Coder (free)"},
 ]
 
 GEMINI_MODELS = [
-    {"id": "gemini-2.5-pro",          "label": "Gemini 2.5 Pro"},
-    {"id": "gemini-2.5-flash",        "label": "Gemini 2.5 Flash"},
-    {"id": "gemini-2.0-flash",        "label": "Gemini 2.0 Flash"},
-    {"id": "gemini-2.0-flash-lite",   "label": "Gemini 2.0 Flash Lite"},
+    {"id": "gemini-2.5-pro",                  "label": "Gemini 2.5 Pro (mais capaz)"},
+    {"id": "gemini-2.5-pro-preview-06-05",    "label": "Gemini 2.5 Pro Preview jun/25"},
+    {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash (rápido)"},
+    {"id": "gemini-2.5-flash-preview-05-20",  "label": "Gemini 2.5 Flash Preview mai/25"},
+    {"id": "gemini-2.0-flash",                "label": "Gemini 2.0 Flash"},
+    {"id": "gemini-2.0-flash-lite",           "label": "Gemini 2.0 Flash Lite"},
 ]
 
-DEFAULT_OR_MODEL    = "google/gemini-2.5-pro-exp-03-25:free"
+DEFAULT_OR_MODEL    = "nvidia/nemotron-3-ultra-550b-a55b:free"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_PROVIDER    = "openrouter"
 
@@ -124,7 +127,7 @@ def _call_openrouter(api_key: str, model: str, prompt: str) -> dict:
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.7,
-            "max_tokens": 3000,
+            "max_tokens": 8000,
         },
         timeout=90,
     )
@@ -139,7 +142,7 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> dict:
         headers={"Content-Type": "application/json"},
         json={
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 3000, "temperature": 0.7},
+            "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.7},
         },
         timeout=90,
     )
@@ -263,20 +266,16 @@ def _get_recent_results(db: Session, team_code: str, limit: int = 5) -> list:
 
 def _get_mc_prob(db: Session, match_id: int) -> dict | None:
     row = db.execute(
-        text("SELECT data FROM simulations_cache WHERE match_id = :mid LIMIT 1"),
+        text("SELECT prob_a, prob_draw, prob_b FROM simulations_cache WHERE match_id = :mid LIMIT 1"),
         {"mid": match_id},
     ).fetchone()
     if not row:
         return None
-    try:
-        d = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-        return {
-            "prob_a":    round(d.get("prob_a", 0) * 100, 1),
-            "prob_draw": round(d.get("prob_draw", 0) * 100, 1),
-            "prob_b":    round(d.get("prob_b", 0) * 100, 1),
-        }
-    except Exception:
-        return None
+    return {
+        "prob_a":    round(float(row[0] or 0) * 100, 1),
+        "prob_draw": round(float(row[1] or 0) * 100, 1),
+        "prob_b":    round(float(row[2] or 0) * 100, 1),
+    }
 
 
 def _generate_one(match_id: int, db: Session, cfg: dict) -> dict:
@@ -338,6 +337,7 @@ def _generate_all_bg(db_url: str, cfg: dict):
                 log.info("analysis ok match_id=%s", mid)
             except Exception as e:
                 log.error("analysis fail match_id=%s: %s", mid, e)
+                db.rollback()
     finally:
         db.close()
 
