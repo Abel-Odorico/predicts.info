@@ -19,20 +19,28 @@ function TeamLabel({ code, name, flagUrl, compact = false }) {
 export default function Bets() {
   const { token } = useAuth()
   const navigate = useNavigate()
-  const [bets, setBets]       = useState([])
-  const [matches, setMatches] = useState([])
-  const [loading, setLoad]    = useState(true)
-  const [tab, setTab]         = useState('open')
+  const [bets, setBets]             = useState([])
+  const [matches, setMatches]       = useState([])
+  const [finished, setFinished]     = useState([])
+  const [loading, setLoad]          = useState(true)
+  const [tab, setTab]               = useState('open')
   const [shareMsg, setShareMsg] = useState('')
   const [now, setNow]         = useState(Date.now())
   const [pendingOpenId, setPendingOpenId] = useState(null)
   const matchRefs = useRef({})
 
   const load = useCallback(() => {
-    const reqs = [api.get('/matches?status=scheduled&limit=200')]
+    const reqs = [
+      api.get('/matches?status=scheduled&limit=200'),
+      api.get('/matches?status=finished&limit=100'),
+    ]
     if (token) reqs.push(api.get('/bets/mine', token))
     Promise.all(reqs)
-      .then(([m, b]) => { setMatches(m); if (b) setBets(b) })
+      .then(([m, f, b]) => {
+        setMatches(m)
+        setFinished(Array.isArray(f) ? f : [])
+        if (token && b) setBets(b)
+      })
       .catch(console.error)
       .finally(() => setLoad(false))
   }, [token])
@@ -109,6 +117,7 @@ export default function Bets() {
         {[
           { id: 'open',  label: `Partidas Abertas${openMatches.length ? ` (${openMatches.length})` : ''}` },
           { id: 'mine',  label: `Meus Palpites${bets.length ? ` (${bets.length})` : ''}` },
+          { id: 'past',  label: `Anteriores${finished.length ? ` (${finished.length})` : ''}` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} className={tab === t.id ? 'active' : ''}>
             {t.label}
@@ -168,6 +177,27 @@ export default function Bets() {
                   onOpenSimulation={() => navigate(`/partida/${b.match_id}`)}
                 />
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'past' && (
+        <div className="fade-in-1">
+          {finished.length === 0 ? (
+            <div className="bet-empty mt-6" style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
+              Sem partidas finalizadas ainda.
+            </div>
+          ) : (
+            <div className="bets-list mt-6">
+              {[...finished]
+                .sort((a, b) => new Date(b.match_date || 0) - new Date(a.match_date || 0))
+                .map((m, i) => {
+                  const bet = betsByMatchId[m.id]
+                  return bet
+                    ? <BetRow key={m.id} bet={bet} index={i} onOpenSimulation={() => navigate(`/partida/${m.id}`)} />
+                    : <FinishedNoBetRow key={m.id} match={m} index={i} onOpenSimulation={() => navigate(`/partida/${m.id}`)} />
+                })}
             </div>
           )}
         </div>
@@ -743,6 +773,41 @@ function BetRow({ bet, index, onOpenSimulation }) {
     </div>
     {showShare && <BetShareModal bet={bet} onClose={() => setShowShare(false)} />}
     </>
+  )
+}
+
+// ── Finished match card (no bet placed) ──────────────────────────────────────
+function FinishedNoBetRow({ match, index, onOpenSimulation }) {
+  const sa = match.result?.score_a ?? match.score_a ?? '?'
+  const sb = match.result?.score_b ?? match.score_b ?? '?'
+  return (
+    <div className="bet-card fade-in" style={{ animationDelay: `${index * 30}ms`, opacity: 0.65 }}>
+      <div className="bet-card__top">
+        <span className="badge badge-group">Grupo {match.group_name}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
+          <span className="bet-card__time">{formatMatchDate(match.match_date)}</span>
+          <span className="pts-badge pts-badge--wrong">sem palpite</span>
+        </div>
+      </div>
+      <div className="bet-card__match" style={{ marginTop: 'var(--s4)' }}>
+        <div className="bet-card__team">
+          <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <div className="bet-card__score">{sa} – {sb}</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-4)', textTransform: 'uppercase' }}>
+            resultado
+          </div>
+        </div>
+        <div className="bet-card__team bet-card__team--right">
+          <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} />
+        </div>
+      </div>
+      <div className="bet-card__footer" style={{ marginTop: 'var(--s4)' }}>
+        <span className="bet-card__status" style={{ color: 'var(--text-4)' }}>Partida encerrada · palpite não registrado</span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenSimulation}>Ver Simulação</button>
+      </div>
+    </div>
   )
 }
 

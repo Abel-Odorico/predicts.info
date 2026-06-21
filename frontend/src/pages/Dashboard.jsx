@@ -3,10 +3,13 @@ import { useNavigate, Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
+import { useAuth } from '../stores/authStore'
 
 export default function Dashboard() {
+  const { token }                     = useAuth()
   const [matches, setMatches]         = useState([])
   const [results, setResults]         = useState([])
+  const [userBetsMap, setUserBetsMap] = useState({})
   const [tourney, setTourney]         = useState(null)
   const [liveGames, setLiveGames]     = useState([])
   const [calendar, setCalendar]       = useState([])
@@ -22,7 +25,7 @@ export default function Dashboard() {
       try {
         const [sched, done, tour, live, fullCalendar] = await Promise.all([
           api.get('/matches?status=scheduled&limit=10'),
-          api.get('/matches?status=finished&limit=5'),
+          api.get('/matches?status=finished&limit=10'),
           api.get('/tournament/simulate?n=50000'),
           api.get('/live/world-cup'),
           api.get('/matches/calendar'),
@@ -38,6 +41,12 @@ export default function Dashboard() {
           if (!mounted) return
           setTopBettors(Array.isArray(bettors) ? bettors.filter(b => b.total_points > 0) : [])
         }).catch(() => {})
+        if (token) {
+          api.get('/bets/mine', token).then(myBets => {
+            if (!mounted || !Array.isArray(myBets)) return
+            setUserBetsMap(Object.fromEntries(myBets.map(b => [b.match_id, b])))
+          }).catch(() => {})
+        }
         const liveMatchIds = games.filter(g => g.status === 'live' && g.match_id).map(g => g.match_id)
         if (liveMatchIds.length > 0) {
           Promise.all(liveMatchIds.map(id => api.get(`/matches/${id}/live-bets`).catch(() => null)))
@@ -331,8 +340,9 @@ export default function Dashboard() {
                 <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
                   Últimos Resultados
                 </span>
+                <Link to="/palpites" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>Ver palpites →</Link>
               </div>
-              {results.map(m => <MatchRow key={m.id} match={m} done />)}
+              {results.map(m => <MatchRow key={m.id} match={m} done bet={userBetsMap[m.id] || null} />)}
             </div>
           )}
         </div>
@@ -467,7 +477,7 @@ function TeamBig({ team }) {
   )
 }
 
-function MatchRow({ match, done }) {
+function MatchRow({ match, done, bet }) {
   const navigate = useNavigate()
   const isLive = match.status === 'live'
   const hasLiveScore = match.live_score_a != null || match.live_score_b != null
@@ -476,6 +486,14 @@ function MatchRow({ match, done }) {
     : hasLiveScore
       ? `${match.live_score_a ?? '-'}–${match.live_score_b ?? '-'}`
       : 'vs'
+
+  const betBadge = done && bet
+    ? bet.result === 'exact'   ? { label: '🎯 +3', color: 'var(--accent)' }
+    : bet.result === 'correct' ? { label: '✅ +1', color: 'var(--win)' }
+    : bet.result === 'wrong'   ? { label: '❌ 0',  color: 'var(--lose)' }
+    : { label: `${bet.score_a}–${bet.score_b} ⏳`, color: 'var(--text-3)' }
+    : done && !bet ? { label: '— sem palpite', color: 'var(--text-4)' }
+    : null
 
   return (
     <div className="match-card" onClick={() => navigate(`/partida/${match.id}`)}>
@@ -497,7 +515,14 @@ function MatchRow({ match, done }) {
           <span>{PT_NAMES[match.team_b.code] || match.team_b.code}</span>
         </div>
       </div>
-      {done ? <span className="badge badge-done">FIM</span> : isLive ? <span className="badge badge-live">{match.status_raw || 'Ao vivo'}</span> : <span className="match-card__arrow">›</span>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', flexShrink: 0 }}>
+        {betBadge && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: betBadge.color, whiteSpace: 'nowrap' }}>
+            {betBadge.label}
+          </span>
+        )}
+        {done ? <span className="badge badge-done">FIM</span> : isLive ? <span className="badge badge-live">{match.status_raw || 'Ao vivo'}</span> : <span className="match-card__arrow">›</span>}
+      </div>
     </div>
   )
 }
