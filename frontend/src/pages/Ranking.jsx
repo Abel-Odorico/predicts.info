@@ -54,6 +54,17 @@ export default function Ranking() {
   const [dateTo,      setDateTo]    = useState('')
   const [lastUpdated, setLastUpdated] = useState(null)
   const [flashUpdate, setFlashUpdate] = useState(false)
+  const [champPicks,  setChampPicks]  = useState({})
+  const [allPicks,    setAllPicks]    = useState([])
+
+  useEffect(() => {
+    api.get('/champion/picks/all')
+      .then(rows => {
+        setAllPicks(rows)
+        setChampPicks(Object.fromEntries(rows.map(r => [r.user_id, r])))
+      })
+      .catch(() => {})
+  }, [])
 
   const loadSilent = useCallback((silent = false) => {
     if (!silent) setLoad(true)
@@ -263,6 +274,7 @@ export default function Ranking() {
             {data.map((r, i) => {
               const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
               const leaderPts = data[0]?.total_points || 1
+              const cp = champPicks[r.user_id]
 
               return (
                 <Link
@@ -288,6 +300,23 @@ export default function Ranking() {
                         borderRadius: 2, transition: 'width 600ms ease',
                       }} />
                     </div>
+                    {/* Picks de campeão */}
+                    {cp && (cp.champion || cp.runner_up) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        {cp.champion && (
+                          <span title={`🏆 Campeão: ${cp.champion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <img src={cp.champion.flag} alt={cp.champion.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--accent)' }}>🏆</span>
+                          </span>
+                        )}
+                        {cp.runner_up && (
+                          <span title={`🥈 Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <img src={cp.runner_up.flag} alt={cp.runner_up.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#d4af37' }}>🥈</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {/* Resumo visível só no mobile */}
                     <div className="ranking-row__mobile-stats">
                       <span>{r.total_bets ?? 0} apostas</span>
@@ -367,6 +396,58 @@ export default function Ranking() {
           </div>
         </div>
       </div>
+
+      {/* ── Palpites de Campeão ────────────────────────────────────────── */}
+      {allPicks.length > 0 && (
+        <div className="card mt-6 fade-in-4">
+          <div className="card__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+              🏆 Palpites de Campeão
+            </span>
+            <Link to="/campeao" style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)' }}>
+              Fazer seu palpite →
+            </Link>
+          </div>
+          <div className="card__body" style={{ padding: 0 }}>
+            {allPicks.map((p, i) => (
+              <div key={p.user_id} style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0,1fr) 1fr 1fr',
+                gap: 8,
+                padding: '10px var(--s4)',
+                borderBottom: i < allPicks.length - 1 ? '1px solid var(--border)' : 'none',
+                alignItems: 'center',
+              }}>
+                <Link to={`/usuarios/${p.user_id}/historico`} style={{
+                  fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
+                  color: 'var(--text-1)', textDecoration: 'none',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {p.user_name}
+                </Link>
+                {p.champion ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <img src={p.champion.flag} alt={p.champion.code} style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1)', fontWeight: 600 }}>{p.champion.code}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)' }}>+100</span>
+                  </div>
+                ) : (
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', fontStyle: 'italic' }}>—</span>
+                )}
+                {p.runner_up ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <img src={p.runner_up.flag} alt={p.runner_up.code} style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1)', fontWeight: 600 }}>{p.runner_up.code}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#d4af37' }}>+50</span>
+                  </div>
+                ) : (
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', fontStyle: 'italic' }}>—</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

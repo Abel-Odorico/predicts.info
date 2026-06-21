@@ -151,9 +151,22 @@ export default function Admin() {
   const [awardForm, setAwardForm] = useState({ champion_team_id: '', runner_up_team_id: '' })
   const [awardMsg, setAwardMsg] = useState('')
   const [awarding, setAwarding] = useState(false)
+  const [champAllPicks, setChampAllPicks] = useState(null)
+  const [champStats, setChampStats] = useState(null)
 
   async function loadAwardStatus() {
     try { setAwardStatus(await api.get('/admin/champion/award', token)) } catch {}
+  }
+
+  async function loadChampPicks() {
+    try {
+      const [picks, stats] = await Promise.all([
+        api.get('/champion/picks/all'),
+        api.get('/champion/picks/stats'),
+      ])
+      setChampAllPicks(picks)
+      setChampStats(stats)
+    } catch {}
   }
 
   async function submitAward(e) {
@@ -288,6 +301,7 @@ export default function Admin() {
     if (tab === 'knockout' && !knockoutMatches && !knockoutLoading) loadKnockout()
     if (tab === 'knockout' && allTeams.length === 0) loadAllTeams()
     if (tab === 'knockout' && !awardStatus) loadAwardStatus()
+    if (tab === 'knockout' && !champAllPicks) loadChampPicks()
   }, [tab])
 
   useEffect(() => {
@@ -1467,6 +1481,79 @@ export default function Admin() {
               )}
             </div>
           </div>
+
+          {/* Palpites de Campeão — admin view */}
+          {champAllPicks && (
+            <div className="adm-card" style={{ marginTop: 'var(--s5)' }}>
+              <div className="adm-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="adm-card__title">🏆 Palpites de Campeão — {champAllPicks.length} participante{champAllPicks.length !== 1 ? 's' : ''}</span>
+                <button className="btn btn-ghost btn-sm" onClick={loadChampPicks} style={{ fontSize: 11 }}>↻ Atualizar</button>
+              </div>
+
+              {/* Estatísticas */}
+              {champStats && (
+                <div style={{ padding: 'var(--s4) var(--s5)', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s4)' }}>
+                    {[
+                      { label: '🏆 Campeão — distribuição', data: champStats.champion },
+                      { label: '🥈 Vice — distribuição',    data: champStats.runner_up },
+                    ].map(({ label, data }) => (
+                      <div key={label}>
+                        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 8 }}>{label.toUpperCase()}</p>
+                        {(data || []).slice(0, 8).map(s => (
+                          <div key={s.team_id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                            <img src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', minWidth: 32 }}>{s.code}</span>
+                            <div style={{ flex: 1, height: 6, background: 'var(--bg-overlay)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ width: `${s.pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 3 }} />
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)', minWidth: 42, textAlign: 'right' }}>{s.pct}% ({s.count})</span>
+                          </div>
+                        ))}
+                        {!(data?.length) && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Sem palpites ainda</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lista completa */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      {['Participante', '🏆 Campeão', '🥈 Vice-Campeão'].map(h => (
+                        <th key={h} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', fontWeight: 700, letterSpacing: '0.08em', textAlign: 'left', padding: '8px 16px', textTransform: 'uppercase' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {champAllPicks.map((p, i) => (
+                      <tr key={p.user_id} style={{ borderBottom: i < champAllPicks.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <td style={{ padding: '9px 16px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{p.user_name}</td>
+                        <td style={{ padding: '9px 16px' }}>
+                          {p.champion ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <img src={p.champion.flag} alt={p.champion.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600 }}>{p.champion.name}</span>
+                            </div>
+                          ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>não escolheu</span>}
+                        </td>
+                        <td style={{ padding: '9px 16px' }}>
+                          {p.runner_up ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <img src={p.runner_up.flag} alt={p.runner_up.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600 }}>{p.runner_up.name}</span>
+                            </div>
+                          ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>não escolheu</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Edit modal */}
           {editMatch && (

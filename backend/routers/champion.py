@@ -134,6 +134,31 @@ def picks_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/champion/picks/all")
+def all_picks(db: Session = Depends(get_db)):
+    rows = (
+        db.query(ChampionPick, User)
+        .join(User, User.id == ChampionPick.user_id)
+        .order_by(User.name)
+        .all()
+    )
+    team_ids = set()
+    for pick, _ in rows:
+        if pick.team_id:           team_ids.add(pick.team_id)
+        if pick.runner_up_team_id: team_ids.add(pick.runner_up_team_id)
+    teams_map = {t.id: t for t in db.query(Team).filter(Team.id.in_(team_ids)).all()} if team_ids else {}
+
+    return [
+        {
+            "user_id":   user.id,
+            "user_name": user.name,
+            "champion":  _team_dict(teams_map[pick.team_id])           if pick.team_id           and pick.team_id           in teams_map else None,
+            "runner_up": _team_dict(teams_map[pick.runner_up_team_id]) if pick.runner_up_team_id and pick.runner_up_team_id in teams_map else None,
+        }
+        for pick, user in rows
+    ]
+
+
 @router.get("/admin/champion/award")
 def award_status(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     award = db.query(ChampionAward).order_by(ChampionAward.id.desc()).first()

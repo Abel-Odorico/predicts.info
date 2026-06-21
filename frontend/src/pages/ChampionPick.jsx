@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -102,9 +103,10 @@ export default function ChampionPick() {
   const { user, token } = useAuth()
   const countdown = useCountdown()
 
-  const [teams, setTeams]   = useState([])
-  const [stats, setStats]   = useState({ champion: [], runner_up: [] })
-  const [myPick, setMyPick] = useState(null)
+  const [teams, setTeams]     = useState([])
+  const [stats, setStats]     = useState({ champion: [], runner_up: [] })
+  const [allPicks, setAllPicks] = useState([])
+  const [myPick, setMyPick]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
   const [msg, setMsg]         = useState('')
@@ -112,12 +114,14 @@ export default function ChampionPick() {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [teamsData, statsData] = await Promise.all([
+        const [teamsData, statsData, picksData] = await Promise.all([
           api.get('/teams'),
           api.get('/champion/picks/stats'),
+          api.get('/champion/picks/all'),
         ])
         setTeams(teamsData)
         setStats(statsData)
+        setAllPicks(picksData)
         if (token) {
           try { setMyPick(await api.get('/champion/pick', token)) } catch {}
         }
@@ -140,8 +144,12 @@ export default function ChampionPick() {
       setMyPick(res)
       const label = type === 'champion' ? 'Campeão' : 'Vice-campeão'
       setMsg(`✓ ${label} salvo — ${team.name || team.code}`)
-      const statsData = await api.get('/champion/picks/stats')
+      const [statsData, picksData] = await Promise.all([
+        api.get('/champion/picks/stats'),
+        api.get('/champion/picks/all'),
+      ])
       setStats(statsData)
+      setAllPicks(picksData)
     } catch (e) {
       const detail = e?.response?.data?.detail || e?.message || ''
       setMsg(detail || 'Erro ao salvar palpite')
@@ -328,6 +336,57 @@ export default function ChampionPick() {
             ))}
           </div>
         </>
+      )}
+
+      {/* ── Palpites do Bolão ── */}
+      {allPicks.length > 0 && (
+        <div style={{ marginTop: 'var(--s6)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--s3)' }}>
+            <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.08em', margin: 0 }}>
+              PALPITES DO BOLÃO — {allPicks.length} participante{allPicks.length !== 1 ? 's' : ''}
+            </p>
+            <Link to="/ranking" style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)' }}>
+              Ver ranking →
+            </Link>
+          </div>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            {/* header */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 1fr 1fr', gap: 8, padding: '8px var(--s4)', borderBottom: '1px solid var(--border)' }}>
+              {['Participante', '🏆 Campeão (+100)', '🥈 Vice (+50)'].map(h => (
+                <span key={h} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-4)', textTransform: 'uppercase' }}>{h}</span>
+              ))}
+            </div>
+            {allPicks.map((p, i) => (
+              <div key={p.user_id} style={{
+                display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 1fr 1fr', gap: 8,
+                padding: '10px var(--s4)',
+                borderBottom: i < allPicks.length - 1 ? '1px solid var(--border)' : 'none',
+                alignItems: 'center',
+                background: p.user_id === user?.id ? 'rgba(15,122,120,0.06)' : 'transparent',
+              }}>
+                <Link to={`/usuarios/${p.user_id}/historico`} style={{
+                  fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: p.user_id === user?.id ? 700 : 500,
+                  color: p.user_id === user?.id ? 'var(--accent)' : 'var(--text-1)',
+                  textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {p.user_name}{p.user_id === user?.id ? ' (você)' : ''}
+                </Link>
+                {p.champion ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <img src={p.champion.flag} alt={p.champion.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{p.champion.code}</span>
+                  </div>
+                ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>—</span>}
+                {p.runner_up ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <img src={p.runner_up.flag} alt={p.runner_up.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{p.runner_up.code}</span>
+                  </div>
+                ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>—</span>}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
     </div>
