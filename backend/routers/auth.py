@@ -150,6 +150,25 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(Ranking(user_id=user.id))
     db.commit()
     db.refresh(user)
+
+    try:
+        from datetime import datetime, timezone as tz
+        from routers.champion import DEADLINE
+        from routers.notifications import create_notification
+        if datetime.now(tz.utc).replace(tzinfo=None) < DEADLINE:
+            create_notification(
+                db,
+                user_id=user.id,
+                type_="champion_remind",
+                title="🏆 Escolha o campeão da Copa!",
+                body="Acerte o campeão e ganhe +100 pts · prazo: 26/06 às 09h.",
+                meta={"url": "/campeao"},
+                push=False,
+            )
+            db.commit()
+    except Exception:
+        pass
+
     return user
 
 
