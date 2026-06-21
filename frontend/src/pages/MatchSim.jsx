@@ -291,15 +291,21 @@ export default function MatchSim() {
             </div>
           )}
         </div>
-      </div>
-      <div style={{ marginTop: 'var(--s4)', borderTop: '1px solid var(--border)', paddingTop: 'var(--s4)' }}>
-        {analysisLoading ? (
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>⏳ Carregando análise IA…</div>
-        ) : analysis ? (
-          <SimAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
-        ) : (
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>🤖 Análise IA não disponível para esta partida</div>
-        )}
+
+        {/* Análise IA — full-width dentro do grid */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          {analysisLoading ? (
+            <div className="card" style={{ padding: 'var(--s4)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>⏳ Carregando análise IA…</span>
+            </div>
+          ) : analysis ? (
+            <SimAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
+          ) : (
+            <div className="card" style={{ padding: 'var(--s4)' }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>🤖 Análise IA não disponível para esta partida — gere via painel admin.</span>
+            </div>
+          )}
+        </div>
       </div>
       <MatchComments matchId={match?.id} />
     </div>

@@ -2132,13 +2132,28 @@ export default function Admin() {
                   </div>
                 </div>
 
+                {/* Metodologia — dados injetados no prompt */}
+                <AnalysisMethodologyCard />
+
                 {/* Prompt editor */}
                 <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
                   <button type="button"
                     onClick={() => setPromptOpen(v => !v)}
                     style={{ width: '100%', background: 'var(--bg-overlay)', border: 'none', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>
                     <span>📝 Editor de Prompt</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{promptOpen ? '▲ fechar' : '▼ editar'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {!aForm.prompt_template && (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--win)', background: 'rgba(46,201,128,0.1)', border: '1px solid rgba(46,201,128,0.25)', borderRadius: 4, padding: '1px 6px' }}>
+                          ✓ usando padrão
+                        </span>
+                      )}
+                      {aForm.prompt_template && (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--amber)', background: 'rgba(232,196,74,0.1)', border: '1px solid rgba(232,196,74,0.25)', borderRadius: 4, padding: '1px 6px' }}>
+                          ✎ customizado
+                        </span>
+                      )}
+                      <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{promptOpen ? '▲ fechar' : '▼ editar'}</span>
+                    </div>
                   </button>
                   {promptOpen && (
                     <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2293,6 +2308,87 @@ export default function Admin() {
         </div>
       )}
 
+    </div>
+  )
+}
+
+// ── Analysis Methodology Card ────────────────────────────────────────────────
+
+function AnalysisMethodologyCard() {
+  const [open, setOpen] = useState(false)
+  const h4 = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6, marginTop: 12 }
+  const pill = { display: 'inline-block', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 7px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-2)', marginRight: 4, marginBottom: 4 }
+  const row = { display: 'flex', gap: 10, alignItems: 'flex-start', padding: '7px 0', borderBottom: '1px solid var(--border)' }
+  const label = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-1)', minWidth: 160 }
+  const desc = { fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+      <button type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{ width: '100%', background: 'var(--bg-overlay)', border: 'none', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>
+        <span>📊 Metodologia — Como os Dados São Gerados</span>
+        <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{open ? '▲ fechar' : '▼ ver'}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '14px 16px' }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 12 }}>
+            Para cada partida, o sistema coleta os dados abaixo e monta um prompt estruturado enviado ao modelo de IA selecionado.
+            O modelo retorna um JSON com análise tática completa.
+          </div>
+
+          <div style={h4}>Dados Injetados no Prompt</div>
+          <div style={{ borderTop: '1px solid var(--border)' }}>
+            {[
+              ['Elo Rating', 'Classificação Elo de cada seleção — calculada via histórico de resultados internacionais com fator K ajustado por importância da competição'],
+              ['Forma Recente', 'Sequência V/E/D dos últimos 5 e 10 jogos — extraída do histórico de partidas registradas no banco'],
+              ['Médias de Gol', 'avg_goals_for e avg_goals_against por jogo — calculadas sobre os últimos 20 jogos da seleção'],
+              ['Expected Goals (xG/xGA)', 'Gols esperados marcados e sofridos — proxy baseado na qualidade das finalizações (dados Football-Data.org via sync)'],
+              ['Convocação', 'Até 16 jogadores por posição (GOL / DEF / MEI / ATA) — sincronizados da Wikipedia via world_cup_sync.py no startup e a cada 1h'],
+              ['Resultados nesta Copa', 'Últimos 5 jogos do torneio atual com placar real — extraídos da tabela match_results'],
+              ['Monte Carlo', '1.000.000 simulações Poisson + Elo → prob_a / prob_draw / prob_b em % — lidas direto da tabela simulations_cache'],
+              ['Fase / Grupo / Data', 'Contexto da partida: fase (group/R32/oitavas/quartas/semi/final), grupo e data (UTC)'],
+            ].map(([l, d]) => (
+              <div key={l} style={row}>
+                <span style={label}>{l}</span>
+                <span style={desc}>{d}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={h4}>Estrutura de Saída (JSON)</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+            {[
+              ['overview', '3 parágrafos: contexto, histórico Copa, momento atual'],
+              ['team_a / team_b', 'tactical · key_players[] · form · strengths · weaknesses'],
+              ['matchup', '2 parágrafos: batalha tática + fator X'],
+              ['prediction', '2 parágrafos: desenvolvimento do jogo + placar provável'],
+              ['verdict', 'Frase-síntese opinativa sobre o favorito'],
+            ].map(([k, v]) => (
+              <div key={k} style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', marginBottom: 4 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>{k}</span>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginLeft: 8 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={h4}>Variáveis Disponíveis no Template</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            {[
+              '{team_a_name}', '{team_b_name}', '{team_a_code}', '{team_b_code}',
+              '{team_a_elo}', '{team_b_elo}', '{team_a_form5}', '{team_b_form5}',
+              '{team_a_form10}', '{team_b_form10}', '{team_a_avg_gf}', '{team_b_avg_gf}',
+              '{team_a_avg_ga}', '{team_b_avg_ga}', '{team_a_xg}', '{team_b_xg}',
+              '{team_a_xga}', '{team_b_xga}', '{team_a_players}', '{team_b_players}',
+              '{team_a_results}', '{team_b_results}', '{team_a_wc_apps}', '{team_b_wc_apps}',
+              '{team_a_best}', '{team_b_best}', '{phase}', '{group_name}', '{match_date}', '{mc_probs}',
+            ].map(v => <span key={v} style={pill}>{v}</span>)}
+          </div>
+
+          <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(15,122,120,0.08)', border: '1px solid rgba(15,122,120,0.2)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
+            <strong style={{ color: 'var(--accent)' }}>Fluxo:</strong> Sync Wikipedia (1h) → atualiza times/convocados/placares → Simulação Monte Carlo → cache em simulations_cache → Geração de análise IA (admin manual ou "Gerar todas") → cache em match_analyses → Exibição pública em /sim/:id e no painel de odds de cada jogo.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
