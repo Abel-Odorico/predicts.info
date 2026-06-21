@@ -399,18 +399,18 @@ def _generate_one(match_id: int, db: Session, cfg: dict) -> dict:
     return content
 
 
-def _generate_all_bg(db_url: str, cfg: dict):
+def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     engine = create_engine(db_url)
     Sess = sessionmaker(bind=engine)
     db = Sess()
     try:
-        # Futuras primeiro, depois passadas — usuário vê futuras no Palpites
+        where = "WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)" if only_pending else ""
         pending = db.execute(
-            text("""
+            text(f"""
                 SELECT m.id FROM matches m
-                WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)
+                {where}
                 ORDER BY
                     CASE WHEN m.match_date >= NOW() THEN 0 ELSE 1 END,
                     m.match_date
@@ -558,5 +558,5 @@ def generate_all(
     if cfg["provider"] == "openrouter" and not cfg["openrouter_key"]:
         raise HTTPException(400, "OpenRouter API key não configurada")
     from config import settings
-    background_tasks.add_task(_generate_all_bg, settings.database_url, cfg)
+    background_tasks.add_task(_generate_all_bg, settings.database_url, cfg, body.only_pending)
     return {"ok": True, "message": "Geração iniciada em background"}
