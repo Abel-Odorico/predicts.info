@@ -556,54 +556,183 @@ def _match_snapshot(match: Match, all_users: list, db: Session) -> dict:
     }
 
 
+_ENG_PERIODS = {
+    "today": {"days": 0,  "trunc": "hour", "label": "Hoje"},
+    "7d":    {"days": 7,  "trunc": "day",  "label": "7 dias"},
+    "30d":   {"days": 30, "trunc": "day",  "label": "30 dias"},
+    "all":   {"days": None, "trunc": "week", "label": "Todo período"},
+}
+
+_STREAK_SQL = """
+WITH daily AS (
+    SELECT DISTINCT user_id, DATE(created_at) AS bet_day
+    FROM bets
+),
+numbered AS (
+    SELECT user_id, bet_day,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY bet_day) AS rn
+    FROM daily
+),
+grouped AS (
+    SELECT user_id, bet_day,
+           (bet_day - (rn || ' days')::interval)::date AS grp
+    FROM numbered
+),
+streak_groups AS (
+    SELECT user_id, grp,
+           COUNT(*) AS streak_len,
+           MIN(bet_day) AS streak_start,
+           MAX(bet_day) AS streak_end
+    FROM grouped
+    GROUP BY user_id, grp
+),
+user_best AS (
+    SELECT
+        user_id,
+        MAX(streak_len) AS max_streak,
+        MAX(streak_end) AS last_active_day,
+        COALESCE(
+            MAX(CASE WHEN streak_end >= CURRENT_DATE - 1 THEN streak_len END),
+            0
+        ) AS current_streak
+    FROM streak_groups
+    GROUP BY user_id
+)
+SELECT u.id, u.name, u.username, u.email,
+       ub.max_streak, ub.current_streak, ub.last_active_day
+FROM user_best ub
+JOIN users u ON u.id = ub.user_id
+ORDER BY ub.current_streak DESC, ub.max_streak DESC, ub.last_active_day DESC
+LIMIT 20
+"""
+
+
 @router.get("/engagement")
 def engagement(
+    period: str = Query(default="7d"),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    ago7  = now - timedelta(days=7)
-    ago30 = now - timedelta(days=30)
+    if period not in _ENG_PERIODS:
+        raise HTTPException(400, f"period must be one of {list(_ENG_PERIODS)}")
 
-    all_users = db.query(User).order_by(User.name.asc()).all()
+    now   = datetime.now(timezone.utc).replace(tzinfo=None)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    cfg   = _ENG_PERIODS[period]
+
+    if cfg["days"] is None:
+        since = None
+    elif cfg["days"] == 0:
+        since = today
+    else:
+        since = now - timedelta(days=cfg["days"])
+
+    where_since = "AND b.created_at >= :since" if since else ""
+    params: dict = {"since": since} if since else {}
+
+    all_users   = db.query(User).order_by(User.name.asc()).all()
     total_users = len(all_users)
 
-    # ── Summary KPIs ──────────────────────────────────────────────
+    # ── KPIs período ──────────────────────────────────────────────
+    bettors_period_q = db.query(Bet.user_id).distinct()
+    bets_period_q    = db.query(func.count(Bet.id))
+    if since:
+        bettors_period_q = bettors_period_q.filter(Bet.created_at >= since)
+        bets_period_q    = bets_period_q.filter(Bet.created_at >= since)
+
+    bettors_period_ids = {r[0] for r in bettors_period_q}
+    bets_period        = int(bets_period_q.scalar() or 0)
+
+    # fixos (sempre today)
     bettors_today_ids = {
         r[0] for r in db.query(Bet.user_id).filter(Bet.created_at >= today).distinct()
     }
-    bets_today = db.query(func.count(Bet.id)).filter(Bet.created_at >= today).scalar() or 0
-    active_7d_ids = {
-        r[0] for r in db.query(Bet.user_id).filter(Bet.created_at >= ago7).distinct()
-    }
-    active_30d_ids = {
-        r[0] for r in db.query(Bet.user_id).filter(Bet.created_at >= ago30).distinct()
-    }
-    users_with_bets = {r[0] for r in db.query(Bet.user_id).distinct()}
-    never_bet_ids = {u.id for u in all_users} - users_with_bets
-    page_views_today = (
+    page_views_today = int(
         db.query(func.count(PageView.id)).filter(PageView.created_at >= today).scalar() or 0
     )
 
-    # ── Activity 7d (bets per day) ────────────────────────────────
-    activity_rows = db.execute(text("""
-        SELECT
-            DATE(created_at) AS day,
-            COUNT(*) AS bets,
-            COUNT(DISTINCT user_id) AS unique_users
+    users_with_bets = {r[0] for r in db.query(Bet.user_id).distinct()}
+    never_bet_ids   = {u.id for u in all_users} - users_with_bets
+
+    # ── Activity series ───────────────────────────────────────────
+    trunc = cfg["trunc"]
+    if trunc == "hour":
+        bucket_sql = "date_trunc('hour', created_at)"
+        fmt_key    = "hour"
+    elif trunc == "week":
+        bucket_sql = "date_trunc('week', created_at)::date"
+        fmt_key    = "week"
+    else:
+        bucket_sql = "DATE(created_at)"
+        fmt_key    = "day"
+
+    where_act = "WHERE created_at >= :since" if since else ""
+    act_rows  = db.execute(text(f"""
+        SELECT {bucket_sql} AS bucket,
+               COUNT(*) AS bets,
+               COUNT(DISTINCT user_id) AS unique_users
         FROM bets
-        WHERE created_at >= :since
-        GROUP BY day
-        ORDER BY day
-    """), {"since": ago7}).fetchall()
-    activity_7d = [
-        {"date": str(r.day), "bets": int(r.bets), "unique_users": int(r.unique_users)}
-        for r in activity_rows
+        {where_act}
+        GROUP BY bucket
+        ORDER BY bucket
+    """), params).fetchall()
+
+    activity_series = []
+    for r in act_rows:
+        b = r.bucket
+        if fmt_key == "hour":
+            label = b.strftime("%H:00") if hasattr(b, "strftime") else str(b)
+        elif fmt_key == "week":
+            label = b.strftime("%d/%m") if hasattr(b, "strftime") else str(b)
+        else:
+            label = b.strftime("%d/%m") if hasattr(b, "strftime") else str(b)
+        activity_series.append({
+            "label": label,
+            "date": str(b),
+            "bets": int(r.bets),
+            "unique_users": int(r.unique_users),
+        })
+
+    # ── Streaks (all-time, independente do período) ───────────────
+    streak_rows = db.execute(text(_STREAK_SQL)).fetchall()
+    streaks = [
+        {
+            "id": r.id, "name": r.name, "username": r.username, "email": r.email,
+            "current_streak": int(r.current_streak),
+            "max_streak": int(r.max_streak),
+            "last_active_day": str(r.last_active_day) if r.last_active_day else None,
+        }
+        for r in streak_rows
     ]
 
-    # ── Top bettors (by bets count) ───────────────────────────────
-    top_rows = db.execute(text("""
+    # most_engaged: higher score = current_streak*3 + max_streak + period_bets
+    most_engaged = None
+    if streak_rows:
+        # combine streak + period bets
+        period_bets_by_user: dict[int, int] = {}
+        pb_rows = db.execute(text(f"""
+            SELECT user_id, COUNT(*) AS cnt
+            FROM bets
+            {where_act}
+            GROUP BY user_id
+        """), params).fetchall()
+        for r in pb_rows:
+            period_bets_by_user[r.user_id] = int(r.cnt)
+
+        best = max(
+            streak_rows,
+            key=lambda r: int(r.current_streak) * 3 + int(r.max_streak)
+                          + period_bets_by_user.get(r.id, 0),
+        )
+        most_engaged = {
+            "id": best.id, "name": best.name, "username": best.username,
+            "current_streak": int(best.current_streak),
+            "max_streak": int(best.max_streak),
+            "period_bets": period_bets_by_user.get(best.id, 0),
+        }
+
+    # ── Top bettors no período ────────────────────────────────────
+    top_rows = db.execute(text(f"""
         SELECT
             u.id, u.name, u.username, u.email,
             COUNT(b.id) AS bets_count,
@@ -611,10 +740,11 @@ def engagement(
             MAX(b.created_at) AS last_bet_at
         FROM users u
         JOIN bets b ON b.user_id = u.id
+        {where_since.replace('b.', 'b.')}
         GROUP BY u.id, u.name, u.username, u.email
         ORDER BY bets_count DESC
         LIMIT 15
-    """)).fetchall()
+    """), params).fetchall()
     top_bettors = [
         {
             "id": r.id, "name": r.name, "username": r.username, "email": r.email,
@@ -624,42 +754,43 @@ def engagement(
         for r in top_rows
     ]
 
-    # ── Inactive 7d (have bets but none in last 7 days) ──────────
-    inactive_rows = db.execute(text("""
-        SELECT
-            u.id, u.name, u.username, u.email,
-            COUNT(b.id) AS bets_count,
-            MAX(b.created_at) AS last_bet_at
-        FROM users u
-        JOIN bets b ON b.user_id = u.id
-        GROUP BY u.id, u.name, u.username, u.email
-        HAVING MAX(b.created_at) < :ago7
-        ORDER BY last_bet_at DESC
-    """), {"ago7": ago7}).fetchall()
-    inactive_7d = [
-        {
-            "id": r.id, "name": r.name, "username": r.username, "email": r.email,
-            "bets_count": int(r.bets_count),
-            "last_bet_at": r.last_bet_at.isoformat() if r.last_bet_at else None,
-            "days_inactive": (now - r.last_bet_at).days if r.last_bet_at else None,
-        }
-        for r in inactive_rows
-    ]
+    # ── Inativos no período (têm bets mas nenhum no período) ──────
+    if since:
+        inactive_rows = db.execute(text("""
+            SELECT
+                u.id, u.name, u.username, u.email,
+                COUNT(b.id) AS bets_count,
+                MAX(b.created_at) AS last_bet_at
+            FROM users u
+            JOIN bets b ON b.user_id = u.id
+            GROUP BY u.id, u.name, u.username, u.email
+            HAVING MAX(b.created_at) < :since
+            ORDER BY last_bet_at DESC
+        """), {"since": since}).fetchall()
+        inactive = [
+            {
+                "id": r.id, "name": r.name, "username": r.username, "email": r.email,
+                "bets_count": int(r.bets_count),
+                "last_bet_at": r.last_bet_at.isoformat() if r.last_bet_at else None,
+                "days_inactive": (now - r.last_bet_at).days if r.last_bet_at else None,
+            }
+            for r in inactive_rows
+        ]
+    else:
+        inactive = []
 
-    # ── Never bet ─────────────────────────────────────────────────
+    # ── Segmentos de usuários ─────────────────────────────────────
+    bettors_period_users = [
+        {"id": u.id, "name": u.name, "username": u.username, "email": u.email}
+        for u in all_users if u.id in bettors_period_ids
+    ]
     never_bet_users = [
         {"id": u.id, "name": u.name, "username": u.username, "email": u.email,
          "joined_at": u.created_at.isoformat() if u.created_at else None}
         for u in all_users if u.id in never_bet_ids
     ]
 
-    # ── Bettors today ─────────────────────────────────────────────
-    bettors_today_users = [
-        {"id": u.id, "name": u.name, "username": u.username, "email": u.email}
-        for u in all_users if u.id in bettors_today_ids
-    ]
-
-    # ── Last finished match ───────────────────────────────────────
+    # ── Partidas ──────────────────────────────────────────────────
     last_finished = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b))
@@ -667,9 +798,6 @@ def engagement(
         .order_by(Match.match_date.desc().nullslast(), Match.id.desc())
         .first()
     )
-    last_finished_data = _match_snapshot(last_finished, all_users, db) if last_finished else None
-
-    # ── Next scheduled match ──────────────────────────────────────
     next_match = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b))
@@ -677,23 +805,25 @@ def engagement(
         .order_by(Match.match_date.asc().nullslast(), Match.id.asc())
         .first()
     )
-    next_match_data = _match_snapshot(next_match, all_users, db) if next_match else None
 
     return {
+        "period": period,
+        "period_label": cfg["label"],
         "summary": {
-            "total_users": total_users,
-            "bettors_today": len(bettors_today_ids),
-            "bets_today": int(bets_today),
-            "active_7d": len(active_7d_ids),
-            "active_30d": len(active_30d_ids),
-            "never_bet": len(never_bet_ids),
-            "page_views_today": int(page_views_today),
+            "total_users":    total_users,
+            "bettors_period": len(bettors_period_ids),
+            "bets_period":    bets_period,
+            "bettors_today":  len(bettors_today_ids),
+            "never_bet":      len(never_bet_ids),
+            "page_views_today": page_views_today,
         },
-        "bettors_today": bettors_today_users,
+        "most_engaged": most_engaged,
+        "streaks": streaks,
+        "bettors_period": bettors_period_users,
         "never_bet": never_bet_users,
-        "last_finished_match": last_finished_data,
-        "next_match": next_match_data,
-        "activity_7d": activity_7d,
+        "last_finished_match": _match_snapshot(last_finished, all_users, db) if last_finished else None,
+        "next_match":          _match_snapshot(next_match,    all_users, db) if next_match    else None,
+        "activity_series": activity_series,
         "top_bettors": top_bettors,
-        "inactive_7d": inactive_7d,
+        "inactive": inactive,
     }

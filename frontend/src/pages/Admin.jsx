@@ -115,7 +115,8 @@ export default function Admin() {
   // Engagement
   const [engagement, setEngagement] = useState(null)
   const [engagementLoading, setEngagementLoading] = useState(false)
-  const [engSegment, setEngSegment] = useState(null) // 'today'|'7d'|'30d'|'never'|'inactive'|'top'
+  const [engSegment, setEngSegment] = useState(null) // 'period'|'never'|'inactive'|'top'
+  const [engPeriod, setEngPeriod] = useState('7d')   // today|7d|30d|all
 
   function toggleSeries(key) {
     setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }))
@@ -254,9 +255,14 @@ export default function Admin() {
     finally { setPollLoading(false) }
   }
 
-  async function loadEngagement() {
+  async function loadEngagement(period = engPeriod) {
     setEngagementLoading(true)
-    try { setEngagement(await api.get('/admin/engagement', token)) } catch {}
+    setEngSegment(null)
+    try {
+      const data = await api.get(`/admin/engagement?period=${period}`, token)
+      setEngagement(data)
+      setEngPeriod(period)
+    } catch {}
     finally { setEngagementLoading(false) }
   }
 
@@ -890,17 +896,36 @@ export default function Admin() {
       {/* ── Tab: Engajamento ─────────────────────────── */}
       {tab === 'engagement' && (
         <div className="adm-pane fade-in-1">
-          {engagementLoading && <p style={{ padding: 'var(--s5)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando...</p>}
+
+          {/* Period selector */}
+          <div style={{ display: 'flex', gap: 'var(--s2)', marginBottom: 'var(--s4)', flexWrap: 'wrap', alignItems: 'center' }}>
+            {[
+              { id: 'today', label: 'Hoje' },
+              { id: '7d',    label: '7 dias' },
+              { id: '30d',   label: '30 dias' },
+              { id: 'all',   label: 'Tudo' },
+            ].map(p => (
+              <button
+                key={p.id}
+                className={`btn btn-sm ${engPeriod === p.id ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => loadEngagement(p.id)}
+                disabled={engagementLoading}
+              >{p.label}</button>
+            ))}
+            {engagementLoading && <span style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>Carregando...</span>}
+            {!engagementLoading && <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => loadEngagement(engPeriod)}>↻</button>}
+          </div>
 
           {!engagementLoading && engagement && (() => {
-            const s = engagement.summary
+            const s   = engagement.summary
+            const seg = engSegment
             const segUsers = {
-              today:    engagement.bettors_today,
+              period:   engagement.bettors_period,
               never:    engagement.never_bet,
-              inactive: engagement.inactive_7d,
+              inactive: engagement.inactive,
               top:      engagement.top_bettors,
             }
-            const segList = engSegment ? (segUsers[engSegment] || []) : []
+            const segList = seg ? (segUsers[seg] || []) : []
 
             function UserRow({ u, extra }) {
               return (
@@ -915,25 +940,53 @@ export default function Admin() {
               )
             }
 
+            const periodLabel = engagement.period_label || engPeriod
             const KPIS = [
-              { label: 'Total usuários',   val: s.total_users,       seg: null,     color: 'var(--text-1)' },
-              { label: 'Apostaram hoje',   val: s.bettors_today,     seg: 'today',  color: 'var(--win)' },
-              { label: 'Ativos 7 dias',    val: s.active_7d,         seg: null,     color: 'var(--accent)' },
-              { label: 'Ativos 30 dias',   val: s.active_30d,        seg: null,     color: 'var(--accent)' },
-              { label: 'Nunca apostaram',  val: s.never_bet,         seg: 'never',  color: 'var(--lose)' },
-              { label: 'Views hoje',       val: s.page_views_today,  seg: null,     color: 'var(--amber)' },
+              { label: 'Total usuários',            val: s.total_users,      seg: null,       color: 'var(--text-1)' },
+              { label: `Ativos — ${periodLabel}`,   val: s.bettors_period,   seg: 'period',   color: 'var(--win)' },
+              { label: `Palpites — ${periodLabel}`, val: s.bets_period,      seg: null,       color: 'var(--accent)' },
+              { label: 'Apostaram hoje',            val: s.bettors_today,    seg: null,       color: 'var(--accent)' },
+              { label: 'Nunca apostaram',           val: s.never_bet,        seg: 'never',    color: 'var(--lose)' },
+              { label: 'Views hoje',                val: s.page_views_today, seg: null,       color: 'var(--amber)' },
             ]
 
             return (
               <>
+                {/* Most engaged hero */}
+                {engagement.most_engaged && (
+                  <div className="adm-card" style={{ marginBottom: 'var(--s4)', background: 'linear-gradient(135deg, rgba(15,122,120,0.12) 0%, rgba(15,122,120,0.04) 100%)', border: '1px solid rgba(15,122,120,0.3)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--s4)' }}>
+                      <div>
+                        <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', color: 'var(--accent)', letterSpacing: '0.1em', marginBottom: 4 }}>🏆 MAIS ENGAJADO — {periodLabel.toUpperCase()}</div>
+                        <div style={{ fontSize: 20, fontFamily: 'var(--font-display)', color: 'var(--text-1)' }}>{engagement.most_engaged.name}</div>
+                        {engagement.most_engaged.username && <div style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>@{engagement.most_engaged.username}</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--s5)', textAlign: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 28, fontFamily: 'var(--font-display)', color: 'var(--win)', lineHeight: 1 }}>
+                            {engagement.most_engaged.current_streak > 0 ? `🔥${engagement.most_engaged.current_streak}` : engagement.most_engaged.max_streak}
+                          </div>
+                          <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', color: 'var(--text-3)', letterSpacing: '0.06em' }}>
+                            {engagement.most_engaged.current_streak > 0 ? 'DIAS SEGUIDOS' : 'STREAK MÁX'}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 28, fontFamily: 'var(--font-display)', color: 'var(--accent)', lineHeight: 1 }}>{engagement.most_engaged.period_bets}</div>
+                          <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', color: 'var(--text-3)', letterSpacing: '0.06em' }}>PALPITES</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* KPI Strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 'var(--s3)', marginBottom: 'var(--s4)' }}>
                   {KPIS.map(k => (
                     <div
                       key={k.label}
                       className="adm-card"
-                      onClick={() => k.seg ? setEngSegment(engSegment === k.seg ? null : k.seg) : null}
-                      style={{ cursor: k.seg ? 'pointer' : 'default', padding: 'var(--s4)', outline: engSegment === k.seg ? '2px solid var(--accent)' : 'none', transition: 'outline 0.15s' }}
+                      onClick={() => k.seg ? setEngSegment(seg === k.seg ? null : k.seg) : null}
+                      style={{ cursor: k.seg ? 'pointer' : 'default', padding: 'var(--s4)', outline: seg === k.seg ? '2px solid var(--accent)' : 'none', transition: 'outline 0.15s' }}
                     >
                       <div style={{ fontSize: 26, fontFamily: 'var(--font-display)', color: k.color, lineHeight: 1 }}>{k.val}</div>
                       <div style={{ fontSize: 11, fontFamily: 'var(--font-cond)', color: 'var(--text-3)', marginTop: 4, letterSpacing: '0.04em' }}>{k.label.toUpperCase()}</div>
@@ -942,38 +995,81 @@ export default function Admin() {
                   ))}
                 </div>
 
-                {/* Expanded segment list */}
-                {engSegment && (
+                {/* Expanded segment */}
+                {seg && (
                   <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
                     <div className="adm-card__head">
                       <span className="adm-card__title">
-                        {engSegment === 'today' && `Apostaram hoje (${segList.length})`}
-                        {engSegment === 'never' && `Nunca apostaram (${segList.length})`}
-                        {engSegment === 'inactive' && `Inativos +7 dias (${segList.length})`}
-                        {engSegment === 'top' && `Top apostadores (${segList.length})`}
+                        {seg === 'period'   && `Ativos — ${periodLabel} (${segList.length})`}
+                        {seg === 'never'    && `Nunca apostaram (${segList.length})`}
+                        {seg === 'inactive' && `Inativos — ${periodLabel} (${segList.length})`}
+                        {seg === 'top'      && `Top apostadores — ${periodLabel} (${segList.length})`}
                       </span>
                       <button className="btn btn-ghost btn-sm" onClick={() => setEngSegment(null)}>✕</button>
                     </div>
                     <div style={{ maxHeight: 320, overflowY: 'auto' }}>
                       {segList.length === 0 && <p style={{ padding: 'var(--s4)', color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>Nenhum usuário.</p>}
-                      {engSegment === 'today' && segList.map(u => <UserRow key={u.id} u={u} />)}
-                      {engSegment === 'never' && segList.map(u => <UserRow key={u.id} u={u} extra={`cadastro: ${u.joined_at ? fmtShort(u.joined_at) : '—'}`} />)}
-                      {engSegment === 'inactive' && segList.map(u => <UserRow key={u.id} u={u} extra={`última aposta há ${u.days_inactive}d · ${u.bets_count} palpites`} />)}
-                      {engSegment === 'top' && segList.map(u => <UserRow key={u.id} u={u} extra={`${u.bets_count} palpites · ${u.points} pts`} />)}
+                      {seg === 'period'   && segList.map(u => <UserRow key={u.id} u={u} />)}
+                      {seg === 'never'    && segList.map(u => <UserRow key={u.id} u={u} extra={`cadastro: ${u.joined_at ? fmtShort(u.joined_at) : '—'}`} />)}
+                      {seg === 'inactive' && segList.map(u => <UserRow key={u.id} u={u} extra={`última aposta há ${u.days_inactive}d · ${u.bets_count} palpites`} />)}
+                      {seg === 'top'      && segList.map(u => <UserRow key={u.id} u={u} extra={`${u.bets_count} palpites · ${u.points} pts`} />)}
                     </div>
                   </div>
                 )}
 
-                {/* Activity 7d + Inativos */}
+                {/* Streaks de dias consecutivos */}
+                {engagement.streaks?.length > 0 && (
+                  <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
+                    <div className="adm-card__head">
+                      <span className="adm-card__title">🔥 Dias consecutivos com palpites</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>streak atual / recorde</span>
+                    </div>
+                    <div className="adm-table-wrap">
+                      <table className="adm-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Usuário</th>
+                            <th className="adm-table__num">🔥 Atual</th>
+                            <th className="adm-table__num">🏅 Recorde</th>
+                            <th>Último dia ativo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {engagement.streaks.slice(0, 10).map((u, i) => (
+                            <tr key={u.id}>
+                              <td style={{ color: i < 3 ? 'var(--amber)' : 'var(--text-3)', fontWeight: 700 }}>{i + 1}</td>
+                              <td>
+                                <div style={{ fontWeight: 600 }}>{u.name}</div>
+                                {u.username && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>@{u.username}</div>}
+                              </td>
+                              <td className="adm-table__num">
+                                {u.current_streak > 0
+                                  ? <span style={{ color: 'var(--win)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>🔥 {u.current_streak}d</span>
+                                  : <span style={{ color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>—</span>
+                                }
+                              </td>
+                              <td className="adm-table__num" style={{ fontFamily: 'var(--font-mono)', color: 'var(--amber)' }}>{u.max_streak}d</td>
+                              <td style={{ color: 'var(--text-3)', fontSize: 11 }}>
+                                {u.last_active_day ? new Date(u.last_active_day + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Activity series + Inativos */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
                   <div className="adm-card">
-                    <div className="adm-card__head"><span className="adm-card__title">Apostas — últimos 7 dias</span></div>
+                    <div className="adm-card__head"><span className="adm-card__title">Apostas — {periodLabel}</span></div>
                     <div style={{ height: 160 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={engagement.activity_7d} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                        <ComposedChart data={engagement.activity_series} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                           <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
-                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} tickLine={false} axisLine={false}
-                            tickFormatter={v => { const d = new Date(v + 'T00:00:00'); return `${d.getDate()}/${d.getMonth()+1}` }} />
+                          <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} tickLine={false} axisLine={false} />
                           <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)' }} tickLine={false} axisLine={false} />
                           <Tooltip contentStyle={{ background: '#0d1b2a', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-mono)' }} />
                           <Bar dataKey="bets" name="Apostas" fill="var(--accent)" radius={[3,3,0,0]} />
@@ -983,30 +1079,32 @@ export default function Admin() {
                     </div>
                   </div>
 
-                  <div className="adm-card" style={{ cursor: 'pointer' }} onClick={() => setEngSegment(engSegment === 'inactive' ? null : 'inactive')}>
+                  <div className="adm-card" style={{ cursor: engagement.inactive?.length > 0 ? 'pointer' : 'default' }}
+                       onClick={() => engagement.inactive?.length > 0 && setEngSegment(seg === 'inactive' ? null : 'inactive')}>
                     <div className="adm-card__head">
-                      <span className="adm-card__title" style={{ color: engagement.inactive_7d.length > 0 ? 'var(--amber)' : 'var(--text-1)' }}>
-                        Inativos +7 dias
+                      <span className="adm-card__title" style={{ color: engagement.inactive?.length > 0 ? 'var(--amber)' : 'var(--text-1)' }}>
+                        Inativos — {periodLabel}
                       </span>
-                      <span className="badge" style={{ background: 'rgba(232,196,74,0.15)', color: 'var(--amber)' }}>{engagement.inactive_7d.length}</span>
+                      <span className="badge" style={{ background: 'rgba(232,196,74,0.15)', color: 'var(--amber)' }}>{engagement.inactive?.length ?? '—'}</span>
                     </div>
                     <div style={{ maxHeight: 130, overflowY: 'auto' }}>
-                      {engagement.inactive_7d.slice(0, 5).map(u => (
+                      {(engagement.inactive || []).slice(0, 5).map(u => (
                         <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)' }}>
                           <span style={{ color: 'var(--text-2)' }}>{u.name}</span>
                           <span style={{ color: 'var(--text-3)' }}>há {u.days_inactive}d</span>
                         </div>
                       ))}
-                      {engagement.inactive_7d.length > 5 && (
+                      {(engagement.inactive?.length || 0) > 5 && (
                         <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-cond)' }}>
-                          + {engagement.inactive_7d.length - 5} mais — clique para ver todos
+                          + {engagement.inactive.length - 5} mais
                         </div>
                       )}
+                      {engPeriod === 'all' && <p style={{ padding: 'var(--s3) var(--s4)', fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>Inativos não se aplica ao modo "Tudo"</p>}
                     </div>
                   </div>
                 </div>
 
-                {/* Última partida finalizada */}
+                {/* Última / próxima partida */}
                 {engagement.last_finished_match && (
                   <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
                     <div className="adm-card__head">
@@ -1039,9 +1137,7 @@ export default function Admin() {
                         <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--lose)', fontFamily: 'var(--font-cond)', letterSpacing: '0.06em' }}>NÃO APOSTARAM ({engagement.last_finished_match.non_bettors.length})</div>
                         <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                           {engagement.last_finished_match.non_bettors.map(u => (
-                            <div key={u.id} style={{ padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                              {u.name}
-                            </div>
+                            <div key={u.id} style={{ padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>{u.name}</div>
                           ))}
                         </div>
                       </div>
@@ -1049,7 +1145,6 @@ export default function Admin() {
                   </div>
                 )}
 
-                {/* Próxima partida */}
                 {engagement.next_match && (
                   <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
                     <div className="adm-card__head">
@@ -1080,9 +1175,7 @@ export default function Admin() {
                         <div style={{ padding: 'var(--s2) var(--s4)', fontSize: 11, color: 'var(--amber)', fontFamily: 'var(--font-cond)', letterSpacing: '0.06em' }}>AGUARDANDO PALPITE ({engagement.next_match.non_bettors.length})</div>
                         <div style={{ maxHeight: 160, overflowY: 'auto' }}>
                           {engagement.next_match.non_bettors.map(u => (
-                            <div key={u.id} style={{ padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                              {u.name}
-                            </div>
+                            <div key={u.id} style={{ padding: 'var(--s1) var(--s4)', fontSize: 12, fontFamily: 'var(--font-cond)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>{u.name}</div>
                           ))}
                         </div>
                       </div>
@@ -1091,9 +1184,9 @@ export default function Admin() {
                 )}
 
                 {/* Top bettors */}
-                <div className="adm-card" style={{ cursor: 'pointer' }} onClick={() => setEngSegment(engSegment === 'top' ? null : 'top')}>
+                <div className="adm-card" style={{ cursor: 'pointer' }} onClick={() => setEngSegment(seg === 'top' ? null : 'top')}>
                   <div className="adm-card__head">
-                    <span className="adm-card__title">Top Apostadores</span>
+                    <span className="adm-card__title">Top Apostadores — {periodLabel}</span>
                     <span style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-cond)' }}>clique para lista completa</span>
                   </div>
                   <div className="adm-table-wrap">
@@ -1123,10 +1216,6 @@ export default function Admin() {
                       </tbody>
                     </table>
                   </div>
-                </div>
-
-                <div style={{ textAlign: 'right', marginTop: 'var(--s3)' }}>
-                  <button className="btn btn-ghost btn-sm" onClick={loadEngagement}>↻ Atualizar</button>
                 </div>
               </>
             )
