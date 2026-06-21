@@ -353,8 +353,15 @@ def _generate_all_bg(db_url: str, cfg: dict):
     Sess = sessionmaker(bind=engine)
     db = Sess()
     try:
+        # Futuras primeiro, depois passadas — usuário vê futuras no Palpites
         pending = db.execute(
-            text("SELECT m.id FROM matches m WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id) ORDER BY m.match_date")
+            text("""
+                SELECT m.id FROM matches m
+                WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)
+                ORDER BY
+                    CASE WHEN m.match_date >= NOW() THEN 0 ELSE 1 END,
+                    m.match_date
+            """)
         ).fetchall()
         print(f"[analysis] background: {len(pending)} partidas pendentes", flush=True)
         for (mid,) in pending:
