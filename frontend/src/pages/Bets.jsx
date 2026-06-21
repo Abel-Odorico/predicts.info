@@ -147,6 +147,7 @@ export default function Bets() {
                     onGoToNextMatch={goToNextMatch}
                     autoOpen={pendingOpenId === m.id}
                     onAutoOpenDone={() => setPendingOpenId(null)}
+                    recentMatches={finished}
                   />
                 </div>
               ))}
@@ -207,7 +208,7 @@ export default function Bets() {
 }
 
 // ── Inline bettable match card ────────────────────────────────────────────────
-function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation, nextMatch, onGoToNextMatch, autoOpen, onAutoOpenDone }) {
+function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation, nextMatch, onGoToNextMatch, autoOpen, onAutoOpenDone, recentMatches }) {
   const initStillOpen = match.is_open !== undefined
     ? match.is_open
     : (() => {
@@ -425,6 +426,13 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
           ) : communityBets && communityBets.total_bets === 0 ? (
             <div className="community-bets__empty">Nenhum palpite registrado ainda</div>
           ) : null}
+
+          {/* Forma recente das seleções */}
+          <TeamFormSection
+            teamA={match.team_a}
+            teamB={match.team_b}
+            recentMatches={recentMatches}
+          />
         </div>
       )}
 
@@ -773,6 +781,75 @@ function BetRow({ bet, index, onOpenSimulation }) {
     </div>
     {showShare && <BetShareModal bet={bet} onClose={() => setShowShare(false)} />}
     </>
+  )
+}
+
+// ── Team recent form (inside odds panel) ─────────────────────────────────────
+function TeamFormSection({ teamA, teamB, recentMatches }) {
+  if (!recentMatches?.length) return null
+
+  function getForm(teamCode) {
+    return recentMatches
+      .filter(m => m.team_a?.code === teamCode || m.team_b?.code === teamCode)
+      .sort((a, b) => new Date(b.match_date || 0) - new Date(a.match_date || 0))
+      .slice(0, 2)
+      .map(m => {
+        const isA     = m.team_a?.code === teamCode
+        const opp     = isA ? m.team_b : m.team_a
+        const my      = isA ? (m.result?.score_a ?? m.score_a) : (m.result?.score_b ?? m.score_b)
+        const them    = isA ? (m.result?.score_b ?? m.score_b) : (m.result?.score_a ?? m.score_a)
+        const outcome = my > them ? 'V' : my < them ? 'D' : 'E'
+        return { opp, my, them, outcome, date: m.match_date }
+      })
+  }
+
+  const formA = getForm(teamA?.code)
+  const formB = getForm(teamB?.code)
+  if (!formA.length && !formB.length) return null
+
+  const rColor = r => r === 'V' ? 'var(--win)' : r === 'D' ? 'var(--lose)' : 'var(--text-3)'
+  const rBg    = r => r === 'V' ? 'rgba(46,201,128,0.15)' : r === 'D' ? 'rgba(232,82,82,0.15)' : 'rgba(255,255,255,0.06)'
+
+  function FormCol({ team, games }) {
+    return (
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+          {team?.flag_url && <img src={team.flag_url} alt={team.code} className="match-card__flag" style={{ width: 14, height: 10, objectFit: 'cover' }} />}
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em' }}>{team?.code}</span>
+        </div>
+        {games.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--text-4)', fontFamily: 'var(--font-cond)' }}>Sem jogos</div>
+        ) : games.map((g, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+              fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)',
+              background: rBg(g.outcome), color: rColor(g.outcome),
+            }}>{g.outcome}</span>
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-cond)', color: 'var(--text-2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {PT_NAMES[g.opp?.code] || g.opp?.code}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
+              {g.my}–{g.them}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: 'var(--s4)', paddingTop: 'var(--s3)', borderTop: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', color: 'var(--text-4)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+        Últimos jogos
+      </div>
+      <div style={{ display: 'flex', gap: 'var(--s4)' }}>
+        <FormCol team={teamA} games={formA} />
+        <div style={{ width: 1, background: 'var(--border)', flexShrink: 0 }} />
+        <FormCol team={teamB} games={formB} />
+      </div>
+    </div>
   )
 }
 
