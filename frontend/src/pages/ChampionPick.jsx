@@ -172,18 +172,40 @@ export default function ChampionPick() {
         </p>
       </div>
 
-      {/* Bonuses */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 'var(--s4)', flexWrap: 'wrap' }}>
+      {/* Resumo dos palpites */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 'var(--s4)' }}>
         {[
-          { label: 'Acertar o campeão',      pts: '+100 pts', color: 'var(--accent)' },
-          { label: 'Acertar o vice-campeão', pts: '+50 pts',  color: '#d4af37' },
-        ].map(({ label, pts, color }) => (
+          { emoji: '🏆', label: 'Campeão',      pts: '+100 pts', color: 'var(--accent)', pick: myPick?.champion },
+          { emoji: '🥈', label: 'Vice-Campeão', pts: '+50 pts',  color: '#d4af37',       pick: myPick?.runner_up },
+        ].map(({ emoji, label, pts, color, pick }) => (
           <div key={label} style={{
-            flex: 1, minWidth: 140, background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '12px 16px', textAlign: 'center',
+            background: pick ? `${color}12` : 'var(--bg-surface)',
+            border: `1.5px solid ${pick ? color : 'var(--border)'}`,
+            borderRadius: 12, padding: '14px 16px',
+            display: 'flex', flexDirection: 'column', gap: 6,
+            transition: 'border-color 0.2s',
           }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color }}>{pts}</div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.08em' }}>
+                {emoji} {label.toUpperCase()}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color }}>{pts}</span>
+            </div>
+            {pick ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <img src={pick.flag} alt={pick.code} style={{ width: 36, height: 25, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', lineHeight: 1.2 }}>
+                    {pick.name || pick.code}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color, marginTop: 2 }}>✓ escolhido</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', fontStyle: 'italic' }}>
+                não escolhido ainda
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -232,7 +254,6 @@ export default function ChampionPick() {
               </div>
             </div>
 
-            <CurrentPickBadge pick={myPick?.champion} label="Seu palpite de campeão" color="var(--accent)" />
 
             {stats.champion?.length > 0 && (
               <div style={{ marginBottom: 'var(--s3)' }}>
@@ -273,7 +294,6 @@ export default function ChampionPick() {
               </div>
             </div>
 
-            <CurrentPickBadge pick={myPick?.runner_up} label="Seu palpite de vice-campeão" color="#d4af37" />
 
             {stats.runner_up?.length > 0 && (
               <div style={{ marginBottom: 'var(--s3)' }}>
