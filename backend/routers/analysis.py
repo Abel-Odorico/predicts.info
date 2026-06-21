@@ -340,12 +340,13 @@ def _generate_all_bg(db_url: str, cfg: dict):
         pending = db.execute(
             text("SELECT m.id FROM matches m WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id) ORDER BY m.match_date")
         ).fetchall()
+        print(f"[analysis] background: {len(pending)} partidas pendentes", flush=True)
         for (mid,) in pending:
             try:
                 _generate_one(mid, db, cfg)
-                log.info("analysis ok match_id=%s", mid)
+                print(f"[analysis] ✓ match_id={mid}", flush=True)
             except Exception as e:
-                log.error("analysis fail match_id=%s: %s", mid, e)
+                print(f"[analysis] ✗ match_id={mid}: {e}", flush=True)
                 db.rollback()
     finally:
         db.close()
