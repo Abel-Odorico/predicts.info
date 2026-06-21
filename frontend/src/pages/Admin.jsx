@@ -58,6 +58,7 @@ const TABS = [
   { id: 'versions',   label: 'Versões',      icon: '🔖' },
   { id: 'pwa',        label: 'Ícone PWA',    icon: '🖼' },
   { id: 'knockout',   label: 'Mata-Mata',    icon: '⚔️' },
+  { id: 'analyses',   label: 'Análises IA',  icon: '🤖' },
 ]
 
 const PHASE_LABELS_ADMIN = {
@@ -153,6 +154,58 @@ export default function Admin() {
   const [awarding, setAwarding] = useState(false)
   const [champAllPicks, setChampAllPicks] = useState(null)
   const [champStats, setChampStats] = useState(null)
+
+  // ── Análises IA ──────────────────────────────────────────────────────────────
+  const [analysisConfig, setAnalysisConfig]   = useState(null)
+  const [analysisStatus, setAnalysisStatus]   = useState(null)
+  const [analysisConfigForm, setAnalysisConfigForm] = useState({ api_key: '', model: '' })
+  const [analysisSaving, setAnalysisSaving]   = useState(false)
+  const [analysisMsg, setAnalysisMsg]         = useState('')
+  const [generatingId, setGeneratingId]       = useState(null)
+  const [generatingAll, setGeneratingAll]     = useState(false)
+
+  async function loadAnalysisConfig() {
+    try {
+      const cfg = await api.get('/admin/analysis/config', token)
+      setAnalysisConfig(cfg)
+      setAnalysisConfigForm({ api_key: '', model: cfg.model })
+    } catch {}
+  }
+
+  async function loadAnalysisStatus() {
+    try { setAnalysisStatus(await api.get('/admin/analysis/status', token)) } catch {}
+  }
+
+  async function saveAnalysisConfig(e) {
+    e.preventDefault()
+    setAnalysisSaving(true); setAnalysisMsg('')
+    try {
+      await api.post('/admin/analysis/config', analysisConfigForm, token)
+      setAnalysisMsg('✓ Configuração salva')
+      loadAnalysisConfig()
+    } catch { setAnalysisMsg('Erro ao salvar') }
+    finally { setAnalysisSaving(false) }
+  }
+
+  async function generateOne(matchId) {
+    setGeneratingId(matchId); setAnalysisMsg('')
+    try {
+      await api.post(`/admin/analysis/${matchId}/generate`, {}, token)
+      setAnalysisMsg(`✓ Análise gerada para partida #${matchId}`)
+      loadAnalysisStatus()
+    } catch (err) { setAnalysisMsg(`Erro: ${err.message || 'falha na geração'}`) }
+    finally { setGeneratingId(null) }
+  }
+
+  async function generateAll() {
+    setGeneratingAll(true); setAnalysisMsg('')
+    try {
+      await api.post('/admin/analysis/generate-all', { only_pending: true }, token)
+      setAnalysisMsg('✓ Geração em background iniciada. Atualize a lista em alguns minutos.')
+    } catch { setAnalysisMsg('Erro ao iniciar geração') }
+    finally { setGeneratingAll(false) }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   async function loadAwardStatus() {
     try { setAwardStatus(await api.get('/admin/champion/award', token)) } catch {}
@@ -302,6 +355,8 @@ export default function Admin() {
     if (tab === 'knockout' && allTeams.length === 0) loadAllTeams()
     if (tab === 'knockout' && !awardStatus) loadAwardStatus()
     if (tab === 'knockout' && !champAllPicks) loadChampPicks()
+    if (tab === 'analyses' && !analysisConfig) loadAnalysisConfig()
+    if (tab === 'analyses' && !analysisStatus) loadAnalysisStatus()
   }, [tab])
 
   useEffect(() => {
@@ -1978,6 +2033,124 @@ export default function Admin() {
           </div>
         </div>
       )}
+      {/* ── Análises IA ──────────────────────────────────────────────────── */}
+      {tab === 'analyses' && (
+        <div className="adm-pane">
+          {/* Config card */}
+          <div className="adm-card">
+            <div className="adm-card__header">
+              <span className="adm-card__title">🤖 Configuração OpenRouter</span>
+            </div>
+            <div className="adm-card__body">
+              {analysisMsg && (
+                <div style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 12,
+                  background: analysisMsg.startsWith('✓') ? 'rgba(46,201,128,0.12)' : 'rgba(232,82,82,0.12)',
+                  color: analysisMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)',
+                  fontFamily: 'var(--font-cond)', fontSize: 13,
+                }}>
+                  {analysisMsg}
+                </div>
+              )}
+              <form onSubmit={saveAnalysisConfig} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>
+                    API Key OpenRouter {analysisConfig?.has_key && <span style={{ color: 'var(--win)' }}>✓ configurada ({analysisConfig?.api_key_masked})</span>}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={analysisConfig?.has_key ? '••••••••• (deixe vazio para manter)' : 'sk-or-...'}
+                    value={analysisConfigForm.api_key}
+                    onChange={e => setAnalysisConfigForm(p => ({ ...p, api_key: e.target.value }))}
+                    style={{ width: '100%', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>Modelo</label>
+                  <select
+                    value={analysisConfigForm.model}
+                    onChange={e => setAnalysisConfigForm(p => ({ ...p, model: e.target.value }))}
+                    style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13, width: '100%' }}
+                  >
+                    {(analysisConfig?.available_models || []).map(m => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="btn btn-primary btn-sm" disabled={analysisSaving} type="submit">
+                    {analysisSaving ? 'Salvando…' : '💾 Salvar'}
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus() }}>
+                    ↻ Atualizar
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={generateAll} disabled={generatingAll || !analysisConfig?.has_key}>
+                    {generatingAll ? 'Iniciando…' : '⚡ Gerar todas pendentes'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Status table */}
+          <div className="adm-card">
+            <div className="adm-card__header">
+              <span className="adm-card__title">📋 Partidas — Status das Análises</span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>
+                {analysisStatus ? `${analysisStatus.filter(r => r.has_analysis).length}/${analysisStatus.length} geradas` : ''}
+              </span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="adm-table" style={{ minWidth: 600 }}>
+                <thead>
+                  <tr>
+                    <th>Partida</th>
+                    <th>Data</th>
+                    <th>Fase</th>
+                    <th>Status</th>
+                    <th>Modelo</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(analysisStatus || []).map(r => (
+                    <tr key={r.match_id}>
+                      <td style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {r.team_a_code} × {r.team_b_code}
+                      </td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                        {r.match_date ? new Date(r.match_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                      </td>
+                      <td>
+                        <span className="badge badge-group" style={{ fontSize: 10 }}>{r.phase}</span>
+                      </td>
+                      <td>
+                        {r.has_analysis
+                          ? <span style={{ color: 'var(--win)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>✓ gerada</span>
+                          : <span style={{ color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>pendente</span>
+                        }
+                      </td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.model_used?.split('/').pop() || '—'}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: 11, padding: '4px 10px' }}
+                          disabled={generatingId === r.match_id || !analysisConfig?.has_key}
+                          onClick={() => generateOne(r.match_id)}
+                        >
+                          {generatingId === r.match_id ? '…' : r.has_analysis ? '↻' : '⚡'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

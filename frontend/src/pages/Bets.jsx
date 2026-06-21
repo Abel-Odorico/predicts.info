@@ -255,6 +255,9 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
   const [oddsLoading, setOddsLoading]   = useState(false)
   const [communityBets, setCommunityBets]     = useState(null)
   const [communityLoading, setCommunityLoading] = useState(false)
+  const [analysis, setAnalysis]         = useState(null)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(false)
 
   const msBefore  = parseUtcMatchDate(match.match_date).getTime() - now
   const stillOpen = match.is_open !== undefined ? match.is_open : msBefore > 0
@@ -290,12 +293,23 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
     finally { setCommunityLoading(false) }
   }
 
+  async function fetchAnalysis() {
+    if (analysis || analysisLoading) return
+    setAnalysisLoading(true)
+    try {
+      const data = await api.get(`/matches/${match.id}/analysis`)
+      setAnalysis(data.content)
+    } catch (_) { setAnalysis(null) }
+    finally { setAnalysisLoading(false) }
+  }
+
   function toggleExpand() {
     const next = !showOdds
     setShowOdds(next)
     if (next) {
       fetchOdds()
       fetchCommunityBets()
+      fetchAnalysis()
       if (stillOpen && !confirmed) setOpen(true)
     }
   }
@@ -466,6 +480,13 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
               🎯 Placar exato <strong>+25 pts</strong> · ✅ Vencedor exato <strong>+18</strong> · Saldo <strong>+15</strong> · Gols perdedor <strong>+12</strong> · Resultado <strong>+10</strong>
             </span>
           </div>
+
+          {/* Análise IA */}
+          {analysisLoading ? (
+            <div style={{ padding: '10px 0', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Carregando análise…</div>
+          ) : analysis ? (
+            <MatchAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
+          ) : null}
         </div>
       )}
 
@@ -887,6 +908,86 @@ function FormBlock({ team, games, role }) {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+function MatchAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
+  if (!analysis) return null
+  const s = { fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }
+  const h = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--accent)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 4 }
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+      <button onClick={onToggle} style={{
+        display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+        cursor: 'pointer', padding: 0, fontFamily: 'var(--font-cond)', fontSize: 13,
+        color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.04em',
+      }}>
+        🤖 Análise IA
+        <span style={{ fontSize: 10, color: 'var(--text-4)', fontWeight: 400 }}>{show ? '▲ fechar' : '▼ ver análise'}</span>
+      </button>
+
+      {show && (
+        <div className="fade-in-1" style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Veredicto */}
+          {analysis.verdict && (
+            <div style={{ background: 'rgba(15,122,120,0.1)', border: '1px solid rgba(15,122,120,0.3)', borderRadius: 8, padding: '8px 14px', fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>
+              {analysis.verdict}
+            </div>
+          )}
+
+          {/* Overview */}
+          {analysis.overview && (
+            <div>
+              <div style={h}>📋 Panorama</div>
+              <div style={s}>{analysis.overview}</div>
+            </div>
+          )}
+
+          {/* 2-col teams */}
+          {(analysis.team_a || analysis.team_b) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {[
+                { team: teamA, data: analysis.team_a },
+                { team: teamB, data: analysis.team_b },
+              ].map(({ team, data }) => data ? (
+                <div key={team?.code} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    {team?.flag_url && <img src={team.flag_url} alt={team.code} style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 2 }} />}
+                    <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>{team?.name || team?.code}</span>
+                  </div>
+                  {data.tactical && <><div style={h}>Tática</div><div style={{ ...s, marginBottom: 8 }}>{data.tactical}</div></>}
+                  {data.strengths && <><div style={h}>✅ Forças</div><div style={{ ...s, marginBottom: 8 }}>{data.strengths}</div></>}
+                  {data.weaknesses && <><div style={h}>⚠️ Vulnerabilidades</div><div style={{ ...s, marginBottom: 8 }}>{data.weaknesses}</div></>}
+                  {data.form && <><div style={h}>📈 Forma</div><div style={{ ...s, marginBottom: 8 }}>{data.form}</div></>}
+                  {data.key_players?.length > 0 && (
+                    <>
+                      <div style={h}>⭐ Jogadores-chave</div>
+                      <ul style={{ margin: 0, paddingLeft: 16 }}>
+                        {data.key_players.map((p, i) => <li key={i} style={{ ...s, marginBottom: 3 }}>{p}</li>)}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              ) : null)}
+            </div>
+          )}
+
+          {/* Matchup + Prediction */}
+          {analysis.matchup && (
+            <div>
+              <div style={h}>⚔️ Confronto</div>
+              <div style={s}>{analysis.matchup}</div>
+            </div>
+          )}
+          {analysis.prediction && (
+            <div>
+              <div style={h}>🔮 Predição</div>
+              <div style={s}>{analysis.prediction}</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
