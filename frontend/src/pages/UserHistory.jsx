@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../stores/authStore'
+import MyChampionCard from '../components/MyChampionCard'
 
 
 const RESULT_META = {
@@ -701,6 +702,9 @@ export default function UserHistory() {
           </div>
         ))}
       </div>
+
+      {/* ── Palpite de campeão (só perfil próprio) ── */}
+      {isOwn && <MyChampionCard />}
 
       {/* ── Barra distribuição ──────────────────────── */}
       {evaluated.length > 0 && (

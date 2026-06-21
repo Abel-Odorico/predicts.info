@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
+import MyChampionCard from '../components/MyChampionCard'
 import { PT_NAMES } from '../utils/teamNames'
 
 const PHASE_LABELS = {
@@ -36,7 +37,6 @@ function TeamLabel({ code, name, flagUrl, compact = false }) {
   )
 }
 
-const CHAMPION_DEADLINE = new Date('2026-06-26T12:00:00Z')
 
 export default function Bets() {
   const { token } = useAuth()
@@ -49,7 +49,6 @@ export default function Bets() {
   const [shareMsg, setShareMsg] = useState('')
   const [now, setNow]         = useState(Date.now())
   const [pendingOpenId, setPendingOpenId] = useState(null)
-  const [showChampionBanner, setShowChampionBanner] = useState(false)
   const matchRefs = useRef({})
 
   const load = useCallback(() => {
@@ -68,14 +67,6 @@ export default function Bets() {
       .finally(() => setLoad(false))
   }, [token])
 
-  useEffect(() => {
-    if (!token) return
-    if (Date.now() >= CHAMPION_DEADLINE.getTime()) return
-    if (sessionStorage.getItem('champion_banner_dismissed')) return
-    api.get('/champion/pick', token)
-      .then(pick => { if (!pick?.champion || !pick?.runner_up) setShowChampionBanner(true) })
-      .catch(() => setShowChampionBanner(true))
-  }, [token])
 
   useEffect(() => { load() }, [load])
 
@@ -143,50 +134,7 @@ export default function Bets() {
         <p className="page-subtitle">Palpite até o apito inicial · ao iniciar, o palpite encerra automaticamente</p>
       </div>
 
-      {showChampionBanner && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(15,122,120,0.15), rgba(212,175,55,0.1))',
-          border: '1.5px solid var(--accent)',
-          borderRadius: 12,
-          padding: '14px 18px',
-          marginBottom: 'var(--s4)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}>
-          <span style={{ fontSize: 28 }}>🏆</span>
-          <div style={{ flex: 1, minWidth: 160 }}>
-            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)' }}>
-              Escolha campeão e vice-campeão!
-            </div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              Acerte e ganhe <strong style={{ color: 'var(--accent)' }}>+100 pts</strong> (campeão) ou <strong style={{ color: '#d4af37' }}>+50 pts</strong> (vice) · prazo: 26/06 às 09h
-            </div>
-          </div>
-          <button
-            onClick={() => navigate('/campeao')}
-            style={{
-              background: 'var(--accent)', color: '#fff',
-              border: 'none', borderRadius: 8,
-              padding: '8px 18px',
-              fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
-              cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            Escolher agora
-          </button>
-          <button
-            onClick={() => { setShowChampionBanner(false); sessionStorage.setItem('champion_banner_dismissed', '1') }}
-            style={{
-              background: 'none', border: 'none',
-              color: 'var(--text-4)', cursor: 'pointer',
-              fontSize: 18, padding: '4px 6px', lineHeight: 1,
-            }}
-            aria-label="Fechar"
-          >✕</button>
-        </div>
-      )}
+      <MyChampionCard />
 
       <GuideBanner onShare={handleShare} shareMsg={shareMsg} />
 

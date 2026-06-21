@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import Spinner from '../components/Spinner'
+import MyChampionCard from '../components/MyChampionCard'
 
 const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L']
 
@@ -130,6 +131,8 @@ export default function Ranking() {
           </span>
         )}
       </div>
+
+      <MyChampionCard compact />
 
       {/* ── Cards de destaque ─────────────────────────────────────────── */}
       {!loading && data.length > 0 && (
