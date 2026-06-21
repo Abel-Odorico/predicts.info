@@ -33,7 +33,7 @@ function todayQS() {
 
 function aproveitamento(r) {
   if (!r.total_bets) return null
-  return Math.round(r.total_points / (r.total_bets * 3) * 100)
+  return Math.round(r.total_points / (r.total_bets * 25) * 100)
 }
 function pctResultado(r) {
   if (!r.total_bets) return null
@@ -111,7 +111,7 @@ export default function Ranking() {
       <div className="fade-in-1" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--s4)' }}>
         <div>
           <h1 className="page-title">RANKING</h1>
-          <p className="page-subtitle">Placar exato = 3 pts · Resultado correto = 1 pt</p>
+          <p className="page-subtitle">Placar exato = 25 pts · Vencedor+gols = 18 · Saldo = 15 · Gols perdedor = 12 · Resultado = 10</p>
         </div>
         {lastUpdated && (
           <span className={`ranking-live-badge${flashUpdate ? ' ranking-live-badge--flash' : ''}`}>
@@ -337,15 +337,18 @@ export default function Ranking() {
         </div>
         <div className="card__body rules-list">
           {[
-            { pts: 3, label: 'Placar exato',      desc: 'Acertou o placar completo (ex: 2×1)' },
-            { pts: 1, label: 'Resultado correto', desc: 'Acertou vitória/empate/derrota' },
-            { pts: 0, label: 'Erro',              desc: 'Resultado errado' },
+            { pts: 25, label: 'Placar exato',               desc: 'Acertou o placar completo (ex: 2×1 = 2×1)', color: 'var(--accent)' },
+            { pts: 18, label: 'Vencedor + gols do vencedor', desc: 'Resultado 3×1 · Palpite 3×0',              color: 'var(--win)' },
+            { pts: 15, label: 'Vencedor + saldo de gols',    desc: 'Resultado 3×1 · Palpite 2×0',              color: 'var(--win)' },
+            { pts: 12, label: 'Vencedor + gols do perdedor', desc: 'Resultado 3×1 · Palpite 2×1',              color: 'var(--win)' },
+            { pts: 10, label: 'Acertou resultado',           desc: 'Vencedor ou empate — gols errados',         color: 'var(--amber, #d4af37)' },
+            { pts: 0,  label: 'Erro',                        desc: 'Acertou vencedor errado',                   color: 'var(--text-4)' },
           ].map(rule => (
-            <div key={rule.pts} className="rule-item">
+            <div key={rule.label} className="rule-item">
               <span style={{
-                fontFamily: 'var(--font-display)', fontSize: 28,
-                color: rule.pts === 3 ? 'var(--accent)' : rule.pts === 1 ? 'var(--win)' : 'var(--text-4)',
-                minWidth: 28, textAlign: 'center',
+                fontFamily: 'var(--font-display)', fontSize: 24,
+                color: rule.color,
+                minWidth: 32, textAlign: 'center',
               }}>
                 {rule.pts}
               </span>
@@ -356,7 +359,7 @@ export default function Ranking() {
             </div>
           ))}
           <div style={{ marginTop: 'var(--s3)', padding: 'var(--s3)', background: 'var(--bg-overlay)', borderRadius: 'var(--radius)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div><strong style={{ color: 'var(--text-2)' }}>Aproveito</strong> = Pontos ÷ (Apostas × 3) — pontos conquistados vs pontos em jogo</div>
+            <div><strong style={{ color: 'var(--text-2)' }}>Aproveito</strong> = Pontos ÷ (Apostas × 25) — pontos conquistados vs máximo possível</div>
             <div><strong style={{ color: 'var(--text-2)' }}>% Resultado</strong> = (Exatos + Certos) ÷ Apostas — acertou o vencedor ou empate</div>
             <div><strong style={{ color: 'var(--text-2)' }}>% Exato</strong> = Exatos ÷ Apostas — acertou o placar completo</div>
           </div>

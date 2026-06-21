@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 
-const VERSAO = '1.0'
-const VIGENCIA = '20/06/2026'
+const VERSAO = '2.0'
+const VIGENCIA = '21/06/2026'
 
 export default function Regras() {
   return (
@@ -20,14 +20,9 @@ export default function Regras() {
       <section className="regras-section">
         <h2 className="regras-section__title">1. Sistema de Pontuação</h2>
         <p className="regras-section__desc">
-          O sistema atual é simples: você é recompensado por acertar o resultado ou o placar exato.
+          Sistema de Precisão — aprovado em consulta pública e vigente para todas as partidas da Copa 2026.
+          Quanto mais detalhes você acertar, mais pontos você ganha.
         </p>
-        <div className="regras-alert">
-          🗳 <strong>Consulta ativa:</strong> um novo sistema está em votação e, se aprovado,
-          entrará em vigor ainda neste campeonato (Copa 2026) para as partidas ainda não realizadas.
-          Partidas já encerradas não serão recalculadas.{' '}
-          <Link to="/votacao">Participe da votação</Link>.
-        </div>
 
         <div className="regras-table-wrap">
           <table className="regras-table">
@@ -35,43 +30,61 @@ export default function Regras() {
               <tr>
                 <th>Situação</th>
                 <th>Pontos</th>
-                <th>Exemplo</th>
+                <th>Exemplo (resultado 3×1)</th>
               </tr>
             </thead>
             <tbody>
               <tr className="highlight">
                 <td>Placar exato</td>
-                <td className="pts">3 pts</td>
-                <td className="ex">Resultado 2×1 · Palpite 2×1</td>
+                <td className="pts">25 pts</td>
+                <td className="ex">Palpite 3×1</td>
+              </tr>
+              <tr>
+                <td>Vencedor + gols do vencedor</td>
+                <td className="pts">18 pts</td>
+                <td className="ex">Palpite 3×0</td>
+              </tr>
+              <tr>
+                <td>Vencedor + saldo de gols</td>
+                <td className="pts">15 pts</td>
+                <td className="ex">Palpite 2×0</td>
+              </tr>
+              <tr>
+                <td>Vencedor + gols do perdedor</td>
+                <td className="pts">12 pts</td>
+                <td className="ex">Palpite 2×1</td>
               </tr>
               <tr>
                 <td>Acertou vencedor ou empate</td>
-                <td className="pts">1 pt</td>
-                <td className="ex">Resultado 2×1 · Palpite 3×0</td>
+                <td className="pts">10 pts</td>
+                <td className="ex">Palpite 4×2</td>
               </tr>
               <tr>
                 <td>Nenhum acerto</td>
                 <td className="pts">0 pts</td>
-                <td className="ex">Resultado 2×1 · Palpite 0×2</td>
+                <td className="ex">Palpite 0×2</td>
               </tr>
             </tbody>
           </table>
         </div>
+        <p className="regras-section__desc" style={{ marginTop: '12px', fontSize: 13 }}>
+          <strong>Empate:</strong> acertar empate vale 10 pts. Exato (ex: 1×1 = 1×1) vale 25 pts.
+        </p>
       </section>
 
       {/* ── Palpite de Campeão e Vice ────────────────── */}
       <section className="regras-section">
         <h2 className="regras-section__title">2. Campeão e Vice-Campeão</h2>
         <ul className="regras-list">
-          <li>Cada participante pode indicar um palpite de campeão e vice-campeão.</li>
+          <li>Cada participante pode indicar um palpite de campeão da Copa 2026.</li>
           <li>
-            <strong>Prazo:</strong> os palpites são bloqueados automaticamente 1 minuto
-            antes do início da primeira partida oficial do campeonato.
+            <strong>Prazo:</strong> palpites encerram em <strong>26/06/2026 às 09h (horário de Brasília)</strong>,
+            antes do início da fase mata-mata.
           </li>
-          <li>Após o bloqueio, nenhuma alteração é permitida.</li>
-          <li>Acertar o campeão: <strong className="pts">+100 pontos</strong> (no novo sistema).</li>
-          <li>Acertar o vice-campeão: <strong className="pts">+50 pontos</strong> (no novo sistema).</li>
-          <li>No sistema atual, não há bônus de campeão/vice.</li>
+          <li>Após o prazo, nenhuma alteração é permitida.</li>
+          <li>Acertar o campeão: <strong className="pts">+100 pontos</strong>.</li>
+          <li>Acertar o vice-campeão: <strong className="pts">+50 pontos</strong>.</li>
+          <li>Os bônus são creditados manualmente após a final da Copa.</li>
         </ul>
       </section>
 
@@ -144,9 +157,14 @@ export default function Regras() {
             </thead>
             <tbody>
               <tr>
+                <td>2.0</td>
+                <td>21/06/2026</td>
+                <td>Sistema de Precisão aprovado em consulta pública — pontuação V2 retroativa a todas as partidas</td>
+              </tr>
+              <tr>
                 <td>1.0</td>
                 <td>20/06/2026</td>
-                <td>Versão inicial publicada</td>
+                <td>Versão inicial publicada (exato = 3 pts, resultado = 1 pt)</td>
               </tr>
             </tbody>
           </table>
@@ -188,7 +206,7 @@ export default function Regras() {
       </section>
 
       <div className="regras-footer">
-        <Link to="/votacao" className="btn btn-primary">Ver consulta de pontuação</Link>
+        <Link to="/campeao" className="btn btn-primary">Escolher campeão</Link>
         <Link to="/apostas" className="btn btn-ghost">Fazer palpites</Link>
       </div>
     </div>
