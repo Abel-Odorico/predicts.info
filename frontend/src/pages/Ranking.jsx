@@ -111,7 +111,7 @@ export default function Ranking() {
       <div className="fade-in-1" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--s4)' }}>
         <div>
           <h1 className="page-title">RANKING</h1>
-          <p className="page-subtitle">Placar exato = 25 pts · Vencedor+gols = 18 · Saldo = 15 · Gols perdedor = 12 · Resultado = 10</p>
+          <p className="page-subtitle">Exato = 25 pts · Vencedor+gols = 18 · Saldo = 15 · Perdedor = 12 · Resultado = 10 · Campeão = +100 · Vice = +50</p>
         </div>
         {lastUpdated && (
           <span className={`ranking-live-badge${flashUpdate ? ' ranking-live-badge--flash' : ''}`}>
@@ -337,12 +337,14 @@ export default function Ranking() {
         </div>
         <div className="card__body rules-list">
           {[
-            { pts: 25, label: 'Placar exato',               desc: 'Acertou o placar completo (ex: 2×1 = 2×1)', color: 'var(--accent)' },
-            { pts: 18, label: 'Vencedor + gols do vencedor', desc: 'Resultado 3×1 · Palpite 3×0',              color: 'var(--win)' },
-            { pts: 15, label: 'Vencedor + saldo de gols',    desc: 'Resultado 3×1 · Palpite 2×0',              color: 'var(--win)' },
-            { pts: 12, label: 'Vencedor + gols do perdedor', desc: 'Resultado 3×1 · Palpite 2×1',              color: 'var(--win)' },
-            { pts: 10, label: 'Acertou resultado',           desc: 'Vencedor ou empate — gols errados',         color: 'var(--amber, #d4af37)' },
-            { pts: 0,  label: 'Erro',                        desc: 'Acertou vencedor errado',                   color: 'var(--text-4)' },
+            { pts: 25,   label: 'Placar exato',               desc: 'Acertou o placar completo (ex: 2×1 = 2×1)', color: 'var(--accent)' },
+            { pts: 18,   label: 'Vencedor + gols do vencedor', desc: 'Resultado 3×1 · Palpite 3×0',              color: 'var(--win)' },
+            { pts: 15,   label: 'Vencedor + saldo de gols',    desc: 'Resultado 3×1 · Palpite 2×0',              color: 'var(--win)' },
+            { pts: 12,   label: 'Vencedor + gols do perdedor', desc: 'Resultado 3×1 · Palpite 2×1',              color: 'var(--win)' },
+            { pts: 10,   label: 'Acertou resultado',           desc: 'Vencedor ou empate — gols errados',         color: 'var(--amber, #d4af37)' },
+            { pts: 0,    label: 'Erro',                        desc: 'Acertou vencedor errado',                   color: 'var(--text-4)' },
+            { pts: '+100', label: 'Palpite de campeão',        desc: 'Acertou o campeão da Copa — bônus final',  color: 'var(--accent)' },
+            { pts: '+50',  label: 'Palpite de vice-campeão',   desc: 'Acertou o vice-campeão — bônus final',     color: 'var(--amber, #d4af37)' },
           ].map(rule => (
             <div key={rule.label} className="rule-item">
               <span style={{
