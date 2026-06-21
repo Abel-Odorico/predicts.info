@@ -26,6 +26,7 @@ import ResetPassword  from './pages/ResetPassword'
 import Votacao        from './pages/Votacao'
 import Regras         from './pages/Regras'
 import Changelog      from './pages/Changelog'
+import ChampionPick   from './pages/ChampionPick'
 import VotacaoBanner  from './components/VotacaoBanner'
 import Onboarding from './components/Onboarding'
 import { useAuth } from './stores/authStore'
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="/votacao"         element={<Votacao />} />
             <Route path="/regras"          element={<Regras />} />
             <Route path="/changelog"       element={<Changelog />} />
+            <Route path="/campeao"         element={<ChampionPick />} />
           </Routes>
         </main>
       </div>

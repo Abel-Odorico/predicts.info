@@ -27,6 +27,39 @@ from routers.notifications import create_notification
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+SCORING_V2_SINCE = datetime(2026, 6, 21, 16, 0, 0)
+
+
+def _calc_points(match_date, bet_a: int, bet_b: int, res_a: int, res_b: int) -> tuple[int, bool, bool]:
+    exact = bet_a == res_a and bet_b == res_b
+    if isinstance(match_date, str):
+        match_date = datetime.fromisoformat(match_date)
+    if match_date is None or match_date < SCORING_V2_SINCE:
+        correct = (bet_a > bet_b) == (res_a > res_b) and (bet_a == bet_b) == (res_a == res_b)
+        return (3 if exact else (1 if correct else 0)), exact, correct
+    # V2 — Precisão
+    if exact:
+        return 25, True, False
+    bet_w = 'a' if bet_a > bet_b else ('b' if bet_b > bet_a else 'draw')
+    res_w = 'a' if res_a > res_b else ('b' if res_b > res_a else 'draw')
+    if bet_w != res_w:
+        return 0, False, False
+    if res_w == 'draw':
+        return 10, False, True
+    bwg = bet_a if bet_w == 'a' else bet_b
+    rwg = res_a if res_w == 'a' else res_b
+    blg = bet_b if bet_w == 'a' else bet_a
+    rlg = res_b if res_w == 'a' else res_a
+    if bwg == rwg:
+        pts = 18
+    elif abs(bet_a - bet_b) == abs(res_a - res_b):
+        pts = 15
+    elif blg == rlg:
+        pts = 12
+    else:
+        pts = 10
+    return pts, False, True
+
 
 def _redis():
     return redis_lib.from_url(settings.redis_url, decode_responses=True)
@@ -82,37 +115,34 @@ def _evaluate_bets(match: Match, result: MatchResult, db: Session) -> None:
     for bet in bets:
         if bet.evaluated_at:
             continue
-        exact = (bet.score_a == result.score_a and bet.score_b == result.score_b)
-        correct_result = (
-            (bet.score_a > bet.score_b) == (result.score_a > result.score_b) and
-            (bet.score_a == bet.score_b) == (result.score_a == result.score_b)
+        points, exact, correct_result = _calc_points(
+            match.match_date, bet.score_a, bet.score_b, result.score_a, result.score_b
         )
-        bet.points_earned = 3 if exact else (1 if correct_result else 0)
+        bet.points_earned = points
         bet.evaluated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         ranking = db.query(Ranking).filter(Ranking.user_id == bet.user_id).first()
         if not ranking:
             ranking = Ranking(user_id=bet.user_id, total_points=0, exact_scores=0, correct_results=0)
             db.add(ranking)
-        ranking.total_points   = (ranking.total_points   or 0) + bet.points_earned
-        ranking.exact_scores   = (ranking.exact_scores   or 0) + (1 if exact else 0)
-        ranking.correct_results = (ranking.correct_results or 0) + (1 if correct_result and not exact else 0)
+        ranking.total_points    = (ranking.total_points    or 0) + points
+        ranking.exact_scores    = (ranking.exact_scores    or 0) + (1 if exact else 0)
+        ranking.correct_results = (ranking.correct_results or 0) + (1 if correct_result else 0)
 
-        # Notificação de resultado
         meta = {
             "match_id": match.id,
             "team_a": team_a,
             "team_b": team_b,
             "score": f"{result.score_a}–{result.score_b}",
             "bet": f"{bet.score_a}–{bet.score_b}",
-            "points": bet.points_earned,
+            "points": points,
         }
         if exact:
             create_notification(db, bet.user_id, "bet_exact",
-                f"🎯 Placar exato! +3 pts", f"{match_label} · {bet.score_a}–{bet.score_b}", meta)
+                f"🎯 Placar exato! +{points} pts", f"{match_label} · {bet.score_a}–{bet.score_b}", meta)
         elif correct_result:
             create_notification(db, bet.user_id, "bet_correct",
-                f"✅ Resultado certo! +1 pt", f"{match_label} · placar: {result.score_a}–{result.score_b}", meta)
+                f"✅ Resultado certo! +{points} pts", f"{match_label} · placar: {result.score_a}–{result.score_b}", meta)
         else:
             create_notification(db, bet.user_id, "bet_wrong",
                 f"❌ Resultado errado", f"{match_label} · seu palpite: {bet.score_a}–{bet.score_b}", meta)

@@ -433,6 +433,14 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
             teamB={match.team_b}
             recentMatches={recentMatches}
           />
+
+          {/* Scoring hint */}
+          <div style={{ margin: '8px 0 0', padding: '8px 12px', background: 'rgba(15,122,120,0.08)', borderRadius: 8, borderLeft: '3px solid var(--accent)' }}>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
+              <strong style={{ color: 'var(--accent)' }}>Sistema Precisão:</strong>{' '}
+              🎯 Placar exato <strong>+25 pts</strong> · ✅ Vencedor exato <strong>+18</strong> · Saldo <strong>+15</strong> · Gols perdedor <strong>+12</strong> · Resultado <strong>+10</strong>
+            </span>
+          </div>
         </div>
       )}
 
@@ -939,8 +947,8 @@ function GuideBanner({ onShare, shareMsg }) {
         <div className="bet-guide-minimal__main">
           <div className="bet-guide-minimal__title">Regras do bolão</div>
           <div className="bet-guide-minimal__chips">
-            <span className="bet-guide-chip"><strong>3 pts</strong> Placar exato</span>
-            <span className="bet-guide-chip"><strong>1 pt</strong> Resultado correto</span>
+            <span className="bet-guide-chip"><strong>25 pts</strong> Placar exato</span>
+            <span className="bet-guide-chip"><strong>10–18 pts</strong> Resultado correto</span>
             <span className="bet-guide-chip"><strong>0 pt</strong> Sem acerto</span>
           </div>
         </div>

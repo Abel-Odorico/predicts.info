@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, desc, func, or_
+from sqlalchemy import case, desc, func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from auth_utils import get_current_user
@@ -29,9 +29,9 @@ def _is_open(match: Match) -> bool:
 def _bet_result(b: Bet) -> str | None:
     if b.evaluated_at is None:
         return None
-    if b.points_earned == 3:
+    if b.points_earned in (3, 25):
         return "exact"
-    if b.points_earned == 1:
+    if b.points_earned and b.points_earned > 0:
         return "correct"
     return "wrong"
 
@@ -231,8 +231,8 @@ def ranking(
             db.query(
                 Bet.user_id.label("user_id"),
                 func.coalesce(func.sum(Bet.points_earned), 0).label("total_points"),
-                func.sum(case((Bet.points_earned == 3, 1), else_=0)).label("exact_scores"),
-                func.sum(case((Bet.points_earned == 1, 1), else_=0)).label("correct_results"),
+                func.sum(case((Bet.points_earned.in_([3, 25]), 1), else_=0)).label("exact_scores"),
+                func.sum(case((and_(Bet.points_earned > 0, Bet.points_earned.not_in([3, 25])), 1), else_=0)).label("correct_results"),
                 func.count(Bet.id).label("total_bets"),
             )
             .filter(Bet.match_id.in_(match_ids))

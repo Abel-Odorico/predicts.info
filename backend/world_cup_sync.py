@@ -29,6 +29,9 @@ from models import (
 
 LogFn = Callable[[str], None] | None
 
+# Sistema V2 (Precisão) aplica-se a partidas a partir desta data UTC
+SCORING_V2_SINCE = datetime(2026, 6, 21, 16, 0, 0)
+
 WIKI_RAW_URL = "https://en.wikipedia.org/w/index.php?title={title}&action=raw"
 GROUP_LETTERS = list("ABCDEFGHIJKL")
 SQUADS_TITLE = "2026_FIFA_World_Cup_squads"
@@ -136,14 +139,47 @@ def _bet_match_key(
     return (phase or MatchPhase.group.value, group_name, team_a_code, team_b_code)
 
 
-def _score_points(score_a: int, score_b: int, result_score_a: int, result_score_b: int) -> tuple[int, bool, bool]:
-    exact = score_a == result_score_a and score_b == result_score_b
+def _score_points_v1(score_a: int, score_b: int, result_a: int, result_b: int) -> tuple[int, bool, bool]:
+    exact = score_a == result_a and score_b == result_b
     correct_result = (
-        (score_a > score_b) == (result_score_a > result_score_b)
-        and (score_a == score_b) == (result_score_a == result_score_b)
+        (score_a > score_b) == (result_a > result_b)
+        and (score_a == score_b) == (result_a == result_b)
     )
     points = 3 if exact else (1 if correct_result else 0)
     return points, exact, correct_result
+
+
+def _score_points_v2(score_a: int, score_b: int, result_a: int, result_b: int) -> tuple[int, bool, bool]:
+    exact = score_a == result_a and score_b == result_b
+    if exact:
+        return 25, True, False
+    bet_winner = 'a' if score_a > score_b else ('b' if score_b > score_a else 'draw')
+    res_winner = 'a' if result_a > result_b else ('b' if result_b > result_a else 'draw')
+    if bet_winner != res_winner:
+        return 0, False, False
+    if res_winner == 'draw':
+        return 10, False, True
+    bet_winner_goals = score_a if bet_winner == 'a' else score_b
+    res_winner_goals = result_a if res_winner == 'a' else result_b
+    bet_loser_goals  = score_b if bet_winner == 'a' else score_a
+    res_loser_goals  = result_b if res_winner == 'a' else result_a
+    bet_diff = abs(score_a - score_b)
+    res_diff = abs(result_a - result_b)
+    if bet_winner_goals == res_winner_goals:
+        pts = 18
+    elif bet_diff == res_diff:
+        pts = 15
+    elif bet_loser_goals == res_loser_goals:
+        pts = 12
+    else:
+        pts = 10
+    return pts, False, True
+
+
+def _score_points(score_a: int, score_b: int, result_a: int, result_b: int, match_date=None) -> tuple[int, bool, bool]:
+    if match_date is not None and match_date >= SCORING_V2_SINCE:
+        return _score_points_v2(score_a, score_b, result_a, result_b)
+    return _score_points_v1(score_a, score_b, result_a, result_b)
 
 
 def _clean_links(text: str) -> str:
@@ -519,6 +555,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         new_matches = 0
         result_by_match_id: dict[int, tuple[int, int]] = {}
         match_label_by_id: dict[int, str] = {}
+        match_date_by_id: dict[int, datetime] = {}
 
         for match_number, item in enumerate(match_rows, start=1):
             key = _bet_match_key(
@@ -558,6 +595,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
             team_a_name = team_by_code[item["team_a_code"]].name
             team_b_name = team_by_code[item["team_b_code"]].name
             match_label_by_id[match.id] = f"{team_a_name} × {team_b_name}"
+            match_date_by_id[match.id] = match.match_date
 
             if item["score_a"] is not None and item["score_b"] is not None:
                 result_by_match_id[match.id] = (item["score_a"], item["score_b"])
@@ -594,8 +632,9 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         for bet in db.query(Bet).all():
             result_scores = result_by_match_id.get(bet.match_id)
             if result_scores is not None:
+                match_date = match_date_by_id.get(bet.match_id)
                 points, exact, correct_result = _score_points(
-                    bet.score_a, bet.score_b, result_scores[0], result_scores[1]
+                    bet.score_a, bet.score_b, result_scores[0], result_scores[1], match_date
                 )
                 bet.points_earned = points
                 bet.evaluated_at = now_utc
@@ -621,11 +660,11 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                     }
                     if exact:
                         db.add(Notification(user_id=bet.user_id, type="bet_exact",
-                            title="🎯 Placar exato! +3 pts",
+                            title=f"🎯 Placar exato! +{points} pts",
                             body=f"{label} · {bet.score_a}–{bet.score_b}", meta=meta))
                     elif correct_result:
                         db.add(Notification(user_id=bet.user_id, type="bet_correct",
-                            title="✅ Resultado certo! +1 pt",
+                            title=f"✅ Resultado certo! +{points} pts",
                             body=f"{label} · placar: {score_str}", meta=meta))
                     else:
                         db.add(Notification(user_id=bet.user_id, type="bet_wrong",

@@ -21,6 +21,7 @@ const NAV_DRAWER = [
   { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos' },
   { to: '/votacao',    icon: '🗳',  label: 'Votação'     },
   { to: '/regras',     icon: '📜', label: 'Regras'      },
+  { to: '/campeao',    icon: '🏅', label: 'Campeão'     },
   { to: '/perfil',     icon: '👤', label: 'Meu Perfil'  },
 ]
 
