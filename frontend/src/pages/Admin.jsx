@@ -2719,41 +2719,54 @@ function GrowthChart({ title, subtitle, data, barKey, barName, barGrad, barColor
 // ─── Analysis Progress Card ───────────────────────────────────────────────────
 
 function AnalysisProgressCard({ progress, nowMs, onClose }) {
+  const itemsRef = useRef(null)
+
+  // auto-scroll to bottom when new items arrive
+  useEffect(() => {
+    if (itemsRef.current) {
+      itemsRef.current.scrollTop = itemsRef.current.scrollHeight
+    }
+  }, [progress.items?.length])
+
   const isRunning = progress.status === 'running'
   const isDone    = progress.status === 'done'
   const isError   = progress.status === 'error'
 
-  const startedMs  = progress.started_at ? new Date(progress.started_at + 'Z').getTime() : null
-  const endedMs    = progress.ended_at   ? new Date(progress.ended_at + 'Z').getTime()   : null
-  const elapsedMs  = isRunning && startedMs ? nowMs - startedMs
-                   : (endedMs && startedMs)  ? endedMs - startedMs
-                   : 0
+  const startedMs = progress.started_at ? new Date(progress.started_at + 'Z').getTime() : null
+  const endedMs   = progress.ended_at   ? new Date(progress.ended_at + 'Z').getTime()   : null
+  const elapsedMs = isRunning && startedMs ? nowMs - startedMs
+    : (endedMs && startedMs) ? endedMs - startedMs : 0
   const elapsedStr = elapsedMs < 60000
     ? (elapsedMs / 1000).toFixed(0) + 's'
     : Math.floor(elapsedMs / 60000) + 'm ' + Math.floor((elapsedMs % 60000) / 1000) + 's'
 
-  const pct = progress.total > 0
-    ? Math.round((progress.done / progress.total) * 100)
-    : isRunning ? 5 : 100
-
-  const headerColor = isRunning ? 'var(--accent)'
-    : isDone    ? 'var(--win)'
-    : isError   ? 'var(--lose)'
-    : 'var(--text-3)'
-
-  const headerTitle = isRunning ? `⚙️ Gerando análises… (${progress.done}/${progress.total})`
-    : isDone   ? `✓ Geração concluída — ${progress.done} de ${progress.total} partidas`
-    : isError  ? '✗ Erro na geração'
-    : 'Última geração'
-
-  const items = progress.items || []
+  const items    = progress.items || []
   const okCount  = items.filter(i => i.status === 'ok').length
   const errCount = items.filter(i => i.status === 'error').length
+
+  // pct: se total=0 e running → indeterminate (shimmer full), else % real
+  const hasTotal = progress.total > 0
+  const pct = hasTotal ? Math.round((progress.done / progress.total) * 100) : (isDone ? 100 : 0)
+  const indeterminate = isRunning && !hasTotal
+
+  const headerColor = isRunning ? 'var(--accent)'
+    : isDone  ? 'var(--win)'
+    : isError ? 'var(--lose)'
+    : 'var(--text-3)'
+
+  const headerTitle = isRunning && hasTotal
+    ? `⚙️ Gerando… ${progress.done} de ${progress.total}`
+    : isRunning
+    ? '⚙️ Preparando geração…'
+    : isDone
+    ? `✓ Concluído — ${progress.done} de ${progress.total} análises`
+    : isError ? '✗ Erro na geração'
+    : 'Última geração'
 
   return (
     <div style={{
       background: 'var(--bg-card)', border: `1px solid ${headerColor}40`,
-      borderRadius: 10, marginBottom: 20, overflow: 'hidden',
+      borderRadius: 10, marginBottom: 20,
     }}>
       {/* Header */}
       <div style={{
@@ -2761,90 +2774,105 @@ function AnalysisProgressCard({ progress, nowMs, onClose }) {
         padding: '12px 16px',
         background: `${headerColor}10`,
         borderBottom: `1px solid ${headerColor}30`,
+        borderRadius: '10px 10px 0 0',
       }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: headerColor }}>
             {headerTitle}
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>
-            {progress.trigger === 'auto' ? '🤖 automático (sync)' : '👤 manual'}
-            {progress.only_future ? ' · só jogos futuros' : ''}
-            {progress.only_pending ? ' · só pendentes' : ' · todos'}
+            {progress.trigger === 'auto' ? '🤖 auto' : '👤 manual'}
+            {progress.only_future ? ' · só futuros' : ''}
             {' · '}⏱ {elapsedStr}
-            {isRunning && (
-              <span style={{ marginLeft: 6, color: 'var(--accent)', animation: 'pulse 1.5s ease-in-out infinite' }}>
-                ao vivo
-              </span>
-            )}
+            {isRunning && <span style={{ marginLeft: 6, color: 'var(--accent)', animation: 'pulse 1.5s ease-in-out infinite' }}>● ao vivo</span>}
           </div>
         </div>
-        {/* Progress % */}
-        <div style={{ textAlign: 'right', minWidth: 48 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: headerColor, lineHeight: 1 }}>{pct}%</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>concluído</div>
-        </div>
+        {hasTotal && (
+          <div style={{ textAlign: 'right', minWidth: 44 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: headerColor, lineHeight: 1 }}>{pct}%</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>{progress.done}/{progress.total}</div>
+          </div>
+        )}
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 16, padding: 4 }}>✕</button>
       </div>
 
       {/* Progress bar */}
-      <div style={{ height: 4, background: 'var(--bg-overlay)', position: 'relative' }}>
-        <div style={{
-          height: '100%', background: headerColor,
-          width: `${pct}%`,
-          transition: 'width 600ms ease',
-          borderRadius: '0 2px 2px 0',
-        }} />
-        {isRunning && (
+      <div style={{ height: 6, background: 'var(--bg-overlay)', position: 'relative', overflow: 'hidden' }}>
+        {indeterminate ? (
           <div style={{
-            position: 'absolute', top: 0, left: `${Math.max(0, pct - 6)}%`,
-            width: '6%', height: '100%',
-            background: `linear-gradient(90deg, transparent, ${headerColor}80, transparent)`,
-            animation: 'shimmer 1.5s ease-in-out infinite',
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+            background: `linear-gradient(90deg, transparent 0%, ${headerColor} 40%, transparent 100%)`,
+            animation: 'progressSweep 1.5s ease-in-out infinite',
           }} />
+        ) : (
+          <>
+            <div style={{
+              height: '100%', background: headerColor,
+              width: `${pct}%`, transition: 'width 800ms cubic-bezier(.4,0,.2,1)',
+              borderRadius: '0 3px 3px 0',
+            }} />
+            {isRunning && pct > 0 && (
+              <div style={{
+                position: 'absolute', top: 0,
+                left: `${Math.max(0, pct - 15)}%`, width: '15%', height: '100%',
+                background: `linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)`,
+                animation: 'shimmer 1.5s ease-in-out infinite',
+              }} />
+            )}
+          </>
         )}
       </div>
 
-      {/* Current processing */}
+      {/* Currently processing row */}
       {isRunning && progress.current && (
         <div style={{
-          padding: '8px 16px', fontFamily: 'var(--font-cond)', fontSize: 12,
+          padding: '7px 16px', fontFamily: 'var(--font-cond)', fontSize: 12,
           color: 'var(--text-3)', background: 'var(--bg-overlay)',
           borderBottom: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1s ease-in-out infinite', flexShrink: 0 }} />
-          Gerando: <strong style={{ color: 'var(--text-1)' }}>{progress.current}</strong>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, animation: 'pulse 1s ease-in-out infinite', display: 'inline-block' }} />
+          <span style={{ color: 'var(--text-4)' }}>Gerando agora:</span>
+          <strong style={{ color: 'var(--text-1)' }}>{progress.current}</strong>
         </div>
       )}
 
-      {/* Items list */}
+      {/* Items list — grows downward, newest at bottom, auto-scroll */}
       {items.length > 0 && (
-        <div style={{ maxHeight: 260, overflowY: 'auto', padding: '8px 16px' }}>
-          {[...items].reverse().map((item, i) => (
+        <div
+          ref={itemsRef}
+          style={{ maxHeight: 300, overflowY: 'auto', overflowAnchor: 'none' }}
+        >
+          {items.map((item, i) => (
             <div key={item.match_id || i} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '5px 0',
-              borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none',
-              animation: 'slideIn 300ms ease',
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '8px 16px',
+              borderBottom: '1px solid var(--border)',
+              animation: 'slideIn 250ms ease',
             }}>
-              <span style={{ fontSize: 13, flexShrink: 0 }}>{item.status === 'ok' ? '✓' : '✗'}</span>
+              <span style={{
+                fontSize: 14, flexShrink: 0, marginTop: 1,
+                color: item.status === 'ok' ? 'var(--win)' : 'var(--lose)',
+              }}>
+                {item.status === 'ok' ? '✓' : '✗'}
+              </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 12,
+                  fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 13,
                   color: item.status === 'ok' ? 'var(--text-1)' : 'var(--lose)',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
                   {item.teams || `#${item.match_id}`}
                 </div>
-                {item.status === 'error' && (
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--lose)', marginTop: 1 }}>
-                    {item.error?.slice(0, 80) || 'erro desconhecido'}
+                {item.status === 'error' && item.error && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--lose)', marginTop: 2 }}>
+                    {item.error.slice(0, 100)}
                   </div>
                 )}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>
-                  {item.model?.split('/').pop()?.replace(':free', '') || '—'}
+                  {(item.model || '').split('/').pop()?.replace(':free', '') || '—'}
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-3)' }}>
                   {item.duration_ms ? (item.duration_ms / 1000).toFixed(1) + 's' : '—'}
@@ -2852,27 +2880,24 @@ function AnalysisProgressCard({ progress, nowMs, onClose }) {
               </div>
             </div>
           ))}
+          {/* anchor div for auto-scroll */}
+          <div id="progress-items-bottom" />
         </div>
       )}
 
-      {/* Summary footer */}
-      {(isDone || errCount > 0) && (
-        <div style={{
-          display: 'flex', gap: 16, padding: '8px 16px',
-          borderTop: '1px solid var(--border)',
-          background: 'var(--bg-overlay)',
-          fontFamily: 'var(--font-cond)', fontSize: 12,
-        }}>
-          <span style={{ color: 'var(--win)' }}>✓ {okCount} geradas</span>
-          {errCount > 0 && <span style={{ color: 'var(--lose)' }}>✗ {errCount} erros</span>}
-          <span style={{ color: 'var(--text-4)', marginLeft: 'auto' }}>⏱ {elapsedStr}</span>
-          {isDone && (
-            <span style={{ color: 'var(--text-4)', fontSize: 10 }}>
-              Geração continua em background — pode fechar
-            </span>
-          )}
-        </div>
-      )}
+      {/* Footer summary */}
+      <div style={{
+        display: 'flex', gap: 12, padding: '8px 16px', flexWrap: 'wrap',
+        borderTop: items.length > 0 ? '1px solid var(--border)' : undefined,
+        background: 'var(--bg-overlay)',
+        borderRadius: '0 0 10px 10px',
+        fontFamily: 'var(--font-cond)', fontSize: 12,
+      }}>
+        {okCount > 0  && <span style={{ color: 'var(--win)' }}>✓ {okCount} geradas</span>}
+        {errCount > 0 && <span style={{ color: 'var(--lose)' }}>✗ {errCount} erros</span>}
+        {!okCount && !errCount && isRunning && <span style={{ color: 'var(--text-4)' }}>Aguardando primeira análise…</span>}
+        <span style={{ color: 'var(--text-4)', marginLeft: 'auto' }}>⏱ {elapsedStr}</span>
+      </div>
     </div>
   )
 }
