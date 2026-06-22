@@ -46,18 +46,17 @@ OPENROUTER_FREE_MODELS = [
 ]
 
 GEMINI_MODELS = [
-    {"id": "gemini-3.5-flash",                "label": "Gemini 3.5 Flash (mais novo)"},
-    {"id": "gemini-2.5-pro",                  "label": "Gemini 2.5 Pro (mais capaz)"},
-    {"id": "gemini-2.5-pro-preview-06-05",    "label": "Gemini 2.5 Pro Preview jun/25"},
-    {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash"},
+    {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash (mais rápido)"},
     {"id": "gemini-2.5-flash-preview-05-20",  "label": "Gemini 2.5 Flash Preview mai/25"},
     {"id": "gemini-2.0-flash",                "label": "Gemini 2.0 Flash"},
-    {"id": "gemini-2.0-flash-lite",           "label": "Gemini 2.0 Flash Lite"},
+    {"id": "gemini-2.0-flash-lite",           "label": "Gemini 2.0 Flash Lite (ultrarrápido)"},
+    {"id": "gemini-2.5-pro",                  "label": "Gemini 2.5 Pro (mais capaz)"},
+    {"id": "gemini-2.5-pro-preview-06-05",    "label": "Gemini 2.5 Pro Preview jun/25"},
 ]
 
-DEFAULT_OR_MODEL    = "nvidia/nemotron-3-ultra-550b-a55b:free"
-DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
-DEFAULT_PROVIDER    = "openrouter"
+DEFAULT_OR_MODEL     = "meta-llama/llama-3.3-70b-instruct:free"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_PROVIDER     = "openrouter"
 
 CONFIG_KEYS = (
     "analysis_provider",
@@ -66,7 +65,7 @@ CONFIG_KEYS = (
     "analysis_prompt_template",
 )
 
-BEST_FREE_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+BEST_FREE_OR_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
 
 def _utcnow():
@@ -107,7 +106,8 @@ def _get_provider_chain(cfg: dict) -> list[dict]:
     if cfg.get("gemini_key_2"):
         chain.append({"type": "gemini", "key": cfg["gemini_key_2"], "model": cfg["gemini_model"], "label": "Gemini key2"})
     if cfg.get("openrouter_key"):
-        chain.append({"type": "openrouter", "key": cfg["openrouter_key"], "model": BEST_FREE_OR_MODEL, "label": f"OpenRouter {BEST_FREE_OR_MODEL}"})
+        or_model = cfg.get("openrouter_model") or BEST_FREE_OR_MODEL
+        chain.append({"type": "openrouter", "key": cfg["openrouter_key"], "model": or_model, "label": f"OpenRouter {or_model.split('/')[-1]}"})
     return chain
 
 
@@ -154,9 +154,9 @@ def _call_openrouter(api_key: str, model: str, prompt: str) -> tuple[dict, dict]
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.7,
-            "max_tokens": 8000,
+            "max_tokens": 3000,
         },
-        timeout=90,
+        timeout=60,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -180,7 +180,7 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
             model=model,
             contents=prompt,
             config=genai_types.GenerateContentConfig(
-                max_output_tokens=8192,
+                max_output_tokens=3000,
                 temperature=0.7,
             ),
         )
@@ -197,7 +197,7 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
             headers={"Content-Type": "application/json"},
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.7},
+                "generationConfig": {"maxOutputTokens": 3000, "temperature": 0.7},
             },
             timeout=90,
         )
@@ -317,21 +317,22 @@ DEFAULT_PROMPT_TEMPLATE = (
 
 def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, recent_a, recent_b, mc_prob, custom_template: str = "") -> str:
     def fmt_players(players):
-        # FW first — stars (Messi, Salah, Mbappé) are attackers and must not be truncated
+        # FW first — stars (Messi, Salah, Mbappé) are attackers
+        # Limit to 15 players max to keep prompt concise and fast
         pos_order = {"FW": 0, "MF": 1, "DF": 2, "GK": 3}
         pos_label = {"FW": "ATA", "MF": "MEI", "DF": "DEF", "GK": "GOL"}
         sorted_p = sorted(players, key=lambda p: pos_order.get(p.position, 9))
+        # Keep all injured/suspended + up to 15 total
+        priority = [p for p in sorted_p if p.is_injured or p.is_suspended]
+        rest = [p for p in sorted_p if not p.is_injured and not p.is_suspended]
+        selected = (priority + rest)[:15]
         lines, cur_pos = [], None
-        for p in sorted_p:  # show full squad, no truncation
+        for p in selected:
             lbl = pos_label.get(p.position, p.position)
             if lbl != cur_pos:
                 lines.append(f"  [{lbl}]")
                 cur_pos = lbl
-            suffix = ""
-            if p.is_injured:
-                suffix = " ⚠️ LESIONADO"
-            elif p.is_suspended:
-                suffix = " 🚫 SUSPENSO"
+            suffix = " ⚠️" if p.is_injured else " 🚫" if p.is_suspended else ""
             lines.append(f"    • {p.name}{suffix}")
         return "\n".join(lines)
 
@@ -592,7 +593,7 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                 })
                 _push_progress(r, progress)
                 if i < len(pending_ids) - 1:
-                    time.sleep(15)
+                    time.sleep(3)
             except Exception as e:
                 err = str(e)
                 duration_ms = int((time.time() - t0) * 1000)
@@ -623,8 +624,8 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                 })
                 _push_progress(r, progress)
                 if _is_quota_error(err):
-                    print(f"[analysis] rate limit — aguardando 30s", flush=True)
-                    time.sleep(30)
+                    print(f"[analysis] rate limit — aguardando 10s", flush=True)
+                    time.sleep(10)
 
         progress["status"] = "done"
         progress["current"] = None
