@@ -165,7 +165,10 @@ export default function Admin() {
   const [generatingForce, setGeneratingForce] = useState(false)
   const [analysisLogs, setAnalysisLogs]       = useState(null)
   const [logsLoading, setLogsLoading]         = useState(false)
-  const analysisMsgTimerRef = useRef(null)
+  const [genProgress, setGenProgress]         = useState(null)
+  const [onlyFuture, setOnlyFuture]           = useState(false)
+  const analysisMsgTimerRef  = useRef(null)
+  const progressIntervalRef  = useRef(null)
   const [viewingAnalysis, setViewingAnalysis] = useState(null)  // { match_id, content, model_used }
   const [promptOpen, setPromptOpen]           = useState(false)
   const [aForm, setAForm] = useState({
@@ -174,6 +177,26 @@ export default function Admin() {
     gemini_key: '', gemini_key_2: '', gemini_model: '',
     prompt_template: '',
   })
+
+  async function fetchProgress() {
+    try {
+      const data = await api.get('/admin/analysis/progress', token)
+      setGenProgress(data)
+      if (data.status !== 'running') {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current)
+          progressIntervalRef.current = null
+        }
+      }
+    } catch {}
+  }
+
+  function startProgressPolling() {
+    fetchProgress()
+    if (!progressIntervalRef.current) {
+      progressIntervalRef.current = setInterval(fetchProgress, 3000)
+    }
+  }
 
   function setAnalysisMsgTimed(msg, ms = 6000) {
     setAnalysisMsg(msg)
@@ -231,10 +254,14 @@ export default function Admin() {
     if (force) { setGeneratingForce(true) } else { setGeneratingAll(true) }
     setAnalysisMsg('')
     try {
-      await api.post('/admin/analysis/generate-all', { only_pending: !force }, token)
+      await api.post('/admin/analysis/generate-all', {
+        only_pending: !force,
+        only_future: onlyFuture,
+      }, token)
       setAnalysisMsgTimed(force
-        ? '✓ Regeneração total iniciada! Acompanhe nos logs abaixo.'
-        : '✓ Geração de pendentes iniciada! Clique em "Ver logs" para acompanhar.')
+        ? '✓ Regeneração iniciada! Acompanhe o progresso abaixo.'
+        : '✓ Geração de pendentes iniciada! Acompanhe o progresso abaixo.')
+      setTimeout(startProgressPolling, 500)
     } catch(err) {
       setAnalysisMsgTimed('✗ Erro: ' + (err?.message || 'falha ao iniciar geração'))
     }
@@ -399,11 +426,15 @@ export default function Admin() {
     if (tab === 'knockout' && !champAllPicks) loadChampPicks()
     if (tab === 'analyses' && !analysisConfig) loadAnalysisConfig()
     if (tab === 'analyses' && !analysisStatus) loadAnalysisStatus()
+    if (tab === 'analyses') fetchProgress()
   }, [tab])
 
   useEffect(() => {
     const iv = setInterval(() => setNowMs(Date.now()), 1000)
-    return () => clearInterval(iv)
+    return () => {
+      clearInterval(iv)
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -2238,18 +2269,24 @@ export default function Admin() {
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus(); setAnalysisMsgTimed('✓ Atualizado!') }}>↻ Atualizar</button>
                 </div>
 
-                {/* Ações de geração — fora do form submit */}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', alignSelf: 'center' }}>GERAR ANÁLISES:</span>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(false)} disabled={generatingAll || generatingForce}>
-                    {generatingAll ? '⏳ Iniciando…' : '⚡ Gerar pendentes'}
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(true)} disabled={generatingAll || generatingForce}>
-                    {generatingForce ? '⏳ Iniciando…' : '🔄 Regenerar todas'}
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={loadAnalysisLogs} disabled={logsLoading}>
-                    {logsLoading ? '⏳ Carregando…' : '📊 Ver logs'}
-                  </button>
+                {/* Ações de geração */}
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)' }}>GERAR ANÁLISES:</span>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(false)} disabled={generatingAll || generatingForce}>
+                      {generatingAll ? '⏳ Iniciando…' : '⚡ Gerar pendentes'}
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(true)} disabled={generatingAll || generatingForce}>
+                      {generatingForce ? '⏳ Iniciando…' : '🔄 Regenerar todas'}
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={loadAnalysisLogs} disabled={logsLoading}>
+                      {logsLoading ? '⏳ Carregando…' : '📊 Ver logs'}
+                    </button>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+                    <input type="checkbox" checked={onlyFuture} onChange={e => setOnlyFuture(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+                    Somente jogos ainda não realizados (ignora partidas passadas)
+                  </label>
                 </div>
 
                 {/* Feedback sempre visível perto dos botões */}
@@ -2269,6 +2306,11 @@ export default function Admin() {
               </form>
             </div>
           </div>
+
+          {/* Progress card */}
+          {genProgress && genProgress.status !== 'idle' && (
+            <AnalysisProgressCard progress={genProgress} nowMs={nowMs} onClose={() => setGenProgress(null)} />
+          )}
 
           {/* Logs de geração IA */}
           {analysisLogs && (
@@ -2302,7 +2344,7 @@ export default function Admin() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
                   <thead>
                     <tr style={{ color: 'var(--text-4)', borderBottom: '1px solid var(--border)' }}>
-                      {['Data', 'Jogo', 'Modelo', 'Status', 'T.In', 'T.Out', 'Custo', 'Tempo'].map(h => (
+                      {['Gerado em', 'Tipo', 'Jogo', 'Modelo', 'Status', 'T.In', 'T.Out', 'Custo', 'Tempo'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>{h}</th>
                       ))}
                     </tr>
@@ -2311,11 +2353,20 @@ export default function Admin() {
                     {analysisLogs.items.map(item => (
                       <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', color: item.status === 'error' ? 'var(--lose)' : 'var(--text-2)' }}>
                         <td style={{ padding: '4px 8px', whiteSpace: 'nowrap' }}>{item.created_at?.slice(0,16).replace('T',' ')}</td>
+                        <td style={{ padding: '4px 8px' }}>
+                          <span style={{
+                            fontSize: 9, padding: '2px 5px', borderRadius: 4, fontWeight: 700,
+                            background: item.trigger === 'auto' ? 'rgba(100,160,255,0.15)' : 'rgba(15,122,120,0.15)',
+                            color: item.trigger === 'auto' ? '#6fa0f0' : 'var(--accent)',
+                          }}>
+                            {item.trigger === 'auto' ? 'AUTO' : 'MANUAL'}
+                          </span>
+                        </td>
                         <td style={{ padding: '4px 8px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {item.team_a && item.team_b ? `${item.team_a} × ${item.team_b}` : item.match_id ? `#${item.match_id}` : '—'}
                         </td>
-                        <td style={{ padding: '4px 8px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.model_used || '—'}</td>
-                        <td style={{ padding: '4px 8px' }}>{item.status === 'ok' ? '✓' : '✗ ' + (item.error_msg?.slice(0,40) || 'erro')}</td>
+                        <td style={{ padding: '4px 8px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.model_used?.split('/').pop() || '—'}</td>
+                        <td style={{ padding: '4px 8px' }}>{item.status === 'ok' ? '✓' : '✗ ' + (item.error_msg?.slice(0,30) || 'erro')}</td>
                         <td style={{ padding: '4px 8px' }}>{item.tokens_in ? item.tokens_in.toLocaleString() : '—'}</td>
                         <td style={{ padding: '4px 8px' }}>{item.tokens_out ? item.tokens_out.toLocaleString() : '—'}</td>
                         <td style={{ padding: '4px 8px' }}>{item.cost_usd > 0 ? '$' + item.cost_usd.toFixed(5) : 'free'}</td>
@@ -2658,6 +2709,168 @@ function GrowthChart({ title, subtitle, data, barKey, barName, barGrad, barColor
               />
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ─── Analysis Progress Card ───────────────────────────────────────────────────
+
+function AnalysisProgressCard({ progress, nowMs, onClose }) {
+  const isRunning = progress.status === 'running'
+  const isDone    = progress.status === 'done'
+  const isError   = progress.status === 'error'
+
+  const startedMs  = progress.started_at ? new Date(progress.started_at + 'Z').getTime() : null
+  const endedMs    = progress.ended_at   ? new Date(progress.ended_at + 'Z').getTime()   : null
+  const elapsedMs  = isRunning && startedMs ? nowMs - startedMs
+                   : (endedMs && startedMs)  ? endedMs - startedMs
+                   : 0
+  const elapsedStr = elapsedMs < 60000
+    ? (elapsedMs / 1000).toFixed(0) + 's'
+    : Math.floor(elapsedMs / 60000) + 'm ' + Math.floor((elapsedMs % 60000) / 1000) + 's'
+
+  const pct = progress.total > 0
+    ? Math.round((progress.done / progress.total) * 100)
+    : isRunning ? 5 : 100
+
+  const headerColor = isRunning ? 'var(--accent)'
+    : isDone    ? 'var(--win)'
+    : isError   ? 'var(--lose)'
+    : 'var(--text-3)'
+
+  const headerTitle = isRunning ? `⚙️ Gerando análises… (${progress.done}/${progress.total})`
+    : isDone   ? `✓ Geração concluída — ${progress.done} de ${progress.total} partidas`
+    : isError  ? '✗ Erro na geração'
+    : 'Última geração'
+
+  const items = progress.items || []
+  const okCount  = items.filter(i => i.status === 'ok').length
+  const errCount = items.filter(i => i.status === 'error').length
+
+  return (
+    <div style={{
+      background: 'var(--bg-card)', border: `1px solid ${headerColor}40`,
+      borderRadius: 10, marginBottom: 20, overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 16px',
+        background: `${headerColor}10`,
+        borderBottom: `1px solid ${headerColor}30`,
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: headerColor }}>
+            {headerTitle}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>
+            {progress.trigger === 'auto' ? '🤖 automático (sync)' : '👤 manual'}
+            {progress.only_future ? ' · só jogos futuros' : ''}
+            {progress.only_pending ? ' · só pendentes' : ' · todos'}
+            {' · '}⏱ {elapsedStr}
+            {isRunning && (
+              <span style={{ marginLeft: 6, color: 'var(--accent)', animation: 'pulse 1.5s ease-in-out infinite' }}>
+                ao vivo
+              </span>
+            )}
+          </div>
+        </div>
+        {/* Progress % */}
+        <div style={{ textAlign: 'right', minWidth: 48 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: headerColor, lineHeight: 1 }}>{pct}%</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>concluído</div>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 16, padding: 4 }}>✕</button>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height: 4, background: 'var(--bg-overlay)', position: 'relative' }}>
+        <div style={{
+          height: '100%', background: headerColor,
+          width: `${pct}%`,
+          transition: 'width 600ms ease',
+          borderRadius: '0 2px 2px 0',
+        }} />
+        {isRunning && (
+          <div style={{
+            position: 'absolute', top: 0, left: `${Math.max(0, pct - 6)}%`,
+            width: '6%', height: '100%',
+            background: `linear-gradient(90deg, transparent, ${headerColor}80, transparent)`,
+            animation: 'shimmer 1.5s ease-in-out infinite',
+          }} />
+        )}
+      </div>
+
+      {/* Current processing */}
+      {isRunning && progress.current && (
+        <div style={{
+          padding: '8px 16px', fontFamily: 'var(--font-cond)', fontSize: 12,
+          color: 'var(--text-3)', background: 'var(--bg-overlay)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1s ease-in-out infinite', flexShrink: 0 }} />
+          Gerando: <strong style={{ color: 'var(--text-1)' }}>{progress.current}</strong>
+        </div>
+      )}
+
+      {/* Items list */}
+      {items.length > 0 && (
+        <div style={{ maxHeight: 260, overflowY: 'auto', padding: '8px 16px' }}>
+          {[...items].reverse().map((item, i) => (
+            <div key={item.match_id || i} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '5px 0',
+              borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none',
+              animation: 'slideIn 300ms ease',
+            }}>
+              <span style={{ fontSize: 13, flexShrink: 0 }}>{item.status === 'ok' ? '✓' : '✗'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 12,
+                  color: item.status === 'ok' ? 'var(--text-1)' : 'var(--lose)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {item.teams || `#${item.match_id}`}
+                </div>
+                {item.status === 'error' && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--lose)', marginTop: 1 }}>
+                    {item.error?.slice(0, 80) || 'erro desconhecido'}
+                  </div>
+                )}
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>
+                  {item.model?.split('/').pop()?.replace(':free', '') || '—'}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-3)' }}>
+                  {item.duration_ms ? (item.duration_ms / 1000).toFixed(1) + 's' : '—'}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Summary footer */}
+      {(isDone || errCount > 0) && (
+        <div style={{
+          display: 'flex', gap: 16, padding: '8px 16px',
+          borderTop: '1px solid var(--border)',
+          background: 'var(--bg-overlay)',
+          fontFamily: 'var(--font-cond)', fontSize: 12,
+        }}>
+          <span style={{ color: 'var(--win)' }}>✓ {okCount} geradas</span>
+          {errCount > 0 && <span style={{ color: 'var(--lose)' }}>✗ {errCount} erros</span>}
+          <span style={{ color: 'var(--text-4)', marginLeft: 'auto' }}>⏱ {elapsedStr}</span>
+          {isDone && (
+            <span style={{ color: 'var(--text-4)', fontSize: 10 }}>
+              Geração continua em background — pode fechar
+            </span>
+          )}
         </div>
       )}
     </div>

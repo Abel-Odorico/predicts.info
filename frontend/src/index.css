@@ -8175,3 +8175,18 @@ strong.pts {
   text-overflow: ellipsis;
 }
 .modal-box__head button:hover { color: var(--text-1); background: var(--bg-2); }
+
+/* Analysis Progress Card animations */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+@keyframes shimmer {
+  0%   { opacity: 0; }
+  50%  { opacity: 1; }
+  100% { opacity: 0; }
+}

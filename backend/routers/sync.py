@@ -77,7 +77,7 @@ def _auto_generate_analyses(db_url: str) -> None:
             print("[analysis-auto] nenhum provider configurado — pulando", flush=True)
             return
 
-        _generate_all_bg(db_url, cfg, only_pending=True)
+        _generate_all_bg(db_url, cfg, only_pending=True, only_future=False, trigger="auto")
     except Exception as exc:
         print(f"[analysis-auto] erro: {exc}", flush=True)
 

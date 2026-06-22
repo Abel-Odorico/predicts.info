@@ -437,6 +437,7 @@ def _generate_one(
     cfg: dict,
     provider_state: list | None = None,
     batch_id: str | None = None,
+    trigger: str = "manual",
 ) -> dict:
     import time
     row = db.execute(
@@ -485,21 +486,42 @@ def _generate_one(
     db.execute(
         text("""
             INSERT INTO analysis_logs (match_id, model_used, provider, tokens_in, tokens_out,
-                cost_usd, duration_ms, status, batch_id, created_at)
-            VALUES (:mid, :model, :prov, :ti, :to, :cost, :dur, 'ok', :bid, :now)
+                cost_usd, duration_ms, status, batch_id, trigger, created_at)
+            VALUES (:mid, :model, :prov, :ti, :to, :cost, :dur, 'ok', :bid, :trig, :now)
         """),
         {
             "mid": match_id, "model": model_tag, "prov": provider_type,
             "ti": usage.get("tokens_in", 0), "to": usage.get("tokens_out", 0),
             "cost": usage.get("cost_usd", 0.0), "dur": duration_ms,
-            "bid": batch_id, "now": _utcnow(),
+            "bid": batch_id, "trig": trigger, "now": _utcnow(),
         },
     )
     db.commit()
     return content
 
 
-def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
+PROGRESS_REDIS_KEY = "analysis:progress"
+PROGRESS_TTL = 7200  # 2h
+
+
+def _redis_for_progress():
+    try:
+        import redis as _redis
+        from config import settings
+        return _redis.from_url(settings.redis_url, decode_responses=True)
+    except Exception:
+        return None
+
+
+def _push_progress(r, data: dict):
+    if r:
+        try:
+            r.setex(PROGRESS_REDIS_KEY, PROGRESS_TTL, json.dumps(data, default=str))
+        except Exception:
+            pass
+
+
+def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_future: bool = False, trigger: str = "manual"):
     import time, uuid
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -507,28 +529,73 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
     Sess = sessionmaker(bind=engine)
     db = Sess()
     batch_id = str(uuid.uuid4())[:16]
+    r = _redis_for_progress()
+
+    # Build WHERE clause
+    clauses = []
+    if only_pending:
+        clauses.append("NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)")
+    if only_future:
+        clauses.append("m.match_date >= NOW()")
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
     try:
-        where = "WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)" if only_pending else ""
         pending = db.execute(
             text(f"""
-                SELECT m.id FROM matches m
+                SELECT m.id, ta.name, tb.name FROM matches m
+                JOIN teams ta ON ta.id = m.team_a_id
+                JOIN teams tb ON tb.id = m.team_b_id
                 {where}
                 ORDER BY
                     CASE WHEN m.match_date >= NOW() THEN 0 ELSE 1 END,
                     m.match_date
             """)
         ).fetchall()
+
+        match_map = {row[0]: f"{row[1]} × {row[2]}" for row in pending}
+        pending_ids = [(row[0],) for row in pending]
+
         chain = _get_provider_chain(cfg)
         provider_state = [0]
-        print(f"[analysis] background: {len(pending)} partidas | cadeia: {' → '.join(p['label'] for p in chain)}", flush=True)
-        for i, (mid,) in enumerate(pending):
+
+        progress = {
+            "batch_id": batch_id,
+            "status": "running",
+            "total": len(pending_ids),
+            "done": 0,
+            "current": None,
+            "started_at": _utcnow().isoformat(),
+            "only_pending": only_pending,
+            "only_future": only_future,
+            "trigger": trigger,
+            "items": [],
+        }
+        _push_progress(r, progress)
+        print(f"[analysis] background: {len(pending_ids)} partidas | cadeia: {' → '.join(p['label'] for p in chain)}", flush=True)
+
+        for i, (mid,) in enumerate(pending_ids):
+            match_label = match_map.get(mid, f"#{mid}")
+            progress["current"] = match_label
+            _push_progress(r, progress)
+
+            t0 = time.time()
             try:
-                _generate_one(mid, db, cfg, provider_state, batch_id=batch_id)
-                print(f"[analysis] ✓ match_id={mid} via {chain[provider_state[0]]['label']}", flush=True)
-                if i < len(pending) - 1:
+                _generate_one(mid, db, cfg, provider_state, batch_id=batch_id, trigger=trigger)
+                duration_ms = int((time.time() - t0) * 1000)
+                model_label = chain[provider_state[0]]["label"] if chain else "?"
+                print(f"[analysis] ✓ match_id={mid} via {model_label}", flush=True)
+                progress["done"] += 1
+                progress["items"].append({
+                    "match_id": mid, "teams": match_label,
+                    "model": model_label, "duration_ms": duration_ms,
+                    "status": "ok", "finished_at": _utcnow().isoformat(),
+                })
+                _push_progress(r, progress)
+                if i < len(pending_ids) - 1:
                     time.sleep(15)
             except Exception as e:
                 err = str(e)
+                duration_ms = int((time.time() - t0) * 1000)
                 print(f"[analysis] ✗ match_id={mid}: {err[:120]}", flush=True)
                 try:
                     db.execute(
@@ -537,7 +604,8 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
                             VALUES (:mid, :model, :prov, 'error', :err, :bid, :now)
                         """),
                         {
-                            "mid": mid, "model": chain[provider_state[0]]["model"] if chain else None,
+                            "mid": mid,
+                            "model": chain[provider_state[0]]["model"] if chain else None,
                             "prov": chain[provider_state[0]]["type"] if chain else None,
                             "err": err[:500], "bid": batch_id, "now": _utcnow(),
                         },
@@ -545,9 +613,27 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
                     db.commit()
                 except Exception:
                     db.rollback()
+                progress["done"] += 1
+                progress["items"].append({
+                    "match_id": mid, "teams": match_label,
+                    "model": chain[provider_state[0]]["label"] if chain else "?",
+                    "duration_ms": duration_ms,
+                    "status": "error", "error": err[:200],
+                    "finished_at": _utcnow().isoformat(),
+                })
+                _push_progress(r, progress)
                 if _is_quota_error(err):
                     print(f"[analysis] rate limit — aguardando 30s", flush=True)
                     time.sleep(30)
+
+        progress["status"] = "done"
+        progress["current"] = None
+        progress["ended_at"] = _utcnow().isoformat()
+        _push_progress(r, progress)
+
+    except Exception as outer:
+        progress_err = {"batch_id": batch_id, "status": "error", "error": str(outer)[:300]}
+        _push_progress(r, progress_err)
     finally:
         db.close()
 
@@ -673,6 +759,7 @@ def generate_one(match_id: int, db: Session = Depends(get_db), _: User = Depends
 
 class GenerateAllBody(BaseModel):
     only_pending: bool = True
+    only_future: bool = False
 
 
 @router.post("/admin/analysis/generate-all")
@@ -686,8 +773,24 @@ def generate_all(
     if not _get_provider_chain(cfg):
         raise HTTPException(400, "Nenhum provider configurado (configure Gemini ou OpenRouter)")
     from config import settings
-    background_tasks.add_task(_generate_all_bg, settings.database_url, cfg, body.only_pending)
+    background_tasks.add_task(
+        _generate_all_bg, settings.database_url, cfg,
+        body.only_pending, body.only_future, "manual",
+    )
     return {"ok": True, "message": "Geração iniciada em background"}
+
+
+@router.get("/admin/analysis/progress")
+def analysis_progress(_: User = Depends(require_admin)):
+    r = _redis_for_progress()
+    if r:
+        try:
+            data = r.get(PROGRESS_REDIS_KEY)
+            if data:
+                return json.loads(data)
+        except Exception:
+            pass
+    return {"status": "idle", "total": 0, "done": 0, "items": [], "current": None}
 
 
 @router.get("/admin/analysis/logs")
@@ -700,7 +803,8 @@ def analysis_logs(limit: int = 100, db: Session = Depends(get_db), _: User = Dep
             al.tokens_in, al.tokens_out,
             al.cost_usd, al.duration_ms,
             al.status, al.error_msg,
-            al.batch_id, al.created_at
+            al.batch_id, al.created_at,
+            COALESCE(al.trigger, 'manual') AS trigger
         FROM analysis_logs al
         LEFT JOIN matches m ON m.id = al.match_id
         LEFT JOIN teams ta ON ta.id = m.team_a_id
@@ -721,6 +825,7 @@ def analysis_logs(limit: int = 100, db: Session = Depends(get_db), _: User = Dep
             "status": r[10], "error_msg": r[11],
             "batch_id": r[12],
             "created_at": str(r[13]),
+            "trigger": r[14] or "manual",
         })
 
     totals = db.execute(text("""

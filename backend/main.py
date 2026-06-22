@@ -270,12 +270,22 @@ def _run_migrations():
                 status       VARCHAR(20) DEFAULT 'ok',
                 error_msg    TEXT,
                 batch_id     VARCHAR(64),
+                trigger      VARCHAR(20) DEFAULT 'manual',
                 created_at   TIMESTAMP DEFAULT NOW()
             )
             """,
         ]:
             try:
                 conn.execute(text(ddl))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        # Column additions on existing tables
+        for alter in [
+            "ALTER TABLE analysis_logs ADD COLUMN IF NOT EXISTS trigger VARCHAR(20) DEFAULT 'manual'",
+        ]:
+            try:
+                conn.execute(text(alter))
                 conn.commit()
             except Exception:
                 conn.rollback()
