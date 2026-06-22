@@ -71,6 +71,42 @@ def _match_lambdas(ta: dict, tb: dict) -> tuple[float, float]:
     return float(np.clip(la, 0.30, 5.0)), float(np.clip(lb, 0.30, 5.0))
 
 
+_DC_RHO = -0.13
+
+
+def _dc_thin_knockout(
+    ga: np.ndarray,
+    gb: np.ndarray,
+    la: np.ndarray,
+    lb: np.ndarray,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Vectorized Dixon-Coles thinning for knockout rounds.
+    1-0 and 0-1 outcomes are overrepresented by Poisson (τ < 1 with ρ < 0).
+    Rejected samples are converted to draws (→ penalty shootout).
+    0-0 and 1-1 upsampling is omitted (small effect, can't add samples mid-array).
+    """
+    n = len(ga)
+    # τ for 1-0: 1 + lb*ρ  (< 1 since ρ < 0)
+    # τ for 0-1: 1 + la*ρ  (< 1 since ρ < 0)
+    tau_10 = np.clip(1.0 + lb * _DC_RHO, 0.0, 1.0)
+    tau_01 = np.clip(1.0 + la * _DC_RHO, 0.0, 1.0)
+
+    mask_10 = (ga == 1) & (gb == 0)
+    mask_01 = (ga == 0) & (gb == 1)
+
+    rand = rng.random(n)
+    reject_10 = mask_10 & (rand > tau_10)
+    reject_01 = mask_01 & (rand > tau_01)
+    reassign  = reject_10 | reject_01
+
+    # Convert to 0-0 draw (exact score irrelevant in knockout — only draw matters)
+    ga = np.where(reassign, 0, ga)
+    gb = np.where(reassign, 0, gb)
+    return ga, gb
+
+
 def _knockout_round(
     bracket: np.ndarray,           # (n, 2k) team IDs
     attack: np.ndarray,            # (max_id,) attack indexed by team_id
@@ -91,6 +127,10 @@ def _knockout_round(
         # variable-lambda poisson: rng.poisson accepts array lam
         ga = rng.poisson(la)
         gb = rng.poisson(lb)
+
+        # Dixon-Coles thinning: 1-0 and 0-1 are overrepresented in Poisson (τ < 1)
+        # Reject fraction and convert to draws → more penalty shootouts
+        ga, gb = _dc_thin_knockout(ga, gb, la, lb, rng)
 
         draw = ga == gb
         penalty_a = rng.random(n) > 0.5
