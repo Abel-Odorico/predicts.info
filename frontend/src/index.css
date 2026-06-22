@@ -8195,3 +8195,314 @@ strong.pts {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(200%); }
 }
+
+/* ── Knockout Bracket Visual ───────────────────────────────────── */
+.bk-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: var(--s4);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.bk-wrap::-webkit-scrollbar { height: 6px; }
+.bk-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.bk-root {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: max-content;
+  padding: var(--s4) var(--s2);
+}
+
+.bk-half {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.bk-col {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Each "slot" is sized so that height doubles each round */
+.bk-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Connector lines: right side for left-half columns, left side for right-half columns */
+/* Each pair of adjacent slots gets bracket connectors */
+.bk-slot--upper-left::after {
+  content: '';
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  height: 50%;
+  width: 14px;
+  border-right: 2px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-top-right-radius: 3px;
+}
+.bk-slot--lower-left::after {
+  content: '';
+  position: absolute;
+  right: -14px;
+  top: 0;
+  height: 50%;
+  width: 14px;
+  border-right: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+  border-bottom-right-radius: 3px;
+}
+
+/* Right half: connectors on left side */
+.bk-slot--upper-right::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  height: 50%;
+  width: 14px;
+  border-left: 2px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-top-left-radius: 3px;
+}
+.bk-slot--lower-right::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 0;
+  height: 50%;
+  width: 14px;
+  border-left: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+  border-bottom-left-radius: 3px;
+}
+
+/* Incoming connector on left half parent slot */
+.bk-slot--parent-left::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 14px;
+  height: 1px;
+  background: var(--border);
+}
+/* Incoming connector on right half parent slot */
+.bk-slot--parent-right::after {
+  content: '';
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  width: 14px;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Bracket match card (compact) */
+.bk-card {
+  width: 188px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-card);
+  flex-shrink: 0;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.bk-card:hover {
+  border-color: var(--border-accent);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.bk-card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-overlay);
+  border-bottom: 1px solid var(--border);
+}
+.bk-card__section {
+  font-family: var(--font-cond);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 1px 5px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.bk-card__meta {
+  font-family: var(--font-data);
+  font-size: 9px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.bk-card__body {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bk-team-row {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.bk-team-row--winner .bk-team-name {
+  color: var(--win);
+}
+.bk-team-row--loser {
+  opacity: 0.45;
+}
+.bk-team-flag {
+  width: 20px;
+  height: 14px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.bk-team-flag--ph {
+  width: 20px;
+  height: 14px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.bk-team-name {
+  font-family: var(--font-cond);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bk-team-name--ghost {
+  color: var(--text-4);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.bk-card__score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 1px 0 2px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text-1);
+}
+.bk-card__score-sep {
+  font-size: 10px;
+  color: var(--text-4);
+  font-family: var(--font-cond);
+}
+
+.bk-card__vs {
+  text-align: center;
+  font-family: var(--font-cond);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-4);
+  margin: 1px 0;
+}
+
+.bk-card__venue {
+  font-family: var(--font-data);
+  font-size: 9px;
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* Final card (bigger, centered) */
+.bk-final-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 16px;
+  min-width: 220px;
+}
+.bk-final-label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-align: center;
+}
+.bk-card--final {
+  width: 210px;
+  border-color: var(--accent);
+  border-width: 1.5px;
+  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.bk-card--third {
+  width: 210px;
+  border-color: var(--amber);
+  border-width: 1.5px;
+}
+
+/* Half labels */
+.bk-half-label {
+  writing-mode: vertical-lr;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-4);
+  padding: 0 4px;
+  opacity: 0.5;
+}
+
+/* Pending card ghost */
+.bk-card--pending {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+/* ChampionPick half badge */
+.half-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-cond);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.half-badge--A {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+.half-badge--B {
+  background: color-mix(in srgb, #a78bfa 20%, transparent);
+  color: #a78bfa;
+}

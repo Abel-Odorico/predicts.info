@@ -199,6 +199,60 @@ def bracket(db: Session = Depends(get_db)):
     }
 
 
+HALF_A_R32 = {73, 74, 75, 77, 81, 82, 83, 84}
+HALF_B_R32 = {76, 78, 79, 80, 85, 86, 87, 88}
+
+
+@router.get("/bracket-sides")
+def bracket_sides(db: Session = Depends(get_db)):
+    """Returns which bracket half (A or B) each team belongs to."""
+    from sqlalchemy.orm import joinedload
+    half_a, half_b = [], []
+    seen_a, seen_b = set(), set()
+
+    def _add(team_dict, half):
+        tid = team_dict.get("id")
+        if not tid:
+            return
+        if half == "A" and tid not in seen_a:
+            seen_a.add(tid)
+            half_a.append(team_dict)
+        elif half == "B" and tid not in seen_b:
+            seen_b.add(tid)
+            half_b.append(team_dict)
+
+    r32_db = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .filter(Match.phase == MatchPhase.r32, Match.match_number.isnot(None))
+        .all()
+    )
+    for m in r32_db:
+        half = "A" if m.match_number in HALF_A_R32 else "B" if m.match_number in HALF_B_R32 else None
+        if not half:
+            continue
+        for t in [m.team_a, m.team_b]:
+            if t:
+                _add({"id": t.id, "code": t.code, "name": t.name, "flag_url": t.flag_url}, half)
+
+    if not r32_db:
+        table = compute_group_tables(db)
+        schedule = fetch_official_knockout_schedule()
+        for item in schedule:
+            if item.get("phase") != "r32":
+                continue
+            mn = item.get("match_number")
+            half = "A" if mn in HALF_A_R32 else "B" if mn in HALF_B_R32 else None
+            if not half:
+                continue
+            for label in [item.get("team_a_label", ""), item.get("team_b_label", "")]:
+                slot = resolve_slot(label, table) if label else None
+                if slot:
+                    _add({"id": slot["id"], "code": slot["code"], "name": slot["name"], "flag_url": slot.get("flag_url")}, half)
+
+    return {"half_a": half_a, "half_b": half_b}
+
+
 @router.get("/official-bracket")
 def official_bracket(db: Session = Depends(get_db)):
     table = compute_group_tables(db)

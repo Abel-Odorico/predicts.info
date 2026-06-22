@@ -26,23 +26,33 @@ router = APIRouter(tags=["analysis"])
 # ─── Provider catalogs ────────────────────────────────────────────────────────
 
 OPENROUTER_FREE_MODELS = [
-    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free",       "label": "🆓 Nvidia Nemotron Ultra 550B"},
-    {"id": "nousresearch/hermes-3-llama-3.1-405b:free",    "label": "🆓 Hermes 3 Llama 405B"},
+    {"id": "meta-llama/llama-3.3-70b-instruct:free",       "label": "🆓 Llama 3.3 70B (rápido)"},
+    {"id": "google/gemma-4-31b-it:free",                   "label": "🆓 Gemma 4 31B (mais rápido)"},
     {"id": "openai/gpt-oss-120b:free",                     "label": "🆓 GPT OSS 120B"},
+    {"id": "nousresearch/hermes-3-llama-3.1-405b:free",    "label": "🆓 Hermes 3 Llama 405B"},
     {"id": "nvidia/nemotron-3-super-120b-a12b:free",       "label": "🆓 Nvidia Nemotron Super 120B"},
     {"id": "qwen/qwen3-next-80b-a3b-instruct:free",        "label": "🆓 Qwen3 Next 80B"},
-    {"id": "meta-llama/llama-3.3-70b-instruct:free",       "label": "🆓 Llama 3.3 70B"},
-    {"id": "google/gemma-4-31b-it:free",                   "label": "🆓 Gemma 4 31B"},
-    # Pagos — melhores modelos
-    {"id": "anthropic/claude-opus-4",                      "label": "💎 Claude Opus 4"},
-    {"id": "anthropic/claude-sonnet-4-5",                  "label": "💎 Claude Sonnet 4.5"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free",       "label": "🆓 Nvidia Nemotron Ultra 550B (lento)"},
+]
+
+OPENROUTER_PAID_MODELS = [
+    {"id": "anthropic/claude-opus-4",                      "label": "💎 Claude Opus 4 (melhor análise)"},
+    {"id": "anthropic/claude-sonnet-4-5",                  "label": "💎 Claude Sonnet 4.5 (rápido+capaz)"},
+    {"id": "openai/gpt-4.1",                               "label": "💎 GPT-4.1 (excelente contexto)"},
     {"id": "openai/gpt-4o",                                "label": "💎 GPT-4o"},
-    {"id": "openai/gpt-4.1",                               "label": "💎 GPT-4.1"},
     {"id": "google/gemini-2.5-pro",                        "label": "💎 Gemini 2.5 Pro (via OR)"},
     {"id": "google/gemini-2.5-flash",                      "label": "💎 Gemini 2.5 Flash (via OR)"},
-    {"id": "deepseek/deepseek-r1",                         "label": "💎 DeepSeek R1"},
+    {"id": "deepseek/deepseek-r1",                         "label": "💎 DeepSeek R1 (raciocínio)"},
     {"id": "meta-llama/llama-4-maverick",                  "label": "💎 Llama 4 Maverick"},
     {"id": "x-ai/grok-3",                                  "label": "💎 Grok 3"},
+]
+
+OPENAI_DIRECT_MODELS = [
+    {"id": "gpt-4.1",         "label": "💎 GPT-4.1 (melhor para análises longas)"},
+    {"id": "gpt-4o",          "label": "💎 GPT-4o (rápido e capaz)"},
+    {"id": "gpt-4o-mini",     "label": "💡 GPT-4o Mini (barato e rápido)"},
+    {"id": "gpt-4-turbo",     "label": "💎 GPT-4 Turbo"},
+    {"id": "o1-mini",         "label": "🧠 o1-mini (raciocínio)"},
 ]
 
 GEMINI_MODELS = [
@@ -62,6 +72,7 @@ CONFIG_KEYS = (
     "analysis_provider",
     "openrouter_api_key", "openrouter_model",
     "gemini_api_key",     "gemini_api_key_2", "gemini_model",
+    "openai_api_key",     "openai_model",
     "analysis_prompt_template",
 )
 
@@ -94,17 +105,22 @@ def _get_config(db: Session) -> dict:
         "gemini_key":        c.get("gemini_api_key", ""),
         "gemini_key_2":      c.get("gemini_api_key_2", ""),
         "gemini_model":      c.get("gemini_model", DEFAULT_GEMINI_MODEL),
+        "openai_key":        c.get("openai_api_key", ""),
+        "openai_model":      c.get("openai_model", "gpt-4o-mini"),
         "prompt_template":   c.get("analysis_prompt_template", "") or "",
     }
 
 
 def _get_provider_chain(cfg: dict) -> list[dict]:
-    """Retorna cadeia de fallback: Gemini1 → Gemini2 → OpenRouter best free."""
+    """Cadeia de fallback: Gemini1 → Gemini2 → OpenAI → OpenRouter."""
     chain = []
     if cfg.get("gemini_key"):
         chain.append({"type": "gemini", "key": cfg["gemini_key"], "model": cfg["gemini_model"], "label": "Gemini key1"})
     if cfg.get("gemini_key_2"):
         chain.append({"type": "gemini", "key": cfg["gemini_key_2"], "model": cfg["gemini_model"], "label": "Gemini key2"})
+    if cfg.get("openai_key"):
+        oai_model = cfg.get("openai_model") or "gpt-4o-mini"
+        chain.append({"type": "openai", "key": cfg["openai_key"], "model": oai_model, "label": f"OpenAI {oai_model}"})
     if cfg.get("openrouter_key"):
         or_model = cfg.get("openrouter_model") or BEST_FREE_OR_MODEL
         chain.append({"type": "openrouter", "key": cfg["openrouter_key"], "model": or_model, "label": f"OpenRouter {or_model.split('/')[-1]}"})
@@ -118,18 +134,51 @@ def _upsert(db: Session, key: str, val: str):
     )
 
 
-def _save_config(db: Session, provider: str, or_key: str, or_model: str, g_key: str, g_model: str):
+def _save_config(db: Session, provider: str, or_key: str, or_model: str, g_key: str, g_model: str,
+                 oai_key: str = "", oai_model: str = ""):
     _upsert(db, "analysis_provider",  provider)
     _upsert(db, "openrouter_model",   or_model)
     _upsert(db, "gemini_model",       g_model)
+    if oai_model:
+        _upsert(db, "openai_model", oai_model)
     if or_key and not or_key.startswith("•"):
         _upsert(db, "openrouter_api_key", or_key)
     if g_key and not g_key.startswith("•"):
         _upsert(db, "gemini_api_key", g_key)
+    if oai_key and not oai_key.startswith("•"):
+        _upsert(db, "openai_api_key", oai_key)
     db.commit()
 
 
 # ─── LLM callers ─────────────────────────────────────────────────────────────
+
+def _call_openai(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
+    resp = http_requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": 3000,
+            "response_format": {"type": "json_object"},
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    usage = data.get("usage", {})
+    result = json.loads(data["choices"][0]["message"]["content"])
+    meta = {
+        "tokens_in":  int(usage.get("prompt_tokens", 0)),
+        "tokens_out": int(usage.get("completion_tokens", 0)),
+        "cost_usd":   0.0,  # calculated separately if needed
+    }
+    return result, meta
+
 
 def _strip_fences(text_out: str) -> str:
     text_out = text_out.strip()
@@ -231,6 +280,8 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None) -> tup
         try:
             if p["type"] == "gemini":
                 result, meta = _call_gemini(p["key"], p["model"], prompt)
+            elif p["type"] == "openai":
+                result, meta = _call_openai(p["key"], p["model"], prompt)
             else:
                 result, meta = _call_openrouter(p["key"], p["model"], prompt)
             if provider_state is not None:
@@ -664,13 +715,18 @@ def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require
         "openrouter_key_masked":  _mask(cfg["openrouter_key"]),
         "openrouter_has_key":     bool(cfg["openrouter_key"]),
         "openrouter_model":       cfg["openrouter_model"],
-        "openrouter_models":      OPENROUTER_FREE_MODELS,
+        "openrouter_free_models": OPENROUTER_FREE_MODELS,
+        "openrouter_paid_models": OPENROUTER_PAID_MODELS,
         "gemini_key_masked":      _mask(cfg["gemini_key"]),
         "gemini_has_key":         bool(cfg["gemini_key"]),
         "gemini_key_2_masked":    _mask(cfg["gemini_key_2"]),
         "gemini_has_key_2":       bool(cfg["gemini_key_2"]),
         "gemini_model":           cfg["gemini_model"],
         "gemini_models":          GEMINI_MODELS,
+        "openai_key_masked":      _mask(cfg["openai_key"]),
+        "openai_has_key":         bool(cfg["openai_key"]),
+        "openai_model":           cfg["openai_model"],
+        "openai_models":          OPENAI_DIRECT_MODELS,
         "prompt_template":        cfg["prompt_template"],
         "default_prompt":         DEFAULT_PROMPT_TEMPLATE,
         "provider_chain":         [{"label": p["label"], "type": p["type"]} for p in chain],
@@ -685,6 +741,8 @@ class AnalysisConfigIn(BaseModel):
     gemini_key:      str = ""
     gemini_key_2:    str = ""
     gemini_model:    str = DEFAULT_GEMINI_MODEL
+    openai_key:      str = ""
+    openai_model:    str = "gpt-4o-mini"
     prompt_template: str = ""
 
 
@@ -693,6 +751,7 @@ def _save_config_full(db: Session, body: "AnalysisConfigIn"):
         ("analysis_provider",        body.provider),
         ("openrouter_model",         body.openrouter_model),
         ("gemini_model",             body.gemini_model),
+        ("openai_model",             body.openai_model),
         ("analysis_prompt_template", body.prompt_template),
     ]
     if body.openrouter_key and not body.openrouter_key.startswith("•"):
@@ -701,6 +760,8 @@ def _save_config_full(db: Session, body: "AnalysisConfigIn"):
         pairs.append(("gemini_api_key", body.gemini_key))
     if body.gemini_key_2 and not body.gemini_key_2.startswith("•"):
         pairs.append(("gemini_api_key_2", body.gemini_key_2))
+    if body.openai_key and not body.openai_key.startswith("•"):
+        pairs.append(("openai_api_key", body.openai_key))
     for key, val in pairs:
         db.execute(
             text("INSERT INTO site_config (key,value) VALUES (:k,:v) ON CONFLICT (key) DO UPDATE SET value=:v"),

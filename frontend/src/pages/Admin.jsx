@@ -175,6 +175,7 @@ export default function Admin() {
     provider: 'openrouter',
     openrouter_key: '', openrouter_model: '',
     gemini_key: '', gemini_key_2: '', gemini_model: '',
+    openai_key: '', openai_model: 'gpt-4o-mini',
     prompt_template: '',
   })
 
@@ -213,6 +214,7 @@ export default function Admin() {
         provider: cfg.provider,
         openrouter_model: cfg.openrouter_model,
         gemini_model: cfg.gemini_model,
+        openai_model: cfg.openai_model || 'gpt-4o-mini',
         prompt_template: cfg.prompt_template || '',
       }))
     } catch {}
@@ -2137,10 +2139,10 @@ export default function Admin() {
                 </div>
 
                 {/* OpenRouter section */}
-                <div style={{ border: `1px solid ${aForm.provider === 'openrouter' ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ border: `1px solid var(--border)`, borderRadius: 10, padding: '14px 16px' }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
                     🔀 OPENROUTER
-                    {analysisConfig?.openrouter_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ key: {analysisConfig.openrouter_key_masked}</span>}
+                    {analysisConfig?.openrouter_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ {analysisConfig.openrouter_key_masked}</span>}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <input type="password"
@@ -2149,10 +2151,27 @@ export default function Admin() {
                       onChange={e => setAForm(f => ({ ...f, openrouter_key: e.target.value }))}
                       style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
                     />
-                    <select value={aForm.openrouter_model} onChange={e => setAForm(f => ({ ...f, openrouter_model: e.target.value }))}
-                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-                      {(analysisConfig?.openrouter_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                    </select>
+                    <div>
+                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>🆓 MODELOS GRATUITOS</label>
+                      <select value={analysisConfig?.openrouter_free_models?.find(m => m.id === aForm.openrouter_model) ? aForm.openrouter_model : ''}
+                        onChange={e => e.target.value && setAForm(f => ({ ...f, openrouter_model: e.target.value }))}
+                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13, width: '100%' }}>
+                        <option value="">— selecionar —</option>
+                        {(analysisConfig?.openrouter_free_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>💎 MODELOS PAGOS</label>
+                      <select value={analysisConfig?.openrouter_paid_models?.find(m => m.id === aForm.openrouter_model) ? aForm.openrouter_model : ''}
+                        onChange={e => e.target.value && setAForm(f => ({ ...f, openrouter_model: e.target.value }))}
+                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13, width: '100%' }}>
+                        <option value="">— selecionar —</option>
+                        {(analysisConfig?.openrouter_paid_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)', background: 'var(--bg-base)', borderRadius: 6, padding: '6px 10px' }}>
+                      Modelo ativo: <span style={{ color: 'var(--accent)' }}>{aForm.openrouter_model || '—'}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -2187,6 +2206,27 @@ export default function Admin() {
                     <select value={aForm.gemini_model} onChange={e => setAForm(f => ({ ...f, gemini_model: e.target.value }))}
                       style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
                       {(analysisConfig?.gemini_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* OpenAI Direct section */}
+                <div style={{ border: `1px solid var(--border)`, borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    🤖 OPENAI (DIRETO)
+                    {analysisConfig?.openai_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ {analysisConfig.openai_key_masked}</span>}
+                    <span style={{ fontWeight: 400, color: 'var(--text-4)', marginLeft: 8 }}>entra na cadeia após Gemini</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <input type="password"
+                      placeholder={analysisConfig?.openai_has_key ? '••• (vazio = manter)' : 'sk-...'}
+                      value={aForm.openai_key}
+                      onChange={e => setAForm(f => ({ ...f, openai_key: e.target.value }))}
+                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
+                    />
+                    <select value={aForm.openai_model} onChange={e => setAForm(f => ({ ...f, openai_model: e.target.value }))}
+                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                      {(analysisConfig?.openai_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                     </select>
                   </div>
                 </div>

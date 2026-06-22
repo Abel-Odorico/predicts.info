@@ -277,6 +277,10 @@ export default function Tournament() {
       {bracket && (
         <CompetitionSection bracket={bracket} groups={groups} className="mt-6 fade-in-3" />
       )}
+
+      {bracket && (
+        <KnockoutBracket bracket={bracket} className="mt-6 fade-in-3" />
+      )}
     </div>
   )
 }
@@ -695,4 +699,258 @@ function formatBracketDate(value) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Sem data'
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date)
+}
+
+/* ─── Knockout Bracket Visual ─────────────────────────────────── */
+
+// Match number → bracket half (A = left/SF1 side, B = right/SF2 side)
+const HALF_A_R32 = new Set([73, 74, 75, 77, 81, 82, 83, 84])
+const HALF_B_R32 = new Set([76, 78, 79, 80, 85, 86, 87, 88])
+
+// Ordered R32 → R16 → QF → SF (top-to-bottom per half, so bracket connections align)
+const HALF_A_ROUNDS = {
+  r32: [74, 77, 73, 75, 83, 84, 81, 82],
+  r16: [89, 90, 93, 94],
+  qf:  [97, 98],
+  sf:  [101],
+}
+const HALF_B_ROUNDS = {
+  r32: [76, 78, 79, 80, 86, 88, 85, 87],
+  r16: [91, 92, 95, 96],
+  qf:  [99, 100],
+  sf:  [102],
+}
+const FINAL_NUM = 104
+const THIRD_NUM = 103
+
+// Base slot height in px (R32). Each subsequent round doubles.
+const BASE_H = 88
+
+function formatBkDate(value) {
+  if (!value) return null
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d)
+}
+
+function BkTeamRow({ team, label, matchLookup, winner }) {
+  const name = team
+    ? (PT_NAMES[team.code] || team.name)
+    : (() => {
+        if (!label) return '?'
+        const wm = label.match(/Winner Match (\d+)/)
+        if (wm) {
+          const ref = matchLookup[parseInt(wm[1])]
+          if (ref) {
+            const ta = ref.resolved_team_a
+            const tb = ref.resolved_team_b
+            if (ta && tb) return `Venc. ${ta.code}×${tb.code}`
+          }
+          return `Venc. #${wm[1]}`
+        }
+        const rg = label.match(/Runner-up Group ([A-Z])/)
+        if (rg) return `2º Gr.${rg[1]}`
+        const wg = label.match(/Winner Group ([A-Z])/)
+        if (wg) return `1º Gr.${wg[1]}`
+        const tg = label.match(/3rd Group (.+)/)
+        if (tg) return `3º ${tg[1]}`
+        return label || '?'
+      })()
+
+  const cls = winner === true
+    ? 'bk-team-row bk-team-row--winner'
+    : winner === false
+    ? 'bk-team-row bk-team-row--loser'
+    : 'bk-team-row'
+
+  return (
+    <div className={cls}>
+      {team?.flag_url
+        ? <img src={team.flag_url} alt={team.code} className="bk-team-flag" />
+        : <span className="bk-team-flag--ph" />
+      }
+      <span className={`bk-team-name${team ? '' : ' bk-team-name--ghost'}`}>{name}</span>
+    </div>
+  )
+}
+
+function BkCard({ matchNum, matchLookup, isFinal, isThird }) {
+  const m = matchLookup[matchNum]
+  const isPending = !m
+  const ta = m?.resolved_team_a
+  const tb = m?.resolved_team_b
+  const result = m?.result
+  const dateStr = formatBkDate(m?.match_date)
+
+  let winnerA = null, winnerB = null
+  if (result) {
+    winnerA = result.score_a > result.score_b
+    winnerB = result.score_b > result.score_a
+  }
+
+  const cardCls = [
+    'bk-card',
+    isFinal ? 'bk-card--final' : '',
+    isThird ? 'bk-card--third' : '',
+    isPending ? 'bk-card--pending' : '',
+  ].filter(Boolean).join(' ')
+
+  return (
+    <div className={cardCls}>
+      <div className="bk-card__head">
+        <span className="bk-card__section">
+          {isFinal ? 'FINAL' : isThird ? '3º Lugar' : (m?.section || `#${matchNum}`)}
+        </span>
+        <span className="bk-card__meta">
+          {dateStr || 'Data TBD'}
+        </span>
+      </div>
+      <div className="bk-card__body">
+        {result ? (
+          <>
+            <BkTeamRow team={ta} label={m?.team_a_label} matchLookup={matchLookup} winner={winnerA} />
+            <div className="bk-card__score">
+              <span style={{ color: winnerA ? 'var(--win)' : winnerB ? 'var(--lose)' : 'var(--text-2)' }}>{result.score_a}</span>
+              <span className="bk-card__score-sep">×</span>
+              <span style={{ color: winnerB ? 'var(--win)' : winnerA ? 'var(--lose)' : 'var(--text-2)' }}>{result.score_b}</span>
+            </div>
+            <BkTeamRow team={tb} label={m?.team_b_label} matchLookup={matchLookup} winner={winnerB} />
+          </>
+        ) : (
+          <>
+            <BkTeamRow team={ta} label={m?.team_a_label} matchLookup={matchLookup} />
+            <div className="bk-card__vs">VS</div>
+            <BkTeamRow team={tb} label={m?.team_b_label} matchLookup={matchLookup} />
+          </>
+        )}
+        {m?.venue && (
+          <div className="bk-card__venue">📍 {m.venue}, {m.city}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BkColumn({ matchNums, matchLookup, side, roundIndex, isSF }) {
+  const slotH = BASE_H * Math.pow(2, roundIndex)
+  return (
+    <div className="bk-col">
+      {matchNums.map((num, idx) => {
+        const pairPos = idx % 2  // 0=upper, 1=lower
+        // SF (single match) only gets incoming connector from Final side; no pair bracket
+        const cls = isSF
+          ? `bk-slot bk-slot--parent-${side}`
+          : pairPos === 0
+          ? `bk-slot bk-slot--upper-${side}`
+          : `bk-slot bk-slot--lower-${side}`
+
+        return (
+          <div
+            key={num}
+            className={cls}
+            style={{ height: slotH, paddingLeft: side === 'right' ? 14 : 0, paddingRight: side === 'left' ? 14 : 0 }}
+          >
+            <BkCard matchNum={num} matchLookup={matchLookup} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function BkHalf({ rounds, matchLookup, side }) {
+  const roundKeys = side === 'left'
+    ? ['r32', 'r16', 'qf', 'sf']
+    : ['sf', 'qf', 'r16', 'r32']
+
+  return (
+    <div className="bk-half">
+      {roundKeys.map((key, i) => {
+        const roundIndex = side === 'left' ? i : (3 - i)
+        return (
+          <BkColumn
+            key={key}
+            matchNums={rounds[key]}
+            matchLookup={matchLookup}
+            side={side}
+            roundIndex={roundIndex}
+            isSF={key === 'sf'}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function KnockoutBracket({ bracket, className }) {
+  const schedule = bracket?.schedule || []
+  const matchLookup = useMemo(() => {
+    const m = {}
+    for (const s of schedule) m[s.match_number] = s
+    return m
+  }, [schedule])
+
+  const hasAnyData = schedule.length > 0
+
+  return (
+    <div className={`card ${className || ''}`}>
+      <div style={{ padding: 'var(--s4) var(--s5) var(--s2)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', flexWrap: 'wrap' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '0.1em', margin: 0, color: 'var(--text-1)' }}>
+            CHAVEAMENTO
+          </h2>
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+              <span className="half-badge half-badge--A">A</span> Semi 1
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+              <span className="half-badge half-badge--B">B</span> Semi 2
+            </span>
+          </div>
+        </div>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', margin: '4px 0 0' }}>
+          Arraste para ver todo o chaveamento · role para os lados
+        </p>
+      </div>
+
+      {!hasAnyData ? (
+        <div style={{ padding: 'var(--s6)', textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>
+          Partidas do mata-mata ainda não cadastradas. Sincronize na aba ⚔️ do painel admin.
+        </div>
+      ) : (
+        <div className="card__body" style={{ padding: 'var(--s4) var(--s4)' }}>
+          <div className="bk-wrap">
+            <div className="bk-root">
+              {/* Round labels row */}
+              <div style={{ position: 'absolute', pointerEvents: 'none' }} />
+
+              {/* Left half: R32 → R16 → QF → SF */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', marginRight: 4 }}>
+                <span className="bk-half-label" style={{ height: BASE_H * 8 }}>LADO A</span>
+              </div>
+              <BkHalf rounds={HALF_A_ROUNDS} matchLookup={matchLookup} side="left" />
+
+              {/* Center: Final + 3rd */}
+              <div className="bk-final-col" style={{ height: BASE_H * 8 }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
+                  <div className="bk-final-label">★ FINAL ★</div>
+                  <BkCard matchNum={FINAL_NUM} matchLookup={matchLookup} isFinal />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, paddingBottom: 'var(--s3)' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--amber)', letterSpacing: '0.12em' }}>🥉 3º LUGAR</div>
+                  <BkCard matchNum={THIRD_NUM} matchLookup={matchLookup} isThird />
+                </div>
+              </div>
+
+              {/* Right half: SF → QF → R16 → R32 (mirrored) */}
+              <BkHalf rounds={HALF_B_ROUNDS} matchLookup={matchLookup} side="right" />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', marginLeft: 4 }}>
+                <span className="bk-half-label" style={{ height: BASE_H * 8 }}>LADO B</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

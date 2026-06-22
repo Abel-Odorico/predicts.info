@@ -19,7 +19,7 @@ function useCountdown() {
   return `${h}h ${m}m ${s}s`
 }
 
-function TeamGrid({ teams, myTeamId, blockedTeamId, statMap, onPick, saving, canPick, accentColor }) {
+function TeamGrid({ teams, myTeamId, blockedSet, statMap, onPick, saving, canPick, accentColor, halfMap }) {
   const [filter, setFilter] = useState('')
   const filtered = teams.filter(t =>
     !filter || t.name.toLowerCase().includes(filter.toLowerCase()) || t.code.toLowerCase().includes(filter.toLowerCase())
@@ -36,14 +36,15 @@ function TeamGrid({ teams, myTeamId, blockedTeamId, statMap, onPick, saving, can
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8 }}>
         {filtered.map(team => {
           const isMyPick  = myTeamId === team.id
-          const isBlocked = blockedTeamId === team.id
+          const isBlocked = blockedSet ? blockedSet.has(team.id) : false
           const stat      = statMap[team.id]
+          const half      = halfMap ? halfMap[team.id] : null
           return (
             <button
               key={team.id}
               onClick={() => canPick && !isBlocked && onPick(team)}
               disabled={saving || !canPick || isBlocked}
-              title={isBlocked ? 'Já escolhido no outro palpite' : undefined}
+              title={isBlocked ? 'Mesmo lado do chaveamento — não pode chegar na final juntos' : undefined}
               style={{
                 background: isMyPick ? `${accentColor}22` : isBlocked ? 'var(--bg-overlay)' : 'var(--bg-surface)',
                 border: `2px solid ${isMyPick ? accentColor : 'var(--border)'}`,
@@ -51,11 +52,21 @@ function TeamGrid({ teams, myTeamId, blockedTeamId, statMap, onPick, saving, can
                 cursor: canPick && !isBlocked ? 'pointer' : 'default',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
                 transition: 'border-color 0.15s, background 0.15s',
-                opacity: (saving || isBlocked) ? 0.45 : 1,
+                opacity: (saving || isBlocked) ? 0.4 : 1,
+                position: 'relative',
               }}
               onMouseEnter={e => { if (!isMyPick && canPick && !isBlocked) e.currentTarget.style.borderColor = accentColor }}
               onMouseLeave={e => { if (!isMyPick) e.currentTarget.style.borderColor = 'var(--border)' }}
             >
+              {half && (
+                <span
+                  className={`half-badge half-badge--${half}`}
+                  style={{ position: 'absolute', top: 4, right: 4 }}
+                  title={`Lado ${half} do chaveamento`}
+                >
+                  {half}
+                </span>
+              )}
               <img src={team.flag_url} alt={team.code} style={{ width: 38, height: 27, objectFit: 'cover', borderRadius: 3 }} />
               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
                 {team.code}
@@ -103,25 +114,31 @@ export default function ChampionPick() {
   const { user, token } = useAuth()
   const countdown = useCountdown()
 
-  const [teams, setTeams]     = useState([])
-  const [stats, setStats]     = useState({ champion: [], runner_up: [] })
+  const [teams, setTeams]       = useState([])
+  const [stats, setStats]       = useState({ champion: [], runner_up: [] })
   const [allPicks, setAllPicks] = useState([])
-  const [myPick, setMyPick]   = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving]   = useState(false)
-  const [msg, setMsg]         = useState('')
+  const [myPick, setMyPick]     = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
+  const [msg, setMsg]           = useState('')
+  const [halfMap, setHalfMap]   = useState({})  // teamId → 'A' | 'B'
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [teamsData, statsData, picksData] = await Promise.all([
+        const [teamsData, statsData, picksData, sidesData] = await Promise.all([
           api.get('/teams'),
           api.get('/champion/picks/stats'),
           api.get('/champion/picks/all'),
+          api.get('/tournament/bracket-sides').catch(() => ({ half_a: [], half_b: [] })),
         ])
         setTeams(teamsData)
         setStats(statsData)
         setAllPicks(picksData)
+        const map = {}
+        for (const t of (sidesData.half_a || [])) map[t.id] = 'A'
+        for (const t of (sidesData.half_b || [])) map[t.id] = 'B'
+        setHalfMap(map)
         if (token) {
           try { setMyPick(await api.get('/champion/pick', token)) } catch {}
         }
@@ -163,6 +180,13 @@ export default function ChampionPick() {
   const myChampId      = myPick?.champion?.team_id
   const myRunnerUpId   = myPick?.runner_up?.team_id
   const canPick        = !!user && !!countdown
+
+  // Teams from same bracket half as champion can't also be vice (they'd meet before the final)
+  const champHalf      = myChampId ? halfMap[myChampId] : null
+  const ruHalf         = myRunnerUpId ? halfMap[myRunnerUpId] : null
+  // For vice grid: block champion team AND all teams from same half as champion
+  const sameHalfAsChamp = champHalf ? new Set(Object.entries(halfMap).filter(([,h]) => h === champHalf).map(([id]) => Number(id))) : new Set()
+  const sameHalfAsRu    = ruHalf ? new Set(Object.entries(halfMap).filter(([,h]) => h === ruHalf).map(([id]) => Number(id))) : new Set()
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner /></div>
 
@@ -282,12 +306,13 @@ export default function ChampionPick() {
               <TeamGrid
                 teams={teams}
                 myTeamId={myChampId}
-                blockedTeamId={myRunnerUpId}
+                blockedSet={myRunnerUpId ? new Set([myRunnerUpId, ...sameHalfAsRu]) : undefined}
                 statMap={champStatMap}
                 onPick={t => pickTeam(t, 'champion')}
                 saving={saving}
                 canPick={canPick}
                 accentColor="var(--accent)"
+                halfMap={halfMap}
               />
             )}
           </div>
@@ -319,16 +344,32 @@ export default function ChampionPick() {
             )}
 
             {canPick && (myChampId ? (
-              <TeamGrid
-                teams={teams}
-                myTeamId={myRunnerUpId}
-                blockedTeamId={myChampId}
-                statMap={ruStatMap}
-                onPick={t => pickTeam(t, 'runner_up')}
-                saving={saving}
-                canPick={canPick}
-                accentColor="#d4af37"
-              />
+              <>
+                {champHalf && (
+                  <div style={{
+                    fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)',
+                    marginBottom: 'var(--s3)', display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'var(--bg-overlay)', borderRadius: 8, padding: '8px 12px',
+                  }}>
+                    <span>Campeão no</span>
+                    <span className={`half-badge half-badge--${champHalf}`}>{champHalf}</span>
+                    <span>— vice deve ser do</span>
+                    <span className={`half-badge half-badge--${champHalf === 'A' ? 'B' : 'A'}`}>{champHalf === 'A' ? 'B' : 'A'}</span>
+                    <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(lados opostos chegam na final)</span>
+                  </div>
+                )}
+                <TeamGrid
+                  teams={teams}
+                  myTeamId={myRunnerUpId}
+                  blockedSet={new Set([myChampId, ...sameHalfAsChamp])}
+                  statMap={ruStatMap}
+                  onPick={t => pickTeam(t, 'runner_up')}
+                  saving={saving}
+                  canPick={canPick}
+                  accentColor="#d4af37"
+                  halfMap={halfMap}
+                />
+              </>
             ) : (
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', padding: 'var(--s3) 0' }}>
                 Escolha o campeão primeiro para liberar o vice.
