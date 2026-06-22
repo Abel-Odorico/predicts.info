@@ -92,17 +92,44 @@ export default function Tournament() {
     else { setSort(key); setDir(1) }
   }
 
-  if (loading) return <Spinner text="Rodando simulações do torneio..." />
+  const [pageTab, setPageTab] = useState('bracket')
+
+  if (loading) return <Spinner text="Carregando chaveamento..." />
 
   return (
     <div className="page">
       <div className="fade-in-1">
-        <h1 className="page-title">SIMULAÇÃO DO TORNEIO</h1>
-        <p className="page-subtitle">
-          {data?.simulations.toLocaleString('pt-BR')} simulações · {data?.elapsed_ms}ms
-          {data?.cached && ' · cache'}
-        </p>
+        <h1 className="page-title">COPA DO MUNDO 2026</h1>
+        <p className="page-subtitle">Fase eliminatória · {data?.simulations?.toLocaleString('pt-BR')} simulações</p>
       </div>
+
+      {/* Page-level tabs */}
+      <div className="phase-nav mt-4" style={{ marginBottom: 0 }}>
+        <button
+          className={`phase-nav__tab${pageTab === 'bracket' ? ' active' : ''}`}
+          onClick={() => setPageTab('bracket')}
+        >
+          <span className="phase-nav__icon">⚔️</span>Chaveamento
+        </button>
+        <button
+          className={`phase-nav__tab${pageTab === 'sim' ? ' active' : ''}`}
+          onClick={() => setPageTab('sim')}
+        >
+          <span className="phase-nav__icon">🎲</span>Simulação
+        </button>
+      </div>
+
+      {/* ── CHAVEAMENTO TAB ── */}
+      {pageTab === 'bracket' && bracket && (
+        <>
+          <CompetitionSection bracket={bracket} groups={groups} className="mt-6 fade-in-1" />
+          <KnockoutBracket bracket={bracket} className="mt-6 fade-in-2" />
+        </>
+      )}
+
+      {/* ── SIMULAÇÃO TAB ── */}
+      {pageTab === 'sim' && (
+        <>
 
       {/* Podium top 3 */}
       {top3.length === 3 && (
@@ -274,12 +301,7 @@ export default function Tournament() {
         <ProjectionsSection data={data} className="mt-6 fade-in-3" />
       )}
 
-      {bracket && (
-        <CompetitionSection bracket={bracket} groups={groups} className="mt-6 fade-in-3" />
-      )}
-
-      {bracket && (
-        <KnockoutBracket bracket={bracket} className="mt-6 fade-in-3" />
+        </>
       )}
     </div>
   )
