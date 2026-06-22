@@ -8196,196 +8196,320 @@ strong.pts {
   100% { transform: translateX(200%); }
 }
 
-/* ── Knockout Bracket Visual ───────────────────────────────────── */
-.bk-wrap {
+
+/* ══════════════════════════════════════════════════════
+   CHAVEAMENTO — KNOCKOUT BRACKET (bk2-*)
+   ══════════════════════════════════════════════════════ */
+
+:root {
+  --bk-line: color-mix(in srgb, var(--text-4) 70%, transparent);
+  --bk-card-w: 188px;
+  --bk-slot-base: 86px;   /* R32 slot height */
+  --bk-gap: 22px;          /* gap between round columns (connector space) */
+}
+
+/* Scroll wrapper */
+.bk2-scroll {
   overflow-x: auto;
   overflow-y: visible;
-  padding-bottom: var(--s4);
+  padding: var(--s4) var(--s4) var(--s5);
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
-.bk-wrap::-webkit-scrollbar { height: 6px; }
-.bk-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.bk2-scroll::-webkit-scrollbar { height: 5px; }
+.bk2-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-.bk-root {
+/* Root flex container */
+.bk2-root {
   display: flex;
   align-items: center;
-  gap: 0;
   min-width: max-content;
-  padding: var(--s4) var(--s2);
 }
 
-.bk-half {
+/* Header */
+.bk2-hd {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5) var(--s3);
+  border-bottom: 1px solid var(--border);
+}
+.bk2-hd h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  color: var(--text-1);
+  margin: 0;
+}
+.bk2-hd-note {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  color: var(--text-4);
+  margin-left: auto;
 }
 
-.bk-col {
+/* Half containers */
+.bk2-half {
+  display: flex;
+  align-items: stretch;
+  column-gap: var(--bk-gap);
+  overflow: visible;
+}
+
+/* Round column */
+.bk2-col {
   display: flex;
   flex-direction: column;
+  width: var(--bk-card-w);
+  overflow: visible;
   position: relative;
 }
 
-/* Each "slot" is sized so that height doubles each round */
-.bk-slot {
-  position: relative;
+/* ── Round labels above bracket ── */
+.bk2-labels-wrap {
+  display: flex;
+  align-items: stretch;
+  column-gap: var(--bk-gap);
+}
+.bk2-label {
+  width: var(--bk-card-w);
+  font-family: var(--font-cond);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  text-align: center;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.bk2-label--center {
+  width: 220px;
+}
+.bk2-label--sf {
+  color: var(--accent);
+}
+.bk2-label--final {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+/* ── Slot — variable height centering the card ── */
+.bk2-slot {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  position: relative;
+  overflow: visible;
+  flex-shrink: 0;
 }
 
-/* Connector lines: right side for left-half columns, left side for right-half columns */
-/* Each pair of adjacent slots gets bracket connectors */
-.bk-slot--upper-left::after {
+/* ── CONNECTOR LINES ────────────────────────────────────
+   Each pair of sibling slots creates a bracket shape.
+   upper slot ::after → horizontal line right + corner down
+   lower slot ::after → corner up + horizontal line right
+   Next-round slot ::before → horizontal incoming from left
+   (mirror everything for right half)
+   ──────────────────────────────────────────────────── */
+
+/* LEFT HALF — connectors exit to the RIGHT */
+
+.bk-up-L::after {
   content: '';
   position: absolute;
-  right: -14px;
+  right: calc(-1 * var(--bk-gap));
   top: 50%;
   height: 50%;
-  width: 14px;
-  border-right: 2px solid var(--border);
-  border-top: 2px solid var(--border);
+  width: var(--bk-gap);
+  border-top:   2px solid var(--bk-line);
+  border-right: 2px solid var(--bk-line);
   border-top-right-radius: 3px;
 }
-.bk-slot--lower-left::after {
+.bk-dn-L::after {
   content: '';
   position: absolute;
-  right: -14px;
+  right: calc(-1 * var(--bk-gap));
   top: 0;
   height: 50%;
-  width: 14px;
-  border-right: 2px solid var(--border);
-  border-bottom: 2px solid var(--border);
+  width: var(--bk-gap);
+  border-bottom:       2px solid var(--bk-line);
+  border-right:        2px solid var(--bk-line);
   border-bottom-right-radius: 3px;
 }
-
-/* Right half: connectors on left side */
-.bk-slot--upper-right::before {
+.bk-in-L::before {
   content: '';
   position: absolute;
-  left: -14px;
+  left: calc(-1 * var(--bk-gap));
+  top: calc(50% - 1px);
+  width: var(--bk-gap);
+  height: 2px;
+  background: var(--bk-line);
+}
+
+/* RIGHT HALF — connectors exit to the LEFT */
+
+.bk-up-R::after {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--bk-gap));
   top: 50%;
   height: 50%;
-  width: 14px;
-  border-left: 2px solid var(--border);
-  border-top: 2px solid var(--border);
+  width: var(--bk-gap);
+  border-top:  2px solid var(--bk-line);
+  border-left: 2px solid var(--bk-line);
   border-top-left-radius: 3px;
 }
-.bk-slot--lower-right::before {
+.bk-dn-R::after {
   content: '';
   position: absolute;
-  left: -14px;
+  left: calc(-1 * var(--bk-gap));
   top: 0;
   height: 50%;
-  width: 14px;
-  border-left: 2px solid var(--border);
-  border-bottom: 2px solid var(--border);
+  width: var(--bk-gap);
+  border-bottom:      2px solid var(--bk-line);
+  border-left:        2px solid var(--bk-line);
   border-bottom-left-radius: 3px;
 }
-
-/* Incoming connector on left half parent slot */
-.bk-slot--parent-left::before {
+.bk-in-R::before {
   content: '';
   position: absolute;
-  left: -14px;
-  top: 50%;
-  width: 14px;
-  height: 1px;
-  background: var(--border);
-}
-/* Incoming connector on right half parent slot */
-.bk-slot--parent-right::after {
-  content: '';
-  position: absolute;
-  right: -14px;
-  top: 50%;
-  width: 14px;
-  height: 1px;
-  background: var(--border);
+  right: calc(-1 * var(--bk-gap));
+  top: calc(50% - 1px);
+  width: var(--bk-gap);
+  height: 2px;
+  background: var(--bk-line);
 }
 
-/* Bracket match card (compact) */
-.bk-card {
-  width: 188px;
-  border: 1px solid var(--border);
+/* ── Match Card ──────────────────────────────────────── */
+.bk2-card {
+  width: var(--bk-card-w);
+  border: 1.5px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
   background: var(--bg-card);
   flex-shrink: 0;
-  transition: border-color 150ms, box-shadow 150ms;
+  transition: border-color 150ms, box-shadow 150ms, transform 100ms;
 }
-.bk-card:hover {
+.bk2-card:hover {
   border-color: var(--border-accent);
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translateY(-1px);
+  z-index: 2;
+  position: relative;
+}
+.bk2-card--pending {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.bk2-card--final {
+  width: 210px;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  border-width: 2px;
+  box-shadow: 0 0 28px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.bk2-card--final:hover {
+  box-shadow: 0 0 36px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.bk2-card--third {
+  width: 210px;
+  border-color: color-mix(in srgb, var(--amber) 60%, transparent);
+  border-width: 2px;
 }
 
-.bk-card__head {
+/* Card header row: round-tag + date + time */
+.bk2-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 5px;
+  padding: 4px 8px 3px;
   background: var(--bg-overlay);
   border-bottom: 1px solid var(--border);
+  min-height: 22px;
 }
-.bk-card__section {
+.bk2-section {
   font-family: var(--font-cond);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   padding: 1px 5px;
   border-radius: 2px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
-.bk-card__meta {
+.bk2-section--final {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  font-size: 10px;
+}
+.bk2-section--third {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+}
+.bk2-datetime {
   font-family: var(--font-data);
   font-size: 9px;
-  color: var(--text-3);
+  color: var(--text-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bk2-venue {
+  font-family: var(--font-data);
+  font-size: 8px;
+  color: var(--text-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
+  text-align: right;
 }
 
-.bk-card__body {
-  padding: 6px 8px;
+/* Card body: two team rows */
+.bk2-body {
+  padding: 4px 8px 5px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
 }
 
-.bk-team-row {
+/* Team row */
+.bk2-row {
   display: grid;
-  grid-template-columns: 20px 1fr;
+  grid-template-columns: 18px 1fr auto;
   align-items: center;
   gap: 6px;
-  padding: 2px 0;
+  padding: 3px 0;
+  border-radius: 3px;
+  transition: background 120ms;
 }
-.bk-team-row--winner .bk-team-name {
-  color: var(--win);
+.bk2-row--winner {
+  background: color-mix(in srgb, var(--win) 8%, transparent);
+  padding: 3px 4px;
+  margin: 0 -4px;
 }
-.bk-team-row--loser {
-  opacity: 0.45;
+.bk2-row--loser {
+  opacity: 0.42;
 }
-.bk-team-flag {
-  width: 20px;
-  height: 14px;
+.bk2-flag {
+  width: 18px;
+  height: 13px;
   object-fit: cover;
-  border-radius: 2px;
+  border-radius: 1px;
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
-.bk-team-flag--ph {
-  width: 20px;
-  height: 14px;
+.bk2-flag--ph {
+  display: inline-block;
+  width: 18px;
+  height: 13px;
   background: var(--bg-overlay);
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: 1px;
 }
-.bk-team-name {
+.bk2-name {
   font-family: var(--font-cond);
   font-size: 12px;
   font-weight: 700;
@@ -8393,98 +8517,85 @@ strong.pts {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.2;
 }
-.bk-team-name--ghost {
+.bk2-name--ghost {
   color: var(--text-4);
-  font-style: italic;
   font-weight: 400;
+  font-style: italic;
 }
-
-.bk-card__score {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 1px 0 2px;
+.bk2-name--winner { color: var(--win); }
+.bk2-score {
   font-family: var(--font-display);
   font-size: 15px;
-  color: var(--text-1);
+  color: var(--text-3);
+  min-width: 14px;
+  text-align: right;
+  flex-shrink: 0;
 }
-.bk-card__score-sep {
-  font-size: 10px;
-  color: var(--text-4);
-  font-family: var(--font-cond);
-}
+.bk2-score--win  { color: var(--win); }
+.bk2-score--lose { color: var(--lose); }
 
-.bk-card__vs {
-  text-align: center;
+/* Separator between unplayed teams */
+.bk2-vs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 1px 0;
+  color: var(--text-4);
   font-family: var(--font-cond);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.15em;
-  color: var(--text-4);
-  margin: 1px 0;
+}
+.bk2-vs::before, .bk2-vs::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
-.bk-card__venue {
-  font-family: var(--font-data);
-  font-size: 9px;
-  color: var(--text-4);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-  margin-top: 2px;
-}
-
-/* Final card (bigger, centered) */
-.bk-final-col {
+/* ── Center column (Final + 3rd) ── */
+.bk2-center {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 0 16px;
-  min-width: 220px;
+  gap: 16px;
+  padding: 0 18px;
+  width: 220px;
+  flex-shrink: 0;
 }
-.bk-final-label {
-  font-family: var(--font-display);
-  font-size: 13px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--accent);
-  text-align: center;
-}
-.bk-card--final {
-  width: 210px;
-  border-color: var(--accent);
-  border-width: 1.5px;
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.bk-card--third {
-  width: 210px;
-  border-color: var(--amber);
-  border-width: 1.5px;
-}
-
-/* Half labels */
-.bk-half-label {
-  writing-mode: vertical-lr;
+.bk2-center-label {
   font-family: var(--font-display);
   font-size: 11px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--accent);
+}
+.bk2-third-label {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--amber);
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+/* Half side label (vertical) */
+.bk2-side-label {
+  writing-mode: vertical-lr;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.14em;
   color: var(--text-4);
-  padding: 0 4px;
-  opacity: 0.5;
+  opacity: 0.45;
+  padding: 0 6px;
+  user-select: none;
 }
 
-/* Pending card ghost */
-.bk-card--pending {
-  opacity: 0.55;
-  border-style: dashed;
-}
-
-/* ChampionPick half badge */
+/* Half-badge for ChampionPick */
 .half-badge {
   display: inline-flex;
   align-items: center;
@@ -8493,16 +8604,18 @@ strong.pts {
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.1em;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   border-radius: 3px;
   flex-shrink: 0;
 }
 .half-badge--A {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .half-badge--B {
-  background: color-mix(in srgb, #a78bfa 20%, transparent);
+  background: color-mix(in srgb, #a78bfa 18%, transparent);
   color: #a78bfa;
+  border: 1px solid color-mix(in srgb, #a78bfa 35%, transparent);
 }
