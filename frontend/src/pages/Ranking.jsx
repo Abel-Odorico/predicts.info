@@ -57,6 +57,7 @@ export default function Ranking() {
   const [flashUpdate, setFlashUpdate] = useState(false)
   const [champPicks,  setChampPicks]  = useState({})
   const [allPicks,    setAllPicks]    = useState([])
+  const [botData,     setBotData]     = useState(null)
 
   useEffect(() => {
     api.get('/champion/picks/all')
@@ -65,6 +66,7 @@ export default function Ranking() {
         setChampPicks(Object.fromEntries(rows.map(r => [r.user_id, r])))
       })
       .catch(() => {})
+    api.get('/bot/public').then(setBotData).catch(() => {})
   }, [])
 
   const loadSilent = useCallback((silent = false) => {
@@ -169,6 +171,87 @@ export default function Ranking() {
             userId={maisAtivo?.user_id}
             accent="#9b5de8"
           />
+        </div>
+      )}
+
+      {/* ── Card Apostador IA ────────────────────────────────────────── */}
+      {botData?.exists && (
+        <div className="card fade-in-2" style={{ marginTop: 'var(--s6)', border: '1px solid var(--accent)', background: 'linear-gradient(135deg, var(--bg-overlay) 0%, rgba(15,122,120,0.08) 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 32, lineHeight: 1 }}>🤖</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--accent)', letterSpacing: '0.06em' }}>PREDICTOR IA</div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                Modelo Monte Carlo · {botData.evaluated} palpites avaliados
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              {[
+                { v: botData.total_points, l: 'pts', c: 'var(--accent)' },
+                { v: botData.ranking_position ? `#${botData.ranking_position}` : '—', l: 'posição', c: 'var(--text-1)' },
+                { v: botData.exatos, l: '🎯 exatos', c: 'var(--accent)' },
+                { v: botData.certos, l: '✅ certos', c: 'var(--win)' },
+                { v: botData.erros, l: '❌ erros', c: 'var(--lose)' },
+                { v: botData.evaluated > 0 ? `${Math.round(botData.exatos / botData.evaluated * 100)}%` : '—', l: 'exatidão', c: 'var(--accent)' },
+              ].map(k => (
+                <div key={k.l} style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: k.c, lineHeight: 1 }}>{k.v}</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 3 }}>{k.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Champion pick */}
+          {(botData.champion || botData.vice) && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+              {botData.champion && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--bg-overlay)', borderRadius: 8, padding: '6px 12px', border: '1px solid var(--accent)' }}>
+                  {botData.champion.flag && <img src={botData.champion.flag} alt="" style={{ width: 22, height: 15, objectFit: 'cover', borderRadius: 2 }} />}
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700 }}>🏆 {botData.champion.name}</span>
+                </div>
+              )}
+              {botData.vice && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--bg-overlay)', borderRadius: 8, padding: '6px 12px', border: '1px solid var(--border)' }}>
+                  {botData.vice.flag && <img src={botData.vice.flag} alt="" style={{ width: 22, height: 15, objectFit: 'cover', borderRadius: 2 }} />}
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700 }}>🥈 {botData.vice.name}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Recent bets */}
+          {botData.recent_bets?.length > 0 && (
+            <div style={{ marginTop: 16, overflowX: 'auto' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                Últimos palpites avaliados
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {botData.recent_bets.slice(0, 8).map((b, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 6, background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
+                      {b.team_a_flag && <img src={b.team_a_flag} alt="" style={{ width: 18, height: 12, objectFit: 'cover', borderRadius: 1 }} />}
+                      <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11 }}>{b.team_a_code}</span>
+                      <span style={{ color: 'var(--text-4)', fontSize: 10 }}>×</span>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11 }}>{b.team_b_code}</span>
+                      {b.team_b_flag && <img src={b.team_b_flag} alt="" style={{ width: 18, height: 12, objectFit: 'cover', borderRadius: 1 }} />}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, fontWeight: 700, minWidth: 40, textAlign: 'center' }}>
+                      {b.predicted_a}×{b.predicted_b}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', minWidth: 40, textAlign: 'center' }}>
+                      {b.official_a}×{b.official_b}
+                    </div>
+                    <div style={{ minWidth: 60, textAlign: 'right' }}>
+                      {b.outcome === 'exact'   && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--accent)', fontWeight: 700 }}>🎯 Exato</span>}
+                      {b.outcome === 'correct' && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--win)', fontWeight: 700 }}>✅ Certo</span>}
+                      {b.outcome === 'wrong'   && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--lose)', fontWeight: 700 }}>❌</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

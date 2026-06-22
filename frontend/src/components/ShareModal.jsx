@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import { api } from '../api'
-import { useAuth } from '../stores/authStore'
 
 const BASE_URL = 'https://predicts.info'
 
@@ -87,8 +86,7 @@ function openExternal(url) {
   document.body.removeChild(a)
 }
 
-export default function ShareModal({ onClose }) {
-  const { token } = useAuth()
+export default function ShareModal({ onClose, token }) {
   const onCloseRef = useRef(onClose)
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
@@ -144,7 +142,12 @@ export default function ShareModal({ onClose }) {
   }
 
   function shareWhatsApp() {
-    openExternal(`https://wa.me/?text=${encodeURIComponent(active.waText)}`)
+    if (hasNativeShare) {
+      // Mobile PWA: native share sheet — sem navegação de página
+      navigator.share({ title: active.nativeTitle, text: active.nativeText, url: active.url }).catch(() => {})
+    } else {
+      openExternal(`https://wa.me/?text=${encodeURIComponent(active.waText)}`)
+    }
   }
 
   function shareNative() {
@@ -156,7 +159,13 @@ export default function ShareModal({ onClose }) {
     const digits = phone.replace(/\D/g, '')
     if (digits.length < 10) { setPhoneError('Número inválido — use DDI + DDD + número, ex: 5511999998888'); return }
     setPhoneError('')
-    openExternal(`https://wa.me/${digits}?text=${encodeURIComponent(active.waText)}`)
+    const text = encodeURIComponent(active.waText)
+    if (hasNativeShare) {
+      // Mobile: deep link whatsapp:// — OS intercepta, não navega o browser
+      window.location.href = `whatsapp://send?phone=${digits}&text=${text}`
+    } else {
+      openExternal(`https://wa.me/${digits}?text=${text}`)
+    }
   }
 
   async function generateImage() {

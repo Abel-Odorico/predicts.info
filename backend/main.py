@@ -28,6 +28,7 @@ from routers import knockout as knockout_router
 from routers import analysis as analysis_router
 from routers import awards as awards_router
 from routers import bot as bot_router
+from routers.bot import public_router as bot_public_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -351,6 +352,7 @@ app.include_router(knockout_router.router,      prefix="/api")
 app.include_router(analysis_router.router,      prefix="/api")
 app.include_router(awards_router.router,        prefix="/api")
 app.include_router(bot_router.router,           prefix="/api")
+app.include_router(bot_public_router,           prefix="/api")
 
 
 @app.get("/api")

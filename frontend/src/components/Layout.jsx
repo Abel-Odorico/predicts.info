@@ -47,7 +47,7 @@ function resolveTheme(mode) {
 }
 
 export default function Layout() {
-  const { user, logout, setUser } = useAuth()
+  const { user, logout, setUser, token } = useAuth()
   const navigate = useNavigate()
   const [developerCredit, setDeveloperCredit] = useState('PeepConnect - By Abel Odorico')
   const [drawerOpen, setDrawerOpen]   = useState(false)
@@ -341,7 +341,7 @@ export default function Layout() {
       </div>
 
       {/* ── Share modal ──────────────────────────────── */}
-      {shareOpen && <ShareModal onClose={() => setShareOpen(false)} />}
+      {shareOpen && <ShareModal onClose={() => setShareOpen(false)} token={token} />}
 
       {/* ── Mobile dock ──────────────────────────────── */}
       <nav className="mobile-dock" aria-label="Navegação principal">

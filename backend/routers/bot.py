@@ -369,3 +369,97 @@ def bot_bets(db: Session = Depends(get_db), _admin: User = Depends(_require_admi
             else: bp["erros"] += 1
 
     return {"bets": rows, "by_phase": by_phase}
+
+
+# ── Endpoint público (sem autenticação) ────────────────────────────────────────
+
+public_router = APIRouter(prefix="/bot", tags=["bot-public"])
+
+
+@public_router.get("/public")
+def bot_public(db: Session = Depends(get_db)):
+    """Performance pública do Apostador IA — acessível a todos os usuários."""
+    bot = _get_bot(db)
+    if not bot:
+        return {"exists": False}
+
+    ranking = db.query(Ranking).filter(Ranking.user_id == bot.id).first()
+    total_bets = db.query(func.count(Bet.id)).filter(Bet.user_id == bot.id).scalar() or 0
+    evaluated = db.query(Bet).filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None)).all()
+
+    exatos    = sum(1 for b in evaluated if b.points_earned == 25)
+    certos    = sum(1 for b in evaluated if b.points_earned in (10, 12, 15, 18))
+    erros     = sum(1 for b in evaluated if b.points_earned == 0)
+    total_pts = ranking.total_points if ranking else 0
+
+    pos = None
+    if ranking:
+        pos = db.query(func.count(Ranking.user_id)).filter(
+            Ranking.total_points > total_pts
+        ).scalar()
+        pos = (pos or 0) + 1
+
+    pick = db.query(ChampionPick).filter(ChampionPick.user_id == bot.id).first()
+    champ_team = db.query(Team).filter(Team.id == pick.team_id).first() if pick else None
+    vice_team  = db.query(Team).filter(Team.id == pick.runner_up_team_id).first() if (pick and pick.runner_up_team_id) else None
+
+    # Bets com resultado (últimas 20 avaliadas)
+    recent_bets = (
+        db.query(Bet)
+        .filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None))
+        .join(Bet.match)
+        .order_by(Match.match_date.desc().nullslast())
+        .limit(20)
+        .all()
+    )
+
+    def _outcome(b: Bet) -> str | None:
+        if b.evaluated_at is None: return None
+        if b.points_earned == 25: return "exact"
+        if b.points_earned and b.points_earned > 0: return "correct"
+        return "wrong"
+
+    by_phase: dict[str, dict] = {}
+    recent_rows = []
+    for b in recent_bets:
+        m = b.match
+        r = m.result if m else None
+        outcome = _outcome(b)
+        phase = m.phase.value if m and m.phase else "group"
+        if phase not in by_phase:
+            by_phase[phase] = {"total": 0, "evaluated": 0, "exatos": 0, "certos": 0, "erros": 0, "points": 0}
+        bp = by_phase[phase]
+        bp["total"] += 1
+        if outcome is not None:
+            bp["evaluated"] += 1
+            bp["points"] += b.points_earned or 0
+            if outcome == "exact": bp["exatos"] += 1
+            elif outcome == "correct": bp["certos"] += 1
+            else: bp["erros"] += 1
+        recent_rows.append({
+            "match_date": m.match_date if m else None,
+            "team_a_code": m.team_a.code if m and m.team_a else "?",
+            "team_b_code": m.team_b.code if m and m.team_b else "?",
+            "team_a_flag": m.team_a.flag_url if m and m.team_a else None,
+            "team_b_flag": m.team_b.flag_url if m and m.team_b else None,
+            "predicted_a": b.score_a, "predicted_b": b.score_b,
+            "official_a": r.score_a if r else None,
+            "official_b": r.score_b if r else None,
+            "points": b.points_earned, "outcome": outcome,
+        })
+
+    return {
+        "exists": True,
+        "name": bot.name,
+        "total_bets": total_bets,
+        "evaluated": len(evaluated),
+        "exatos": exatos,
+        "certos": certos,
+        "erros": erros,
+        "total_points": total_pts,
+        "ranking_position": pos,
+        "champion": {"name": champ_team.name, "code": champ_team.code, "flag": champ_team.flag_url} if champ_team else None,
+        "vice": {"name": vice_team.name, "code": vice_team.code, "flag": vice_team.flag_url} if vice_team else None,
+        "recent_bets": recent_rows,
+        "by_phase": by_phase,
+    }
