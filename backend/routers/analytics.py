@@ -297,58 +297,41 @@ def top_users(
     _: User = Depends(require_admin),
 ):
     from sqlalchemy import text as sa_text
-    from models import AuditLog
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     since = now - timedelta(days=days)
 
-    # Logins per user from audit_logs (action = 'login')
-    login_rows = db.execute(sa_text("""
+    # Primary: page_views grouped by user_id (logged-in page views)
+    rows = db.execute(sa_text("""
         SELECT
-            al.user_id,
+            pv.user_id,
             u.name,
             u.email,
-            COUNT(*) AS total_logins,
-            MAX(al.created_at) AS last_login,
-            MIN(al.created_at) AS first_login
-        FROM audit_logs al
-        JOIN users u ON u.id = al.user_id
-        WHERE al.action = 'login' AND al.created_at >= :since
-        GROUP BY al.user_id, u.name, u.email
-        ORDER BY total_logins DESC
+            COUNT(*) AS page_views,
+            COUNT(DISTINCT DATE(pv.created_at)) AS active_days,
+            MAX(pv.created_at) AS last_seen,
+            MIN(pv.created_at) AS first_seen
+        FROM page_views pv
+        JOIN users u ON u.id = pv.user_id
+        WHERE pv.user_id IS NOT NULL AND pv.created_at >= :since
+        GROUP BY pv.user_id, u.name, u.email
+        ORDER BY page_views DESC
         LIMIT :limit
     """), {"since": since, "limit": limit}).fetchall()
 
-    # Page views per user (only rows with user_id set)
-    pv_rows = db.execute(sa_text("""
-        SELECT
-            pv.user_id,
-            COUNT(*) AS page_views,
-            COUNT(DISTINCT DATE(pv.created_at)) AS active_days,
-            MAX(pv.created_at) AS last_seen
-        FROM page_views pv
-        WHERE pv.user_id IS NOT NULL AND pv.created_at >= :since
-        GROUP BY pv.user_id
-    """), {"since": since}).fetchall()
-
-    pv_map = {r[0]: {"page_views": r[1], "active_days": r[2], "last_seen": r[3]} for r in pv_rows}
-
     result = []
-    for r in login_rows:
-        uid = r[0]
-        pv = pv_map.get(uid, {})
-        active_days = pv.get("active_days", 0) or 1
-        total_pv = pv.get("page_views", 0) or 0
+    for r in rows:
+        active_days = int(r[4]) or 1
+        total_pv = int(r[3])
         result.append({
-            "user_id": uid,
+            "user_id": r[0],
             "name": r[1],
             "email": r[2],
-            "total_logins": r[3],
-            "last_login": r[4].isoformat() if r[4] else None,
             "page_views": total_pv,
             "active_days": active_days,
-            "avg_views_per_day": round(total_pv / active_days, 1) if active_days else 0,
-            "last_seen": pv.get("last_seen").isoformat() if pv.get("last_seen") else None,
+            "avg_views_per_day": round(total_pv / active_days, 1),
+            "last_seen": r[5].isoformat() if r[5] else None,
+            "first_seen": r[6].isoformat() if r[6] else None,
         })
 
     return {"days": days, "users": result}

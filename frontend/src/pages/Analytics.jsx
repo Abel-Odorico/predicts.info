@@ -392,13 +392,13 @@ export default function Analytics() {
             </div>
             <div className="card__body">
               {!topUsers || topUsers.users?.length === 0
-                ? <p style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>Sem dados ainda. Logins aparecerão aqui após os primeiros acessos.</p>
+                ? <p style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>Sem dados ainda. Usuários logados aparecerão aqui conforme navegam no sistema.</p>
                 : (
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'var(--font-data)' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                          {['#', 'Usuário', 'Logins', 'Pages', 'Dias ativos', 'Média/dia', 'Último acesso'].map(h => (
+                          {['#', 'Usuário', 'Page views', 'Dias ativos', 'Média/dia', 'Último acesso'].map(h => (
                             <th key={h} style={{ padding: '4px 8px', textAlign: 'left', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
                           ))}
                         </tr>
@@ -415,8 +415,7 @@ export default function Analytics() {
                               <div style={{ color: 'var(--text-1)', fontWeight: 600 }}>{u.name}</div>
                               <div style={{ color: 'var(--text-4)', fontSize: 10 }}>{u.email}</div>
                             </td>
-                            <td style={{ padding: '5px 8px', color: 'var(--accent)', fontWeight: 700, textAlign: 'right' }}>{u.total_logins.toLocaleString()}</td>
-                            <td style={{ padding: '5px 8px', color: 'var(--text-2)', textAlign: 'right' }}>{u.page_views.toLocaleString()}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--accent)', fontWeight: 700, textAlign: 'right' }}>{u.page_views.toLocaleString()}</td>
                             <td style={{ padding: '5px 8px', color: 'var(--text-2)', textAlign: 'right' }}>{u.active_days}</td>
                             <td style={{ padding: '5px 8px', color: 'var(--text-2)', textAlign: 'right' }}>{u.avg_views_per_day}</td>
                             <td style={{ padding: '5px 8px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
