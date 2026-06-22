@@ -57,6 +57,31 @@ def _append_log(message: str) -> None:
     _sync_status["log"] = [*_sync_status["log"], message][-200:]
 
 
+def _auto_generate_analyses(db_url: str) -> None:
+    """Gera análises IA para partidas pendentes após cada sync. Roda em thread daemon."""
+    try:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from routers.analysis import _get_config, _generate_all_bg
+
+        engine = create_engine(db_url)
+        Sess = sessionmaker(bind=engine)
+        db = Sess()
+        try:
+            cfg = _get_config(db)
+        finally:
+            db.close()
+            engine.dispose()
+
+        if not (cfg.get("gemini_key") or cfg.get("openrouter_key")):
+            print("[analysis-auto] nenhum provider configurado — pulando", flush=True)
+            return
+
+        _generate_all_bg(db_url, cfg, only_pending=True)
+    except Exception as exc:
+        print(f"[analysis-auto] erro: {exc}", flush=True)
+
+
 def _run_sync(db_url: str, trigger: str = "manual"):
     global _sync_status, _sync_history, _scheduler_status
     if trigger == "auto":
@@ -94,6 +119,14 @@ def _run_sync(db_url: str, trigger: str = "manual"):
 
         from routers.knockout import run_knockout_sync
         run_knockout_sync(db_url, log=_append_log)
+
+        import threading
+        threading.Thread(
+            target=_auto_generate_analyses,
+            args=(db_url,),
+            daemon=True,
+        ).start()
+        _append_log("● Análises IA: geração de pendentes iniciada em background")
     except Exception as exc:
         errors.append("sync_failed")
         _append_log(f"✗ Falha geral: {exc}")
