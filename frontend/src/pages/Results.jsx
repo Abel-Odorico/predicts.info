@@ -186,7 +186,7 @@ function formatDate(dateStr) {
 
 function formatTime(value) {
   if (!value) return ''
-  const d = new Date(value)
+  const d = new Date(value.endsWith('Z') ? value : value + 'Z')
   if (isNaN(d.getTime())) return ''
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(d)
 }

@@ -204,7 +204,7 @@ export default function Dashboard() {
                   <div className="featured-vs">
                     <div className="featured-vs__date">
                       {featured.match_date
-                        ? new Date(featured.match_date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                        ? new Date(featured.match_date.endsWith('Z') ? featured.match_date : featured.match_date + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
                         : '—'}
                     </div>
                     <div className="featured-vs__label">VS</div>

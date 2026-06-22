@@ -696,7 +696,8 @@ function decodeLabel(label, matchLookup) {
 
 function formatBracketDate(value) {
   if (!value) return 'Sem data'
-  const date = new Date(value)
+  // API returns naive UTC without 'Z' — append to trigger correct tz conversion
+  const date = new Date(value.endsWith('Z') ? value : value + 'Z')
   if (Number.isNaN(date.getTime())) return 'Sem data'
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date)
 }
@@ -732,7 +733,7 @@ const ROUND_LABELS = { r32: 'Round of 32', r16: 'Oitavas', qf: 'Quartas', sf: 'S
 
 function bkDate(value) {
   if (!value) return null
-  const d = new Date(value)
+  const d = new Date(value.endsWith('Z') ? value : value + 'Z')
   if (isNaN(d)) return null
   const day  = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
   const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
