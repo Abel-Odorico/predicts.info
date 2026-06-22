@@ -879,6 +879,190 @@ function BkRound({ matchNums, matchLookup, roundKey, side }) {
   )
 }
 
+// Match number → half label (A or B)
+const MATCH_HALF = {
+  73:'A',74:'A',75:'A',77:'A',81:'A',82:'A',83:'A',84:'A',
+  76:'B',78:'B',79:'B',80:'B',85:'B',86:'B',87:'B',88:'B',
+  89:'A',90:'A',93:'A',94:'A',  91:'B',92:'B',95:'B',96:'B',
+  97:'A',98:'A',                99:'B',100:'B',
+  101:'A',                      102:'B',
+}
+
+// All rounds for mobile view (ordered chronologically)
+const MOBILE_ROUNDS = [
+  { key:'r32',   label:'Round of 32',    icon:'32', nums:[...HALF_A.r32, ...HALF_B.r32] },
+  { key:'r16',   label:'Oitavas de Final', icon:'16', nums:[...HALF_A.r16, ...HALF_B.r16] },
+  { key:'qf',    label:'Quartas de Final', icon:'¼', nums:[...HALF_A.qf,  ...HALF_B.qf]  },
+  { key:'sf',    label:'Semifinais',      icon:'½', nums:[...HALF_A.sf,  ...HALF_B.sf]  },
+  { key:'final', label:'Grande Final',    icon:'★', nums:[FINAL_MN]                      },
+  { key:'3rd',   label:'3º Lugar',        icon:'🥉', nums:[THIRD_MN]                     },
+]
+
+/* Mobile full-width match card */
+function BkMobileCard({ matchNum, matchLookup }) {
+  const m      = matchLookup[matchNum]
+  const ta     = m?.resolved_team_a
+  const tb     = m?.resolved_team_b
+  const result = m?.result
+  const dt     = bkDate(m?.match_date)
+  const half   = MATCH_HALF[matchNum]
+  const isFinal  = matchNum === FINAL_MN
+  const isThird  = matchNum === THIRD_MN
+
+  let winA = null, winB = null
+  if (result) {
+    if (result.score_a > result.score_b)      { winA = true;  winB = false }
+    else if (result.score_b > result.score_a) { winA = false; winB = true  }
+  }
+
+  const nameA = bkDecodeName(ta, m?.team_a_label, matchLookup)
+  const nameB = bkDecodeName(tb, m?.team_b_label, matchLookup)
+
+  return (
+    <div style={{
+      border: `1.5px solid ${isFinal ? 'color-mix(in srgb, var(--accent) 55%, transparent)' : isThird ? 'color-mix(in srgb, var(--amber) 50%, transparent)' : 'var(--border)'}`,
+      borderRadius: 10,
+      overflow: 'hidden',
+      background: 'var(--bg-card)',
+      boxShadow: isFinal ? '0 0 20px color-mix(in srgb, var(--accent) 12%, transparent)' : 'none',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '6px 12px',
+        background: 'var(--bg-overlay)',
+        borderBottom: '1px solid var(--border)',
+        flexWrap: 'wrap',
+      }}>
+        <span className="bk2-section" style={isFinal ? { fontSize: 10 } : isThird ? { color: 'var(--amber)', background: 'color-mix(in srgb, var(--amber) 14%, transparent)' } : {}}>
+          {isFinal ? '★ FINAL' : isThird ? '🥉 3º LUGAR' : (m?.section || `#${matchNum}`)}
+        </span>
+        {half && !isFinal && !isThird && (
+          <span className={`half-badge half-badge--${half}`}>{half}</span>
+        )}
+        {dt && (
+          <>
+            <span style={{ fontFamily:'var(--font-data)', fontSize:11, fontWeight:700, color:'var(--text-1)' }}>
+              {dt.day}
+            </span>
+            <span style={{ fontFamily:'var(--font-data)', fontSize:12, fontWeight:800, color:'var(--accent)' }}>
+              {dt.time}
+            </span>
+          </>
+        )}
+        {m?.venue && (
+          <span style={{ fontFamily:'var(--font-data)', fontSize:10, color:'var(--text-3)', marginLeft:'auto' }}>
+            📍 {m.venue}{m.city ? `, ${m.city}` : ''}
+          </span>
+        )}
+      </div>
+
+      {/* Teams */}
+      <div style={{ padding: '8px 12px', display:'flex', flexDirection:'column', gap:2 }}>
+        {[
+          { team: ta, label: m?.team_a_label, win: winA, score: result?.score_a },
+          { team: tb, label: m?.team_b_label, win: winB, score: result?.score_b },
+        ].map(({ team, label, win, score }, i) => {
+          const name = bkDecodeName(team, label, matchLookup)
+          return (
+            <div key={i} style={{
+              display: 'grid',
+              gridTemplateColumns: '26px 1fr auto',
+              alignItems: 'center',
+              gap: 8,
+              padding: '5px 6px',
+              borderRadius: 6,
+              background: win ? 'color-mix(in srgb, var(--win) 8%, transparent)' : 'transparent',
+              opacity: win === false ? 0.42 : 1,
+              transition: 'opacity 200ms',
+            }}>
+              {team?.flag_url
+                ? <img src={team.flag_url} alt={team.code} style={{ width:26, height:18, objectFit:'cover', borderRadius:2, border:'1px solid var(--border)' }} />
+                : <span style={{ display:'inline-block', width:26, height:18, background:'var(--bg-overlay)', border:'1px solid var(--border)', borderRadius:2 }} />
+              }
+              <span style={{
+                fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14,
+                color: win ? 'var(--win)' : !team ? 'var(--text-4)' : 'var(--text-1)',
+                fontStyle: !team ? 'italic' : 'normal',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {name}
+              </span>
+              {result != null ? (
+                <span style={{
+                  fontFamily: 'var(--font-display)', fontSize: 20,
+                  color: win ? 'var(--win)' : win === false ? 'var(--lose)' : 'var(--text-3)',
+                  minWidth: 18, textAlign: 'right',
+                }}>
+                  {score}
+                </span>
+              ) : (
+                <span style={{ fontFamily:'var(--font-cond)', fontSize:10, color:'var(--text-4)' }}>–</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/* Mobile view: round tabs + match list */
+function BkMobileView({ matchLookup }) {
+  const [activeRound, setActiveRound] = useState('r32')
+  const round = MOBILE_ROUNDS.find(r => r.key === activeRound)
+
+  return (
+    <div style={{ padding: 'var(--s3) var(--s4) var(--s5)' }}>
+      {/* Round tab selector */}
+      <div style={{
+        display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 'var(--s3)',
+        scrollbarWidth: 'none',
+      }}>
+        {MOBILE_ROUNDS.map(r => (
+          <button
+            key={r.key}
+            onClick={() => setActiveRound(r.key)}
+            style={{
+              flexShrink: 0,
+              fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+              padding: '6px 12px', borderRadius: 20,
+              border: `1.5px solid ${activeRound === r.key ? 'var(--accent)' : 'var(--border)'}`,
+              background: activeRound === r.key ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-surface)',
+              color: activeRound === r.key ? 'var(--accent)' : 'var(--text-3)',
+              cursor: 'pointer',
+              transition: 'all 150ms',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            <span style={{ fontSize: 10 }}>{r.icon}</span>
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Half labels for rounds with both halves */}
+      {round && !['final','3rd'].includes(round.key) && (
+        <div style={{ display:'flex', gap:10, marginBottom:'var(--s3)' }}>
+          {['A','B'].map(h => (
+            <span key={h} style={{ display:'flex', alignItems:'center', gap:5, fontFamily:'var(--font-cond)', fontSize:11, color:'var(--text-3)' }}>
+              <span className={`half-badge half-badge--${h}`}>{h}</span>
+              {h === 'A' ? 'Semifinal 1' : 'Semifinal 2'}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Match cards */}
+      <div style={{ display:'flex', flexDirection:'column', gap: 10 }}>
+        {round?.nums.map(num => (
+          <BkMobileCard key={num} matchNum={num} matchLookup={matchLookup} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function KnockoutBracket({ bracket, className }) {
   const schedule = bracket?.schedule || []
   const matchLookup = useMemo(() => {
@@ -892,75 +1076,76 @@ function KnockoutBracket({ bracket, className }) {
   const leftRounds  = ['r32', 'r16', 'qf', 'sf']
   const rightRounds = ['sf',  'qf',  'r16', 'r32']
 
+  const header = (
+    <div className="bk2-hd">
+      <h2>⚔️ CHAVEAMENTO</h2>
+      <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+        {['A','B'].map(h => (
+          <span key={h} style={{ display:'flex', alignItems:'center', gap:5, fontFamily:'var(--font-cond)', fontSize:11, color:'var(--text-3)' }}>
+            <span className={`half-badge half-badge--${h}`}>{h}</span>
+            Semifinal {h === 'A' ? 1 : 2}
+          </span>
+        ))}
+      </div>
+      <span className="bk2-hd-note bk2-desktop-only">← arraste →</span>
+    </div>
+  )
+
   return (
     <div className={`card ${className || ''}`}>
-      {/* Card header */}
-      <div className="bk2-hd">
-        <h2>⚔️ CHAVEAMENTO</h2>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span style={{ display:'flex', alignItems:'center', gap:5, fontFamily:'var(--font-cond)', fontSize:11, color:'var(--text-3)' }}>
-            <span className="half-badge half-badge--A">A</span> Semifinal 1
-          </span>
-          <span style={{ display:'flex', alignItems:'center', gap:5, fontFamily:'var(--font-cond)', fontSize:11, color:'var(--text-3)' }}>
-            <span className="half-badge half-badge--B">B</span> Semifinal 2
-          </span>
+      {header}
+
+      {/* ── DESKTOP: horizontal bracket tree ── */}
+      <div className="bk2-desktop-view">
+        <div className="bk2-scroll">
+          <div style={{ display:'flex', alignItems:'stretch', marginBottom: 0 }}>
+            <div style={{ display:'flex', gap:'var(--bk-gap)', marginRight:'var(--bk-gap)' }}>
+              {leftRounds.map(k => (
+                <div key={k} className={`bk2-label${k==='sf'?' bk2-label--sf':''}`}>{ROUND_LABELS[k]}</div>
+              ))}
+            </div>
+            <div className="bk2-label bk2-label--center bk2-label--final">FINAL</div>
+            <div style={{ display:'flex', gap:'var(--bk-gap)', marginLeft:'var(--bk-gap)' }}>
+              {rightRounds.map(k => (
+                <div key={k} className={`bk2-label${k==='sf'?' bk2-label--sf':''}`}>{ROUND_LABELS[k]}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bk2-root" style={{ height: BK_TOTAL }}>
+            <span className="bk2-side-label" style={{ height: BK_TOTAL }}>LADO A</span>
+
+            <div className="bk2-half" style={{ height: BK_TOTAL }}>
+              {leftRounds.map(k => (
+                <BkRound key={k} matchNums={HALF_A[k]} matchLookup={matchLookup} roundKey={k} side="left" />
+              ))}
+            </div>
+
+            <div className="bk2-center" style={{ height: BK_TOTAL }}>
+              <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', gap:8 }}>
+                <div className="bk2-center-label">★ GRANDE FINAL ★</div>
+                <BkCard2 matchNum={FINAL_MN} matchLookup={matchLookup} isFinal />
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, paddingBottom:'var(--s4)' }}>
+                <div className="bk2-third-label">🥉 DISPUTA 3º LUGAR</div>
+                <BkCard2 matchNum={THIRD_MN} matchLookup={matchLookup} isThird />
+              </div>
+            </div>
+
+            <div className="bk2-half" style={{ height: BK_TOTAL }}>
+              {rightRounds.map(k => (
+                <BkRound key={k} matchNums={HALF_B[k]} matchLookup={matchLookup} roundKey={k} side="right" />
+              ))}
+            </div>
+
+            <span className="bk2-side-label" style={{ height: BK_TOTAL, transform:'rotate(180deg)' }}>LADO B</span>
+          </div>
         </div>
-        <span className="bk2-hd-note">← role para ver →</span>
       </div>
 
-      <div className="bk2-scroll">
-        {/* Round labels row */}
-        <div style={{ display:'flex', alignItems:'stretch', marginBottom: 0 }}>
-          {/* Left side labels */}
-          <div style={{ display:'flex', gap:'var(--bk-gap)', marginRight:'var(--bk-gap)' }}>
-            {leftRounds.map(k => (
-              <div key={k} className={`bk2-label${k === 'sf' ? ' bk2-label--sf' : ''}`}>{ROUND_LABELS[k]}</div>
-            ))}
-          </div>
-          {/* Center label */}
-          <div className="bk2-label bk2-label--center bk2-label--final">FINAL</div>
-          {/* Right side labels */}
-          <div style={{ display:'flex', gap:'var(--bk-gap)', marginLeft:'var(--bk-gap)' }}>
-            {rightRounds.map(k => (
-              <div key={k} className={`bk2-label${k === 'sf' ? ' bk2-label--sf' : ''}`}>{ROUND_LABELS[k]}</div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bracket tree */}
-        <div className="bk2-root" style={{ height: BK_TOTAL }}>
-          {/* Left side label */}
-          <span className="bk2-side-label" style={{ height: BK_TOTAL }}>LADO A</span>
-
-          {/* Left half: R32 → R16 → QF → SF */}
-          <div className="bk2-half" style={{ height: BK_TOTAL }}>
-            {leftRounds.map(k => (
-              <BkRound key={k} matchNums={HALF_A[k]} matchLookup={matchLookup} roundKey={k} side="left" />
-            ))}
-          </div>
-
-          {/* Center: Final + 3rd place */}
-          <div className="bk2-center" style={{ height: BK_TOTAL }}>
-            <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', gap:8 }}>
-              <div className="bk2-center-label">★ GRANDE FINAL ★</div>
-              <BkCard2 matchNum={FINAL_MN} matchLookup={matchLookup} isFinal />
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, paddingBottom: 'var(--s4)' }}>
-              <div className="bk2-third-label">🥉 DISPUTA 3º LUGAR</div>
-              <BkCard2 matchNum={THIRD_MN} matchLookup={matchLookup} isThird />
-            </div>
-          </div>
-
-          {/* Right half: SF → QF → R16 → R32 */}
-          <div className="bk2-half" style={{ height: BK_TOTAL }}>
-            {rightRounds.map(k => (
-              <BkRound key={k} matchNums={HALF_B[k]} matchLookup={matchLookup} roundKey={k} side="right" />
-            ))}
-          </div>
-
-          {/* Right side label */}
-          <span className="bk2-side-label" style={{ height: BK_TOTAL, transform:'rotate(180deg)' }}>LADO B</span>
-        </div>
+      {/* ── MOBILE: round tabs + card list ── */}
+      <div className="bk2-mobile-view">
+        <BkMobileView matchLookup={matchLookup} />
       </div>
     </div>
   )

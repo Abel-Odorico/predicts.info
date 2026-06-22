@@ -8619,3 +8619,23 @@ strong.pts {
   color: #a78bfa;
   border: 1px solid color-mix(in srgb, #a78bfa 35%, transparent);
 }
+
+/* ── Bracket responsive views ─────────────────────────────────── */
+.bk2-desktop-view { display: block; }
+.bk2-mobile-view  { display: none;  }
+.bk2-desktop-only { display: inline; }
+
+@media (max-width: 720px) {
+  .bk2-desktop-view { display: none;  }
+  .bk2-mobile-view  { display: block; }
+  .bk2-desktop-only { display: none;  }
+
+  /* Mobile header compact */
+  .bk2-hd { padding: var(--s3) var(--s4); gap: var(--s2); }
+  .bk2-hd h2 { font-size: 15px; }
+}
+
+/* Mobile round tab strip — hide scrollbar */
+@media (max-width: 720px) {
+  .bk2-mobile-view ::-webkit-scrollbar { display: none; }
+}
