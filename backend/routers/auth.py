@@ -183,6 +183,8 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(401, "Invalid credentials")
     token = create_token(user.id, user.role.value)
+    log_action(db, user.id, "login", None, ip)
+    db.commit()
     return Token(access_token=token, token_type="bearer", user=user)
 
 

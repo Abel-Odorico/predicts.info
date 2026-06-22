@@ -238,7 +238,9 @@ export default function Layout() {
       <header className="mobile-topbar">
         <div className="mobile-topbar__brand">
           <div className="mobile-topbar__logo">PREDICTS</div>
-          <div className="mobile-topbar__subtitle">Simulador Estatístico</div>
+          <div className="mobile-topbar__subtitle">
+            {user ? `Olá, ${user.name.split(' ')[0]}` : 'Simulador Estatístico'}
+          </div>
         </div>
         <div className="mobile-topbar__actions">
           <button

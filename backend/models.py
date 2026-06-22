@@ -384,6 +384,7 @@ class PageView(Base):
     id         = Column(Integer, primary_key=True)
     path       = Column(String(300), nullable=False, default="/")
     ip         = Column(String(45))
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
     country    = Column(String(2))
     country_name = Column(String(80))
     city       = Column(String(100))
@@ -392,6 +393,8 @@ class PageView(Base):
     os         = Column(String(40))
     referrer   = Column(String(500))
     created_at = Column(DateTime, default=_utcnow, index=True)
+
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class Notification(Base):

@@ -283,6 +283,8 @@ def _run_migrations():
         # Column additions on existing tables
         for alter in [
             "ALTER TABLE analysis_logs ADD COLUMN IF NOT EXISTS trigger VARCHAR(20) DEFAULT 'manual'",
+            "ALTER TABLE page_views ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "CREATE INDEX IF NOT EXISTS ix_page_views_user_id ON page_views (user_id) WHERE user_id IS NOT NULL",
         ]:
             try:
                 conn.execute(text(alter))

@@ -88,6 +88,7 @@ async def _geo_lookup(ip: str) -> tuple[str, str, str]:
 class TrackPayload(BaseModel):
     path: str = "/"
     referrer: str = ""
+    user_id: int | None = None
 
 
 @router.post("/track", status_code=204)
@@ -96,22 +97,18 @@ async def track(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    # X-Real-IP is set by nginx from $remote_addr (trusted).
-    # X-Forwarded-For first entry is client-controlled and spoofable.
     ip = (
         request.headers.get("X-Real-IP", "").strip()
         or (request.client.host if request.client else "unknown")
     )
     ua = request.headers.get("User-Agent", "")
 
-    # Rate limit: same ip+path within N seconds = skip
     key = f"{ip}:{payload.path}"
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     if key in _rate and (now - _rate[key]).total_seconds() < _RATE_SEC:
         return
     _rate[key] = now
 
-    # Trim rate cache — always purge expired entries when dict grows
     if len(_rate) >= 1000:
         cutoff = now - timedelta(minutes=5)
         for k in [k for k, v in _rate.items() if v < cutoff]:
@@ -123,6 +120,7 @@ async def track(
     pv = PageView(
         path=payload.path[:300],
         ip=ip,
+        user_id=payload.user_id,
         country=country_code,
         country_name=country_name,
         city=city,
@@ -177,9 +175,27 @@ def stats(
     browser_counter: Counter = Counter(r.browser for r in rows if r.browser)
     browsers = [{"browser": b, "views": c} for b, c in browser_counter.most_common(8)]
 
-    # OS
+    # OS — total views + unique IPs
+    os_ips: dict[str, set] = {}
+    for r in rows:
+        if r.os:
+            os_ips.setdefault(r.os, set()).add(r.ip)
     os_counter: Counter = Counter(r.os for r in rows if r.os)
-    os_list = [{"os": o, "views": c} for o, c in os_counter.most_common(8)]
+    os_list = [
+        {"os": o, "views": os_counter[o], "unique_ips": len(os_ips.get(o, set()))}
+        for o, _ in os_counter.most_common(8)
+    ]
+
+    # Browsers — total views + unique IPs
+    br_ips: dict[str, set] = {}
+    for r in rows:
+        if r.browser:
+            br_ips.setdefault(r.browser, set()).add(r.ip)
+    # rebuild browser_counter with unique_ips
+    browsers = [
+        {"browser": b, "views": browser_counter[b], "unique_ips": len(br_ips.get(b, set()))}
+        for b, _ in browser_counter.most_common(8)
+    ]
 
     # Top referrers
     ref_counter: Counter = Counter(r.referrer for r in rows if r.referrer and r.referrer != "direct")
@@ -271,3 +287,68 @@ def recent(
         }
         for r in rows
     ]
+
+
+@router.get("/top-users")
+def top_users(
+    days: int = 30,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    from sqlalchemy import text as sa_text
+    from models import AuditLog
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(days=days)
+
+    # Logins per user from audit_logs (action = 'login')
+    login_rows = db.execute(sa_text("""
+        SELECT
+            al.user_id,
+            u.name,
+            u.email,
+            COUNT(*) AS total_logins,
+            MAX(al.created_at) AS last_login,
+            MIN(al.created_at) AS first_login
+        FROM audit_logs al
+        JOIN users u ON u.id = al.user_id
+        WHERE al.action = 'login' AND al.created_at >= :since
+        GROUP BY al.user_id, u.name, u.email
+        ORDER BY total_logins DESC
+        LIMIT :limit
+    """), {"since": since, "limit": limit}).fetchall()
+
+    # Page views per user (only rows with user_id set)
+    pv_rows = db.execute(sa_text("""
+        SELECT
+            pv.user_id,
+            COUNT(*) AS page_views,
+            COUNT(DISTINCT DATE(pv.created_at)) AS active_days,
+            MAX(pv.created_at) AS last_seen
+        FROM page_views pv
+        WHERE pv.user_id IS NOT NULL AND pv.created_at >= :since
+        GROUP BY pv.user_id
+    """), {"since": since}).fetchall()
+
+    pv_map = {r[0]: {"page_views": r[1], "active_days": r[2], "last_seen": r[3]} for r in pv_rows}
+
+    result = []
+    for r in login_rows:
+        uid = r[0]
+        pv = pv_map.get(uid, {})
+        active_days = pv.get("active_days", 0) or 1
+        total_pv = pv.get("page_views", 0) or 0
+        result.append({
+            "user_id": uid,
+            "name": r[1],
+            "email": r[2],
+            "total_logins": r[3],
+            "last_login": r[4].isoformat() if r[4] else None,
+            "page_views": total_pv,
+            "active_days": active_days,
+            "avg_views_per_day": round(total_pv / active_days, 1) if active_days else 0,
+            "last_seen": pv.get("last_seen").isoformat() if pv.get("last_seen") else None,
+        })
+
+    return {"days": days, "users": result}

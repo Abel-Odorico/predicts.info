@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -18,6 +19,7 @@ const PERIODS = [
 const FLAG = code => code ? `https://flagcdn.com/24x18/${code.toLowerCase()}.png` : null
 
 const ACTION_LABEL = {
+  'login':                   '🔐 Login',
   'profile.update':          '✏️ Perfil editado',
   'profile.password_change': '🔑 Senha alterada',
   'group.rename':            '📝 Grupo renomeado',
@@ -54,40 +56,46 @@ function KpiCard({ label, value, sub, color, icon }) {
 }
 
 function DualChart({ viewsData, regsData, showRegs }) {
-  if (!viewsData || viewsData.length === 0) return <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6)' }}>Sem dados</div>
-  const data = viewsData
-  const maxV = Math.max(...data.map(d => d.views), 1)
-  const maxR = showRegs && regsData?.length ? Math.max(...regsData.map(d => d.count), 1) : 1
+  if (!viewsData || viewsData.length === 0)
+    return <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6)' }}>Sem dados</div>
+
   const regMap = Object.fromEntries((regsData || []).map(d => [d.date, d.count]))
+  const data = viewsData.map(d => ({
+    date: d.date.slice(5),
+    views: d.views,
+    cadastros: regMap[d.date] || 0,
+  }))
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 100, padding: '0 var(--s2)' }}>
-      {data.map(d => {
-        const pct = (d.views / maxV) * 100
-        const regPct = showRegs ? ((regMap[d.date] || 0) / maxR) * 100 : 0
-        return (
-          <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flex: 1, justifyContent: 'flex-end' }}>
-              {showRegs && regMap[d.date] > 0 && (
-                <div title={`${d.date}: ${regMap[d.date]} cadastros`} style={{
-                  width: '60%', height: `${Math.max(regPct * 0.6, 3)}px`,
-                  background: 'var(--win)', borderRadius: '2px 2px 0 0', opacity: 0.9,
-                }} />
-              )}
-              <div title={`${d.date}: ${d.views} views`} style={{
-                width: '100%', height: `${Math.max(pct, 4)}%`,
-                background: `color-mix(in srgb, var(--accent) ${40 + Math.round(pct * 0.6)}%, transparent)`,
-                borderRadius: '3px 3px 0 0',
-                border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-              }} />
-            </div>
-            <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--font-data)', transform: 'rotate(-45deg)', transformOrigin: 'center', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 28 }}>
-              {d.date.slice(5)}
-            </span>
-          </div>
-        )
-      })}
-    </div>
+    <ResponsiveContainer width="100%" height={160}>
+      <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barGap={2}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 9, fill: 'var(--text-4)', fontFamily: 'var(--font-data)' }}
+          tickLine={false} axisLine={false}
+          interval={data.length > 20 ? Math.floor(data.length / 10) : 0}
+        />
+        <YAxis
+          tick={{ fontSize: 9, fill: 'var(--text-4)', fontFamily: 'var(--font-data)' }}
+          tickLine={false} axisLine={false}
+          allowDecimals={false}
+        />
+        <Tooltip
+          contentStyle={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 6, fontSize: 11, fontFamily: 'var(--font-data)',
+            color: 'var(--text-1)',
+          }}
+          labelStyle={{ color: 'var(--text-3)', marginBottom: 4 }}
+          cursor={{ fill: 'var(--bg-overlay)' }}
+        />
+        <Bar dataKey="views" fill="var(--accent)" opacity={0.85} radius={[2, 2, 0, 0]} maxBarSize={24} name="Views" />
+        {showRegs && (
+          <Bar dataKey="cadastros" fill="var(--win)" opacity={0.9} radius={[2, 2, 0, 0]} maxBarSize={12} name="Cadastros" />
+        )}
+      </BarChart>
+    </ResponsiveContainer>
   )
 }
 
@@ -103,6 +111,8 @@ export default function Analytics() {
   const [auditLogs, setAuditLogs]       = useState(null)
   const [auditLoading, setAuditLoading] = useState(false)
   const [auditFilter, setAuditFilter]   = useState('')
+  const [topUsers, setTopUsers]         = useState(null)
+  const [topUsersLoading, setTopUsersLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -119,6 +129,15 @@ export default function Analytics() {
     if (tab !== 'audit') return
     loadAudit()
   }, [tab, token])
+
+  useEffect(() => {
+    if (tab !== 'usuarios') return
+    setTopUsersLoading(true)
+    api.get(`/analytics/top-users?days=${days}`, token)
+      .then(d => setTopUsers(d))
+      .catch(() => {})
+      .finally(() => setTopUsersLoading(false))
+  }, [tab, days, token])
 
   function loadAudit(action = auditFilter) {
     setAuditLoading(true)
@@ -244,8 +263,11 @@ export default function Analytics() {
               <div className="stack gap-3">
                 {stats.browsers.map(b => (
                   <div key={b.browser} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>{BROWSER_ICON[b.browser] || '⚪'} {b.browser}</span>
-                    <MiniBar value={b.views} max={maxBrowser} color="#f59e0b" />
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>{BROWSER_ICON[b.browser] || '⚪'} {b.browser}</span>
+                      {b.unique_ips != null && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)' }}>{b.unique_ips} únicos</span>}
+                    </div>
+                    <MiniBar value={b.unique_ips || b.views} max={Math.max(...stats.browsers.map(x => x.unique_ips || x.views), 1)} color="#f59e0b" />
                   </div>
                 ))}
               </div>
@@ -343,31 +365,72 @@ export default function Analytics() {
             <div className="card" style={{ gridColumn: '1 / -1' }}>
               <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>✅ Cadastros por Dia</span></div>
               <div className="card__body">
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80, padding: '0 var(--s2)' }}>
-                  {stats.registrations_per_day.map(d => {
-                    const max = Math.max(...stats.registrations_per_day.map(x => x.count), 1)
-                    const pct = (d.count / max) * 100
-                    return (
-                      <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                        <div title={`${d.date}: ${d.count} cadastros`} style={{
-                          width: '100%', height: `${Math.max(pct, 4)}%`,
-                          background: `color-mix(in srgb, var(--win) ${40 + Math.round(pct * 0.6)}%, transparent)`,
-                          borderRadius: '3px 3px 0 0',
-                          border: '1px solid color-mix(in srgb, var(--win) 40%, transparent)',
-                        }} />
-                        <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--font-data)', transform: 'rotate(-45deg)', transformOrigin: 'center', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 28 }}>
-                          {d.date.slice(5)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart
+                    data={stats.registrations_per_day.map(d => ({ date: d.date.slice(5), cadastros: d.count }))}
+                    margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-4)', fontFamily: 'var(--font-data)' }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: 'var(--text-4)', fontFamily: 'var(--font-data)' }} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11, color: 'var(--text-1)' }} cursor={{ fill: 'var(--bg-overlay)' }} />
+                    <Bar dataKey="cadastros" fill="var(--win)" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textAlign: 'center', marginTop: 'var(--s3)' }}>
                   {stats.new_users} novos usuários · total {stats.total_users}
                 </div>
               </div>
             </div>
           )}
+
+          {/* Top usuários */}
+          <div className="card" style={{ gridColumn: '1 / -1' }}>
+            <div className="card__header">
+              <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>👑 Usuários Mais Ativos</span>
+              {topUsersLoading && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>carregando…</span>}
+            </div>
+            <div className="card__body">
+              {!topUsers || topUsers.users?.length === 0
+                ? <p style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>Sem dados ainda. Logins aparecerão aqui após os primeiros acessos.</p>
+                : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'var(--font-data)' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          {['#', 'Usuário', 'Logins', 'Pages', 'Dias ativos', 'Média/dia', 'Último acesso'].map(h => (
+                            <th key={h} style={{ padding: '4px 8px', textAlign: 'left', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topUsers.users.map((u, i) => (
+                          <tr key={u.user_id} style={{ borderBottom: '1px solid var(--border)' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+                            onMouseLeave={e => e.currentTarget.style.background = ''}>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-3)', fontWeight: 700 }}>
+                              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                            </td>
+                            <td style={{ padding: '5px 8px' }}>
+                              <div style={{ color: 'var(--text-1)', fontWeight: 600 }}>{u.name}</div>
+                              <div style={{ color: 'var(--text-4)', fontSize: 10 }}>{u.email}</div>
+                            </td>
+                            <td style={{ padding: '5px 8px', color: 'var(--accent)', fontWeight: 700, textAlign: 'right' }}>{u.total_logins.toLocaleString()}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-2)', textAlign: 'right' }}>{u.page_views.toLocaleString()}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-2)', textAlign: 'right' }}>{u.active_days}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-2)', textAlign: 'right' }}>{u.avg_views_per_day}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                              {u.last_login ? new Date(u.last_login).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              }
+            </div>
+          </div>
         </div>
       )}
 
@@ -448,31 +511,45 @@ export default function Analytics() {
           </div>
 
           <div className="card">
-            <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🌐 Navegadores</span></div>
+            <div className="card__header">
+              <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🌐 Navegadores</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>visitantes únicos</span>
+            </div>
             <div className="card__body">
               <div className="stack gap-4">
-                {stats.browsers.map(b => (
-                  <div key={b.browser} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 120px', alignItems: 'center', gap: 'var(--s3)' }}>
-                    <span style={{ fontSize: 18 }}>{BROWSER_ICON[b.browser] || '⚪'}</span>
-                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)' }}>{b.browser}</span>
-                    <MiniBar value={b.views} max={maxBrowser} color="#f59e0b" />
-                  </div>
-                ))}
+                {stats.browsers.map(b => {
+                  const maxUniq = Math.max(...stats.browsers.map(x => x.unique_ips || 0), 1)
+                  return (
+                    <div key={b.browser} style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto 80px', alignItems: 'center', gap: 'var(--s3)' }}>
+                      <span style={{ fontSize: 18 }}>{BROWSER_ICON[b.browser] || '⚪'}</span>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)' }}>{b.browser}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)' }}>{b.unique_ips ?? '—'}</span>
+                      <MiniBar value={b.unique_ips || b.views} max={maxUniq} color="#f59e0b" />
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
 
           <div className="card">
-            <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🖥️ Sistema Operacional</span></div>
+            <div className="card__header">
+              <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🖥️ Sistema Operacional</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>visitantes únicos</span>
+            </div>
             <div className="card__body">
               <div className="stack gap-4">
-                {stats.os.map(o => (
-                  <div key={o.os} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 120px', alignItems: 'center', gap: 'var(--s3)' }}>
-                    <span style={{ fontSize: 18 }}>{OS_ICON[o.os] || '⚪'}</span>
-                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)' }}>{o.os}</span>
-                    <MiniBar value={o.views} max={stats.os[0].views} color="var(--win)" />
-                  </div>
-                ))}
+                {stats.os.map(o => {
+                  const maxUniq = Math.max(...stats.os.map(x => x.unique_ips || 0), 1)
+                  return (
+                    <div key={o.os} style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto 80px', alignItems: 'center', gap: 'var(--s3)' }}>
+                      <span style={{ fontSize: 18 }}>{OS_ICON[o.os] || '⚪'}</span>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)' }}>{o.os}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)' }}>{o.unique_ips ?? '—'}</span>
+                      <MiniBar value={o.unique_ips || o.views} max={maxUniq} color="var(--win)" />
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -493,13 +570,18 @@ export default function Analytics() {
           </div>
           <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
             <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap' }}>
-              {['', 'profile', 'group'].map(f => (
+              {[
+                { v: '',        l: 'Todos' },
+                { v: 'login',   l: 'Logins' },
+                { v: 'profile', l: 'Perfil' },
+                { v: 'group',   l: 'Grupos' },
+              ].map(({ v, l }) => (
                 <button
-                  key={f || 'all'}
-                  className={`btn btn-sm ${auditFilter === f ? 'btn-primary' : 'btn-ghost'}`}
-                  onClick={() => { setAuditFilter(f); loadAudit(f) }}
+                  key={v || 'all'}
+                  className={`btn btn-sm ${auditFilter === v ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => { setAuditFilter(v); loadAudit(v) }}
                 >
-                  {f === '' ? 'Todos' : f === 'profile' ? 'Perfil' : 'Grupos'}
+                  {l}
                 </button>
               ))}
             </div>
