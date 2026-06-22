@@ -19,7 +19,7 @@ const WEIGHT_LABELS = {
 
 export default function MatchSim() {
   const { id } = useParams()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [match, setMatch]   = useState(null)
   const [sim, setSim]       = useState(null)
   const [loading, setLoading] = useState(true)
