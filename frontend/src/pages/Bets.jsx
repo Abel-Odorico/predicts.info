@@ -954,12 +954,12 @@ function MatchAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
 
           {/* 2-col teams */}
           {(analysis.team_a || analysis.team_b) && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
               {[
                 { team: teamA, data: analysis.team_a },
                 { team: teamB, data: analysis.team_b },
               ].map(({ team, data }) => data ? (
-                <div key={team?.code} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
+                <div key={team?.code} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)', minWidth: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     {team?.flag_url && <img src={team.flag_url} alt={team.code} style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 2 }} />}
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>{team?.name || team?.code}</span>
