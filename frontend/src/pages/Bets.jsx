@@ -954,7 +954,7 @@ function MatchAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
 
           {/* 2-col teams */}
           {(analysis.team_a || analysis.team_b) && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               {[
                 { team: teamA, data: analysis.team_a },
                 { team: teamB, data: analysis.team_b },
