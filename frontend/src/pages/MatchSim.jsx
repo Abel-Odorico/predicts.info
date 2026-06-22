@@ -31,6 +31,8 @@ export default function MatchSim() {
   const [analysis, setAnalysis]         = useState(null)
   const [analysisLoading, setAnalysisLoading] = useState(true)
   const [showAnalysis, setShowAnalysis] = useState(true)
+  const [generating, setGenerating]     = useState(false)
+  const [genError, setGenError]         = useState('')
   const betRef = useRef(null)
 
   useEffect(() => { fetchAll() }, [id])
@@ -43,6 +45,19 @@ export default function MatchSim() {
       .catch(() => setAnalysis(null))
       .finally(() => setAnalysisLoading(false))
   }, [id])
+
+  async function generateAnalysis() {
+    setGenerating(true)
+    setGenError('')
+    try {
+      const d = await api.post(`/admin/analysis/${id}/generate`, null, token)
+      setAnalysis(d.content)
+    } catch (e) {
+      setGenError(e.message || 'Erro ao gerar análise')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   async function fetchAll() {
     setLoading(true)
@@ -155,6 +170,35 @@ export default function MatchSim() {
                 {sim.cached ? '● cache' : `● ${sim.elapsed_ms}ms`}
               </span>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Análise IA — logo após probabilidades ─────────────────────────── */}
+      <div className="mt-6">
+        {analysisLoading ? (
+          <div className="card" style={{ padding: 'var(--s4)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>⏳ Carregando análise IA…</span>
+          </div>
+        ) : analysis ? (
+          <SimAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
+        ) : (
+          <div className="card" style={{ padding: 'var(--s4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>
+              🤖 Análise IA não disponível para esta partida
+            </span>
+            {user?.role === 'admin' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+                {genError && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>{genError}</span>}
+                <button
+                  onClick={generateAnalysis}
+                  disabled={generating}
+                  className="btn btn-primary btn-sm"
+                >
+                  {generating ? '⏳ Gerando…' : '⚡ Gerar Análise IA'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -292,20 +336,6 @@ export default function MatchSim() {
           )}
         </div>
 
-        {/* Análise IA — full-width dentro do grid */}
-        <div style={{ gridColumn: '1 / -1' }}>
-          {analysisLoading ? (
-            <div className="card" style={{ padding: 'var(--s4)', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>⏳ Carregando análise IA…</span>
-            </div>
-          ) : analysis ? (
-            <SimAnalysisCard analysis={analysis} teamA={match.team_a} teamB={match.team_b} show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)} />
-          ) : (
-            <div className="card" style={{ padding: 'var(--s4)' }}>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)' }}>🤖 Análise IA não disponível para esta partida — gere via painel admin.</span>
-            </div>
-          )}
-        </div>
       </div>
       <MatchComments matchId={match?.id} />
     </div>
