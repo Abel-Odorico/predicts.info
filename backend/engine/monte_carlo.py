@@ -7,6 +7,8 @@ Monte Carlo match and tournament simulation — fully vectorized with NumPy.
 import numpy as np
 from itertools import combinations
 
+from engine.poisson import dc_score_weights
+
 GLOBAL_AVG = 1.35
 
 
@@ -17,8 +19,12 @@ def simulate_match(
     seed: int | None = None,
 ) -> dict:
     rng = np.random.default_rng(seed)
-    goals_a = rng.poisson(lambda_a, n)
-    goals_b = rng.poisson(lambda_b, n)
+
+    # Dixon-Coles weighted sampling: corrects low-score joint probabilities
+    sa, sb, weights = dc_score_weights(lambda_a, lambda_b)
+    idx = rng.choice(len(weights), size=n, p=weights)
+    goals_a = sa[idx]
+    goals_b = sb[idx]
 
     prob_a = float((goals_a > goals_b).mean())
     prob_draw = float((goals_a == goals_b).mean())
@@ -183,10 +189,14 @@ def simulate_tournament(
         gm_li = np.array(gm_li, dtype=np.int32)
         gm_lj = np.array(gm_lj, dtype=np.int32)
 
-        la_matrix = np.broadcast_to(la_arr, (n, n_gm)).copy()
-        lb_matrix = np.broadcast_to(lb_arr, (n, n_gm)).copy()
-        goals_a = rng.poisson(la_matrix).astype(np.int32)
-        goals_b = rng.poisson(lb_matrix).astype(np.int32)
+        # Dixon-Coles corrected sampling per group match (exact scores matter for GD)
+        goals_a = np.empty((n, n_gm), dtype=np.int32)
+        goals_b = np.empty((n, n_gm), dtype=np.int32)
+        for m in range(n_gm):
+            sa, sb, wt = dc_score_weights(float(la_arr[m]), float(lb_arr[m]))
+            idx = rng.choice(len(wt), size=n, p=wt)
+            goals_a[:, m] = sa[idx]
+            goals_b[:, m] = sb[idx]
     else:
         goals_a = np.zeros((n, 0), dtype=np.int32)
         goals_b = np.zeros((n, 0), dtype=np.int32)

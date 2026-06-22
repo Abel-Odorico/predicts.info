@@ -1,11 +1,15 @@
 """
-Poisson lambda computation for goal expectation.
+Poisson lambda computation for goal expectation with Dixon-Coles (1997) correction.
 
 λ_A = (attack_strength_A / global_avg) * (defense_weakness_B / global_avg) * global_avg * home_factor
-This is the Dixon-Coles approach adapted for international football.
+
+DC correction adjusts low-score joint probabilities (ga+gb ≤ 2) using a correlation
+parameter ρ. With ρ < 0: 0-0 and 1-1 draws become more likely; 1-0 and 0-1 less likely.
 """
+import numpy as np
 
 GLOBAL_AVG_GOALS = 1.35  # international football average goals per team per match
+DC_RHO = -0.13           # Dixon-Coles ρ — calibrated for international football
 
 
 def compute_lambdas(
@@ -32,33 +36,75 @@ def compute_lambdas(
 
 
 def poisson_score_prob(lambda_a: float, lambda_b: float, ga: int, gb: int) -> float:
-    """Exact Poisson probability for a specific scoreline."""
+    """Exact Poisson probability for a specific scoreline (no DC correction)."""
     from math import exp, factorial
     p_a = (lambda_a ** ga) * exp(-lambda_a) / factorial(ga)
     p_b = (lambda_b ** gb) * exp(-lambda_b) / factorial(gb)
     return p_a * p_b
 
 
+def dc_score_weights(
+    lambda_a: float,
+    lambda_b: float,
+    rho: float = DC_RHO,
+    max_goals: int = 8,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Returns (scores_a, scores_b, weights) arrays for Dixon-Coles corrected sampling.
+    Weights are a normalized PMF over all (ga, gb) pairs up to max_goals.
+    """
+    from math import exp, factorial
+
+    size = (max_goals + 1) ** 2
+    sa = np.empty(size, dtype=np.int32)
+    sb = np.empty(size, dtype=np.int32)
+    w  = np.empty(size, dtype=np.float64)
+
+    idx = 0
+    for ga in range(max_goals + 1):
+        p_a = (lambda_a ** ga) * exp(-lambda_a) / factorial(ga)
+        for gb in range(max_goals + 1):
+            p_b = (lambda_b ** gb) * exp(-lambda_b) / factorial(gb)
+            if ga == 0 and gb == 0:
+                tau = 1.0 - lambda_a * lambda_b * rho
+            elif ga == 1 and gb == 0:
+                tau = 1.0 + lambda_b * rho
+            elif ga == 0 and gb == 1:
+                tau = 1.0 + lambda_a * rho
+            elif ga == 1 and gb == 1:
+                tau = 1.0 - rho
+            else:
+                tau = 1.0
+            sa[idx] = ga
+            sb[idx] = gb
+            w[idx]  = max(0.0, p_a * p_b * tau)
+            idx += 1
+
+    w /= w.sum()
+    return sa, sb, w
+
+
 def analytical_probabilities(lambda_a: float, lambda_b: float, max_goals: int = 8) -> dict:
     """
-    Compute win/draw/loss and top scores analytically (no simulation).
+    Compute win/draw/loss and top scores analytically with Dixon-Coles correction.
     Fast path used for cache priming; Monte Carlo is the accurate path.
     """
+    sa, sb, weights = dc_score_weights(lambda_a, lambda_b, max_goals=max_goals)
+
     prob_a = 0.0
     prob_draw = 0.0
     prob_b = 0.0
     scores: dict[str, float] = {}
 
-    for ga in range(max_goals + 1):
-        for gb in range(max_goals + 1):
-            p = poisson_score_prob(lambda_a, lambda_b, ga, gb)
-            scores[f"{ga}x{gb}"] = round(p * 100, 3)
-            if ga > gb:
-                prob_a += p
-            elif ga == gb:
-                prob_draw += p
-            else:
-                prob_b += p
+    for i in range(len(sa)):
+        ga, gb, p = int(sa[i]), int(sb[i]), float(weights[i])
+        scores[f"{ga}x{gb}"] = round(p * 100, 3)
+        if ga > gb:
+            prob_a += p
+        elif ga == gb:
+            prob_draw += p
+        else:
+            prob_b += p
 
     top_scores = sorted(scores.items(), key=lambda x: -x[1])[:20]
     return {
