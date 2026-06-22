@@ -8138,4 +8138,40 @@ strong.pts {
   color: var(--text-4); font-size: 18px; line-height: 1;
   padding: 2px 6px; border-radius: 4px;
 }
+
+/* ── Dashboard header ────────────────────────────────────────────────── */
+.dash-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+/* Mobile: botões em grade 2×2 */
+.dash-nav-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s2);
+  width: 100%;
+}
+
+/* Desktop: linha horizontal */
+@media (min-width: 600px) {
+  .dash-nav-btns {
+    display: flex;
+    flex-wrap: wrap;
+    width: auto;
+    flex-shrink: 0;
+  }
+}
+
+/* Garante que os botões de nav não causem overflow */
+.dash-nav-btns .btn {
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .modal-box__head button:hover { color: var(--text-1); background: var(--bg-2); }

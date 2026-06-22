@@ -120,11 +120,11 @@ export default function Dashboard() {
   return (
     <div className="page">
       <div className="fade-in-1">
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap' }}>
+        <div className="dash-header">
           <div>
             <h1 className="page-title">COPA DO MUNDO 2026</h1>
             <p className="page-subtitle">
-              Motor Elo · xG · Poisson · Monte Carlo
+              Elo · xG · Poisson · Dixon-Coles · Monte Carlo
               {appVersion?.version && (
                 <span style={{
                   marginLeft: 10, fontFamily: 'var(--font-mono)', fontSize: 10,
@@ -141,12 +141,12 @@ export default function Dashboard() {
               </p>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', flexShrink: 0 }}>
+          <div className="dash-nav-btns">
             <a href="/" className="btn btn-ghost btn-sm" style={{ fontSize: 12 }}>
-              🌐 Página Inicial
+              🌐 Início
             </a>
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => navigate('/grupos')}>
-              🗂 Classificação
+              🗂 Grupos
             </button>
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => navigate('/meus-grupos')}>
               👥 Meus Grupos
@@ -223,20 +223,45 @@ export default function Dashboard() {
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
                 {liveNow.map((game, index) => (
-                  <div key={`live-${game.team_a}-${game.team_b}-${index}`} className="now-playing-card" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={{ ...(index > 0 ? { marginTop: 'var(--s3)', paddingTop: 'var(--s3)', borderTop: '1px solid var(--border)' } : {}), ...(game.match_id ? { cursor: 'pointer' } : {}) }}>
-                    <div className="now-playing-card__team">
-                      {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
-                      <span>{game.team_a}</span>
-                    </div>
-                    <div className="now-playing-card__center">
-                      <div className="now-playing-card__score">
-                        {game.score_a ?? '-'}:{game.score_b ?? '-'}
+                  <div key={`live-${game.team_a}-${game.team_b}-${index}`}
+                    onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)}
+                    style={{
+                      ...(index > 0 ? { marginTop: 'var(--s4)', paddingTop: 'var(--s4)', borderTop: '1px solid var(--border)' } : {}),
+                      ...(game.match_id ? { cursor: 'pointer' } : {})
+                    }}
+                  >
+                    <div className="now-playing-card">
+                      <div className="now-playing-card__team">
+                        {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
+                        <span>{game.team_a}</span>
                       </div>
-                      <div className="now-playing-card__status">{game.status_raw || 'Ao vivo'}</div>
+                      <div className="now-playing-card__center">
+                        <div className="now-playing-card__score">
+                          {game.score_a ?? '-'}:{game.score_b ?? '-'}
+                        </div>
+                        <div className="now-playing-card__status">{game.status_raw || 'Ao vivo'}</div>
+                      </div>
+                      <div className="now-playing-card__team now-playing-card__team--right">
+                        <span>{game.team_b}</span>
+                        {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
+                      </div>
                     </div>
-                    <div className="now-playing-card__team now-playing-card__team--right">
-                      <span>{game.team_b}</span>
-                      {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
+                    {/* Venue + channels */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--s2)', marginTop: 'var(--s3)' }}>
+                      {(game.city || game.venue) && (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.04em' }}>
+                          📍 {[game.city, game.venue].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                      {game.channels?.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {game.channels.slice(0, 5).map(ch => (
+                            ch.img_url
+                              ? <img key={ch.nome} src={ch.img_url} alt={ch.nome} title={ch.nome} style={{ height: 18, width: 'auto', objectFit: 'contain', borderRadius: 3, opacity: 0.85 }} />
+                              : <span key={ch.nome} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>{ch.nome}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -273,7 +298,15 @@ export default function Dashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--s2)' }}>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_b}</div>
-                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.channels?.map(c => c.nome).filter(Boolean).join(' · ') || 'Sem canal'}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                          {game.channels?.length > 0
+                            ? game.channels.slice(0, 3).map(ch =>
+                                ch.img_url
+                                  ? <img key={ch.nome} src={ch.img_url} alt={ch.nome} title={ch.nome} style={{ height: 14, width: 'auto', objectFit: 'contain', borderRadius: 2, opacity: 0.75 }} />
+                                  : <span key={ch.nome} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>{ch.nome}</span>
+                              )
+                            : <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>—</span>}
+                        </div>
                       </div>
                       {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
                     </div>
@@ -325,7 +358,15 @@ export default function Dashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--s2)' }}>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 600 }}>{game.team_b}</div>
-                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{game.channels?.map(c => c.nome).filter(Boolean).join(' · ') || 'Sem canal'}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                          {game.channels?.length > 0
+                            ? game.channels.slice(0, 3).map(ch =>
+                                ch.img_url
+                                  ? <img key={ch.nome} src={ch.img_url} alt={ch.nome} title={ch.nome} style={{ height: 14, width: 'auto', objectFit: 'contain', borderRadius: 2, opacity: 0.75 }} />
+                                  : <span key={ch.nome} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>{ch.nome}</span>
+                              )
+                            : <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>—</span>}
+                        </div>
                       </div>
                       {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
                     </div>
