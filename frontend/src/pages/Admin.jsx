@@ -59,6 +59,7 @@ const TABS = [
   { id: 'pwa',        label: 'Ícone PWA',    icon: '🖼' },
   { id: 'knockout',   label: 'Mata-Mata',    icon: '⚔️' },
   { id: 'analyses',   label: 'Análises IA',  icon: '🤖' },
+  { id: 'bot',        label: 'Apostador IA', icon: '🎮' },
 ]
 
 const PHASE_LABELS_ADMIN = {
@@ -154,6 +155,15 @@ export default function Admin() {
   const [awarding, setAwarding] = useState(false)
   const [champAllPicks, setChampAllPicks] = useState(null)
   const [champStats, setChampStats] = useState(null)
+
+  // ── Bot / Apostador IA ───────────────────────────────────────────────────────
+  const [botStatus,       setBotStatus]       = useState(null)
+  const [botBets,         setBotBets]         = useState(null)
+  const [botLoading,      setBotLoading]      = useState(false)
+  const [botMsg,          setBotMsg]          = useState('')
+  const [botBetPhase,     setBotBetPhase]     = useState('all')
+  const [botBetLoading,   setBotBetLoading]   = useState(false)
+  const [botChampLoading, setBotChampLoading] = useState(false)
 
   // ── Análises IA ──────────────────────────────────────────────────────────────
   const [analysisConfig, setAnalysisConfig]   = useState(null)
@@ -403,6 +413,50 @@ export default function Admin() {
     }
   }
 
+  async function loadBot() {
+    setBotLoading(true)
+    try {
+      const [status, bets] = await Promise.all([
+        api.get('/admin/bot/status', token),
+        api.get('/admin/bot/bets', token),
+      ])
+      setBotStatus(status)
+      setBotBets(bets)
+    } catch {}
+    finally { setBotLoading(false) }
+  }
+
+  async function createBot() {
+    setBotMsg('')
+    try {
+      const r = await api.post('/admin/bot/create', {}, token)
+      setBotMsg(r.status === 'created' ? `✓ Bot criado — ID ${r.user_id}` : '⚠ Bot já existe')
+      loadBot()
+    } catch (e) { setBotMsg(`✗ ${e?.message || 'erro'}`) }
+  }
+
+  async function runBotBet() {
+    setBotBetLoading(true); setBotMsg('')
+    try {
+      const phase = botBetPhase === 'all' ? undefined : botBetPhase
+      const qs = phase ? `?phase=${phase}` : ''
+      const r = await api.post(`/admin/bot/bet${qs}`, {}, token)
+      setBotMsg(`✓ ${r.created} palpites criados · ${r.skipped_exists} já existentes · ${r.skipped_closed} encerradas`)
+      loadBot()
+    } catch (e) { setBotMsg(`✗ ${e?.message || 'erro'}`) }
+    finally { setBotBetLoading(false) }
+  }
+
+  async function runBotChampion() {
+    setBotChampLoading(true); setBotMsg('')
+    try {
+      const r = await api.post('/admin/bot/pick-champion', {}, token)
+      setBotMsg(`✓ Campeão: ${r.champion?.name} · Vice: ${r.vice?.name} (fonte: ${r.source})`)
+      loadBot()
+    } catch (e) { setBotMsg(`✗ ${e?.message || 'erro'}`) }
+    finally { setBotChampLoading(false) }
+  }
+
   function toggleSeries(key) {
     setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -429,6 +483,7 @@ export default function Admin() {
     if (tab === 'analyses' && !analysisConfig) loadAnalysisConfig()
     if (tab === 'analyses' && !analysisStatus) loadAnalysisStatus()
     if (tab === 'analyses') fetchProgress()
+    if (tab === 'bot' && !botStatus && !botLoading) loadBot()
   }, [tab])
 
   useEffect(() => {
@@ -2530,6 +2585,248 @@ export default function Admin() {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── 🎮 Apostador IA ──────────────────────────────────────────────────── */}
+      {tab === 'bot' && (
+        <div className="adm-pane fade-in-1">
+
+          {/* Status card */}
+          <div className="adm-card">
+            <div className="adm-card__header">
+              <span className="adm-card__title">🎮 Apostador IA — Status</span>
+              <button className="btn btn-sm" onClick={loadBot} disabled={botLoading}>
+                {botLoading ? '…' : '↻ Atualizar'}
+              </button>
+            </div>
+            <div className="adm-card__body">
+              {!botStatus ? (
+                <div style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando…</div>
+              ) : !botStatus.exists ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)' }}>Bot ainda não criado.</div>
+                  <button className="btn btn-primary" onClick={createBot}>🤖 Criar Bot Apostador</button>
+                </div>
+              ) : (
+                <div>
+                  {/* KPIs */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
+                    {[
+                      { label: 'Pontos', val: botStatus.total_points, color: 'var(--accent)' },
+                      { label: 'Posição', val: botStatus.ranking_position ? `#${botStatus.ranking_position}` : '—', color: 'var(--text-1)' },
+                      { label: 'Palpites', val: botStatus.total_bets, color: 'var(--text-1)' },
+                      { label: 'Avaliados', val: botStatus.evaluated, color: 'var(--text-1)' },
+                      { label: '🎯 Exatos', val: botStatus.exatos, color: 'var(--accent)' },
+                      { label: '✅ Certos', val: botStatus.certos, color: 'var(--win)' },
+                      { label: '❌ Erros', val: botStatus.erros, color: 'var(--lose)' },
+                      { label: '% Aproveit.', val: botStatus.evaluated > 0 ? `${Math.round(botStatus.total_points / (botStatus.evaluated * 25) * 100)}%` : '—', color: 'var(--accent)' },
+                    ].map(k => (
+                      <div key={k.label} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: k.color, lineHeight: 1 }}>{k.val}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{k.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Champion picks */}
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                    {botStatus.champion && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent-dim)', borderRadius: 8, padding: '8px 14px', border: '1px solid var(--accent)' }}>
+                        {botStatus.champion.flag && <img src={botStatus.champion.flag} alt="" style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} />}
+                        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13 }}>🏆 {botStatus.champion.name}</span>
+                      </div>
+                    )}
+                    {botStatus.vice && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-overlay)', borderRadius: 8, padding: '8px 14px', border: '1px solid var(--border)' }}>
+                        {botStatus.vice.flag && <img src={botStatus.vice.flag} alt="" style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} />}
+                        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13 }}>🥈 {botStatus.vice.name}</span>
+                      </div>
+                    )}
+                    {!botStatus.champion && !botStatus.vice && (
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Campeão/vice ainda não escolhidos</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          {botStatus?.exists && (
+            <div className="adm-card">
+              <div className="adm-card__header">
+                <span className="adm-card__title">⚡ Ações</span>
+              </div>
+              <div className="adm-card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Gerar palpites */}
+                <div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                    Fase dos palpites
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {[
+                      { id: 'all', label: 'Todas' },
+                      { id: 'group', label: 'Fase de Grupos' },
+                      { id: 'r32', label: 'Round of 32' },
+                      { id: 'r16', label: 'Oitavas' },
+                      { id: 'qf', label: 'Quartas' },
+                      { id: 'sf', label: 'Semifinal' },
+                      { id: 'final', label: 'Final' },
+                    ].map(p => (
+                      <button
+                        key={p.id}
+                        className={`btn btn-sm${botBetPhase === p.id ? ' btn-primary' : ''}`}
+                        onClick={() => setBotBetPhase(p.id)}
+                        style={{ fontSize: 11 }}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={runBotBet}
+                    disabled={botBetLoading}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    {botBetLoading ? '⏳ Gerando…' : '🎯 Gerar Palpites'}
+                  </button>
+                </div>
+
+                {/* Escolher campeão */}
+                <div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                    Palpite de Campeão/Vice
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+                    Usa simulação Monte Carlo mais recente. Fallback: Elo das seleções.
+                  </div>
+                  <button
+                    className="btn"
+                    onClick={runBotChampion}
+                    disabled={botChampLoading}
+                    style={{ background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    {botChampLoading ? '⏳ Escolhendo…' : '🏆 Escolher Campeão/Vice pelo Modelo'}
+                  </button>
+                </div>
+
+                {botMsg && (
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: botMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)', background: 'var(--bg-overlay)', borderRadius: 8, padding: '8px 12px', border: `1px solid ${botMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)'}` }}>
+                    {botMsg}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Performance por fase */}
+          {botBets?.by_phase && Object.keys(botBets.by_phase).length > 0 && (
+            <div className="adm-card">
+              <div className="adm-card__header">
+                <span className="adm-card__title">📊 Performance por Fase</span>
+              </div>
+              <div className="adm-card__body" style={{ padding: 0 }}>
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th>Fase</th>
+                      <th className="adm-table__num">Apostas</th>
+                      <th className="adm-table__num">Avaliados</th>
+                      <th className="adm-table__num" style={{ color: 'var(--accent)' }}>🎯 Exatos</th>
+                      <th className="adm-table__num" style={{ color: 'var(--win)' }}>✅ Certos</th>
+                      <th className="adm-table__num" style={{ color: 'var(--lose)' }}>❌ Erros</th>
+                      <th className="adm-table__num">Pontos</th>
+                      <th className="adm-table__num">Aproveito</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(botBets.by_phase).map(([phase, p]) => {
+                      const aprov = p.evaluated > 0 ? Math.round(p.points / (p.evaluated * 25) * 100) : null
+                      return (
+                        <tr key={phase}>
+                          <td style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12 }}>
+                            {phase === 'group' ? 'Grupos' : phase === 'r32' ? 'R32' : phase === 'r16' ? 'Oitavas' : phase === 'qf' ? 'Quartas' : phase === 'sf' ? 'Semi' : phase === 'final' ? 'Final' : phase}
+                          </td>
+                          <td className="adm-table__num">{p.total}</td>
+                          <td className="adm-table__num">{p.evaluated}</td>
+                          <td className="adm-table__num" style={{ color: 'var(--accent)', fontWeight: 700 }}>{p.exatos}</td>
+                          <td className="adm-table__num" style={{ color: 'var(--win)' }}>{p.certos}</td>
+                          <td className="adm-table__num" style={{ color: 'var(--lose)' }}>{p.erros}</td>
+                          <td className="adm-table__num" style={{ fontFamily: 'var(--font-display)', color: 'var(--accent)' }}>{p.points}</td>
+                          <td className="adm-table__num" style={{ color: aprov >= 60 ? 'var(--win)' : aprov >= 30 ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700 }}>
+                            {aprov !== null ? `${aprov}%` : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Bets list */}
+          {botBets?.bets?.length > 0 && (
+            <div className="adm-card">
+              <div className="adm-card__header">
+                <span className="adm-card__title">📋 Palpites do Bot</span>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>
+                  {botBets.bets.length} palpites
+                </span>
+              </div>
+              <div className="adm-table-wrap">
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th>Partida</th>
+                      <th>Fase</th>
+                      <th className="adm-table__num">Bot</th>
+                      <th className="adm-table__num">Oficial</th>
+                      <th className="adm-table__num">Pts</th>
+                      <th>Resultado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {botBets.bets.map(b => (
+                      <tr key={b.id} style={{ opacity: b.outcome === null ? 0.7 : 1 }}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {b.team_a_flag && <img src={b.team_a_flag} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1 }} />}
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12 }}>{b.team_a_code}</span>
+                            <span style={{ color: 'var(--text-4)', fontSize: 11 }}>×</span>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12 }}>{b.team_b_code}</span>
+                            {b.team_b_flag && <img src={b.team_b_flag} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1 }} />}
+                          </div>
+                        </td>
+                        <td style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                          {b.phase === 'group' ? 'Grupos' : b.phase === 'r32' ? 'R32' : b.phase === 'r16' ? 'Oitavas' : b.phase === 'qf' ? 'Quartas' : b.phase === 'sf' ? 'Semi' : b.phase === 'final' ? 'Final' : b.phase}
+                        </td>
+                        <td className="adm-table__num" style={{ fontFamily: 'var(--font-data)', fontWeight: 700 }}>
+                          {b.predicted_a}×{b.predicted_b}
+                        </td>
+                        <td className="adm-table__num" style={{ fontFamily: 'var(--font-data)', color: 'var(--text-3)' }}>
+                          {b.official_a !== null ? `${b.official_a}×${b.official_b}` : '—'}
+                        </td>
+                        <td className="adm-table__num" style={{ fontFamily: 'var(--font-display)', color: 'var(--accent)' }}>
+                          {b.points ?? '—'}
+                        </td>
+                        <td>
+                          {b.outcome === 'exact'   && <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700 }}>🎯 Exato</span>}
+                          {b.outcome === 'correct' && <span style={{ color: 'var(--win)',    fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700 }}>✅ Certo</span>}
+                          {b.outcome === 'wrong'   && <span style={{ color: 'var(--lose)',   fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700 }}>❌ Errou</span>}
+                          {b.outcome === null      && <span style={{ color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 11 }}>Aguardando</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 

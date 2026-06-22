@@ -30,130 +30,76 @@ async function drawRankingCanvas(ranking, title) {
   const W = 520, ROW = 52, HEADER = 128, FOOTER = 50
   const top = ranking.slice(0, 10)
   const H = HEADER + top.length * ROW + FOOTER
-
   const canvas = document.createElement('canvas')
   canvas.width = W * 2
   canvas.height = H * 2
   const ctx = canvas.getContext('2d')
   ctx.scale(2, 2)
-
-  // Background
-  ctx.fillStyle = '#0d1b2a'
-  ctx.fillRect(0, 0, W, H)
-
-  // Header bg
-  ctx.fillStyle = '#0a3d3b'
-  ctx.fillRect(0, 0, W, HEADER)
-
-  // Top accent line
-  ctx.fillStyle = '#0f7a78'
-  ctx.fillRect(0, 0, W, 4)
-
-  // PREDICTS text
-  ctx.font = 'bold 30px Arial, sans-serif'
-  ctx.fillStyle = '#ffffff'
-  ctx.textAlign = 'center'
+  ctx.fillStyle = '#0d1b2a'; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = '#0a3d3b'; ctx.fillRect(0, 0, W, HEADER)
+  ctx.fillStyle = '#0f7a78'; ctx.fillRect(0, 0, W, 4)
+  ctx.font = 'bold 30px Arial, sans-serif'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'
   ctx.fillText('PREDICTS', W / 2, 48)
-
-  // Subtitle
-  ctx.font = '13px Arial, sans-serif'
-  ctx.fillStyle = '#8ecfcc'
+  ctx.font = '13px Arial, sans-serif'; ctx.fillStyle = '#8ecfcc'
   ctx.fillText('Bolão Copa 2026 · predicts.info', W / 2, 70)
-
-  // Separator
-  ctx.fillStyle = 'rgba(255,255,255,0.1)'
-  ctx.fillRect(40, 82, W - 80, 1)
-
-  // Title
-  ctx.font = 'bold 14px Arial, sans-serif'
-  ctx.fillStyle = '#0f7a78'
-  ctx.textAlign = 'center'
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(40, 82, W - 80, 1)
+  ctx.font = 'bold 14px Arial, sans-serif'; ctx.fillStyle = '#0f7a78'
   ctx.fillText(title.toUpperCase(), W / 2, 110)
-
-  // Rows
   top.forEach((r, i) => {
     const y = HEADER + i * ROW
     const barColor = i === 0 ? '#d4af37' : i === 1 ? '#9e9e9e' : i === 2 ? '#0f7a78' : null
-
-    // Stripe
-    if (i % 2 === 0) {
-      ctx.fillStyle = 'rgba(255,255,255,0.03)'
-      ctx.fillRect(0, y, W, ROW)
-    }
-
-    // Gold row tint
-    if (i === 0) {
-      ctx.fillStyle = 'rgba(212,175,55,0.07)'
-      ctx.fillRect(0, y, W, ROW)
-    }
-
-    // Left bar
-    if (barColor) {
-      ctx.fillStyle = barColor
-      ctx.fillRect(0, y, 4, ROW)
-    }
-
-    // Row border
-    ctx.fillStyle = 'rgba(255,255,255,0.06)'
-    ctx.fillRect(0, y + ROW - 1, W, 1)
-
-    // Position
+    if (i % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(0, y, W, ROW) }
+    if (i === 0) { ctx.fillStyle = 'rgba(212,175,55,0.07)'; ctx.fillRect(0, y, W, ROW) }
+    if (barColor) { ctx.fillStyle = barColor; ctx.fillRect(0, y, 4, ROW) }
+    ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(0, y + ROW - 1, W, 1)
     ctx.textAlign = 'center'
     const posLabel = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1)
     ctx.font = i < 3 ? 'bold 18px Arial, sans-serif' : 'bold 13px Arial, sans-serif'
     ctx.fillStyle = barColor || '#6b7280'
     ctx.fillText(posLabel, 30, y + ROW / 2 + 6)
-
-    // Name
     ctx.font = i < 3 ? 'bold 14px Arial, sans-serif' : '13px Arial, sans-serif'
-    ctx.fillStyle = i < 3 ? '#f1f5f9' : '#cbd5e1'
-    ctx.textAlign = 'left'
+    ctx.fillStyle = i < 3 ? '#f1f5f9' : '#cbd5e1'; ctx.textAlign = 'left'
     let name = r.name
-    const maxNameW = 320
-    while (ctx.measureText(name).width > maxNameW && name.length > 3) name = name.slice(0, -1)
+    while (ctx.measureText(name).width > 320 && name.length > 3) name = name.slice(0, -1)
     if (name !== r.name) name += '…'
     ctx.fillText(name, 62, y + ROW / 2 + 5)
-
-    // Points
     ctx.textAlign = 'right'
     ctx.font = i < 3 ? 'bold 18px Arial, sans-serif' : 'bold 15px Arial, sans-serif'
     ctx.fillStyle = '#0f7a78'
     ctx.fillText(`${r.total_points} pts`, W - 18, y + ROW / 2 + 6)
   })
-
-  // Footer
   const footerY = HEADER + top.length * ROW
-  ctx.fillStyle = '#060f18'
-  ctx.fillRect(0, footerY, W, FOOTER)
-  ctx.fillStyle = '#0f7a78'
-  ctx.fillRect(0, footerY, W, 1)
-
-  ctx.font = '12px Arial, sans-serif'
-  ctx.fillStyle = '#4a6070'
-  ctx.textAlign = 'center'
+  ctx.fillStyle = '#060f18'; ctx.fillRect(0, footerY, W, FOOTER)
+  ctx.fillStyle = '#0f7a78'; ctx.fillRect(0, footerY, W, 1)
+  ctx.font = '12px Arial, sans-serif'; ctx.fillStyle = '#4a6070'; ctx.textAlign = 'center'
   const now = new Date()
-  ctx.fillText(
-    `predicts.info · ${now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}`,
-    W / 2, footerY + FOOTER / 2 + 4
-  )
-
+  ctx.fillText(`predicts.info · ${now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}`, W / 2, footerY + FOOTER / 2 + 4)
   return canvas.toDataURL('image/png')
+}
+
+function openExternal(url) {
+  const a = document.createElement('a')
+  a.href = url
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
 }
 
 export default function ShareModal({ onClose }) {
   const { token } = useAuth()
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
-  // Link sharing
   const [target, setTarget] = useState('dashboard')
   const [copied, setCopied] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState(null)
   const [qrExpanded, setQrExpanded] = useState(false)
 
-  // WhatsApp number tool
   const [phone, setPhone] = useState('')
   const [phoneError, setPhoneError] = useState('')
 
-  // Image sharing
   const [groups, setGroups] = useState([])
   const [imgSource, setImgSource] = useState('geral')
   const [selectedGroup, setSelectedGroup] = useState(null)
@@ -163,12 +109,22 @@ export default function ShareModal({ onClose }) {
 
   const active = SHARE_TARGETS.find(t => t.id === target)
 
+  // Lock scroll — run once only
   useEffect(() => {
-    const handler = e => { if (e.key === 'Escape') { if (qrExpanded) setQrExpanded(false); else onClose() } }
-    document.addEventListener('keydown', handler)
     document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', handler); document.body.style.overflow = '' }
-  }, [onClose, qrExpanded])
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  // Keyboard handler — stable ref for onClose
+  useEffect(() => {
+    function handler(e) {
+      if (e.key !== 'Escape') return
+      if (qrExpanded) setQrExpanded(false)
+      else onCloseRef.current()
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [qrExpanded])
 
   useEffect(() => {
     setQrDataUrl(null)
@@ -178,9 +134,7 @@ export default function ShareModal({ onClose }) {
 
   useEffect(() => {
     if (!token) return
-    api.get('/user-groups', token)
-      .then(gs => { setGroups(gs || []) })
-      .catch(() => {})
+    api.get('/user-groups', token).then(gs => setGroups(gs || [])).catch(() => {})
   }, [token])
 
   function copy() {
@@ -190,7 +144,7 @@ export default function ShareModal({ onClose }) {
   }
 
   function shareWhatsApp() {
-    window.open(`https://wa.me/?text=${encodeURIComponent(active.waText)}`, '_blank')
+    openExternal(`https://wa.me/?text=${encodeURIComponent(active.waText)}`)
   }
 
   function shareNative() {
@@ -202,26 +156,21 @@ export default function ShareModal({ onClose }) {
     const digits = phone.replace(/\D/g, '')
     if (digits.length < 10) { setPhoneError('Número inválido — use DDI + DDD + número, ex: 5511999998888'); return }
     setPhoneError('')
-    window.open(`https://wa.me/${digits}?text=${encodeURIComponent(active.waText)}`, '_blank')
+    openExternal(`https://wa.me/${digits}?text=${encodeURIComponent(active.waText)}`)
   }
 
   async function generateImage() {
-    setGeneratingImg(true)
-    setImgDataUrl(null)
-    setImgError('')
+    setGeneratingImg(true); setImgDataUrl(null); setImgError('')
     try {
       let ranking, title
       if (imgSource === 'group' && selectedGroup) {
         const res = await api.get(`/user-groups/${selectedGroup.id}/ranking`, token)
-        ranking = res.ranking || []
-        title = res.group_name || selectedGroup.name
+        ranking = res.ranking || []; title = res.group_name || selectedGroup.name
       } else {
-        ranking = await api.get('/ranking')
-        title = 'Ranking Geral'
+        ranking = await api.get('/ranking'); title = 'Ranking Geral'
       }
       if (!ranking.length) { setImgError('Sem dados de ranking ainda.'); return }
-      const dataUrl = await drawRankingCanvas(ranking, title)
-      setImgDataUrl(dataUrl)
+      setImgDataUrl(await drawRankingCanvas(ranking, title))
     } catch (e) {
       setImgError(e.message || 'Erro ao gerar imagem')
     } finally {
@@ -233,384 +182,269 @@ export default function ShareModal({ onClose }) {
     const a = document.createElement('a')
     a.href = imgDataUrl
     a.download = 'ranking-predicts.png'
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
   }
 
-  async function shareImage() {
-    if (!navigator.share) { downloadImage(); return }
+  async function shareImageNative() {
     try {
       const res = await fetch(imgDataUrl)
       const blob = await res.blob()
       const file = new File([blob], 'ranking-predicts.png', { type: 'image/png' })
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: 'Ranking Predicts' })
-      } else {
-        downloadImage()
+        return
       }
-    } catch { downloadImage() }
+    } catch {}
+    downloadImage()
   }
 
   const hasNativeShare = typeof navigator !== 'undefined' && !!navigator.share
 
   return (
-    <>
-      {/* QR Expanded overlay */}
-      {qrExpanded && (
-        <div
-          onClick={() => setQrExpanded(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 9100,
-            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20,
-            animation: 'fadeIn 100ms ease',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}
-          >
-            <div style={{
-              background: '#fff', borderRadius: 20, padding: 20,
-              boxShadow: '0 0 60px rgba(15,122,120,0.6)',
-              border: '3px solid #0f7a78',
-            }}>
-              {qrDataUrl && <img src={qrDataUrl} alt="QR Code" style={{ width: 240, height: 240, display: 'block' }} />}
-            </div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: '#8ecfcc', letterSpacing: '0.05em' }}>
-              {active.url}
-            </div>
-            <button
-              onClick={() => setQrExpanded(false)}
-              style={{
-                fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700,
-                letterSpacing: '0.08em', textTransform: 'uppercase',
-                padding: '8px 24px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.2)',
-                cursor: 'pointer', background: 'rgba(255,255,255,0.1)', color: '#fff',
-              }}
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main modal */}
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9000,
+        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', animation: 'fadeIn 120ms ease',
+        overscrollBehavior: 'contain',
+      }}
+    >
       <div
-        onClick={onClose}
+        onClick={e => e.stopPropagation()}
         style={{
-          position: 'fixed', inset: 0, zIndex: 9000,
-          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '16px', animation: 'fadeIn 120ms ease',
+          background: 'var(--surface)', borderRadius: 20, width: '100%', maxWidth: 440,
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+          animation: 'slideUp 180ms cubic-bezier(.22,.9,.36,1)',
+          border: '1px solid var(--border)',
+          overscrollBehavior: 'contain',
         }}
       >
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            background: 'var(--surface)', borderRadius: 20, width: '100%', maxWidth: 440,
-            maxHeight: '90vh', overflowY: 'auto',
-            boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
-            animation: 'slideUp 180ms cubic-bezier(.22,.9,.36,1)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          {/* Hero */}
-          <div style={{ background: '#0a3d3b', padding: '28px 24px 20px', position: 'relative', textAlign: 'center' }}>
-            <button
-              onClick={onClose}
-              style={{
-                position: 'absolute', top: 12, right: 12,
-                background: 'rgba(255,255,255,0.12)', border: 'none',
-                borderRadius: '50%', width: 30, height: 30,
-                cursor: 'pointer', color: '#fff', fontSize: 16,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >×</button>
-            <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 10 }}>🎯</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#ffffff', letterSpacing: '0.08em' }}>PREDICTS</div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#8ecfcc', marginTop: 4, letterSpacing: '0.04em' }}>
-              Bolão Copa 2026 · Convide para jogar
-            </div>
-          </div>
+        {/* Hero */}
+        <div style={{ background: '#0a3d3b', padding: '28px 24px 20px', position: 'relative', textAlign: 'center', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', color: '#fff', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >×</button>
+          <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 10 }}>🎯</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#ffffff', letterSpacing: '0.08em' }}>PREDICTS</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#8ecfcc', marginTop: 4, letterSpacing: '0.04em' }}>Bolão Copa 2026 · Convide para jogar</div>
+        </div>
 
-          <div style={{ padding: '20px 20px 24px' }}>
+        <div style={{ padding: '20px 20px 24px' }}>
 
-            {/* Target tabs */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 18, background: 'var(--bg-overlay)', borderRadius: 10, padding: 3 }}>
-              {SHARE_TARGETS.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => { setTarget(t.id); setCopied(false) }}
-                  style={{
-                    flex: 1, padding: '7px 6px', borderRadius: 8, border: 'none',
-                    cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                    background: target === t.id ? 'var(--surface)' : 'transparent',
-                    color: target === t.id ? 'var(--accent)' : 'var(--text-3)',
-                    boxShadow: target === t.id ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
-                    transition: 'all .15s',
-                  }}
-                >
-                  <span>{t.icon}</span> {t.label}
-                </button>
-              ))}
-            </div>
-
-            {/* QR + Link */}
-            <div style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'center' }}>
-              {/* QR — clicável */}
+          {/* QR expandido inline */}
+          {qrExpanded ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+              <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 0 32px rgba(15,122,120,0.4)', border: '2px solid var(--accent)' }}>
+                {qrDataUrl && <img src={qrDataUrl} alt="QR Code" style={{ width: 220, height: 220, display: 'block' }} />}
+              </div>
+              <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', textAlign: 'center' }}>{active.url}</div>
               <button
-                onClick={() => qrDataUrl && setQrExpanded(true)}
-                title="Clique para expandir"
-                style={{
-                  flexShrink: 0, width: 92, height: 92, borderRadius: 12, overflow: 'hidden',
-                  background: '#fff', border: '2px solid var(--accent)',
-                  boxShadow: '0 4px 12px rgba(15,122,120,0.25)',
-                  cursor: qrDataUrl ? 'zoom-in' : 'default',
-                  padding: 0, position: 'relative',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'box-shadow .15s, transform .15s',
-                }}
-                onMouseOver={e => { if (qrDataUrl) { e.currentTarget.style.boxShadow = '0 6px 20px rgba(15,122,120,0.45)'; e.currentTarget.style.transform = 'scale(1.04)' } }}
-                onMouseOut={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(15,122,120,0.25)'; e.currentTarget.style.transform = 'scale(1)' }}
+                type="button"
+                onClick={() => setQrExpanded(false)}
+                style={{ padding: '7px 24px', borderRadius: 20, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, background: 'transparent', color: 'var(--text-2)', letterSpacing: '0.06em' }}
               >
-                {qrDataUrl ? (
-                  <>
-                    <img src={qrDataUrl} alt="QR Code" style={{ width: 88, height: 88, display: 'block' }} />
-                    <div style={{
-                      position: 'absolute', inset: 0, background: 'rgba(10,61,59,0)', borderRadius: 10,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 18, opacity: 0, transition: 'all .15s',
-                    }}
-                      className="qr-hover-hint"
-                    />
-                  </>
-                ) : (
-                  <div style={{ width: 88, height: 88, background: 'var(--bg-overlay)', borderRadius: 8 }} />
-                )}
+                Fechar QR
               </button>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)',
-                  fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6,
-                }}>
-                  📷 Toque no QR para expandir
-                </div>
-                <div style={{
-                  display: 'flex', gap: 6,
-                  background: 'var(--bg-overlay)', borderRadius: 8,
-                  padding: '7px 10px', alignItems: 'center',
-                }}>
-                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {active.url}
-                  </span>
+            </div>
+          ) : (
+            <>
+              {/* Target tabs */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 18, background: 'var(--bg-overlay)', borderRadius: 10, padding: 3 }}>
+                {SHARE_TARGETS.map(t => (
                   <button
-                    onClick={copy}
+                    key={t.id}
+                    type="button"
+                    onClick={() => { setTarget(t.id); setCopied(false) }}
                     style={{
-                      fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
-                      letterSpacing: '0.06em', textTransform: 'uppercase',
-                      padding: '4px 10px', borderRadius: 6, border: 'none',
-                      cursor: 'pointer', flexShrink: 0,
-                      background: copied ? 'var(--win)' : 'var(--accent)',
-                      color: '#fff', transition: 'background 200ms',
+                      flex: 1, padding: '7px 6px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                      background: target === t.id ? 'var(--surface)' : 'transparent',
+                      color: target === t.id ? 'var(--accent)' : 'var(--text-3)',
+                      boxShadow: target === t.id ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                      transition: 'all .15s',
                     }}
                   >
-                    {copied ? '✓' : 'Copiar'}
+                    <span>{t.icon}</span> {t.label}
                   </button>
+                ))}
+              </div>
+
+              {/* QR + Link */}
+              <div style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => qrDataUrl && setQrExpanded(true)}
+                  title="Clique para expandir QR"
+                  style={{
+                    flexShrink: 0, width: 92, height: 92, borderRadius: 12, overflow: 'hidden',
+                    background: '#fff', border: '2px solid var(--accent)',
+                    boxShadow: '0 4px 12px rgba(15,122,120,0.25)',
+                    cursor: qrDataUrl ? 'zoom-in' : 'default', padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'transform .15s, box-shadow .15s',
+                  }}
+                  onMouseOver={e => { if (qrDataUrl) { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(15,122,120,0.45)' } }}
+                  onMouseOut={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 12px rgba(15,122,120,0.25)' }}
+                >
+                  {qrDataUrl
+                    ? <img src={qrDataUrl} alt="QR Code" style={{ width: 88, height: 88, display: 'block' }} />
+                    : <div style={{ width: 88, height: 88, background: 'var(--bg-overlay)', borderRadius: 8 }} />
+                  }
+                </button>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+                    📷 Toque para expandir QR
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, background: 'var(--bg-overlay)', borderRadius: 8, padding: '7px 10px', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {active.url}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={copy}
+                      style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', flexShrink: 0, background: copied ? 'var(--win)' : 'var(--accent)', color: '#fff', transition: 'background 200ms' }}
+                    >
+                      {copied ? '✓' : 'Copiar'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Share buttons */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              <button
-                onClick={shareWhatsApp}
-                style={{
-                  flex: 1, padding: '11px', borderRadius: 10, border: 'none',
-                  cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                  background: '#25D366', color: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                  transition: 'opacity .15s',
-                }}
-                onMouseOver={e => e.currentTarget.style.opacity = '.85'}
-                onMouseOut={e => e.currentTarget.style.opacity = '1'}
-              >
-                <WhatsAppIcon /> WhatsApp
-              </button>
-              {hasNativeShare ? (
+              {/* Share buttons */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
                 <button
-                  onClick={shareNative}
-                  style={{
-                    flex: 1, padding: '11px', borderRadius: 10,
-                    border: '1px solid var(--border)', cursor: 'pointer',
-                    fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                    background: 'transparent', color: 'var(--text-2)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    transition: 'background .15s',
-                  }}
-                  onMouseOver={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
-                  onMouseOut={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <ShareIcon /> Mais opções
-                </button>
-              ) : (
-                <button
-                  onClick={() => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(active.waText)}`, '_blank')}
-                  style={{
-                    flex: 1, padding: '11px', borderRadius: 10,
-                    border: '1px solid var(--border)', cursor: 'pointer',
-                    fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                    background: 'transparent', color: 'var(--text-2)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    transition: 'background .15s',
-                  }}
-                  onMouseOver={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
-                  onMouseOut={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  𝕏 Postar
-                </button>
-              )}
-            </div>
-
-            {/* Divider — número */}
-            <Divider label="Enviar para um número" />
-
-            {/* WhatsApp number tool */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="tel"
-                  placeholder="5511999998888"
-                  value={phone}
-                  onChange={e => { setPhone(e.target.value); setPhoneError('') }}
-                  onKeyDown={e => { if (e.key === 'Enter') openWhatsAppNumber() }}
-                  style={{
-                    flex: 1, padding: '10px 12px', borderRadius: 10,
-                    border: `1px solid ${phoneError ? 'var(--lose)' : 'var(--border)'}`,
-                    background: 'var(--bg-overlay)', color: 'var(--text-1)',
-                    fontFamily: 'var(--font-data)', fontSize: 14, outline: 'none',
-                    transition: 'border-color .15s',
-                  }}
-                />
-                <button
-                  onClick={openWhatsAppNumber}
-                  style={{
-                    padding: '10px 16px', borderRadius: 10, border: 'none',
-                    cursor: 'pointer', background: '#25D366', color: '#fff',
-                    fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                    display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-                    transition: 'opacity .15s',
-                  }}
+                  type="button"
+                  onClick={shareWhatsApp}
+                  style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: '#25D366', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'opacity .15s' }}
                   onMouseOver={e => e.currentTarget.style.opacity = '.85'}
                   onMouseOut={e => e.currentTarget.style.opacity = '1'}
                 >
-                  <WhatsAppIcon /> Enviar
+                  <WhatsAppIcon /> WhatsApp
                 </button>
-              </div>
-              {phoneError ? (
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--lose)', marginTop: 5 }}>{phoneError}</div>
-              ) : (
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 5 }}>
-                  DDI + DDD + número · Ex: 55 11 9 9999-8888 → 5511999998888
-                </div>
-              )}
-            </div>
-
-            {/* Divider — imagem */}
-            <Divider label="Compartilhar Ranking como Imagem" />
-
-            {/* Image source selector */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <SourcePill
-                  active={imgSource === 'geral'}
-                  onClick={() => { setImgSource('geral'); setImgDataUrl(null); setSelectedGroup(null) }}
-                  label="🌎 Ranking Geral"
-                />
-                {groups.map(g => (
-                  <SourcePill
-                    key={g.id}
-                    active={imgSource === 'group' && selectedGroup?.id === g.id}
-                    onClick={() => { setImgSource('group'); setSelectedGroup(g); setImgDataUrl(null) }}
-                    label={`👥 ${g.name}`}
-                  />
-                ))}
-                {!token && (
-                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', alignSelf: 'center' }}>
-                    Entre para ver seus grupos
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={generateImage}
-              disabled={generatingImg}
-              style={{
-                width: '100%', padding: '11px', borderRadius: 10, border: 'none',
-                cursor: generatingImg ? 'wait' : 'pointer',
-                fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                background: generatingImg ? 'var(--bg-overlay)' : 'var(--accent)',
-                color: generatingImg ? 'var(--text-3)' : '#fff',
-                transition: 'all .15s', marginBottom: imgDataUrl || imgError ? 14 : 0,
-              }}
-            >
-              {generatingImg ? '⏳ Gerando…' : '📸 Gerar Imagem'}
-            </button>
-
-            {imgError && (
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', textAlign: 'center', marginBottom: 10 }}>
-                {imgError}
-              </div>
-            )}
-
-            {imgDataUrl && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* Preview */}
-                <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', lineHeight: 0 }}>
-                  <img src={imgDataUrl} alt="Ranking preview" style={{ width: '100%', display: 'block' }} />
-                </div>
-                {/* Action buttons */}
-                <div style={{ display: 'flex', gap: 8 }}>
+                {hasNativeShare ? (
                   <button
-                    onClick={downloadImage}
-                    style={{
-                      flex: 1, padding: '10px', borderRadius: 10,
-                      border: '1px solid var(--border)', cursor: 'pointer',
-                      fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                      background: 'transparent', color: 'var(--text-2)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      transition: 'background .15s',
-                    }}
+                    type="button"
+                    onClick={shareNative}
+                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: 'transparent', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'background .15s' }}
                     onMouseOver={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    ⬇ Baixar
+                    <ShareIcon /> Mais opções
                   </button>
-                  {hasNativeShare && (
-                    <button
-                      onClick={shareImage}
-                      style={{
-                        flex: 1, padding: '10px', borderRadius: 10, border: 'none',
-                        cursor: 'pointer', background: '#25D366', color: '#fff',
-                        fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                        transition: 'opacity .15s',
-                      }}
-                      onMouseOver={e => e.currentTarget.style.opacity = '.85'}
-                      onMouseOut={e => e.currentTarget.style.opacity = '1'}
-                    >
-                      <WhatsAppIcon /> Compartilhar
-                    </button>
-                  )}
-                </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openExternal(`https://x.com/intent/tweet?text=${encodeURIComponent(active.waText)}`)}
+                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: 'transparent', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'background .15s' }}
+                    onMouseOver={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+                    onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    𝕏 Postar
+                  </button>
+                )}
               </div>
-            )}
+            </>
+          )}
+
+          {/* Divider — número */}
+          <Divider label="Enviar para um número" />
+
+          {/* WhatsApp number tool */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="tel"
+                placeholder="5511999998888"
+                value={phone}
+                onChange={e => { setPhone(e.target.value); setPhoneError('') }}
+                onKeyDown={e => { if (e.key === 'Enter') openWhatsAppNumber() }}
+                style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: `1px solid ${phoneError ? 'var(--lose)' : 'var(--border)'}`, background: 'var(--bg-overlay)', color: 'var(--text-1)', fontFamily: 'var(--font-data)', fontSize: 14, outline: 'none', transition: 'border-color .15s' }}
+              />
+              <button
+                type="button"
+                onClick={openWhatsAppNumber}
+                style={{ padding: '10px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: '#25D366', color: '#fff', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'opacity .15s' }}
+                onMouseOver={e => e.currentTarget.style.opacity = '.85'}
+                onMouseOut={e => e.currentTarget.style.opacity = '1'}
+              >
+                <WhatsAppIcon /> Enviar
+              </button>
+            </div>
+            {phoneError
+              ? <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--lose)', marginTop: 5 }}>{phoneError}</div>
+              : <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 5 }}>DDI + DDD + número · Ex: 55 11 9 9999-8888 → 5511999998888</div>
+            }
           </div>
+
+          {/* Divider — imagem */}
+          <Divider label="Compartilhar Ranking como Imagem" />
+
+          {/* Source selector */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            <SourcePill active={imgSource === 'geral'} onClick={() => { setImgSource('geral'); setImgDataUrl(null); setSelectedGroup(null) }} label="🌎 Ranking Geral" />
+            {groups.map(g => (
+              <SourcePill
+                key={g.id}
+                active={imgSource === 'group' && selectedGroup?.id === g.id}
+                onClick={() => { setImgSource('group'); setSelectedGroup(g); setImgDataUrl(null) }}
+                label={`👥 ${g.name}`}
+              />
+            ))}
+            {!token && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', alignSelf: 'center' }}>Entre para ver seus grupos</span>}
+          </div>
+
+          <button
+            type="button"
+            onClick={generateImage}
+            disabled={generatingImg}
+            style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', cursor: generatingImg ? 'wait' : 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: generatingImg ? 'var(--bg-overlay)' : 'var(--accent)', color: generatingImg ? 'var(--text-3)' : '#fff', transition: 'all .15s', marginBottom: imgDataUrl || imgError ? 14 : 0 }}
+          >
+            {generatingImg ? '⏳ Gerando…' : '📸 Gerar Imagem'}
+          </button>
+
+          {imgError && <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', textAlign: 'center', marginBottom: 10 }}>{imgError}</div>}
+
+          {imgDataUrl && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', lineHeight: 0 }}>
+                <img src={imgDataUrl} alt="Ranking preview" style={{ width: '100%', display: 'block' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={downloadImage}
+                  style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: 'transparent', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'background .15s' }}
+                  onMouseOver={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+                  onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  ⬇ Baixar
+                </button>
+                {hasNativeShare && (
+                  <button
+                    type="button"
+                    onClick={shareImageNative}
+                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', cursor: 'pointer', background: '#25D366', color: '#fff', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'opacity .15s' }}
+                    onMouseOver={e => e.currentTarget.style.opacity = '.85'}
+                    onMouseOut={e => e.currentTarget.style.opacity = '1'}
+                  >
+                    <WhatsAppIcon /> Compartilhar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -618,12 +452,7 @@ function Divider({ label }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
       <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-      <span style={{
-        fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)',
-        fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-      }}>
-        {label}
-      </span>
+      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label}</span>
       <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
     </div>
   )
@@ -632,14 +461,9 @@ function Divider({ label }) {
 function SourcePill({ active, onClick, label }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      style={{
-        padding: '5px 12px', borderRadius: 20, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-        cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600,
-        background: active ? 'var(--accent)' : 'transparent',
-        color: active ? '#fff' : 'var(--text-2)',
-        transition: 'all .15s', whiteSpace: 'nowrap',
-      }}
+      style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, background: active ? 'var(--accent)' : 'transparent', color: active ? '#fff' : 'var(--text-2)', transition: 'all .15s', whiteSpace: 'nowrap' }}
     >
       {label}
     </button>
