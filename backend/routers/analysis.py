@@ -236,7 +236,8 @@ DEFAULT_PROMPT_TEMPLATE = (
     "REGRAS OBRIGATÓRIAS:\n"
     "- Escreva em PORTUGUÊS BRASILEIRO fluente, estilo ESPN/Globo Esporte\n"
     "- Use os DADOS FORNECIDOS como base factual; enriqueça com conhecimento tático real de cada seleção\n"
-    "- Cite jogadores específicos da convocação com posição e função real (ex: 'Vinicius Jr., ponta-esquerda veloz que explora espaços')\n"
+    "- key_players: cite os 3 MAIS FAMOSOS E DETERMINANTES desta seleção pelo seu conhecimento real do futebol mundial — SEMPRE inclua a superestrela titular (ex: Messi, Salah, Mbappé, Vini Jr.) mesmo que apareça no final da lista de convocados\n"
+    "- Use a lista de convocados para confirmar quem está disponível (⚠️ = lesionado, 🚫 = suspenso), mas baseie os key_players na reputação real e titularidade habitual\n"
     "- Mencione sistemas táticos concretos (4-3-3, 4-2-3-1, 3-5-2, etc.) com base no estilo reconhecido de cada CT\n"
     "- Contextualize no grupo/fase: classificação atual, o que cada resultado significa\n"
     "- Seja CIRÚRGICO em predições: placar, quem marca, em que fase do jogo\n"
@@ -265,9 +266,9 @@ DEFAULT_PROMPT_TEMPLATE = (
     '    "tactical": "Sistema tático específico com nome (ex: 4-3-3 de pressão alta), como se organizam defensiva e ofensivamente, '
     'transição, posse ou contra-ataque, set-pieces",\n'
     '    "key_players": [\n'
-    '      "Nome Completo (posição real) — papel específico neste jogo e por que é determinante",\n'
-    '      "Nome Completo (posição) — função tática e ameaça concreta",\n'
-    '      "Nome Completo (posição) — impacto esperado"\n'
+    '      "SUPERESTRELA (ex: Messi/Salah/Mbappé/Vini Jr.) — sempre o 1º, com posição e papel decisivo neste jogo",\n'
+    '      "2º destaque (posição) — função tática e ameaça concreta para este adversário específico",\n'
+    '      "3º destaque (posição) — impacto esperado e duelo individual que travará"\n'
     '    ],\n'
     '    "form": "Desempenho nos jogos desta Copa: gols, assistências, consistência defensiva, '
     'lesões confirmadas ou dúvidas, rotação de titulares esperada",\n'
@@ -286,7 +287,8 @@ DEFAULT_PROMPT_TEMPLATE = (
     '(2) fator X — o que pode mudar o jogo inesperadamente (substituição, expulsão, gol contra, árbitro)",\n'
     '  "prediction": "2 parágrafos: (1) como o jogo deve se desenvolver fase por fase — '
     'quem controla o início, quando surge a primeira grande chance, como o placar tende a se abrir; '
-    '(2) placar mais provável com justificativa estatística, citar quem marca e em que período do jogo",\n'
+    '(2) cite o placar mais provável do modelo Dixon-Coles (primeiro da lista de placares acima) e os xG esperados, '
+    'justifique taticamente, diga quem marca (superestrela em 1º lugar) e em que período do jogo — seja cirúrgico",\n'
     '  "verdict": "Uma frase direta e opinativa: ex. \'{team_a_name} favorita por qualidade no meio-campo\' | '
     '\'Equilíbrio total — clássico pode terminar no detalhe\' | \'{team_b_name} surpreende com velocidade no contra-ataque\'"\n'
     '}}'
@@ -297,16 +299,22 @@ DEFAULT_PROMPT_TEMPLATE = (
 
 def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, recent_a, recent_b, mc_prob, custom_template: str = "") -> str:
     def fmt_players(players):
-        pos_order = {"GK": 0, "DF": 1, "MF": 2, "FW": 3}
-        pos_label = {"GK": "GOL", "DF": "DEF", "MF": "MEI", "FW": "ATA"}
+        # FW first — stars (Messi, Salah, Mbappé) are attackers and must not be truncated
+        pos_order = {"FW": 0, "MF": 1, "DF": 2, "GK": 3}
+        pos_label = {"FW": "ATA", "MF": "MEI", "DF": "DEF", "GK": "GOL"}
         sorted_p = sorted(players, key=lambda p: pos_order.get(p.position, 9))
         lines, cur_pos = [], None
-        for p in sorted_p[:16]:
+        for p in sorted_p:  # show full squad, no truncation
             lbl = pos_label.get(p.position, p.position)
             if lbl != cur_pos:
                 lines.append(f"  [{lbl}]")
                 cur_pos = lbl
-            lines.append(f"    • {p.name}")
+            suffix = ""
+            if p.is_injured:
+                suffix = " ⚠️ LESIONADO"
+            elif p.is_suspended:
+                suffix = " 🚫 SUSPENSO"
+            lines.append(f"    • {p.name}{suffix}")
         return "\n".join(lines)
 
     def fmt_results(results):
@@ -319,11 +327,18 @@ def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, r
 
     mc_probs = ""
     if mc_prob:
+        top_sc = mc_prob.get("top_scores", [])[:5]
+        scores_str = "  |  ".join(
+            f"{s['score']} ({s['prob']:.1f}%)" for s in top_sc
+        ) if top_sc else "N/D"
         mc_probs = (
-            f"## Probabilidades Monte Carlo (1.000.000 simulações)\n"
-            f"  {team_a.name} {mc_prob.get('prob_a', 0):.1f}% | "
-            f"Empate {mc_prob.get('prob_draw', 0):.1f}% | "
-            f"{team_b.name} {mc_prob.get('prob_b', 0):.1f}%\n"
+            f"## Probabilidades Dixon-Coles + Monte Carlo\n"
+            f"  Vitória {team_a.name}: {mc_prob.get('prob_a', 0):.1f}% | "
+            f"Empate: {mc_prob.get('prob_draw', 0):.1f}% | "
+            f"Vitória {team_b.name}: {mc_prob.get('prob_b', 0):.1f}%\n"
+            f"  xG esperado: {team_a.name} {mc_prob.get('lambda_a', 0):.2f} gols × "
+            f"{team_b.name} {mc_prob.get('lambda_b', 0):.2f} gols\n"
+            f"  Placares mais prováveis: {scores_str}\n"
         )
 
     template = custom_template.strip() if custom_template else DEFAULT_PROMPT_TEMPLATE
@@ -380,15 +395,21 @@ def _get_recent_results(db: Session, team_code: str, limit: int = 5) -> list:
 
 def _get_mc_prob(db: Session, match_id: int) -> dict | None:
     row = db.execute(
-        text("SELECT prob_a, prob_draw, prob_b FROM simulations_cache WHERE match_id = :mid LIMIT 1"),
+        text("SELECT prob_a, prob_draw, prob_b, top_scores, lambda_a, lambda_b FROM simulations_cache WHERE match_id = :mid LIMIT 1"),
         {"mid": match_id},
     ).fetchone()
     if not row:
         return None
+    top_scores = row[3] or []
+    if isinstance(top_scores, str):
+        top_scores = json.loads(top_scores)
     return {
         "prob_a":    round(float(row[0] or 0) * 100, 1),
         "prob_draw": round(float(row[1] or 0) * 100, 1),
         "prob_b":    round(float(row[2] or 0) * 100, 1),
+        "top_scores": top_scores[:5],
+        "lambda_a":  round(float(row[4] or 0), 2),
+        "lambda_b":  round(float(row[5] or 0), 2),
     }
 
 
