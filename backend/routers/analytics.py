@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from collections import Counter
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -335,3 +335,130 @@ def top_users(
         })
 
     return {"days": days, "users": result}
+
+
+@router.get("/bets-audit")
+def bets_audit(
+    result_filter: str | None = Query(default=None, alias="result"),  # exact|correct|wrong|pending
+    phase: str | None = Query(default=None),
+    user_id: int | None = Query(default=None),
+    match_id: int | None = Query(default=None),
+    limit: int = Query(default=200, le=1000),
+    offset: int = Query(default=0),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    from sqlalchemy import text as sa_text
+
+    conditions = ["1=1"]
+    params: dict = {"limit": limit, "offset": offset}
+
+    if result_filter == "exact":
+        conditions.append("b.points_earned IN (3, 25)")
+    elif result_filter == "correct":
+        conditions.append("b.points_earned > 0 AND b.points_earned NOT IN (3, 25) AND b.evaluated_at IS NOT NULL")
+    elif result_filter == "wrong":
+        conditions.append("b.points_earned = 0 AND b.evaluated_at IS NOT NULL")
+    elif result_filter == "pending":
+        conditions.append("b.evaluated_at IS NULL")
+
+    if phase:
+        conditions.append("m.phase = :phase")
+        params["phase"] = phase
+    if user_id:
+        conditions.append("b.user_id = :user_id")
+        params["user_id"] = user_id
+    if match_id:
+        conditions.append("b.match_id = :match_id")
+        params["match_id"] = match_id
+
+    where = " AND ".join(conditions)
+
+    rows = db.execute(sa_text(f"""
+        SELECT
+            b.id, b.user_id, u.name AS user_name, u.email AS user_email,
+            b.match_id,
+            ta.code AS team_a, tb.code AS team_b,
+            ta.name AS team_a_name, tb.name AS team_b_name,
+            b.score_a AS bet_a, b.score_b AS bet_b,
+            mr.score_a AS real_a, mr.score_b AS real_b,
+            b.points_earned, b.evaluated_at, b.created_at,
+            m.match_date, m.phase, m.group_name
+        FROM bets b
+        JOIN users u ON u.id = b.user_id
+        JOIN matches m ON m.id = b.match_id
+        JOIN teams ta ON ta.id = m.team_a_id
+        JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN match_results mr ON mr.match_id = m.id
+        WHERE {where}
+        ORDER BY b.created_at DESC
+        LIMIT :limit OFFSET :offset
+    """), params).fetchall()
+
+    total_row = db.execute(sa_text(f"""
+        SELECT COUNT(*) FROM bets b
+        JOIN users u ON u.id = b.user_id
+        JOIN matches m ON m.id = b.match_id
+        JOIN teams ta ON ta.id = m.team_a_id
+        JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN match_results mr ON mr.match_id = m.id
+        WHERE {where}
+    """), {k: v for k, v in params.items() if k not in ("limit", "offset")}).scalar()
+
+    # Summary stats (all bets, no filter)
+    summary = db.execute(sa_text("""
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN b.points_earned IN (3,25) THEN 1 ELSE 0 END) AS exact,
+            SUM(CASE WHEN b.points_earned > 0 AND b.points_earned NOT IN (3,25) AND b.evaluated_at IS NOT NULL THEN 1 ELSE 0 END) AS correct,
+            SUM(CASE WHEN b.points_earned = 0 AND b.evaluated_at IS NOT NULL THEN 1 ELSE 0 END) AS wrong,
+            SUM(CASE WHEN b.evaluated_at IS NULL THEN 1 ELSE 0 END) AS pending,
+            COUNT(DISTINCT b.user_id) AS unique_users,
+            COUNT(DISTINCT b.match_id) AS unique_matches
+        FROM bets b
+    """)).fetchone()
+
+    def _res(r):
+        if r[14] is None:  # evaluated_at
+            return "pending"
+        pts = r[13] or 0
+        if pts in (3, 25):
+            return "exact"
+        if pts > 0:
+            return "correct"
+        return "wrong"
+
+    items = []
+    for r in rows:
+        items.append({
+            "id": r[0],
+            "user_id": r[1],
+            "user_name": r[2],
+            "user_email": r[3],
+            "match_id": r[4],
+            "team_a": r[5], "team_b": r[6],
+            "team_a_name": r[7], "team_b_name": r[8],
+            "bet_a": r[9], "bet_b": r[10],
+            "real_a": r[11], "real_b": r[12],
+            "points": r[13] or 0,
+            "result": _res(r),
+            "evaluated_at": r[14].isoformat() if r[14] else None,
+            "created_at": r[15].isoformat() if r[15] else None,
+            "match_date": r[16].isoformat() if r[16] else None,
+            "phase": r[17],
+            "group_name": r[18],
+        })
+
+    return {
+        "total": total_row or 0,
+        "summary": {
+            "total": int(summary[0] or 0),
+            "exact": int(summary[1] or 0),
+            "correct": int(summary[2] or 0),
+            "wrong": int(summary[3] or 0),
+            "pending": int(summary[4] or 0),
+            "unique_users": int(summary[5] or 0),
+            "unique_matches": int(summary[6] or 0),
+        },
+        "items": items,
+    }

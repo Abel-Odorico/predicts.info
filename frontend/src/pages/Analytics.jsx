@@ -114,6 +114,13 @@ export default function Analytics() {
   const [topUsers, setTopUsers]         = useState(null)
   const [topUsersLoading, setTopUsersLoading] = useState(false)
 
+  const [betsAudit, setBetsAudit]           = useState(null)
+  const [betsLoading, setBetsLoading]       = useState(false)
+  const [betsResultFilter, setBetsResultFilter] = useState('')
+  const [betsUserFilter, setBetsUserFilter]     = useState('')
+  const [betsOffset, setBetsOffset]             = useState(0)
+  const BETS_LIMIT = 100
+
   useEffect(() => {
     setLoading(true)
     Promise.all([
@@ -138,6 +145,22 @@ export default function Analytics() {
       .catch(() => {})
       .finally(() => setTopUsersLoading(false))
   }, [tab, days, token])
+
+  useEffect(() => {
+    if (tab !== 'bets') return
+    loadBetsAudit(betsResultFilter, betsUserFilter, 0)
+  }, [tab, token])
+
+  function loadBetsAudit(res = betsResultFilter, user = betsUserFilter, off = betsOffset) {
+    setBetsLoading(true)
+    const qs = new URLSearchParams({ limit: BETS_LIMIT, offset: off })
+    if (res) qs.set('result', res)
+    if (user) qs.set('user_id', user)
+    api.get(`/analytics/bets-audit?${qs}`, token)
+      .then(d => { setBetsAudit(d); setBetsOffset(off) })
+      .catch(console.error)
+      .finally(() => setBetsLoading(false))
+  }
 
   function loadAudit(action = auditFilter) {
     setAuditLoading(true)
@@ -164,6 +187,7 @@ export default function Analytics() {
     { id: 'geo',       label: '🌍 Localidade' },
     { id: 'tech',      label: '💻 Tecnologia' },
     { id: 'recent',    label: '🕐 Recentes' },
+    { id: 'bets',      label: '🎯 Apostas' },
     { id: 'audit',     label: '🔐 Auditoria' },
   ]
 
@@ -550,6 +574,141 @@ export default function Analytics() {
                   )
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bets audit tab */}
+      {tab === 'bets' && (
+        <div className="fade-in-1" style={{ marginTop: 'var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+
+          {/* Summary KPIs */}
+          {betsAudit?.summary && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 'var(--s3)' }}>
+              {[
+                { label: 'Total apostas', val: betsAudit.summary.total, color: 'var(--accent)' },
+                { label: 'Placar exato', val: betsAudit.summary.exact, color: 'var(--win)' },
+                { label: 'Resultado certo', val: betsAudit.summary.correct, color: '#f59e0b' },
+                { label: 'Erradas', val: betsAudit.summary.wrong, color: 'var(--lose)' },
+                { label: 'Pendentes', val: betsAudit.summary.pending, color: 'var(--text-3)' },
+                { label: 'Apostadores', val: betsAudit.summary.unique_users, color: '#a78bfa' },
+                { label: 'Jogos apostados', val: betsAudit.summary.unique_matches, color: '#38bdf8' },
+              ].map(({ label, val, color }) => (
+                <div key={label} className="card" style={{ padding: 'var(--s4)' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-4)', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 900, color }}>{val?.toLocaleString('pt-BR') ?? '—'}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Filtros */}
+          <div className="card">
+            <div className="card__header">
+              <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🎯 Auditoria de Apostas</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)' }}>
+                {betsAudit ? `${betsAudit.total.toLocaleString()} registros` : ''}
+              </span>
+            </div>
+            <div className="card__body">
+              <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', marginBottom: 'var(--s4)', alignItems: 'center' }}>
+                {[
+                  { v: '', l: 'Todos' },
+                  { v: 'exact', l: '🎯 Placar exato' },
+                  { v: 'correct', l: '✓ Resultado certo' },
+                  { v: 'wrong', l: '✗ Erradas' },
+                  { v: 'pending', l: '⏳ Pendentes' },
+                ].map(({ v, l }) => (
+                  <button key={v || 'all'}
+                    className={`btn btn-sm ${betsResultFilter === v ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => { setBetsResultFilter(v); loadBetsAudit(v, betsUserFilter, 0) }}
+                  >{l}</button>
+                ))}
+                <button className="btn btn-ghost btn-sm" onClick={() => loadBetsAudit(betsResultFilter, betsUserFilter, betsOffset)} disabled={betsLoading}>
+                  {betsLoading ? '⏳' : '↻'}
+                </button>
+              </div>
+
+              {betsLoading && <p style={{ color: 'var(--text-3)', fontSize: 12, fontFamily: 'var(--font-cond)' }}>Carregando...</p>}
+
+              {!betsLoading && betsAudit?.items?.length === 0 && (
+                <p style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-cond)' }}>Nenhuma aposta encontrada.</p>
+              )}
+
+              {!betsLoading && betsAudit?.items?.length > 0 && (
+                <>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'var(--font-data)' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          {['Quando', 'Usuário', 'Jogo', 'Palpite', 'Placar real', 'Resultado', 'Pts'].map(h => (
+                            <th key={h} style={{ padding: '4px 8px', textAlign: 'left', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {betsAudit.items.map(item => {
+                          const resColor = item.result === 'exact' ? 'var(--win)'
+                            : item.result === 'correct' ? '#f59e0b'
+                            : item.result === 'wrong' ? 'var(--lose)'
+                            : 'var(--text-4)'
+                          const resLabel = item.result === 'exact' ? '🎯 Exato'
+                            : item.result === 'correct' ? '✓ Certo'
+                            : item.result === 'wrong' ? '✗ Errado'
+                            : '⏳ Pendente'
+                          return (
+                            <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', cursor: 'default' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+                              onMouseLeave={e => e.currentTarget.style.background = ''}>
+                              <td style={{ padding: '4px 8px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                                {item.created_at ? new Date(item.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                              </td>
+                              <td style={{ padding: '4px 8px' }}>
+                                <div style={{ color: 'var(--text-1)', fontWeight: 600, whiteSpace: 'nowrap' }}>{item.user_name}</div>
+                                <div style={{ color: 'var(--text-4)', fontSize: 9 }}>{item.user_email}</div>
+                              </td>
+                              <td style={{ padding: '4px 8px', whiteSpace: 'nowrap' }}>
+                                <span style={{ color: 'var(--text-2)' }}>{item.team_a} × {item.team_b}</span>
+                                {item.group_name && <span style={{ color: 'var(--text-4)', fontSize: 9, marginLeft: 4 }}>{item.group_name}</span>}
+                              </td>
+                              <td style={{ padding: '4px 8px', fontWeight: 700, color: 'var(--text-1)', textAlign: 'center' }}>
+                                {item.bet_a}–{item.bet_b}
+                              </td>
+                              <td style={{ padding: '4px 8px', color: 'var(--text-2)', textAlign: 'center' }}>
+                                {item.real_a != null ? `${item.real_a}–${item.real_b}` : '—'}
+                              </td>
+                              <td style={{ padding: '4px 8px', whiteSpace: 'nowrap' }}>
+                                <span style={{ color: resColor, fontWeight: 600, fontFamily: 'var(--font-cond)', fontSize: 11 }}>{resLabel}</span>
+                              </td>
+                              <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, color: item.points > 0 ? 'var(--win)' : 'var(--text-3)' }}>
+                                {item.result === 'pending' ? '—' : item.points}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Paginação */}
+                  {betsAudit.total > BETS_LIMIT && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 'var(--s3)', justifyContent: 'center' }}>
+                      <button className="btn btn-ghost btn-sm" disabled={betsOffset === 0}
+                        onClick={() => loadBetsAudit(betsResultFilter, betsUserFilter, Math.max(0, betsOffset - BETS_LIMIT))}>
+                        ← Anterior
+                      </button>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>
+                        {betsOffset + 1}–{Math.min(betsOffset + BETS_LIMIT, betsAudit.total)} de {betsAudit.total}
+                      </span>
+                      <button className="btn btn-ghost btn-sm" disabled={betsOffset + BETS_LIMIT >= betsAudit.total}
+                        onClick={() => loadBetsAudit(betsResultFilter, betsUserFilter, betsOffset + BETS_LIMIT)}>
+                        Próxima →
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
