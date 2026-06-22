@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid,
@@ -165,6 +165,7 @@ export default function Admin() {
   const [generatingForce, setGeneratingForce] = useState(false)
   const [analysisLogs, setAnalysisLogs]       = useState(null)
   const [logsLoading, setLogsLoading]         = useState(false)
+  const analysisMsgTimerRef = useRef(null)
   const [viewingAnalysis, setViewingAnalysis] = useState(null)  // { match_id, content, model_used }
   const [promptOpen, setPromptOpen]           = useState(false)
   const [aForm, setAForm] = useState({
@@ -173,6 +174,12 @@ export default function Admin() {
     gemini_key: '', gemini_key_2: '', gemini_model: '',
     prompt_template: '',
   })
+
+  function setAnalysisMsgTimed(msg, ms = 6000) {
+    setAnalysisMsg(msg)
+    if (analysisMsgTimerRef.current) clearTimeout(analysisMsgTimerRef.current)
+    if (msg) analysisMsgTimerRef.current = setTimeout(() => setAnalysisMsg(''), ms)
+  }
 
   async function loadAnalysisConfig() {
     try {
@@ -204,9 +211,9 @@ export default function Admin() {
     setAnalysisSaving(true); setAnalysisMsg('')
     try {
       await api.post('/admin/analysis/config', aForm, token)
-      setAnalysisMsg('✓ Configuração salva')
+      setAnalysisMsgTimed('✓ Configuração salva com sucesso!')
       loadAnalysisConfig()
-    } catch { setAnalysisMsg('Erro ao salvar') }
+    } catch(err) { setAnalysisMsgTimed('✗ Erro ao salvar: ' + (err?.message || 'falha')) }
     finally { setAnalysisSaving(false) }
   }
 
@@ -214,9 +221,9 @@ export default function Admin() {
     setGeneratingId(matchId); setAnalysisMsg('')
     try {
       await api.post(`/admin/analysis/${matchId}/generate`, {}, token)
-      setAnalysisMsg(`✓ Análise gerada — partida #${matchId}`)
+      setAnalysisMsgTimed(`✓ Análise gerada — partida #${matchId}`)
       loadAnalysisStatus()
-    } catch (err) { setAnalysisMsg(`Erro: ${err.message || 'falha'}`) }
+    } catch (err) { setAnalysisMsgTimed(`✗ Erro: ${err?.message || 'falha'}`) }
     finally { setGeneratingId(null) }
   }
 
@@ -225,11 +232,11 @@ export default function Admin() {
     setAnalysisMsg('')
     try {
       await api.post('/admin/analysis/generate-all', { only_pending: !force }, token)
-      setAnalysisMsg(force
-        ? '✓ Regeneração total iniciada em background (todos os jogos).'
-        : '✓ Background iniciado — atualize a lista em alguns minutos.')
-    } catch(e) {
-      setAnalysisMsg('Erro: ' + (e?.message || 'falha ao iniciar geração'))
+      setAnalysisMsgTimed(force
+        ? '✓ Regeneração total iniciada! Acompanhe nos logs abaixo.'
+        : '✓ Geração de pendentes iniciada! Clique em "Ver logs" para acompanhar.')
+    } catch(err) {
+      setAnalysisMsgTimed('✗ Erro: ' + (err?.message || 'falha ao iniciar geração'))
     }
     finally { setGeneratingAll(false); setGeneratingForce(false) }
   }
@@ -2077,15 +2084,6 @@ export default function Admin() {
               <span className="adm-card__title">🤖 Configuração Provedores IA</span>
             </div>
             <div className="adm-card__body">
-              {analysisMsg && (
-                <div style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 12,
-                  background: analysisMsg.startsWith('✓') ? 'rgba(46,201,128,0.12)' : 'rgba(232,82,82,0.12)',
-                  color: analysisMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)',
-                  fontFamily: 'var(--font-cond)', fontSize: 13,
-                }}>
-                  {analysisMsg}
-                </div>
-              )}
               <form onSubmit={saveAnalysisConfig} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
                 {/* Provider selector */}
@@ -2233,21 +2231,41 @@ export default function Admin() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button className="btn btn-primary btn-sm" disabled={analysisSaving} type="submit">
-                    {analysisSaving ? 'Salvando…' : '💾 Salvar'}
+                    {analysisSaving ? 'Salvando…' : '💾 Salvar config'}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus() }}>↻ Atualizar</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus(); setAnalysisMsgTimed('✓ Atualizado!') }}>↻ Atualizar</button>
+                </div>
+
+                {/* Ações de geração — fora do form submit */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', alignSelf: 'center' }}>GERAR ANÁLISES:</span>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(false)} disabled={generatingAll || generatingForce}>
-                    {generatingAll ? 'Iniciando…' : '⚡ Gerar pendentes'}
+                    {generatingAll ? '⏳ Iniciando…' : '⚡ Gerar pendentes'}
                   </button>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(true)} disabled={generatingAll || generatingForce}>
-                    {generatingForce ? 'Iniciando…' : '🔄 Regenerar todas'}
+                    {generatingForce ? '⏳ Iniciando…' : '🔄 Regenerar todas'}
                   </button>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={loadAnalysisLogs} disabled={logsLoading}>
-                    {logsLoading ? 'Carregando…' : '📊 Ver logs de geração'}
+                    {logsLoading ? '⏳ Carregando…' : '📊 Ver logs'}
                   </button>
                 </div>
+
+                {/* Feedback sempre visível perto dos botões */}
+                {analysisMsg && (
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                    background: analysisMsg.startsWith('✓') || analysisMsg.startsWith('↻')
+                      ? 'rgba(46,201,128,0.15)' : 'rgba(232,82,82,0.15)',
+                    color: analysisMsg.startsWith('✓') || analysisMsg.startsWith('↻')
+                      ? 'var(--win)' : 'var(--lose)',
+                    fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
+                    border: '1px solid currentColor',
+                  }}>
+                    {analysisMsg}
+                  </div>
+                )}
               </form>
             </div>
           </div>

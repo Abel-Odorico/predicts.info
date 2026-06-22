@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [topBettors, setTopBettors]   = useState([])
   const [liveBets, setLiveBets]       = useState({})
   const [appVersion, setAppVersion]   = useState(null)
+  const [awards, setAwards]           = useState(null)
   const [loading, setLoading]         = useState(true)
   const navigate = useNavigate()
 
@@ -44,6 +45,7 @@ export default function Dashboard() {
           setTopBettors(Array.isArray(bettors) ? bettors.filter(b => b.total_points > 0) : [])
         }).catch(() => {})
         api.get('/version/latest').then(v => { if (mounted) setAppVersion(v) }).catch(() => {})
+        api.get('/tournament/awards').then(a => { if (mounted) setAwards(a) }).catch(() => {})
         if (token) {
           api.get('/bets/mine', token).then(myBets => {
             if (!mounted || !Array.isArray(myBets)) return
@@ -417,6 +419,8 @@ export default function Dashboard() {
             <TopBettorsCard bettors={topBettors} />
           )}
 
+          {awards && <TournamentAwardsCard awards={awards} />}
+
           <div className="card fade-in-2">
             <div className="card__header">
               <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
@@ -748,6 +752,191 @@ function TopBettorsCard({ bettors }) {
             <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 }}>Apostas</div>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Tournament Awards Card ───────────────────────────────────────────────────
+
+const AWARD_TABS = [
+  { key: 'scorers',  label: '⚽ Artilheiros' },
+  { key: 'attack',   label: '🔥 Ataque' },
+  { key: 'defense',  label: '🛡 Defesa' },
+  { key: 'gk',       label: '🧤 Goleiros' },
+]
+
+function TournamentAwardsCard({ awards }) {
+  const [tab, setTab] = useState('scorers')
+  const [expanded, setExpanded] = useState(false)
+
+  const scorers  = awards?.top_scorers  || []
+  const attack   = awards?.best_attack  || []
+  const defense  = awards?.best_defense || []
+  const gk       = awards?.best_gk      || []
+
+  const visibleScorers = expanded ? scorers : scorers.slice(0, 5)
+
+  return (
+    <div className="card fade-in-2">
+      <div className="card__header">
+        <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          📊 Estatísticas do Torneio
+        </span>
+        {awards?.updated_at && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>
+            {awards.cached ? '↻' : '🔴'} {new Date(awards.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 2, padding: '0 var(--s4) var(--s2)', overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {AWARD_TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => { setTab(t.key); setExpanded(false) }}
+            style={{
+              padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              fontSize: 11, whiteSpace: 'nowrap',
+              fontFamily: 'var(--font-cond)', fontWeight: tab === t.key ? 700 : 400,
+              background: tab === t.key ? 'var(--accent)' : 'var(--bg-overlay)',
+              color: tab === t.key ? '#fff' : 'var(--text-3)',
+              transition: 'all 200ms ease',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="card__body" style={{ paddingTop: 'var(--s2)', paddingBottom: 'var(--s3)' }}>
+        {tab === 'scorers' && (
+          <div>
+            {visibleScorers.map((s, i) => (
+              <div key={s.player + s.team} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 0',
+                borderBottom: i < visibleScorers.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <span style={{
+                  fontFamily: 'var(--font-display)', fontSize: 16, minWidth: 20, textAlign: 'right',
+                  color: i === 0 ? 'var(--accent)' : i === 1 ? '#c0a060' : i === 2 ? '#9aada0' : 'var(--text-4)',
+                }}>{s.position}</span>
+                {s.flag_url
+                  ? <img src={s.flag_url} alt={s.team} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />
+                  : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', minWidth: 20 }}>{s.team}</span>
+                }
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.player}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>
+                    {s.team_name || s.team}
+                  </div>
+                </div>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 16, fontWeight: 700, color: 'var(--accent)', minWidth: 24, textAlign: 'right' }}>
+                  {s.goals}
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>gols</span>
+              </div>
+            ))}
+            {scorers.length > 5 && (
+              <button
+                onClick={() => setExpanded(e => !e)}
+                style={{ marginTop: 8, width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)' }}
+              >
+                {expanded ? '▲ Mostrar menos' : `▼ Ver todos os ${scorers.length} artilheiros`}
+              </button>
+            )}
+          </div>
+        )}
+
+        {tab === 'attack' && (
+          <div>
+            {attack.slice(0, 8).map((t, i) => (
+              <div key={t.team} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
+                borderBottom: i < Math.min(attack.length, 8) - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, minWidth: 18, color: i === 0 ? 'var(--accent)' : 'var(--text-4)' }}>{i + 1}</span>
+                {t.flag_url
+                  ? <img src={t.flag_url} alt={t.team} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />
+                  : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', minWidth: 20 }}>{t.team}</span>
+                }
+                <div style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {PT_NAMES[t.team] || t.name}
+                </div>
+                <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15, color: 'var(--accent)' }}>{t.goals_scored}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>gols</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-3)', minWidth: 40, textAlign: 'right' }}>
+                  ({t.avg_scored}/j)
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === 'defense' && (
+          <div>
+            {defense.slice(0, 8).map((t, i) => (
+              <div key={t.team} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
+                borderBottom: i < Math.min(defense.length, 8) - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, minWidth: 18, color: i === 0 ? 'var(--accent)' : 'var(--text-4)' }}>{i + 1}</span>
+                {t.flag_url
+                  ? <img src={t.flag_url} alt={t.team} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />
+                  : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', minWidth: 20 }}>{t.team}</span>
+                }
+                <div style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {PT_NAMES[t.team] || t.name}
+                </div>
+                <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15, color: 'var(--win)' }}>{t.goals_conceded}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>sofridos</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-3)', minWidth: 40, textAlign: 'right' }}>
+                  ({t.avg_conceded}/j)
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === 'gk' && (
+          <div>
+            {gk.length === 0 && (
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', textAlign: 'center', padding: '12px 0' }}>
+                Nenhum clean sheet registrado ainda
+              </div>
+            )}
+            {gk.map((t, i) => (
+              <div key={t.team} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
+                borderBottom: i < gk.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, minWidth: 18, color: i === 0 ? 'var(--accent)' : 'var(--text-4)' }}>{i + 1}</span>
+                {t.flag_url
+                  ? <img src={t.flag_url} alt={t.team} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />
+                  : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', minWidth: 20 }}>{t.team}</span>
+                }
+                <div style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {PT_NAMES[t.team] || t.name}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15, color: 'var(--accent)' }}>{t.clean_sheets}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-4)' }}>clean sheets</div>
+                </div>
+                <div style={{ textAlign: 'right', minWidth: 36 }}>
+                  <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>{t.avg_conceded}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-4)' }}>gc/j</div>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', textAlign: 'center' }}>
+              Ranking por seleção (clean sheets da equipe)
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
