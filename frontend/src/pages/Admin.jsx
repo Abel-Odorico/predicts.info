@@ -167,7 +167,7 @@ export default function Admin() {
   const [aForm, setAForm] = useState({
     provider: 'openrouter',
     openrouter_key: '', openrouter_model: '',
-    gemini_key: '',     gemini_model: '',
+    gemini_key: '', gemini_key_2: '', gemini_model: '',
     prompt_template: '',
   })
 
@@ -2116,21 +2116,58 @@ export default function Admin() {
                 <div style={{ border: `1px solid ${aForm.provider === 'gemini' ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px' }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
                     ✦ GEMINI (GOOGLE AI)
-                    {analysisConfig?.gemini_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ key: {analysisConfig.gemini_key_masked}</span>}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <input type="password"
-                      placeholder={analysisConfig?.gemini_has_key ? '••• (vazio = manter)' : 'AIzaSy...'}
-                      value={aForm.gemini_key}
-                      onChange={e => setAForm(f => ({ ...f, gemini_key: e.target.value }))}
-                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
-                    />
+                    <div>
+                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>
+                        CHAVE 1 {analysisConfig?.gemini_has_key && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.gemini_key_masked}</span>}
+                      </label>
+                      <input type="password"
+                        placeholder={analysisConfig?.gemini_has_key ? '••• (vazio = manter)' : 'AIzaSy...'}
+                        value={aForm.gemini_key}
+                        onChange={e => setAForm(f => ({ ...f, gemini_key: e.target.value }))}
+                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>
+                        CHAVE 2 (fallback) {analysisConfig?.gemini_has_key_2 && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.gemini_key_2_masked}</span>}
+                      </label>
+                      <input type="password"
+                        placeholder={analysisConfig?.gemini_has_key_2 ? '••• (vazio = manter)' : 'AIzaSy... (segunda conta Google AI Studio)'}
+                        value={aForm.gemini_key_2}
+                        onChange={e => setAForm(f => ({ ...f, gemini_key_2: e.target.value }))}
+                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
+                      />
+                    </div>
                     <select value={aForm.gemini_model} onChange={e => setAForm(f => ({ ...f, gemini_model: e.target.value }))}
                       style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
                       {(analysisConfig?.gemini_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                     </select>
                   </div>
                 </div>
+
+                {/* Fallback chain preview */}
+                {analysisConfig?.provider_chain?.length > 0 && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(15,122,120,0.06)', border: '1px solid rgba(15,122,120,0.2)', borderRadius: 8 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.07em', marginBottom: 6 }}>CADEIA DE FALLBACK ATIVA</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {analysisConfig.provider_chain.map((p, i) => (
+                        <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--accent)', background: 'rgba(15,122,120,0.12)', border: '1px solid rgba(15,122,120,0.3)', borderRadius: 4, padding: '2px 8px' }}>
+                            {i + 1}. {p.label}
+                          </span>
+                          {i < analysisConfig.provider_chain.length - 1 && (
+                            <span style={{ color: 'var(--text-4)', fontSize: 12 }}>→</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 6 }}>
+                      Quando quota/429 no provider atual, avança automaticamente para o próximo.
+                    </div>
+                  </div>
+                )}
 
                 {/* Metodologia — dados injetados no prompt */}
                 <AnalysisMethodologyCard />

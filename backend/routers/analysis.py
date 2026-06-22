@@ -62,9 +62,11 @@ DEFAULT_PROVIDER    = "openrouter"
 CONFIG_KEYS = (
     "analysis_provider",
     "openrouter_api_key", "openrouter_model",
-    "gemini_api_key",     "gemini_model",
+    "gemini_api_key",     "gemini_api_key_2", "gemini_model",
     "analysis_prompt_template",
 )
+
+BEST_FREE_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
 
 def _utcnow():
@@ -91,9 +93,22 @@ def _get_config(db: Session) -> dict:
         "openrouter_key":    c.get("openrouter_api_key", ""),
         "openrouter_model":  c.get("openrouter_model", DEFAULT_OR_MODEL),
         "gemini_key":        c.get("gemini_api_key", ""),
+        "gemini_key_2":      c.get("gemini_api_key_2", ""),
         "gemini_model":      c.get("gemini_model", DEFAULT_GEMINI_MODEL),
         "prompt_template":   c.get("analysis_prompt_template", "") or "",
     }
+
+
+def _get_provider_chain(cfg: dict) -> list[dict]:
+    """Retorna cadeia de fallback: Gemini1 → Gemini2 → OpenRouter best free."""
+    chain = []
+    if cfg.get("gemini_key"):
+        chain.append({"type": "gemini", "key": cfg["gemini_key"], "model": cfg["gemini_model"], "label": "Gemini key1"})
+    if cfg.get("gemini_key_2"):
+        chain.append({"type": "gemini", "key": cfg["gemini_key_2"], "model": cfg["gemini_model"], "label": "Gemini key2"})
+    if cfg.get("openrouter_key"):
+        chain.append({"type": "openrouter", "key": cfg["openrouter_key"], "model": BEST_FREE_OR_MODEL, "label": f"OpenRouter {BEST_FREE_OR_MODEL}"})
+    return chain
 
 
 def _upsert(db: Session, key: str, val: str):
@@ -178,18 +193,40 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> dict:
     return json.loads(_strip_fences(text_out))
 
 
-def _call_llm(cfg: dict, prompt: str) -> tuple[dict, str]:
-    provider = cfg["provider"]
-    if provider == "gemini":
-        if not cfg["gemini_key"]:
-            raise ValueError("Gemini API key não configurada")
-        model = cfg["gemini_model"]
-        return _call_gemini(cfg["gemini_key"], model, prompt), f"gemini/{model}"
-    else:
-        if not cfg["openrouter_key"]:
-            raise ValueError("OpenRouter API key não configurada")
-        model = cfg["openrouter_model"]
-        return _call_openrouter(cfg["openrouter_key"], model, prompt), f"openrouter/{model}"
+def _is_quota_error(err: str) -> bool:
+    low = err.lower()
+    return "429" in err or "too many requests" in low or "resource_exhausted" in low or "quota" in low or "rate" in low
+
+
+def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None) -> tuple[dict, str]:
+    """
+    Chama LLM com fallback automático: Gemini key1 → Gemini key2 → OpenRouter best free.
+    provider_state: lista de 1 elemento [idx] compartilhada entre chamadas do mesmo lote.
+    """
+    chain = _get_provider_chain(cfg)
+    if not chain:
+        raise ValueError("Nenhum provider configurado (configure Gemini ou OpenRouter)")
+
+    start = provider_state[0] if provider_state else 0
+    for idx in range(start, len(chain)):
+        p = chain[idx]
+        try:
+            if p["type"] == "gemini":
+                result = _call_gemini(p["key"], p["model"], prompt)
+            else:
+                result = _call_openrouter(p["key"], p["model"], prompt)
+            if provider_state is not None:
+                provider_state[0] = idx  # mantém no provider que funcionou
+            return result, f"{p['type']}/{p['model']}"
+        except Exception as e:
+            if _is_quota_error(str(e)) and idx < len(chain) - 1:
+                print(f"[analysis] {p['label']} exausto → {chain[idx+1]['label']}", flush=True)
+                if provider_state is not None:
+                    provider_state[0] = idx + 1
+                continue
+            raise  # último provider ou erro não-quota: propaga
+
+    raise ValueError("Todos os providers da cadeia exaustos")
 
 
 DEFAULT_PROMPT_TEMPLATE = (
@@ -355,7 +392,7 @@ def _get_mc_prob(db: Session, match_id: int) -> dict | None:
     }
 
 
-def _generate_one(match_id: int, db: Session, cfg: dict) -> dict:
+def _generate_one(match_id: int, db: Session, cfg: dict, provider_state: list | None = None) -> dict:
     row = db.execute(
         text("""
             SELECT m.id, ta.id, tb.id, m.match_date, m.phase, ta.group_name
@@ -382,7 +419,7 @@ def _generate_one(match_id: int, db: Session, cfg: dict) -> dict:
                                     _get_recent_results(db, team_b.code),
                                     _get_mc_prob(db, match_id),
                                     cfg.get("prompt_template", ""))
-    content, model_tag = _call_llm(cfg, prompt)
+    content, model_tag = _call_llm(cfg, prompt, provider_state)
 
     db.execute(
         text("""
@@ -400,6 +437,7 @@ def _generate_one(match_id: int, db: Session, cfg: dict) -> dict:
 
 
 def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
+    import time
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     engine = create_engine(db_url)
@@ -416,14 +454,22 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
                     m.match_date
             """)
         ).fetchall()
-        print(f"[analysis] background: {len(pending)} partidas pendentes", flush=True)
-        for (mid,) in pending:
+        chain = _get_provider_chain(cfg)
+        provider_state = [0]  # índice do provider atual, compartilhado entre matches
+        print(f"[analysis] background: {len(pending)} partidas | cadeia: {' → '.join(p['label'] for p in chain)}", flush=True)
+        for i, (mid,) in enumerate(pending):
             try:
-                _generate_one(mid, db, cfg)
-                print(f"[analysis] ✓ match_id={mid}", flush=True)
+                _generate_one(mid, db, cfg, provider_state)
+                print(f"[analysis] ✓ match_id={mid} via {chain[provider_state[0]]['label']}", flush=True)
+                if i < len(pending) - 1:
+                    time.sleep(15)
             except Exception as e:
-                print(f"[analysis] ✗ match_id={mid}: {e}", flush=True)
+                err = str(e)
+                print(f"[analysis] ✗ match_id={mid}: {err[:120]}", flush=True)
                 db.rollback()
+                if _is_quota_error(err):
+                    print(f"[analysis] rate limit — aguardando 30s", flush=True)
+                    time.sleep(30)
     finally:
         db.close()
 
@@ -447,6 +493,7 @@ def get_analysis(match_id: int, db: Session = Depends(get_db)):
 @router.get("/admin/analysis/config")
 def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     cfg = _get_config(db)
+    chain = _get_provider_chain(cfg)
     return {
         "provider":               cfg["provider"],
         "openrouter_key_masked":  _mask(cfg["openrouter_key"]),
@@ -455,10 +502,14 @@ def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require
         "openrouter_models":      OPENROUTER_FREE_MODELS,
         "gemini_key_masked":      _mask(cfg["gemini_key"]),
         "gemini_has_key":         bool(cfg["gemini_key"]),
+        "gemini_key_2_masked":    _mask(cfg["gemini_key_2"]),
+        "gemini_has_key_2":       bool(cfg["gemini_key_2"]),
         "gemini_model":           cfg["gemini_model"],
         "gemini_models":          GEMINI_MODELS,
         "prompt_template":        cfg["prompt_template"],
         "default_prompt":         DEFAULT_PROMPT_TEMPLATE,
+        "provider_chain":         [{"label": p["label"], "type": p["type"]} for p in chain],
+        "best_free_or_model":     BEST_FREE_OR_MODEL,
     }
 
 
@@ -467,6 +518,7 @@ class AnalysisConfigIn(BaseModel):
     openrouter_key:  str = ""
     openrouter_model: str = DEFAULT_OR_MODEL
     gemini_key:      str = ""
+    gemini_key_2:    str = ""
     gemini_model:    str = DEFAULT_GEMINI_MODEL
     prompt_template: str = ""
 
@@ -478,10 +530,12 @@ def _save_config_full(db: Session, body: "AnalysisConfigIn"):
         ("gemini_model",             body.gemini_model),
         ("analysis_prompt_template", body.prompt_template),
     ]
-    if body.openrouter_key:
+    if body.openrouter_key and not body.openrouter_key.startswith("•"):
         pairs.append(("openrouter_api_key", body.openrouter_key))
-    if body.gemini_key:
+    if body.gemini_key and not body.gemini_key.startswith("•"):
         pairs.append(("gemini_api_key", body.gemini_key))
+    if body.gemini_key_2 and not body.gemini_key_2.startswith("•"):
+        pairs.append(("gemini_api_key_2", body.gemini_key_2))
     for key, val in pairs:
         db.execute(
             text("INSERT INTO site_config (key,value) VALUES (:k,:v) ON CONFLICT (key) DO UPDATE SET value=:v"),
