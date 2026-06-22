@@ -141,7 +141,7 @@ def _strip_fences(text_out: str) -> str:
     return text_out.strip()
 
 
-def _call_openrouter(api_key: str, model: str, prompt: str) -> dict:
+def _call_openrouter(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
     resp = http_requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
         headers={
@@ -159,10 +159,19 @@ def _call_openrouter(api_key: str, model: str, prompt: str) -> dict:
         timeout=90,
     )
     resp.raise_for_status()
-    return json.loads(_strip_fences(resp.json()["choices"][0]["message"]["content"]))
+    data = resp.json()
+    usage = data.get("usage", {})
+    result = json.loads(_strip_fences(data["choices"][0]["message"]["content"]))
+    meta = {
+        "tokens_in":  int(usage.get("prompt_tokens", 0)),
+        "tokens_out": int(usage.get("completion_tokens", 0)),
+        "cost_usd":   float(usage.get("cost", 0) or 0),
+    }
+    return result, meta
 
 
-def _call_gemini(api_key: str, model: str, prompt: str) -> dict:
+def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
+    meta = {"tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0}
     try:
         from google import genai
         from google.genai import types as genai_types
@@ -176,6 +185,10 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> dict:
             ),
         )
         text_out = response.text
+        um = getattr(response, "usage_metadata", None)
+        if um:
+            meta["tokens_in"]  = getattr(um, "prompt_token_count", 0) or 0
+            meta["tokens_out"] = getattr(um, "candidates_token_count", 0) or 0
     except Exception:
         # Fallback para REST se SDK não disponível ou der erro
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
@@ -189,8 +202,12 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> dict:
             timeout=90,
         )
         resp.raise_for_status()
-        text_out = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-    return json.loads(_strip_fences(text_out))
+        rj = resp.json()
+        text_out = rj["candidates"][0]["content"]["parts"][0]["text"]
+        um = rj.get("usageMetadata", {})
+        meta["tokens_in"]  = int(um.get("promptTokenCount", 0))
+        meta["tokens_out"] = int(um.get("candidatesTokenCount", 0))
+    return json.loads(_strip_fences(text_out)), meta
 
 
 def _is_quota_error(err: str) -> bool:
@@ -198,10 +215,11 @@ def _is_quota_error(err: str) -> bool:
     return "429" in err or "too many requests" in low or "resource_exhausted" in low or "quota" in low or "rate" in low
 
 
-def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None) -> tuple[dict, str]:
+def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None) -> tuple[dict, str, dict]:
     """
     Chama LLM com fallback automático: Gemini key1 → Gemini key2 → OpenRouter best free.
     provider_state: lista de 1 elemento [idx] compartilhada entre chamadas do mesmo lote.
+    Returns (result, model_tag, usage_meta).
     """
     chain = _get_provider_chain(cfg)
     if not chain:
@@ -212,19 +230,19 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None) -> tup
         p = chain[idx]
         try:
             if p["type"] == "gemini":
-                result = _call_gemini(p["key"], p["model"], prompt)
+                result, meta = _call_gemini(p["key"], p["model"], prompt)
             else:
-                result = _call_openrouter(p["key"], p["model"], prompt)
+                result, meta = _call_openrouter(p["key"], p["model"], prompt)
             if provider_state is not None:
-                provider_state[0] = idx  # mantém no provider que funcionou
-            return result, f"{p['type']}/{p['model']}"
+                provider_state[0] = idx
+            return result, f"{p['type']}/{p['model']}", meta
         except Exception as e:
             if _is_quota_error(str(e)) and idx < len(chain) - 1:
                 print(f"[analysis] {p['label']} exausto → {chain[idx+1]['label']}", flush=True)
                 if provider_state is not None:
                     provider_state[0] = idx + 1
                 continue
-            raise  # último provider ou erro não-quota: propaga
+            raise
 
     raise ValueError("Todos os providers da cadeia exaustos")
 
@@ -413,7 +431,14 @@ def _get_mc_prob(db: Session, match_id: int) -> dict | None:
     }
 
 
-def _generate_one(match_id: int, db: Session, cfg: dict, provider_state: list | None = None) -> dict:
+def _generate_one(
+    match_id: int,
+    db: Session,
+    cfg: dict,
+    provider_state: list | None = None,
+    batch_id: str | None = None,
+) -> dict:
+    import time
     row = db.execute(
         text("""
             SELECT m.id, ta.id, tb.id, m.match_date, m.phase, ta.group_name
@@ -435,12 +460,15 @@ def _generate_one(match_id: int, db: Session, cfg: dict, provider_state: list | 
     players_a = db.query(Player).filter_by(team_id=row[1]).all()
     players_b = db.query(Player).filter_by(team_id=row[2]).all()
 
-    prompt          = _build_prompt(match_row, team_a, team_b, players_a, players_b,
-                                    _get_recent_results(db, team_a.code),
-                                    _get_recent_results(db, team_b.code),
-                                    _get_mc_prob(db, match_id),
-                                    cfg.get("prompt_template", ""))
-    content, model_tag = _call_llm(cfg, prompt, provider_state)
+    prompt = _build_prompt(match_row, team_a, team_b, players_a, players_b,
+                           _get_recent_results(db, team_a.code),
+                           _get_recent_results(db, team_b.code),
+                           _get_mc_prob(db, match_id),
+                           cfg.get("prompt_template", ""))
+
+    t0 = time.time()
+    content, model_tag, usage = _call_llm(cfg, prompt, provider_state)
+    duration_ms = int((time.time() - t0) * 1000)
 
     db.execute(
         text("""
@@ -453,17 +481,32 @@ def _generate_one(match_id: int, db: Session, cfg: dict, provider_state: list | 
         """),
         {"mid": match_id, "content": json.dumps(content), "model": model_tag, "now": _utcnow()},
     )
+    provider_type = "gemini" if model_tag.startswith("gemini") else "openrouter"
+    db.execute(
+        text("""
+            INSERT INTO analysis_logs (match_id, model_used, provider, tokens_in, tokens_out,
+                cost_usd, duration_ms, status, batch_id, created_at)
+            VALUES (:mid, :model, :prov, :ti, :to, :cost, :dur, 'ok', :bid, :now)
+        """),
+        {
+            "mid": match_id, "model": model_tag, "prov": provider_type,
+            "ti": usage.get("tokens_in", 0), "to": usage.get("tokens_out", 0),
+            "cost": usage.get("cost_usd", 0.0), "dur": duration_ms,
+            "bid": batch_id, "now": _utcnow(),
+        },
+    )
     db.commit()
     return content
 
 
 def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
-    import time
+    import time, uuid
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     engine = create_engine(db_url)
     Sess = sessionmaker(bind=engine)
     db = Sess()
+    batch_id = str(uuid.uuid4())[:16]
     try:
         where = "WHERE NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)" if only_pending else ""
         pending = db.execute(
@@ -476,18 +519,32 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True):
             """)
         ).fetchall()
         chain = _get_provider_chain(cfg)
-        provider_state = [0]  # índice do provider atual, compartilhado entre matches
+        provider_state = [0]
         print(f"[analysis] background: {len(pending)} partidas | cadeia: {' → '.join(p['label'] for p in chain)}", flush=True)
         for i, (mid,) in enumerate(pending):
             try:
-                _generate_one(mid, db, cfg, provider_state)
+                _generate_one(mid, db, cfg, provider_state, batch_id=batch_id)
                 print(f"[analysis] ✓ match_id={mid} via {chain[provider_state[0]]['label']}", flush=True)
                 if i < len(pending) - 1:
                     time.sleep(15)
             except Exception as e:
                 err = str(e)
                 print(f"[analysis] ✗ match_id={mid}: {err[:120]}", flush=True)
-                db.rollback()
+                try:
+                    db.execute(
+                        text("""
+                            INSERT INTO analysis_logs (match_id, model_used, provider, status, error_msg, batch_id, created_at)
+                            VALUES (:mid, :model, :prov, 'error', :err, :bid, :now)
+                        """),
+                        {
+                            "mid": mid, "model": chain[provider_state[0]]["model"] if chain else None,
+                            "prov": chain[provider_state[0]]["type"] if chain else None,
+                            "err": err[:500], "bid": batch_id, "now": _utcnow(),
+                        },
+                    )
+                    db.commit()
+                except Exception:
+                    db.rollback()
                 if _is_quota_error(err):
                     print(f"[analysis] rate limit — aguardando 30s", flush=True)
                     time.sleep(30)
@@ -608,10 +665,8 @@ def analysis_status(db: Session = Depends(get_db), _: User = Depends(require_adm
 @router.post("/admin/analysis/{match_id}/generate")
 def generate_one(match_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     cfg = _get_config(db)
-    if cfg["provider"] == "gemini" and not cfg["gemini_key"]:
-        raise HTTPException(400, "Gemini API key não configurada")
-    if cfg["provider"] == "openrouter" and not cfg["openrouter_key"]:
-        raise HTTPException(400, "OpenRouter API key não configurada")
+    if not _get_provider_chain(cfg):
+        raise HTTPException(400, "Nenhum provider configurado (configure Gemini ou OpenRouter)")
     content = _generate_one(match_id, db, cfg)
     return {"ok": True, "match_id": match_id, "content": content}
 
@@ -628,10 +683,65 @@ def generate_all(
     _: User = Depends(require_admin),
 ):
     cfg = _get_config(db)
-    if cfg["provider"] == "gemini" and not cfg["gemini_key"]:
-        raise HTTPException(400, "Gemini API key não configurada")
-    if cfg["provider"] == "openrouter" and not cfg["openrouter_key"]:
-        raise HTTPException(400, "OpenRouter API key não configurada")
+    if not _get_provider_chain(cfg):
+        raise HTTPException(400, "Nenhum provider configurado (configure Gemini ou OpenRouter)")
     from config import settings
     background_tasks.add_task(_generate_all_bg, settings.database_url, cfg, body.only_pending)
     return {"ok": True, "message": "Geração iniciada em background"}
+
+
+@router.get("/admin/analysis/logs")
+def analysis_logs(limit: int = 100, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    rows = db.execute(text("""
+        SELECT
+            al.id, al.match_id,
+            ta.name AS team_a, tb.name AS team_b,
+            al.model_used, al.provider,
+            al.tokens_in, al.tokens_out,
+            al.cost_usd, al.duration_ms,
+            al.status, al.error_msg,
+            al.batch_id, al.created_at
+        FROM analysis_logs al
+        LEFT JOIN matches m ON m.id = al.match_id
+        LEFT JOIN teams ta ON ta.id = m.team_a_id
+        LEFT JOIN teams tb ON tb.id = m.team_b_id
+        ORDER BY al.created_at DESC
+        LIMIT :lim
+    """), {"lim": limit}).fetchall()
+
+    items = []
+    for r in rows:
+        items.append({
+            "id": r[0], "match_id": r[1],
+            "team_a": r[2], "team_b": r[3],
+            "model_used": r[4], "provider": r[5],
+            "tokens_in": r[6] or 0, "tokens_out": r[7] or 0,
+            "cost_usd": float(r[8] or 0),
+            "duration_ms": r[9] or 0,
+            "status": r[10], "error_msg": r[11],
+            "batch_id": r[12],
+            "created_at": str(r[13]),
+        })
+
+    totals = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE status = 'ok') AS total_ok,
+            COUNT(*) FILTER (WHERE status = 'error') AS total_err,
+            SUM(tokens_in) AS total_tokens_in,
+            SUM(tokens_out) AS total_tokens_out,
+            SUM(cost_usd) AS total_cost,
+            SUM(duration_ms) AS total_duration_ms
+        FROM analysis_logs
+    """)).fetchone()
+
+    return {
+        "items": items,
+        "totals": {
+            "ok": int(totals[0] or 0),
+            "error": int(totals[1] or 0),
+            "tokens_in": int(totals[2] or 0),
+            "tokens_out": int(totals[3] or 0),
+            "cost_usd": float(totals[4] or 0),
+            "duration_ms": int(totals[5] or 0),
+        },
+    }

@@ -26,6 +26,7 @@ from routers import pwa_icon as pwa_icon_router
 from routers import champion as champion_router
 from routers import knockout as knockout_router
 from routers import analysis as analysis_router
+from routers import awards as awards_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -256,6 +257,22 @@ def _run_migrations():
                 generated_at TIMESTAMP DEFAULT NOW()
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS analysis_logs (
+                id           SERIAL PRIMARY KEY,
+                match_id     INTEGER REFERENCES matches(id) ON DELETE SET NULL,
+                model_used   VARCHAR(200),
+                provider     VARCHAR(50),
+                tokens_in    INTEGER DEFAULT 0,
+                tokens_out   INTEGER DEFAULT 0,
+                cost_usd     NUMERIC(10,6) DEFAULT 0,
+                duration_ms  INTEGER DEFAULT 0,
+                status       VARCHAR(20) DEFAULT 'ok',
+                error_msg    TEXT,
+                batch_id     VARCHAR(64),
+                created_at   TIMESTAMP DEFAULT NOW()
+            )
+            """,
         ]:
             try:
                 conn.execute(text(ddl))
@@ -319,6 +336,7 @@ app.include_router(pwa_icon_router.router,       prefix="/api")
 app.include_router(champion_router.router,       prefix="/api")
 app.include_router(knockout_router.router,      prefix="/api")
 app.include_router(analysis_router.router,      prefix="/api")
+app.include_router(awards_router.router,        prefix="/api")
 
 
 @app.get("/api")

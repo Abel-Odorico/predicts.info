@@ -162,6 +162,9 @@ export default function Admin() {
   const [analysisMsg, setAnalysisMsg]         = useState('')
   const [generatingId, setGeneratingId]       = useState(null)
   const [generatingAll, setGeneratingAll]     = useState(false)
+  const [generatingForce, setGeneratingForce] = useState(false)
+  const [analysisLogs, setAnalysisLogs]       = useState(null)
+  const [logsLoading, setLogsLoading]         = useState(false)
   const [viewingAnalysis, setViewingAnalysis] = useState(null)  // { match_id, content, model_used }
   const [promptOpen, setPromptOpen]           = useState(false)
   const [aForm, setAForm] = useState({
@@ -217,13 +220,25 @@ export default function Admin() {
     finally { setGeneratingId(null) }
   }
 
-  async function generateAll() {
-    setGeneratingAll(true); setAnalysisMsg('')
+  async function generateAll(force = false) {
+    if (force) { setGeneratingForce(true) } else { setGeneratingAll(true) }
+    setAnalysisMsg('')
     try {
-      await api.post('/admin/analysis/generate-all', { only_pending: true }, token)
-      setAnalysisMsg('✓ Background iniciado — atualize a lista em alguns minutos.')
-    } catch { setAnalysisMsg('Erro ao iniciar geração') }
-    finally { setGeneratingAll(false) }
+      await api.post('/admin/analysis/generate-all', { only_pending: !force }, token)
+      setAnalysisMsg(force
+        ? '✓ Regeneração total iniciada em background (todos os jogos).'
+        : '✓ Background iniciado — atualize a lista em alguns minutos.')
+    } catch(e) {
+      setAnalysisMsg('Erro: ' + (e?.message || 'falha ao iniciar geração'))
+    }
+    finally { setGeneratingAll(false); setGeneratingForce(false) }
+  }
+
+  async function loadAnalysisLogs() {
+    setLogsLoading(true)
+    try { setAnalysisLogs(await api.get('/admin/analysis/logs?limit=100', token)) }
+    catch { setAnalysisLogs(null) }
+    finally { setLogsLoading(false) }
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2223,13 +2238,77 @@ export default function Admin() {
                     {analysisSaving ? 'Salvando…' : '💾 Salvar'}
                   </button>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus() }}>↻ Atualizar</button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={generateAll} disabled={generatingAll}>
-                    {generatingAll ? 'Iniciando…' : '⚡ Gerar todas pendentes'}
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(false)} disabled={generatingAll || generatingForce}>
+                    {generatingAll ? 'Iniciando…' : '⚡ Gerar pendentes'}
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => generateAll(true)} disabled={generatingAll || generatingForce}>
+                    {generatingForce ? 'Iniciando…' : '🔄 Regenerar todas'}
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={loadAnalysisLogs} disabled={logsLoading}>
+                    {logsLoading ? 'Carregando…' : '📊 Ver logs de geração'}
                   </button>
                 </div>
               </form>
             </div>
           </div>
+
+          {/* Logs de geração IA */}
+          {analysisLogs && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 20px', marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>📊 Logs de Geração IA</div>
+                <button type="button" onClick={() => setAnalysisLogs(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 16 }}>✕</button>
+              </div>
+              {/* Totais */}
+              {analysisLogs.totals && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 14 }}>
+                  {[
+                    { label: '✓ Geradas', val: analysisLogs.totals.ok },
+                    { label: '✗ Erros', val: analysisLogs.totals.error },
+                    { label: 'Tokens entrada', val: analysisLogs.totals.tokens_in.toLocaleString() },
+                    { label: 'Tokens saída', val: analysisLogs.totals.tokens_out.toLocaleString() },
+                    { label: 'Custo total', val: '$' + (analysisLogs.totals.cost_usd || 0).toFixed(4) },
+                    { label: 'Tempo total', val: analysisLogs.totals.duration_ms >= 60000
+                        ? Math.floor(analysisLogs.totals.duration_ms/60000) + 'm ' + Math.floor((analysisLogs.totals.duration_ms%60000)/1000) + 's'
+                        : (analysisLogs.totals.duration_ms/1000).toFixed(1) + 's' },
+                  ].map(({ label, val }) => (
+                    <div key={label} style={{ background: 'var(--bg-base)', borderRadius: 8, padding: '8px 10px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)' }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Tabela logs */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                  <thead>
+                    <tr style={{ color: 'var(--text-4)', borderBottom: '1px solid var(--border)' }}>
+                      {['Data', 'Jogo', 'Modelo', 'Status', 'T.In', 'T.Out', 'Custo', 'Tempo'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysisLogs.items.map(item => (
+                      <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', color: item.status === 'error' ? 'var(--lose)' : 'var(--text-2)' }}>
+                        <td style={{ padding: '4px 8px', whiteSpace: 'nowrap' }}>{item.created_at?.slice(0,16).replace('T',' ')}</td>
+                        <td style={{ padding: '4px 8px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.team_a && item.team_b ? `${item.team_a} × ${item.team_b}` : item.match_id ? `#${item.match_id}` : '—'}
+                        </td>
+                        <td style={{ padding: '4px 8px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.model_used || '—'}</td>
+                        <td style={{ padding: '4px 8px' }}>{item.status === 'ok' ? '✓' : '✗ ' + (item.error_msg?.slice(0,40) || 'erro')}</td>
+                        <td style={{ padding: '4px 8px' }}>{item.tokens_in ? item.tokens_in.toLocaleString() : '—'}</td>
+                        <td style={{ padding: '4px 8px' }}>{item.tokens_out ? item.tokens_out.toLocaleString() : '—'}</td>
+                        <td style={{ padding: '4px 8px' }}>{item.cost_usd > 0 ? '$' + item.cost_usd.toFixed(5) : 'free'}</td>
+                        <td style={{ padding: '4px 8px' }}>{item.duration_ms ? (item.duration_ms/1000).toFixed(1) + 's' : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Modal: visualizar análise */}
           {viewingAnalysis && (
