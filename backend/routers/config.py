@@ -56,6 +56,9 @@ DEFAULTS: dict[str, str] = {
     "adsense_slot_header":   "",
     "adsense_slot_content":  "",
     "adsense_slot_footer":   "",
+    # Telegram
+    "telegram_bot_token":    "",
+    "telegram_chat_id":      "",
 }
 
 PUBLIC_KEYS = {

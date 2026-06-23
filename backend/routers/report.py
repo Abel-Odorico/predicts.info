@@ -13,7 +13,16 @@ import httpx
 from database import get_db
 from config import settings
 from auth_utils import require_admin
-from models import User, Bet, Match, MatchStatus, Ranking, PageView
+from models import User, Bet, Match, MatchStatus, Ranking, PageView, SiteConfig
+
+
+def _telegram_config(db: Session) -> tuple[str, str]:
+    rows = {r.key: r.value for r in db.query(SiteConfig).filter(
+        SiteConfig.key.in_(["telegram_bot_token", "telegram_chat_id"])
+    ).all()}
+    token   = rows.get("telegram_bot_token") or settings.telegram_bot_token
+    chat_id = rows.get("telegram_chat_id")   or settings.telegram_chat_id
+    return token, chat_id
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -239,11 +248,11 @@ def get_daily_report(
 ):
     data = _build_report(db)
     text_md = _format_text(data)
-    telegram_configured = bool(settings.telegram_bot_token and settings.telegram_chat_id)
+    tg_token, tg_chat = _telegram_config(db)
     return {
         "data": data,
         "text": text_md,
-        "telegram_configured": telegram_configured,
+        "telegram_configured": bool(tg_token and tg_chat),
     }
 
 
@@ -252,15 +261,16 @@ async def send_daily_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
-        raise HTTPException(400, "Telegram não configurado. Adicione TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env")
+    tg_token, tg_chat = _telegram_config(db)
+    if not tg_token or not tg_chat:
+        raise HTTPException(400, "Telegram não configurado. Adicione o token e chat_id no painel de Configurações.")
 
     data = _build_report(db)
     msg = _format_text(data)
 
-    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
     payload = {
-        "chat_id": settings.telegram_chat_id,
+        "chat_id": tg_chat,
         "text": msg,
         "parse_mode": "MarkdownV2",
         "disable_web_page_preview": False,

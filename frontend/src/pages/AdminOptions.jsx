@@ -189,6 +189,9 @@ export default function AdminOptions() {
   const [saving, setSaving]   = useState(false)
   const [msg, setMsg]         = useState(null)
   const [dirty, setDirty]     = useState({})
+  const [tgTesting, setTgTesting]   = useState(false)
+  const [tgMsg, setTgMsg]           = useState(null)
+  const [showToken, setShowToken]   = useState(false)
 
   useEffect(() => {
     api.get('/site-config/all', token)
@@ -225,6 +228,44 @@ export default function AdminOptions() {
       setMsg({ type: 'err', text: e.message })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function saveTelegram() {
+    setSaving(true)
+    setTgMsg(null)
+    try {
+      await api.post('/site-config/bulk', {
+        updates: {
+          telegram_bot_token: config.telegram_bot_token || '',
+          telegram_chat_id:   config.telegram_chat_id   || '',
+        }
+      }, token)
+      setDirty(d => ({ ...d, telegram_bot_token: false, telegram_chat_id: false }))
+      setTgMsg({ type: 'ok', text: 'Credenciais salvas.' })
+    } catch (e) {
+      setTgMsg({ type: 'err', text: e.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function testTelegram() {
+    setTgTesting(true)
+    setTgMsg(null)
+    try {
+      await api.post('/site-config/bulk', {
+        updates: {
+          telegram_bot_token: config.telegram_bot_token || '',
+          telegram_chat_id:   config.telegram_chat_id   || '',
+        }
+      }, token)
+      await api.post('/admin/daily-report/send', {}, token)
+      setTgMsg({ type: 'ok', text: '✅ Relatório enviado com sucesso!' })
+    } catch (e) {
+      setTgMsg({ type: 'err', text: e.message })
+    } finally {
+      setTgTesting(false)
     }
   }
 
@@ -287,6 +328,11 @@ export default function AdminOptions() {
           <span className="admin-options-quick__label">AdSense</span>
           <strong className="admin-options-quick__value">{config.adsense_publisher_id || 'Nao configurado'}</strong>
           <span className="admin-options-quick__meta">{config.adsense_enabled === 'true' ? 'Ativo' : 'Desativado'}</span>
+        </a>
+        <a href="#telegram-card" className="admin-options-quick__card">
+          <span className="admin-options-quick__label">Telegram</span>
+          <strong className="admin-options-quick__value">{config.telegram_chat_id || 'Nao configurado'}</strong>
+          <span className="admin-options-quick__meta">{config.telegram_bot_token && config.telegram_chat_id ? '✅ Configurado' : '⚠️ Pendente'}</span>
         </a>
       </div>
 
@@ -519,6 +565,137 @@ export default function AdminOptions() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Telegram */}
+      <div id="telegram-card" className="card fade-in-3" style={{ marginTop: 'var(--s6)' }}>
+        <div className="card__header">
+          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+            ✈️ Notificações — Telegram
+          </span>
+        </div>
+        <div className="card__body">
+          <div style={{ display: 'grid', gap: 'var(--s5)', maxWidth: 540 }}>
+
+            {/* Status */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 'var(--s3)',
+              padding: 'var(--s3) var(--s4)',
+              background: config.telegram_bot_token && config.telegram_chat_id
+                ? 'color-mix(in srgb, var(--win) 10%, transparent)'
+                : 'color-mix(in srgb, var(--conf-caf) 10%, transparent)',
+              border: `1px solid ${config.telegram_bot_token && config.telegram_chat_id ? 'color-mix(in srgb, var(--win) 35%, transparent)' : 'color-mix(in srgb, var(--conf-caf) 35%, transparent)'}`,
+              borderRadius: 'var(--r2)',
+              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
+              color: config.telegram_bot_token && config.telegram_chat_id ? 'var(--win)' : 'var(--conf-caf)',
+            }}>
+              {config.telegram_bot_token && config.telegram_chat_id ? '✅ Configurado — pronto para envio' : '⚠️ Não configurado'}
+            </div>
+
+            {/* Token */}
+            <div className="form-group">
+              <label className="form-label">Bot Token</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showToken ? 'text' : 'password'}
+                  className="form-input"
+                  style={{ paddingRight: 44, fontFamily: 'var(--font-data)', fontSize: 12 }}
+                  placeholder="7123456789:AAF..."
+                  value={config.telegram_bot_token || ''}
+                  onChange={e => handleChange('telegram_bot_token', e.target.value)}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(v => !v)}
+                  style={{
+                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {showToken ? 'ocultar' : 'mostrar'}
+                </button>
+              </div>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                Obtenha em @BotFather → /newbot
+              </span>
+            </div>
+
+            {/* Chat ID */}
+            <div className="form-group">
+              <label className="form-label">Chat ID</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+                placeholder="-100xxxxxxxxxx ou @seucanal"
+                value={config.telegram_chat_id || ''}
+                onChange={e => handleChange('telegram_chat_id', e.target.value)}
+                autoComplete="off"
+              />
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                Envie /start pro bot e acesse api.telegram.org/bot&lt;TOKEN&gt;/getUpdates para ver o chat.id
+              </span>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary"
+                onClick={saveTelegram}
+                disabled={saving}
+              >
+                {saving ? '⏳ Salvando...' : '💾 Salvar credenciais'}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={testTelegram}
+                disabled={tgTesting || !config.telegram_bot_token || !config.telegram_chat_id}
+              >
+                {tgTesting ? '⏳ Enviando...' : '📨 Testar envio agora'}
+              </button>
+            </div>
+
+            {tgMsg && (
+              <div style={{
+                padding: 'var(--s3) var(--s4)',
+                borderRadius: 'var(--r2)',
+                background: tgMsg.type === 'ok'
+                  ? 'color-mix(in srgb, var(--win) 12%, transparent)'
+                  : 'color-mix(in srgb, var(--lose) 12%, transparent)',
+                border: `1px solid ${tgMsg.type === 'ok' ? 'var(--win)' : 'var(--lose)'}`,
+                fontFamily: 'var(--font-cond)', fontSize: 13,
+                color: tgMsg.type === 'ok' ? 'var(--win)' : 'var(--lose)',
+              }}>
+                {tgMsg.text}
+              </div>
+            )}
+          </div>
+
+          {/* Instructions */}
+          <div style={{
+            marginTop: 'var(--s6)', padding: 'var(--s4)',
+            background: 'var(--bg-overlay)', borderRadius: 'var(--r2)',
+            border: '1px solid var(--border)', fontSize: 12,
+            color: 'var(--text-2)', lineHeight: 1.8,
+          }}>
+            <strong style={{ fontFamily: 'var(--font-cond)', letterSpacing: '0.06em', color: 'var(--text-1)' }}>
+              📋 Como configurar
+            </strong>
+            <ol style={{ marginTop: 'var(--s3)', paddingLeft: 'var(--s5)', display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
+              <li>Abra o Telegram e fale com <strong>@BotFather</strong></li>
+              <li>Digite <code style={{ background: 'var(--bg-surface)', padding: '1px 5px', borderRadius: 3 }}>/newbot</code> e siga as instruções — copie o <strong>token</strong> e cole acima</li>
+              <li>Mande qualquer mensagem pro bot (ex: <code style={{ background: 'var(--bg-surface)', padding: '1px 5px', borderRadius: 3 }}>/start</code>)</li>
+              <li>Acesse <code style={{ background: 'var(--bg-surface)', padding: '1px 5px', borderRadius: 3 }}>api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> — procure o campo <strong>chat.id</strong></li>
+              <li>Cole o Chat ID acima, salve e clique em <strong>Testar envio</strong></li>
+            </ol>
+            <div style={{ marginTop: 'var(--s3)', color: 'var(--text-3)' }}>
+              Para grupos: adicione o bot ao grupo antes. O Chat ID de grupos começa com <code style={{ background: 'var(--bg-surface)', padding: '1px 5px', borderRadius: 3 }}>-100</code>.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* AdSense Manual */}
