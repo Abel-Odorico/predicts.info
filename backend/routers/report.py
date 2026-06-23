@@ -170,6 +170,7 @@ def _build_report(db: Session) -> dict:
 
 def _format_text(data: dict) -> str:
     from datetime import datetime
+    from html import escape as _e
 
     dt = datetime.fromisoformat(data["generated_at"])
     br_str = dt.strftime("%d/%m/%Y às %H:%Mh (UTC)")
@@ -181,28 +182,28 @@ def _format_text(data: dict) -> str:
     MEDALS = ["🥇", "🥈", "🥉"]
 
     lines = [
-        "📊 *PREDICTS — Relatório da Plataforma*",
-        f"📅 {br_str}",
+        "📊 <b>PREDICTS — Relatório da Plataforma</b>",
+        f"📅 {_e(br_str)}",
         "",
         "━━━━━━━━━━━━━━━━━",
-        "👥 *USUÁRIOS*",
-        f"• Total: *{u['total']}* cadastrados",
-        f"• Novos hoje: *{u['new_today']}* | Semana: *{u['new_week']}*",
+        "👥 <b>USUÁRIOS</b>",
+        f"• Total: <b>{u['total']}</b> cadastrados",
+        f"• Novos hoje: <b>{u['new_today']}</b> | Semana: <b>{u['new_week']}</b>",
         "",
-        "📈 *ACESSOS*",
-        f"• Hoje: *{v['today']}* views · *{v['unique_today']}* únicos",
-        f"• Semana: *{v['week']}* views · *{v['unique_week']}* únicos",
+        "📈 <b>ACESSOS</b>",
+        f"• Hoje: <b>{v['today']}</b> views · <b>{v['unique_today']}</b> únicos",
+        f"• Semana: <b>{v['week']}</b> views · <b>{v['unique_week']}</b> únicos",
         "",
-        "🎯 *APOSTAS*",
-        f"• Total geral: *{b['total']}*",
-        f"• Hoje: *{b['today']}* apostas · *{b['bettors_today']}* apostadores",
-        f"• Semana: *{b['week']}* apostas · *{b['bettors_week']}* apostadores",
+        "🎯 <b>APOSTAS</b>",
+        f"• Total geral: <b>{b['total']}</b>",
+        f"• Hoje: <b>{b['today']}</b> apostas · <b>{b['bettors_today']}</b> apostadores",
+        f"• Semana: <b>{b['week']}</b> apostas · <b>{b['bettors_week']}</b> apostadores",
     ]
 
     # Último resultado
     lr = data.get("last_result")
     if lr:
-        lines += ["", f"⚽ *ÚLTIMO RESULTADO*", f"• {lr['team_a']} {lr['score']} {lr['team_b']}"]
+        lines += ["", "⚽ <b>ÚLTIMO RESULTADO</b>", f"• {_e(lr['team_a'])} {_e(str(lr['score']))} {_e(lr['team_b'])}"]
 
     # Próxima partida
     nm = data.get("next_match")
@@ -214,28 +215,28 @@ def _format_text(data: dict) -> str:
             match_str = nm.get("match_date", "?")
         lines += [
             "",
-            "📅 *PRÓXIMA PARTIDA*",
-            f"• {nm['team_a']} × {nm['team_b']}",
-            f"• {match_str} · {nm['bettors']} apostadores",
+            "📅 <b>PRÓXIMA PARTIDA</b>",
+            f"• {_e(nm['team_a'])} × {_e(nm['team_b'])}",
+            f"• {_e(match_str)} · {nm['bettors']} apostadores",
         ]
 
     # Ranking geral top 10
-    lines += ["", "━━━━━━━━━━━━━━━━━", "🏆 *RANKING GERAL — Top 10*"]
+    lines += ["", "━━━━━━━━━━━━━━━━━", "🏆 <b>RANKING GERAL — Top 10</b>"]
     for r in data["ranking_top10"]:
-        medal = MEDALS[r["pos"] - 1] if r["pos"] <= 3 else f"{r['pos']}\\."
-        lines.append(f"{medal} {r['name']} — *{r['pts']} pts* \\({r['exact']} exatos\\)")
+        medal = MEDALS[r["pos"] - 1] if r["pos"] <= 3 else f"{r['pos']}."
+        lines.append(f"{medal} {_e(r['name'])} — <b>{r['pts']} pts</b> ({r['exact']} exatos)")
 
     # Ranking do dia
     if data["ranking_day"]:
-        lines += ["", "🌟 *DESTAQUE DO DIA*"]
+        lines += ["", "🌟 <b>DESTAQUE DO DIA</b>"]
         for r in data["ranking_day"]:
-            medal = MEDALS[r["pos"] - 1] if r["pos"] <= 3 else f"{r['pos']}\\."
-            lines.append(f"{medal} {r['name']} — *{r['pts']} pts*")
+            medal = MEDALS[r["pos"] - 1] if r["pos"] <= 3 else f"{r['pos']}."
+            lines.append(f"{medal} {_e(r['name'])} — <b>{r['pts']} pts</b>")
 
     lines += [
         "",
         "━━━━━━━━━━━━━━━━━",
-        "🔗 [predicts\\.info](https://predicts.info)",
+        '🔗 <a href="https://predicts.info">predicts.info</a>',
     ]
 
     return "\n".join(lines)
@@ -272,7 +273,7 @@ async def send_daily_report(
     payload = {
         "chat_id": tg_chat,
         "text": msg,
-        "parse_mode": "MarkdownV2",
+        "parse_mode": "HTML",
         "disable_web_page_preview": False,
     }
 
