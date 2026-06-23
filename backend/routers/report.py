@@ -85,7 +85,7 @@ def _build_report(db: Session) -> dict:
     # ── Ranking geral (top 10) ──────────────────────────
     top_rows = db.execute(text("""
         SELECT u.name, r.total_points, r.exact_scores
-        FROM ranking r
+        FROM rankings r
         JOIN users u ON u.id = r.user_id
         ORDER BY r.total_points DESC, r.exact_scores DESC
         LIMIT 10

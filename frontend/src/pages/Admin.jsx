@@ -60,7 +60,7 @@ const TABS = [
   { id: 'knockout',   label: 'Mata-Mata',    icon: '⚔️' },
   { id: 'analyses',   label: 'Análises IA',  icon: '🤖' },
   { id: 'bot',        label: 'Apostador IA', icon: '🎮' },
-  { id: 'report',     label: 'Relatório',    icon: '📨' },
+  { id: 'report',     label: 'Relatório',    icon: '✈️' },
 ]
 
 const PHASE_LABELS_ADMIN = {
@@ -2949,7 +2949,7 @@ function AnalysisMethodologyCard() {
         <div className="adm-pane fade-in-1">
           <div className="adm-card">
             <div className="adm-card__header">
-              <span className="adm-card__title">📨 Relatório da Plataforma</span>
+              <span className="adm-card__title">✈️ Relatório da Plataforma</span>
               <button className="btn btn-sm" onClick={loadReport} disabled={reportLoading}>
                 {reportLoading ? '…' : '↻ Gerar'}
               </button>
@@ -3037,7 +3037,7 @@ function AnalysisMethodologyCard() {
                     type="button"
                     onClick={sendReport}
                     disabled={reportSending || !report.telegram_configured}
-                    title={!report.telegram_configured ? 'Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env' : ''}
+                    title={!report.telegram_configured ? 'Configure o Telegram em Admin → Configurações' : ''}
                     style={{ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: report.telegram_configured ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: report.telegram_configured ? 'var(--accent)' : 'var(--bg-overlay)', color: report.telegram_configured ? '#fff' : 'var(--text-4)', opacity: reportSending ? 0.6 : 1, transition: 'all .2s' }}
                   >
                     {reportSending ? '⏳ Enviando…' : '📤 Enviar Telegram'}
@@ -3046,10 +3046,7 @@ function AnalysisMethodologyCard() {
 
                 {!report.telegram_configured && (
                   <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(232,196,74,0.1)', border: '1px solid rgba(232,196,74,0.3)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--amber)' }}>
-                    ⚠ Telegram não configurado. Adicione no <code>.env</code>:<br />
-                    <code>TELEGRAM_BOT_TOKEN=seu_token_aqui</code><br />
-                    <code>TELEGRAM_CHAT_ID=-100xxxxxxxxxx</code><br />
-                    Depois: <code>docker compose up -d api</code>
+                    ⚠ Telegram não configurado. Acesse <strong>Admin → Configurações → card Telegram</strong> e salve o token e chat_id.
                   </div>
                 )}
               </>
