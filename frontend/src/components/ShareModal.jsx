@@ -162,10 +162,9 @@ export default function ShareModal({ onClose, token }) {
     const digits = phone.replace(/\D/g, '')
     if (digits.length < 10) { setPhoneError('Número inválido — use DDI + DDD + número, ex: 5511999998888'); return }
     setPhoneError('')
-    // whatsapp:// interceptado pelo OS sem navegar o WebView (mobile/PWA)
-    setWaLink(hasNativeShare
-      ? `whatsapp://send?phone=${digits}&text=${encodeURIComponent(active.waText)}`
-      : `https://wa.me/${digits}?text=${encodeURIComponent(active.waText)}`)
+    // wa.me funciona em todo lugar: mobile redireciona p/ app, desktop p/ WhatsApp Web.
+    // (whatsapp:// só abre se houver app registrado — falha silenciosa no desktop sem app)
+    setWaLink(`https://wa.me/${digits}?text=${encodeURIComponent(active.waText)}`)
   }
 
   async function generateImage() {
@@ -330,28 +329,17 @@ export default function ShareModal({ onClose, token }) {
 
               {/* Share buttons */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-                {hasNativeShare ? (
-                  // Mobile/PWA: deep link — OS intercepta whatsapp:// sem navegar WebView
-                  <a
-                    href={`whatsapp://send?text=${encodeURIComponent(active.waText)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: '#25D366', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, textDecoration: 'none' }}
-                  >
-                    <WhatsAppIcon /> WhatsApp
-                  </a>
-                ) : (
-                  // Desktop: abre wa.me em nova aba
-                  <button
-                    type="button"
-                    onClick={() => openExternal(`https://wa.me/?text=${encodeURIComponent(active.waText)}`)}
-                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: '#25D366', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: 'opacity .15s' }}
-                    onMouseOver={e => e.currentTarget.style.opacity = '.85'}
-                    onMouseOut={e => e.currentTarget.style.opacity = '1'}
-                  >
-                    <WhatsAppIcon /> WhatsApp
-                  </button>
-                )}
+                {/* wa.me universal: mobile abre o app, desktop abre WhatsApp Web */}
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(active.waText)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: '#25D366', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, textDecoration: 'none', transition: 'opacity .15s' }}
+                  onMouseOver={e => e.currentTarget.style.opacity = '.85'}
+                  onMouseOut={e => e.currentTarget.style.opacity = '1'}
+                >
+                  <WhatsAppIcon /> WhatsApp
+                </a>
                 {hasNativeShare ? (
                   <button
                     type="button"

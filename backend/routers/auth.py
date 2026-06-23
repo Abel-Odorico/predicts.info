@@ -114,7 +114,7 @@ def check_username(
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
-def register(payload: UserCreate, db: Session = Depends(get_db)):
+def register(payload: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(409, "Email already registered")
 
@@ -166,6 +166,13 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
                 push=False,
             )
             db.commit()
+    except Exception:
+        pass
+
+    # Avisa o admin no Telegram (não bloqueia a resposta do cadastro)
+    try:
+        from routers.report import notify_new_user_telegram
+        background_tasks.add_task(notify_new_user_telegram, user.name, user.email, user.username)
     except Exception:
         pass
 

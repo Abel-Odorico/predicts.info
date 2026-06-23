@@ -282,6 +282,38 @@ async def push_daily_report(db: Session) -> dict:
     }
 
 
+def notify_new_user_telegram(name: str, email: str, username: str | None = None) -> None:
+    """Avisa o admin no Telegram sobre um novo cadastro.
+    Best-effort e síncrono (roda em BackgroundTask): nunca levanta exceção."""
+    import html as _html
+    from database import SessionLocal
+    try:
+        db = SessionLocal()
+        try:
+            tg_token, tg_chat = _telegram_config(db)
+            if not tg_token or not tg_chat:
+                return
+            total = db.query(func.count(User.id)).scalar() or 0
+        finally:
+            db.close()
+
+        text_msg = (
+            "🆕 <b>Novo usuário no Predicts</b>\n\n"
+            f"👤 <b>{_html.escape(name or '—')}</b>\n"
+            f"✉️ {_html.escape(email or '—')}\n"
+            + (f"🔖 @{_html.escape(username)}\n" if username else "")
+            + f"\n📊 Total de usuários: <b>{total}</b>"
+        )
+        httpx.post(
+            f"https://api.telegram.org/bot{tg_token}/sendMessage",
+            json={"chat_id": tg_chat, "text": text_msg, "parse_mode": "HTML",
+                  "disable_web_page_preview": True},
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
 @router.post("/daily-report/send")
 async def send_daily_report(
     db: Session = Depends(get_db),

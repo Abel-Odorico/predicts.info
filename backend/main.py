@@ -72,21 +72,29 @@ async def _auto_sync_loop():
         await asyncio.sleep(interval)
 
 
+# Horários (BRT) em que o relatório diário é enviado ao Telegram
+_DAILY_REPORT_TIMES = [(7, 0), (14, 0)]
+
+
 async def _daily_report_loop():
-    """Envia o relatório diário ao Telegram todo dia às 07:00 (horário de Brasília)."""
+    """Envia o relatório diário ao Telegram nos horários de _DAILY_REPORT_TIMES (BRT)."""
     from database import SessionLocal
     from routers.report import push_daily_report
 
-    def _seconds_until_7am():
+    def _seconds_until_next():
         now = datetime.now(_BRT)
-        target = now.replace(hour=7, minute=0, second=0, microsecond=0)
-        if now >= target:
-            target += timedelta(days=1)
-        return (target - now).total_seconds()
+        candidates = []
+        for hh, mm in _DAILY_REPORT_TIMES:
+            target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if now >= target:
+                target += timedelta(days=1)
+            candidates.append((target - now).total_seconds())
+        return min(candidates)
 
-    print("[daily-report] agendado para 07:00 BRT diariamente", flush=True)
+    _times_label = ", ".join(f"{hh:02d}:{mm:02d}" for hh, mm in _DAILY_REPORT_TIMES)
+    print(f"[daily-report] agendado para {_times_label} BRT diariamente", flush=True)
     while True:
-        wait = _seconds_until_7am()
+        wait = _seconds_until_next()
         print(f"[daily-report] próximo envio em {wait/3600:.1f}h", flush=True)
         await asyncio.sleep(wait)
         try:
