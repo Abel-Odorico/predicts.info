@@ -109,7 +109,7 @@ def list_matches(
     group_name: str | None = Query(None),
     group: str | None = Query(None),
     status: str | None = Query(None),
-    limit: int | None = Query(None, ge=1, le=200),
+    limit: int | None = Query(None, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
     q = db.query(Match).options(joinedload(Match.team_a), joinedload(Match.team_b))

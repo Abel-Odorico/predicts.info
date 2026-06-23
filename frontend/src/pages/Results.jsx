@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
+import LiveFloating from '../components/LiveFloating'
 import { PT_NAMES } from '../utils/teamNames'
 
 const TOTAL_MATCHES = 104
@@ -45,9 +46,10 @@ export default function Results() {
   const filtered = useMemo(() => {
     const q = norm(search)
     return matches.filter(m => {
+      const isLive = m.status === 'live'
       const isFinished = m.status === 'finished' || !!m.result
-      if (statusFilter === 'finished' && !isFinished) return false
-      if (statusFilter === 'scheduled' && isFinished) return false
+      if (statusFilter === 'finished' && !isFinished && !isLive) return false
+      if (statusFilter === 'scheduled' && (isFinished || isLive)) return false
       if (groupFilter && m.group_name !== groupFilter) return false
       if (dateFilter && (m.match_date?.slice(0, 10) !== dateFilter)) return false
       if (q) {
@@ -79,6 +81,7 @@ export default function Results() {
 
   return (
     <div className="page">
+      <LiveFloating />
       <div className="fade-in-1">
         <h1 className="page-title">RESULTADOS</h1>
         <p className="page-subtitle">{finishedCount} de {TOTAL_MATCHES} jogos finalizados</p>
@@ -163,7 +166,7 @@ export default function Results() {
         {/* Chips de status */}
         <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', marginBottom: 'var(--s3)' }}>
           {[
-            { v: 'finished',  label: '✅ Finalizados' },
+            { v: 'finished',  label: '✅ Realizados + Ao vivo' },
             { v: 'scheduled', label: '🗓 Agendados' },
             { v: 'all',       label: '⚽ Todos' },
           ].map(s => (

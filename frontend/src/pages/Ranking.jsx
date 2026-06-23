@@ -32,6 +32,8 @@ function todayQS() {
   return `date_from=${d}&date_to=${d}`
 }
 
+const MIN_APROV_BETS = 5  // mínimo de palpites avaliados p/ entrar no ranking de aproveitamento
+
 function aproveitamento(r) {
   if (!r.total_bets) return null
   return Math.round(r.total_points / (r.total_bets * 25) * 100)
@@ -115,7 +117,7 @@ export default function Ranking() {
   const reiExatos   = data.length ? [...data].sort((a,b) => b.exact_scores - a.exact_scores)[0] : null
   const maisAtivo   = data.length ? [...data].sort((a,b) => b.total_bets   - a.total_bets  )[0] : null
   const topAcerto   = data.length
-    ? [...data].filter(r => r.total_bets >= 3).sort((a,b) => (aproveitamento(b)||0) - (aproveitamento(a)||0))[0]
+    ? [...data].filter(r => r.total_bets >= MIN_APROV_BETS).sort((a,b) => (aproveitamento(b)||0) - (aproveitamento(a)||0))[0]
     : null
 
   function relUpdated() {
@@ -176,6 +178,16 @@ export default function Ranking() {
             sub={maisAtivo ? `${maisAtivo.total_points} pts · ${aproveitamento(maisAtivo) ?? 0}% aproveito` : ''}
             userId={maisAtivo?.user_id}
             accent="#9b5de8"
+          />
+          <HighlightCard
+            icon="📈" label="Melhor Aproveitamento"
+            name={topAcerto?.name || '—'}
+            stat={topAcerto ? `${aproveitamento(topAcerto) ?? 0}% aproveito` : `mín. ${MIN_APROV_BETS} palpites`}
+            sub={topAcerto
+              ? `${topAcerto.total_points} pts em ${topAcerto.total_bets} palpites`
+              : `Ninguém com ${MIN_APROV_BETS}+ palpites ainda`}
+            userId={topAcerto?.user_id}
+            accent="#23b26d"
           />
         </div>
       )}
