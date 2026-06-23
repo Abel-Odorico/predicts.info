@@ -10,7 +10,7 @@ PATCH /admin/users/{id}    update user role
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, text
+from sqlalchemy import func, text, or_
 import redis as redis_lib
 import json
 
@@ -349,42 +349,89 @@ def update_user_role(
 
 @router.get("/bets/all")
 def all_bets(
-    limit: int = 50,
+    limit: int = Query(default=50, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: str | None = Query(default=None, description="busca por nome, email ou id"),
+    match_id: int | None = Query(default=None),
+    status: str | None = Query(default=None, description="exact|correct|wrong|pending"),
+    date_from: str | None = Query(default=None, description="YYYY-MM-DD (data do jogo)"),
+    date_to: str | None = Query(default=None, description="YYYY-MM-DD (data do jogo)"),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    bets = (
+    q = (
         db.query(Bet)
+        .join(User, Bet.user_id == User.id)
+        .join(Match, Bet.match_id == Match.id)
         .options(
             joinedload(Bet.user),
             joinedload(Bet.match).joinedload(Match.team_a),
             joinedload(Bet.match).joinedload(Match.team_b),
             joinedload(Bet.match).joinedload(Match.result),
         )
-        .order_by(Bet.created_at.desc())
-        .limit(limit)
-        .all()
     )
-    return [
-        {
+
+    if user:
+        term = user.strip()
+        if term.isdigit():
+            q = q.filter(Bet.user_id == int(term))
+        else:
+            like = f"%{term}%"
+            q = q.filter(or_(User.name.ilike(like), User.email.ilike(like)))
+    if match_id:
+        q = q.filter(Bet.match_id == match_id)
+    if date_from:
+        q = q.filter(Match.match_date >= f"{date_from} 00:00:00")
+    if date_to:
+        q = q.filter(Match.match_date <= f"{date_to} 23:59:59")
+    if status == "pending":
+        q = q.filter(Bet.evaluated_at.is_(None))
+    elif status == "evaluated":
+        q = q.filter(Bet.evaluated_at.isnot(None))
+    elif status == "exact":
+        q = q.filter(Bet.points_earned == 25)
+    elif status == "correct":
+        q = q.filter(Bet.points_earned > 0, Bet.points_earned != 25)
+    elif status == "wrong":
+        q = q.filter(Bet.evaluated_at.isnot(None), Bet.points_earned == 0)
+
+    total = q.count()
+    bets = q.order_by(Match.match_date.desc(), Bet.created_at.desc()).offset(offset).limit(limit).all()
+
+    items = []
+    for b in bets:
+        m = b.match
+        res = m.result if m else None
+        if b.evaluated_at is None:
+            result = "pending"
+        elif b.points_earned == 25:
+            result = "exact"
+        elif b.points_earned and b.points_earned > 0:
+            result = "correct"
+        else:
+            result = "wrong"
+        items.append({
             "id": b.id,
-            "user_email": b.user.email if b.user else None,
             "user_id": b.user_id,
-            "team_a": b.match.team_a.code if b.match and b.match.team_a else None,
-            "team_b": b.match.team_b.code if b.match and b.match.team_b else None,
+            "user_name": b.user.name if b.user else None,
+            "user_email": b.user.email if b.user else None,
+            "match_id": b.match_id,
+            "team_a": m.team_a.code if m and m.team_a else None,
+            "team_b": m.team_b.code if m and m.team_b else None,
+            "team_a_name": m.team_a.name if m and m.team_a else None,
+            "team_b_name": m.team_b.name if m and m.team_b else None,
+            "match_date": m.match_date if m else None,
+            "match_status": m.status if m else None,
             "score_a": b.score_a,
             "score_b": b.score_b,
-            "points_earned": b.points_earned,
-            "result": (
-                "exact" if b.points_earned == 3
-                else "correct" if b.points_earned == 1
-                else "wrong" if b.evaluated_at else "pending"
-            ),
+            "result_a": res.score_a if res else None,
+            "result_b": res.score_b if res else None,
+            "points_earned": b.points_earned or 0,
+            "result": result,
             "created_at": b.created_at,
-            "group": b.match.group_name if b.match else None,
-        }
-        for b in bets
-    ]
+            "group": m.group_name if m else None,
+        })
+    return {"total": total, "limit": limit, "offset": offset, "bets": items}
 
 
 @router.get("/bets/coverage")

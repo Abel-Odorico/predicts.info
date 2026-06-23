@@ -182,6 +182,25 @@ const TAG_COLOR = {
   'Checklist':   '#0ea5e9',
 }
 
+// Grupos do CONFIG_GROUPS que cada aba renderiza (Landing Page e Paginas
+// Institucionais ficam fora — editadas pelos cards dedicados).
+const TABS = [
+  { id: 'identidade',   icon: '🏷',  label: 'Identidade',    groups: ['Identidade do Site', 'Banner de Destaque'] },
+  { id: 'paginas',      icon: '📄',  label: 'Páginas',       groups: [] },
+  { id: 'avisos',       icon: '🔔',  label: 'Avisos & SEO',  groups: ['Aviso aos Usuarios', 'SEO / Google'] },
+  { id: 'anuncios',     icon: '💰',  label: 'Anúncios',      groups: ['Google AdSense'] },
+  { id: 'notificacoes', icon: '✈️',  label: 'Notificações',  groups: [] },
+]
+
+const _g = name => CONFIG_GROUPS.find(g => g.group === name)?.keys.map(k => k.key) ?? []
+const TAB_KEYS = {
+  identidade:   new Set(['site_title', 'site_subtitle', 'developer_credit', 'banner_enabled', 'banner_text']),
+  paginas:      new Set([...LEGAL_PAGES.flatMap(p => [p.titleKey, p.introKey, p.contentKey]), 'contact_email', 'privacy_email']),
+  avisos:       new Set([..._g('Aviso aos Usuarios'), ..._g('SEO / Google')]),
+  anuncios:     new Set(_g('Google AdSense')),
+  notificacoes: new Set(['telegram_bot_token', 'telegram_chat_id']),
+}
+
 export default function AdminOptions() {
   const { token } = useAuth()
   const [config, setConfig]   = useState({})
@@ -194,6 +213,7 @@ export default function AdminOptions() {
   const [showToken, setShowToken]   = useState(false)
   const [tgHook, setTgHook]         = useState(false)
   const [tgHookInfo, setTgHookInfo] = useState(null)
+  const [tab, setTab]               = useState('identidade')
 
   useEffect(() => {
     api.get('/site-config/all', token)
@@ -201,6 +221,15 @@ export default function AdminOptions() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [token])
+
+  // Avisa antes de sair/recarregar com alterações pendentes
+  useEffect(() => {
+    const hasDirty = Object.values(dirty).some(Boolean)
+    if (!hasDirty) return
+    const handler = e => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   function handleChange(key, value) {
     setConfig(c => ({ ...c, [key]: value }))
@@ -226,6 +255,20 @@ export default function AdminOptions() {
       await api.post('/site-config/bulk', { updates }, token)
       setDirty({})
       setMsg({ type: 'ok', text: `${Object.keys(updates).length} configuração(ões) salva(s).` })
+    } catch (e) {
+      setMsg({ type: 'err', text: e.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function discardAll() {
+    setSaving(true)
+    try {
+      const d = await api.get('/site-config/all', token)
+      setConfig(d)
+      setDirty({})
+      setMsg({ type: 'info', text: 'Alterações descartadas.' })
     } catch (e) {
       setMsg({ type: 'err', text: e.message })
     } finally {
@@ -322,51 +365,120 @@ export default function AdminOptions() {
     return sum + [page.titleKey, page.introKey, page.contentKey].filter(isFieldDirty).length
   }, 0) + ['contact_email', 'privacy_email'].filter(isFieldDirty).length
   const brandingDirty = ['site_title', 'site_subtitle', 'developer_credit'].filter(isFieldDirty).length
+  const tabDirty = id => Object.keys(dirty).filter(k => dirty[k] && TAB_KEYS[id]?.has(k)).length
+
+  const renderGroups = names => (
+    <div className="stack fade-in-2" style={{ gap: 'var(--s6)' }}>
+      {CONFIG_GROUPS.filter(group => names.includes(group.group)).map(group => (
+        <div key={group.group} className="card">
+          <div className="card__header">
+            <span className="section-title section-title--flush">
+              {group.icon} {group.group}
+            </span>
+          </div>
+          <div className="card__body">
+            <div className="stack gap-4">
+              {group.keys.map(field => (
+                <div key={field.key} className="options-field">
+                  <div className="options-field__label">
+                    <span>{field.label}</span>
+                    {dirty[field.key] && (
+                      <span className="options-field__changed">● ALTERADO</span>
+                    )}
+                  </div>
+                  <div className="options-field__hint">{field.hint}</div>
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      className="form-input"
+                      rows={field.rows || 3}
+                      value={config[field.key] ?? ''}
+                      onChange={e => handleChange(field.key, e.target.value)}
+                      style={{ resize: 'vertical', fontFamily: 'var(--font-data)', fontSize: 13 }}
+                    />
+                  ) : field.type === 'select' ? (
+                    <select
+                      className="form-input"
+                      value={config[field.key] ?? 'false'}
+                      onChange={e => handleChange(field.key, e.target.value)}
+                      style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+                    >
+                      {field.options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={config[field.key] ?? ''}
+                      onChange={e => handleChange(field.key, e.target.value)}
+                      style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
+                    />
+                  )}
+                  {dirty[field.key] && (
+                    <button
+                      onClick={() => saveKey(field.key)}
+                      className="btn btn-ghost btn-sm"
+                      style={{ marginTop: 'var(--s2)', alignSelf: 'flex-start' }}
+                      disabled={saving}
+                    >
+                      Salvar apenas este
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <div className="page">
       <div className="fade-in-1">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--s3)' }}>
-          <div>
-            <h1 className="page-title">CONFIGURAÇÕES DO SITE</h1>
-            <p className="page-subtitle">Alterações textuais, páginas públicas, crédito, SEO e AdSense</p>
-          </div>
-          <button
-            onClick={saveAll}
-            disabled={saving || dirtyCount === 0}
-            className="btn btn-primary"
-          >
-            {saving ? '⏳ Salvando...' : dirtyCount > 0 ? `💾 Salvar ${dirtyCount} alterar${dirtyCount > 1 ? 'ações' : 'ação'}` : '✓ Tudo salvo'}
-          </button>
+        <div>
+          <h1 className="page-title">CONFIGURAÇÕES DO SITE</h1>
+          <p className="page-subtitle">Identidade, páginas públicas, avisos, SEO, anúncios e notificações</p>
         </div>
       </div>
 
       <div className="admin-options-quick mt-6 fade-in-1">
-        <a href="#branding-card" className="admin-options-quick__card">
+        <button type="button" onClick={() => setTab('identidade')} className={`admin-options-quick__card${tab === 'identidade' ? ' admin-options-quick__card--accent' : ''}`}>
           <span className="admin-options-quick__label">Identidade</span>
           <strong className="admin-options-quick__value">{config.site_title || 'Predicts.info'}</strong>
-          <span className="admin-options-quick__meta">{brandingDirty > 0 ? `${brandingDirty} alteracao(oes)` : 'Sem alteracoes pendentes'}</span>
-        </a>
-        <a href="#legal-pages-card" className="admin-options-quick__card admin-options-quick__card--accent">
-          <span className="admin-options-quick__label">Paginas Publicas</span>
-          <strong className="admin-options-quick__value">Privacidade, Termos, Sobre e Contato</strong>
-          <span className="admin-options-quick__meta">{legalDirtyCount > 0 ? `${legalDirtyCount} alteracao(oes)` : 'Editor pronto no admin'}</span>
-        </a>
-        <a href="#user-notice-card" className="admin-options-quick__card">
-          <span className="admin-options-quick__label">Aviso aos Usuarios</span>
-          <strong className="admin-options-quick__value">{config.user_notice_title || 'Sem titulo'}</strong>
-          <span className="admin-options-quick__meta">{config.user_notice_enabled === 'true' ? 'Ativo' : 'Desativado'}</span>
-        </a>
-        <a href="#adsense-card" className="admin-options-quick__card">
+          <span className="admin-options-quick__meta">{brandingDirty > 0 ? `${brandingDirty} alteração(ões)` : 'Sem pendências'}</span>
+        </button>
+        <button type="button" onClick={() => setTab('paginas')} className={`admin-options-quick__card${tab === 'paginas' ? ' admin-options-quick__card--accent' : ''}`}>
+          <span className="admin-options-quick__label">Páginas Públicas</span>
+          <strong className="admin-options-quick__value">Privacidade · Termos · Sobre · Contato</strong>
+          <span className="admin-options-quick__meta">{legalDirtyCount > 0 ? `${legalDirtyCount} alteração(ões)` : 'Sem pendências'}</span>
+        </button>
+        <button type="button" onClick={() => setTab('avisos')} className={`admin-options-quick__card${tab === 'avisos' ? ' admin-options-quick__card--accent' : ''}`}>
+          <span className="admin-options-quick__label">Aviso aos Usuários</span>
+          <strong className="admin-options-quick__value">{config.user_notice_title || 'Sem título'}</strong>
+          <span className="admin-options-quick__meta">{config.user_notice_enabled === 'true' ? '✅ Ativo' : '⚪ Desativado'}</span>
+        </button>
+        <button type="button" onClick={() => setTab('anuncios')} className={`admin-options-quick__card${tab === 'anuncios' ? ' admin-options-quick__card--accent' : ''}`}>
           <span className="admin-options-quick__label">AdSense</span>
-          <strong className="admin-options-quick__value">{config.adsense_publisher_id || 'Nao configurado'}</strong>
-          <span className="admin-options-quick__meta">{config.adsense_enabled === 'true' ? 'Ativo' : 'Desativado'}</span>
-        </a>
-        <a href="#telegram-card" className="admin-options-quick__card">
+          <strong className="admin-options-quick__value">{config.adsense_publisher_id || 'Não configurado'}</strong>
+          <span className="admin-options-quick__meta">{config.adsense_enabled === 'true' ? '✅ Ativo' : '⚪ Desativado'}</span>
+        </button>
+        <button type="button" onClick={() => setTab('notificacoes')} className={`admin-options-quick__card${tab === 'notificacoes' ? ' admin-options-quick__card--accent' : ''}`}>
           <span className="admin-options-quick__label">Telegram</span>
-          <strong className="admin-options-quick__value">{config.telegram_chat_id || 'Nao configurado'}</strong>
+          <strong className="admin-options-quick__value">{config.telegram_chat_id || 'Não configurado'}</strong>
           <span className="admin-options-quick__meta">{config.telegram_bot_token && config.telegram_chat_id ? '✅ Configurado' : '⚠️ Pendente'}</span>
-        </a>
+        </button>
+      </div>
+
+      <div className="tabs mt-6 fade-in-1">
+        {TABS.map(t => {
+          const n = tabDirty(t.id)
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)} className={tab === t.id ? 'active' : ''}>
+              <span style={{ marginRight: 6 }}>{t.icon}</span>{t.label}
+              {n > 0 && <span className="tab-badge">{n}</span>}
+            </button>
+          )
+        })}
       </div>
 
       {msg && (
@@ -386,9 +498,10 @@ export default function AdminOptions() {
         </div>
       )}
 
-      <div id="branding-card" className="card card--accent fade-in-2" style={{ marginTop: 'var(--s6)' }}>
+      {tab === 'identidade' && (<>
+      <div className="card card--accent fade-in-2" style={{ marginTop: 'var(--s6)' }}>
         <div className="card__header">
-          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          <span className="section-title section-title--flush">
             ✍️ Credito Publico e Identidade
           </span>
         </div>
@@ -425,9 +538,13 @@ export default function AdminOptions() {
         </div>
       </div>
 
+      {renderGroups(['Identidade do Site', 'Banner de Destaque'])}
+      </>)}
+
+      {tab === 'paginas' && (
       <div id="legal-pages-card" className="card fade-in-2" style={{ marginTop: 'var(--s6)' }}>
         <div className="card__header">
-          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          <span className="section-title section-title--flush">
             📄 Paginas Publicas Editaveis
           </span>
           <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
@@ -532,78 +649,24 @@ export default function AdminOptions() {
           </div>
         </div>
       </div>
+      )}
 
-      <div className="stack mt-6 fade-in-2">
-        {CONFIG_GROUPS.filter(group => !['Landing Page', 'Paginas Institucionais'].includes(group.group)).map(group => (
-          <div
-            key={group.group}
-            className="card"
-            id={group.group === 'Google AdSense' ? 'adsense-card' : group.group === 'Aviso aos Usuarios' ? 'user-notice-card' : undefined}
-          >
-            <div className="card__header">
-              <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
-                {group.icon} {group.group}
-              </span>
-            </div>
-            <div className="card__body">
-              <div className="stack gap-4">
-                {group.keys.map(field => (
-                  <div key={field.key} className="options-field">
-                    <div className="options-field__label">
-                      <span>{field.label}</span>
-                      {dirty[field.key] && (
-                        <span className="options-field__changed">● ALTERADO</span>
-                      )}
-                    </div>
-                    <div className="options-field__hint">{field.hint}</div>
-                    {field.type === 'textarea' ? (
-                      <textarea
-                        className="form-input"
-                        rows={field.rows || 3}
-                        value={config[field.key] ?? ''}
-                        onChange={e => handleChange(field.key, e.target.value)}
-                        style={{ resize: 'vertical', fontFamily: 'var(--font-data)', fontSize: 13 }}
-                      />
-                    ) : field.type === 'select' ? (
-                      <select
-                        className="form-input"
-                        value={config[field.key] ?? 'false'}
-                        onChange={e => handleChange(field.key, e.target.value)}
-                        style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
-                      >
-                        {field.options.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={config[field.key] ?? ''}
-                        onChange={e => handleChange(field.key, e.target.value)}
-                        style={{ fontFamily: 'var(--font-data)', fontSize: 13 }}
-                      />
-                    )}
-                    {dirty[field.key] && (
-                      <button
-                        onClick={() => saveKey(field.key)}
-                        className="btn btn-ghost btn-sm"
-                        style={{ marginTop: 'var(--s2)', alignSelf: 'flex-start' }}
-                        disabled={saving}
-                      >
-                        Salvar apenas este
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      {tab === 'avisos' && (
+        <div className="mt-6">
+          {renderGroups(['Aviso aos Usuarios', 'SEO / Google'])}
+        </div>
+      )}
 
-      {/* Telegram */}
+      {tab === 'anuncios' && (
+        <div className="mt-6">
+          {renderGroups(['Google AdSense'])}
+        </div>
+      )}
+
+      {tab === 'notificacoes' && (
       <div id="telegram-card" className="card fade-in-3" style={{ marginTop: 'var(--s6)' }}>
         <div className="card__header">
-          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          <span className="section-title section-title--flush">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="#229ED9" style={{ verticalAlign: '-3px', marginRight: 4 }} aria-label="Telegram"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z" /></svg> Notificações — Telegram
           </span>
         </div>
@@ -761,11 +824,13 @@ export default function AdminOptions() {
           </div>
         </div>
       </div>
+      )}
 
       {/* AdSense Manual */}
+      {tab === 'anuncios' && (
       <div className="card fade-in-3" style={{ marginTop: 'var(--s6)' }}>
         <div className="card__header">
-          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          <span className="section-title section-title--flush">
             📋 Manual — Como configurar o Google AdSense
           </span>
         </div>
@@ -832,6 +897,23 @@ export default function AdminOptions() {
             Os slots manuais (Topo, Conteúdo, Rodapé) são opcionais e permitem controle fino da posição.
           </div>
         </div>
+      </div>
+      )}
+
+      <div className="admin-save-bar">
+        <span className="admin-save-bar__status">
+          {dirtyCount > 0
+            ? `${dirtyCount} alteração${dirtyCount > 1 ? 'ões' : ''} não salva${dirtyCount > 1 ? 's' : ''}`
+            : '✓ Tudo salvo'}
+        </span>
+        {dirtyCount > 0 && (
+          <button className="btn btn-ghost btn-sm" onClick={discardAll} disabled={saving}>
+            Descartar
+          </button>
+        )}
+        <button className="btn btn-primary btn-sm" onClick={saveAll} disabled={saving || dirtyCount === 0}>
+          {saving ? '⏳ Salvando...' : dirtyCount > 0 ? `💾 Salvar ${dirtyCount}` : '✓ Salvo'}
+        </button>
       </div>
     </div>
   )

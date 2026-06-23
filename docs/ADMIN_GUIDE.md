@@ -39,6 +39,33 @@ Filtros:
 
 Painel de configuracoes do site.
 
+### Layout (abas)
+
+A pagina e dividida em 5 abas — sem scroll unico longo:
+
+| Aba | Conteudo |
+|-----|----------|
+| Identidade | Credito publico, Titulo/Subtitulo do site, Banner de destaque |
+| Paginas | Privacidade, Termos, Sobre, Contato + emails |
+| Avisos & SEO | Aviso aos usuarios + meta tags SEO |
+| Anuncios | Campos AdSense + manual passo-a-passo |
+| Notificacoes | Telegram (token, chat id, webhook, teste) |
+
+Comportamento:
+
+- Cards-resumo no topo tambem trocam de aba (mostram estado: ativo/pendente).
+- Cada aba exibe um badge com o numero de campos alterados nao salvos.
+- Barra de salvar fixa no rodape (`.admin-save-bar`, sticky): segue a rolagem,
+  mostra "N alteracoes nao salvas" e tem botoes `Salvar` e `Descartar`.
+- Aviso `beforeunload`: alerta ao recarregar/fechar com alteracoes pendentes.
+- No mobile a barra fixa sobe acima do dock; abas viram rolagem horizontal.
+
+Salvar:
+
+- `Salvar` envia todos os campos alterados de uma vez (`POST /site-config/bulk`).
+- `Descartar` re-busca a config do servidor (`GET /site-config/all`) e limpa o estado.
+- Campos de grupo tambem tem botao "Salvar apenas este" (`PUT /site-config/{key}`).
+
 ### Identidade e credito
 
 Campos importantes:
@@ -88,6 +115,28 @@ Observacoes:
 - o publisher precisa estar no formato `ca-pub-...`
 - o `ads.txt` publicado usa `pub-...`
 - a verificacao depende de snippet, meta e `ads.txt`
+
+### Notificacoes — Telegram
+
+Aba `Notificacoes`. Campos e acoes:
+
+- `Bot Token` e `Chat ID` — credenciais (salvas em `site-config`).
+- `Testar envio agora` — dispara `POST /admin/daily-report/send` na hora.
+- `Ativar bot/menu` — registra webhook (`POST /admin/telegram/setup-webhook`).
+- `Status do bot` — `GET /admin/telegram/webhook-info`.
+
+**Cron do relatorio diario — onde fica:**
+
+NAO e cron do sistema (sem crontab) e NAO e configuravel pela pagina de
+configuracoes nem pelo `/admin`. O agendamento vive no **codigo do backend**:
+
+- `backend/main.py` -> `_daily_report_loop()` (loop asyncio).
+- Iniciado no startup do FastAPI: `report_task = asyncio.create_task(_daily_report_loop())`.
+- Dorme ate as **07:00 BRT** e chama `push_daily_report` (`routers/report.py`); repete diariamente.
+- Para mudar o horario: editar `target.replace(hour=7, ...)` em `main.py` e reiniciar o backend.
+
+A pagina de configuracoes so guarda token/chat id e permite teste manual —
+o disparo automatico e do processo do servidor.
 
 ## `/admin/analytics`
 

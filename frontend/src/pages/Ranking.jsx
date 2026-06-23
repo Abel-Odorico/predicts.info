@@ -44,6 +44,12 @@ function pctExato(r) {
   if (!r.total_bets) return null
   return Math.round(r.exact_scores / r.total_bets * 100)
 }
+function acertos(r) {
+  return (r.exact_scores || 0) + (r.correct_results || 0)
+}
+function erros(r) {
+  return Math.max(0, (r.total_bets || 0) - acertos(r))
+}
 
 export default function Ranking() {
   const [data,        setData]      = useState([])
@@ -347,19 +353,20 @@ export default function Ranking() {
           <div>
             {/* Header */}
             <div className="ranking-head" style={{ padding: '6px var(--s4)' }}>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'center' }}>#</span>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)' }}>Usuário</span>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }}>Pts</span>
-              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }}>Apostas</span>
-              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }} title="Pontos / (Apostas × 3)">Aproveito</span>
-              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }} title="Acertou vencedor ou empate">% Res.</span>
-              <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', textAlign: 'right' }} title="Acertou placar exato">% Exato</span>
+              <span className="rk-h" style={{ textAlign: 'center' }}>#</span>
+              <span className="rk-h">Jogador</span>
+              <span className="rk-h" style={{ textAlign: 'right' }} title="Pontos totais · diferença pro líder">Pts</span>
+              <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }} title="Palpites avaliados · ✓ acertos / ✗ erros">Palpites</span>
+              <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }} title="Placares exatos cravados · % do total">🎯 Exatos</span>
+              <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }} title="Pontos ÷ máximo possível (apostas × 25)">Aprov.</span>
+              <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }} title="Acertou vencedor ou empate ÷ apostas">% Res.</span>
             </div>
 
             {/* Rows */}
             {data.map((r, i) => {
               const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
               const leaderPts = data[0]?.total_points || 1
+              const gapLeader = (data[0]?.total_points ?? 0) - r.total_points
               const cp = champPicks[r.user_id]
 
               return (
@@ -405,35 +412,66 @@ export default function Ranking() {
                     )}
                     {/* Resumo visível só no mobile */}
                     <div className="ranking-row__mobile-stats">
-                      <span>{r.total_bets ?? 0} apostas</span>
+                      <span>{r.total_bets ?? 0} palp.</span>
                       <span>·</span>
-                      <span title="Aproveitamento de pontos">{aproveitamento(r) ?? '—'}% aproveito</span>
+                      <span style={{ color: 'var(--win)' }} title="Acertos">✓{acertos(r)}</span>
+                      <span style={{ color: 'var(--lose)' }} title="Erros">✗{erros(r)}</span>
                       <span>·</span>
-                      <span title="% resultado correto">{pctResultado(r) ?? '—'}% res.</span>
+                      <span title="Placares exatos">🎯{r.exact_scores ?? 0}</span>
                       <span>·</span>
-                      <span title="% exatos">{pctExato(r) ?? '—'}% exato</span>
+                      <span title="Aproveitamento de pontos">{aproveitamento(r) ?? '—'}% aprov.</span>
+                      {i > 0 && <><span>·</span><span title="Diferença pro líder">−{gapLeader} líder</span></>}
                     </div>
                   </div>
 
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', textAlign: 'right', fontWeight: 700 }}>
-                    {r.total_points}
-                  </span>
-                  <span className="ranking-col-hide" style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)', textAlign: 'right' }}>
-                    {r.total_bets ?? 0}
-                  </span>
+                  {/* Pts + gap pro líder */}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700, lineHeight: 1 }}>
+                      {r.total_points}
+                    </div>
+                    {i > 0 && gapLeader > 0 && (
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }} title="Diferença pro líder">
+                        −{gapLeader}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Palpites + acertos/erros */}
+                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
+                      {r.total_bets ?? 0}
+                    </div>
+                    {r.total_bets > 0 && (
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, marginTop: 3 }}>
+                        <span style={{ color: 'var(--win)' }} title="Acertos">✓{acertos(r)}</span>{' '}
+                        <span style={{ color: 'var(--lose)' }} title="Erros">✗{erros(r)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Exatos (nº + %) */}
+                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: r.exact_scores ? 'var(--accent)' : 'var(--text-4)' }}>
+                      {r.exact_scores ?? 0}
+                    </div>
+                    {r.total_bets > 0 && (
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>
+                        {pctExato(r) ?? 0}%
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Aproveitamento */}
                   <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
                     {(() => { const v = aproveitamento(r); return v !== null
-                      ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, fontWeight: 700, color: v >= 60 ? 'var(--win)' : v >= 30 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
+                      ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: v >= 60 ? 'var(--win)' : v >= 30 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
                       : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
                   </div>
+
+                  {/* % Resultado */}
                   <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
                     {(() => { const v = pctResultado(r); return v !== null
-                      ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: v >= 60 ? 'var(--win)' : v >= 35 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
-                      : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
-                  </div>
-                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
-                    {(() => { const v = pctExato(r); return v !== null
-                      ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: v >= 40 ? 'var(--win)' : v >= 15 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
+                      ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: v >= 60 ? 'var(--win)' : v >= 35 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
                       : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
                   </div>
                 </Link>

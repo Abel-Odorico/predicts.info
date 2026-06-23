@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toPng } from 'html-to-image'
 import {
   ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
@@ -111,7 +112,101 @@ export default function Admin() {
 
   // Bets
   const [allBets, setAllBets] = useState(null)
+  const [betsTotal, setBetsTotal] = useState(0)
   const [betsLoading, setBetsLoading] = useState(false)
+  const [betFilters, setBetFilters] = useState({ user: '', match_id: '', status: '', date_from: '', date_to: '' })
+  const [userSuggest, setUserSuggest] = useState([])
+  const [showSuggest, setShowSuggest] = useState(false)
+  const suggestTimer = useRef(null)
+
+  function onUserType(value) {
+    setBetFilters(f => ({ ...f, user: value }))
+    if (suggestTimer.current) clearTimeout(suggestTimer.current)
+    const term = value.trim()
+    if (term.length < 2) { setUserSuggest([]); setShowSuggest(false); return }
+    suggestTimer.current = setTimeout(async () => {
+      try {
+        const rows = await api.get(`/admin/users?q=${encodeURIComponent(term)}&limit=8`, token)
+        setUserSuggest(rows || [])
+        setShowSuggest(true)
+      } catch { setUserSuggest([]) }
+    }, 250)
+  }
+
+  function pickUser(u) {
+    setBetFilters(f => ({ ...f, user: u.name || u.email }))
+    setShowSuggest(false)
+    setUserSuggest([])
+    loadBets({ ...betFilters, user: String(u.id) })
+  }
+
+  // ── Exportar / compartilhar apostas ──────────────────────────
+  const betsExportRef = useRef(null)
+  const [betsExportMsg, setBetsExportMsg] = useState('')
+
+  function _sitLabel(r) {
+    return r === 'exact' ? '🎯 Placar exato' : r === 'correct' ? '✅ Acertou' : r === 'wrong' ? '❌ Errou' : '⏳ Pendente'
+  }
+
+  function _betsText() {
+    if (!allBets?.length) return ''
+    const head = '🏆 Apostas — predicts.info\n' + (betsTotal ? `${allBets.length}/${betsTotal} apostas\n` : '')
+    const lines = allBets.map(b => {
+      const real = b.result_a != null ? `${b.result_a}-${b.result_b}` : '—'
+      const pts = b.result === 'pending' ? '' : ` (+${b.points_earned})`
+      return `• ${b.user_name || b.user_email?.split('@')[0]} | ${b.team_a}×${b.team_b} | palpite ${b.score_a}-${b.score_b} · real ${real} | ${_sitLabel(b.result)}${pts}`
+    })
+    return head + '\n' + lines.join('\n')
+  }
+
+  async function _toPng() {
+    const node = betsExportRef.current
+    if (!node) return null
+    const bg = getComputedStyle(document.body).backgroundColor || '#0f1115'
+    const w = node.scrollWidth
+    const h = node.scrollHeight
+    return toPng(node, {
+      backgroundColor: bg,
+      pixelRatio: 2,
+      cacheBust: true,
+      width: w,
+      height: h,
+      style: { overflow: 'visible', width: `${w}px`, height: `${h}px`, maxHeight: 'none' },
+    })
+  }
+
+  async function exportBetsImage() {
+    setBetsExportMsg('Gerando…')
+    try {
+      const url = await _toPng()
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `apostas-${new Date().toISOString().slice(0, 10)}.png`
+      a.click()
+      setBetsExportMsg('✓ Imagem baixada')
+    } catch { setBetsExportMsg('Erro ao gerar imagem') }
+    setTimeout(() => setBetsExportMsg(''), 3000)
+  }
+
+  async function copyBetsImage() {
+    setBetsExportMsg('Copiando…')
+    try {
+      const url = await _toPng()
+      const blob = await (await fetch(url)).blob()
+      await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })])
+      setBetsExportMsg('✓ Imagem copiada — cole no WhatsApp')
+    } catch {
+      try { await navigator.clipboard.writeText(_betsText()); setBetsExportMsg('✓ Texto copiado (imagem indisponível)') }
+      catch { setBetsExportMsg('Erro ao copiar') }
+    }
+    setTimeout(() => setBetsExportMsg(''), 3500)
+  }
+
+  function shareBetsWhatsApp() {
+    const txt = _betsText()
+    if (!txt) { setBetsExportMsg('Nada para enviar'); setTimeout(() => setBetsExportMsg(''), 2500); return }
+    window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, '_blank')
+  }
 
   // Coverage
   const [betCoverage, setBetCoverage] = useState(null)
@@ -570,9 +665,19 @@ export default function Admin() {
     finally { setMatchesLoading(false) }
   }
 
-  async function loadBets() {
+  async function loadBets(filters = betFilters) {
     setBetsLoading(true)
-    try { setAllBets(await api.get('/admin/bets/all?limit=50', token)) }
+    try {
+      const p = new URLSearchParams({ limit: '200' })
+      if (filters.user)       p.set('user', filters.user)
+      if (filters.match_id)   p.set('match_id', filters.match_id)
+      if (filters.status)     p.set('status', filters.status)
+      if (filters.date_from)  p.set('date_from', filters.date_from)
+      if (filters.date_to)    p.set('date_to', filters.date_to)
+      const res = await api.get(`/admin/bets/all?${p.toString()}`, token)
+      setAllBets(res.bets ?? [])
+      setBetsTotal(res.total ?? 0)
+    }
     catch {}
     finally { setBetsLoading(false) }
   }
@@ -1176,40 +1281,119 @@ export default function Admin() {
         <div className="adm-pane fade-in-1">
           <div className="adm-card">
             <div className="adm-card__head">
-              <span className="adm-card__title">Apostas Recentes</span>
-              <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center' }}>
-                {allBets && <span className="badge badge-group">{allBets.length}</span>}
-                <button onClick={loadBets} className="btn btn-ghost btn-sm" disabled={betsLoading}>{betsLoading ? '⏳' : '↻ Atualizar'}</button>
+              <span className="adm-card__title">Apostas {betsTotal ? `· ${allBets?.length}/${betsTotal}` : ''}</span>
+              <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
+                {betsExportMsg && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: betsExportMsg.startsWith('✓') ? 'var(--win)' : 'var(--text-3)' }}>{betsExportMsg}</span>}
+                <button onClick={exportBetsImage} className="btn btn-ghost btn-sm" disabled={!allBets?.length} title="Baixar tabela como imagem PNG">📷 Imagem</button>
+                <button onClick={copyBetsImage} className="btn btn-ghost btn-sm" disabled={!allBets?.length} title="Copiar imagem (colar no WhatsApp)">📋 Copiar</button>
+                <button onClick={shareBetsWhatsApp} className="btn btn-sm" disabled={!allBets?.length} style={{ background: '#25D366', color: '#073' }} title="Enviar resumo no WhatsApp">🟢 WhatsApp</button>
+                <button onClick={() => loadBets()} className="btn btn-ghost btn-sm" disabled={betsLoading}>{betsLoading ? '⏳' : '↻'}</button>
               </div>
             </div>
 
-            <div className="adm-table-wrap">
-              <table className="adm-table">
+            {/* Filtros */}
+            <div className="adm-bet-filters">
+              <label className="adm-bet-filters__field adm-bet-filters__field--user" style={{ position: 'relative' }}>
+                <span>Usuário (nome / email / id)</span>
+                <input value={betFilters.user}
+                  onChange={e => onUserType(e.target.value)}
+                  onFocus={() => userSuggest.length && setShowSuggest(true)}
+                  onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                  onKeyDown={e => { if (e.key === 'Enter') { setShowSuggest(false); loadBets() } }}
+                  placeholder="ex: Wesley" className="form-input" autoComplete="off" />
+                {showSuggest && userSuggest.length > 0 && (
+                  <div className="adm-suggest">
+                    {userSuggest.map(u => (
+                      <button type="button" key={u.id} className="adm-suggest__item"
+                        onMouseDown={e => { e.preventDefault(); pickUser(u) }}>
+                        <span className="adm-suggest__name">{u.name || '—'}</span>
+                        <span className="adm-suggest__meta">{u.email} · #{u.id} · {u.bets_count} aposta{u.bets_count !== 1 ? 's' : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showSuggest && userSuggest.length === 0 && betFilters.user.trim().length >= 2 && (
+                  <div className="adm-suggest"><div className="adm-suggest__empty">Nenhum usuário</div></div>
+                )}
+              </label>
+              <label className="adm-bet-filters__field adm-bet-filters__field--mid">
+                <span>Jogo (match_id)</span>
+                <input value={betFilters.match_id} onChange={e => setBetFilters(f => ({ ...f, match_id: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && loadBets()} placeholder="ex: 756" className="form-input" inputMode="numeric" />
+              </label>
+              <label className="adm-bet-filters__field">
+                <span>De</span>
+                <input type="date" value={betFilters.date_from} onChange={e => setBetFilters(f => ({ ...f, date_from: e.target.value }))} className="form-input" />
+              </label>
+              <label className="adm-bet-filters__field">
+                <span>Até</span>
+                <input type="date" value={betFilters.date_to} onChange={e => setBetFilters(f => ({ ...f, date_to: e.target.value }))} className="form-input" />
+              </label>
+              <label className="adm-bet-filters__field">
+                <span>Status</span>
+                <select value={betFilters.status} onChange={e => setBetFilters(f => ({ ...f, status: e.target.value }))} className="form-input">
+                  <option value="">Todos</option>
+                  <option value="evaluated">✔️ Com resultado</option>
+                  <option value="exact">🎯 Placar exato</option>
+                  <option value="correct">✅ Resultado certo</option>
+                  <option value="wrong">❌ Errado</option>
+                  <option value="pending">⏳ Pendente</option>
+                </select>
+              </label>
+              <div className="adm-bet-filters__actions">
+                <button onClick={() => { const f = { ...betFilters, date_to: new Date().toISOString().slice(0, 10) }; setBetFilters(f); loadBets(f) }} className="btn btn-ghost btn-sm" title="Filtra jogos até hoje">📅 Até hoje</button>
+                <button onClick={() => loadBets()} className="btn btn-sm" style={{ background: 'var(--accent)', color: '#fff' }} disabled={betsLoading}>{betsLoading ? '⏳' : 'Buscar'}</button>
+                <button onClick={() => { const f = { user: '', match_id: '', status: '', date_from: '', date_to: '' }; setBetFilters(f); loadBets(f) }} className="btn btn-ghost btn-sm">Limpar</button>
+              </div>
+            </div>
+
+            <div className="adm-table-wrap" ref={betsExportRef}>
+              <div className="adm-bets-export-head">
+                <strong>🏆 Apostas · predicts.info</strong>
+                <span>{betFilters.user ? `Usuário: ${betFilters.user} · ` : ''}{betFilters.match_id ? `Jogo #${betFilters.match_id} · ` : ''}{allBets?.length || 0} apostas · {new Date().toLocaleDateString('pt-BR')}</span>
+              </div>
+              <table className="adm-table adm-table--bets">
                 <thead>
                   <tr>
                     <th>Usuário</th>
                     <th>Partida</th>
                     <th className="adm-table__num">Palpite</th>
+                    <th className="adm-table__num">Real</th>
+                    <th>Situação</th>
                     <th className="adm-table__num">Pts</th>
-                    <th>Data</th>
+                    <th>Data jogo</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {betsLoading && <tr><td colSpan={5} className="adm-table__empty">Carregando...</td></tr>}
-                  {!betsLoading && allBets?.length === 0 && <tr><td colSpan={5} className="adm-table__empty">Nenhuma aposta ainda.</td></tr>}
-                  {allBets?.map(b => (
+                  {betsLoading && <tr><td colSpan={7} className="adm-table__empty">Carregando...</td></tr>}
+                  {!betsLoading && allBets?.length === 0 && <tr><td colSpan={7} className="adm-table__empty">Nenhuma aposta encontrada.</td></tr>}
+                  {!betsLoading && allBets?.map(b => {
+                    const sit = b.result === 'exact'   ? { label: '🎯 Placar exato',    color: 'var(--win)' }
+                              : b.result === 'correct' ? { label: '✅ Acertou resultado', color: 'var(--accent)' }
+                              : b.result === 'wrong'   ? { label: '❌ Errou',            color: 'var(--lose)' }
+                              :                          { label: '⏳ Pendente',         color: 'var(--text-4)' }
+                    return (
                     <tr key={b.id}>
-                      <td className="adm-table__email">{b.user_email?.split('@')[0]}</td>
-                      <td style={{ fontFamily: 'var(--font-cond)', fontWeight: 600 }}>{b.team_a} × {b.team_b}</td>
+                      <td className="adm-table__email" title={b.user_email}>{b.user_name || b.user_email?.split('@')[0]}</td>
+                      <td style={{ fontFamily: 'var(--font-cond)', fontWeight: 600 }}>
+                        {b.team_a} × {b.team_b}
+                        <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 6 }}>#{b.match_id}</span>
+                      </td>
                       <td className="adm-table__num" style={{ fontFamily: 'var(--font-data)', fontWeight: 700 }}>{b.score_a}–{b.score_b}</td>
+                      <td className="adm-table__num" style={{ fontFamily: 'var(--font-data)', color: 'var(--text-3)' }}>
+                        {b.result_a != null ? `${b.result_a}–${b.result_b}` : (b.match_status === 'scheduled' ? '—' : '⏳')}
+                      </td>
+                      <td>
+                        <span style={{ color: sit.color, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>{sit.label}</span>
+                      </td>
                       <td className="adm-table__num">
-                        <span style={{ color: b.result === 'exact' ? 'var(--win)' : b.result === 'correct' ? 'var(--accent)' : b.result === 'wrong' ? 'var(--lose)' : 'var(--text-4)', fontWeight: 700 }}>
-                          {b.result === 'exact' ? '+3' : b.result === 'correct' ? '+1' : b.result === 'wrong' ? '0' : '⏳'}
+                        <span style={{ color: sit.color, fontWeight: 800, fontFamily: 'var(--font-data)' }}>
+                          {b.result === 'pending' ? '—' : `+${b.points_earned}`}
                         </span>
                       </td>
-                      <td className="adm-table__date">{b.created_at ? fmtShort(b.created_at) : '—'}</td>
+                      <td className="adm-table__date">{b.match_date ? fmtShort(b.match_date) : '—'}</td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

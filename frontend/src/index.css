@@ -1759,9 +1759,13 @@ img {
   text-transform: uppercase;
 }
 
-.ranking-head span:nth-child(4),
-.ranking-head span:nth-child(5) {
-  display: none;
+.rk-h {
+  font-family: var(--font-cond);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-4);
 }
 
 .rules-list {
@@ -3206,6 +3210,136 @@ img {
   color: var(--text-3);
 }
 
+/* ── Bet filters ──────────────────────────────────────────── */
+.adm-bet-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+  align-items: flex-end;
+}
+.adm-bet-filters__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.adm-bet-filters__field > span {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.adm-bet-filters__field .form-input {
+  width: 150px;
+}
+.adm-bet-filters__field--user .form-input { width: 200px; }
+.adm-bet-filters__field--mid .form-input  { width: 100px; }
+.adm-bet-filters__actions {
+  display: flex;
+  gap: var(--s2);
+  align-items: flex-end;
+}
+@media (max-width: 640px) {
+  .adm-bet-filters {
+    padding: var(--s3);
+    gap: var(--s2);
+  }
+  .adm-bet-filters__field {
+    flex: 1 1 100%;
+  }
+  .adm-bet-filters__field--mid {
+    flex: 1 1 calc(50% - var(--s2));
+  }
+  .adm-bet-filters__field .form-input,
+  .adm-bet-filters__field--user .form-input,
+  .adm-bet-filters__field--mid .form-input {
+    width: 100%;
+  }
+  .adm-bet-filters__actions {
+    flex: 1 1 100%;
+  }
+  .adm-bet-filters__actions .btn {
+    flex: 1 1 0;
+  }
+  /* não esconder a coluna "Real" da tabela de apostas */
+  .adm-table--bets th:nth-child(4),
+  .adm-table--bets td:nth-child(4) {
+    display: table-cell;
+  }
+}
+
+/* ── User typeahead ───────────────────────────────────────── */
+.adm-suggest {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin-top: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.adm-suggest__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.adm-suggest__item:last-child { border-bottom: none; }
+.adm-suggest__item:hover { background: rgba(255,255,255,0.05); }
+.adm-suggest__name {
+  font-family: var(--font-cond);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.adm-suggest__meta {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.adm-suggest__empty {
+  padding: var(--s3);
+  font-family: var(--font-cond);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.adm-bets-export-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s2) var(--s3);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+.adm-bets-export-head strong {
+  font-family: var(--font-cond);
+  font-size: 13px;
+  color: var(--text-1);
+  letter-spacing: 0.04em;
+}
+.adm-bets-export-head span {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
 /* ── Table ────────────────────────────────────────────────── */
 .adm-table-wrap {
   overflow-x: auto;
@@ -4002,7 +4136,7 @@ img {
 
   .ranking-head,
   .ranking-row {
-    grid-template-columns: 36px minmax(0, 1fr) 52px 56px 52px 52px;
+    grid-template-columns: 44px minmax(0, 1fr) 60px 64px 60px 56px 56px;
   }
 
   .ranking-col-hide {
@@ -5035,6 +5169,104 @@ img {
 .admin-options-quick__meta {
   color: var(--text-2);
   font-size: 12px;
+}
+
+/* Quick cards agora são <button> de troca de aba */
+button.admin-options-quick__card {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  width: 100%;
+}
+.admin-options-quick__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Header de card sem borda/margem inferior */
+.section-title--flush {
+  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* Badge de alterações pendentes na aba */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 100px;
+  background: var(--accent);
+  color: #000;
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+/* Barra de salvar fixa no rodapé */
+.admin-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s6);
+  padding: var(--s3) var(--s4);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: var(--r3);
+}
+.admin-save-bar__status {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-cond);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobile: barra sobe acima do dock e abas/cards compactam */
+@media (max-width: 1023px) {
+  .admin-save-bar {
+    bottom: calc(var(--mobile-nav) + env(safe-area-inset-bottom));
+  }
+  .admin-options-quick__card {
+    padding: var(--s3);
+  }
+  .tabs button {
+    padding: var(--s2) var(--s3);
+    font-size: 12px;
+  }
+}
+
+/* Tablet: quick cards em 2 colunas antes do desktop (3 col) */
+@media (min-width: 560px) and (max-width: 899px) {
+  .admin-options-quick {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Abas: rolagem horizontal limpa em telas estreitas */
+.tabs {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tabs button {
+  white-space: nowrap;
 }
 
 .admin-options-highlight {
