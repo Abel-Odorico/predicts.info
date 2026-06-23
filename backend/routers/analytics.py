@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database import get_db
-from models import PageView, User
+from models import PageView, User, Bet
 from auth_utils import require_admin
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -236,6 +236,28 @@ def stats(
     # Total users
     total_users = db.query(func.count(User.id)).scalar() or 0
 
+    # Heatmap dia-da-semana × hora (BRT, UTC-3) — acessos e apostas
+    # Matrizes 7×24: linha 0 = segunda ... 6 = domingo; coluna = hora 0-23
+    BR_OFFSET = timedelta(hours=-3)
+    access_heatmap = [[0] * 24 for _ in range(7)]
+    for r in rows:
+        if not r.created_at:
+            continue
+        local = r.created_at + BR_OFFSET
+        access_heatmap[local.weekday()][local.hour] += 1
+
+    bets_heatmap = [[0] * 24 for _ in range(7)]
+    bet_rows = (
+        db.query(Bet.created_at)
+        .filter(Bet.created_at >= since, Bet.created_at.isnot(None))
+        .all()
+    )
+    for (created_at,) in bet_rows:
+        if not created_at:
+            continue
+        local = created_at + BR_OFFSET
+        bets_heatmap[local.weekday()][local.hour] += 1
+
     return {
         "days": days,
         "total_views": total_views,
@@ -256,6 +278,8 @@ def stats(
         "total_users": total_users,
         "conversion_rate": conversion_rate,
         "registrations_per_day": registrations_per_day,
+        "access_heatmap": access_heatmap,
+        "bets_heatmap": bets_heatmap,
     }
 
 

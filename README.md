@@ -25,7 +25,7 @@ Plataforma web para simulacao da Copa do Mundo 2026 com previsoes estatisticas, 
 - Grupos da Copa, resultados, ranking e painel de dashboard
 - Apostas por placar com bloqueio automatico no inicio do jogo
 - Ranking por acertos
-- Analytics com filtros de periodo
+- Analytics com filtros de periodo + mapa de calor de acessos/apostas por hora
 - Configuracoes de site, SEO e AdSense via admin
 - Paginas institucionais editaveis no admin
 - Credito publico "Desenvolvido por" editavel no admin
@@ -122,6 +122,15 @@ Componente `frontend/src/components/LiveFloating.jsx`, montado globalmente no `L
 - Permanece visivel ao rolar/tocar (sem auto-hide). Clique abre modal (portal `z-index 9000`) com todos os jogos ao vivo: placar, canais de transmissao, local e botao "Abrir partida" -> `/partida/:id`.
 
 > Historico: era montado so em `/resultados` e sumia ao rolar (auto-hide por inatividade). Em 2026-06-23 virou global e fixo, com pilula maior.
+
+## Mapa de calor por hora (Analytics)
+
+Em `/admin/analytics` (visão geral), card "🔥 Mapa de Calor por Hora" com toggle Acessos / Apostas.
+
+- Backend: `GET /api/analytics/stats` retorna `access_heatmap` e `bets_heatmap` — matrizes 7×24 (linha 0 = segunda … 6 = domingo; coluna = hora 0-23).
+- Fontes: `page_views.created_at` (acessos) e `bets.created_at` (apostas), filtradas pelo período (`days`).
+- Horário convertido para **Brasília (UTC-3)** no backend antes de agrupar por dia-da-semana × hora.
+- Frontend: componente `HourHeatmap` em `Analytics.jsx` — intensidade da célula proporcional ao máximo, exibe total e hora de pico.
 
 ## Documentacao complementar
 

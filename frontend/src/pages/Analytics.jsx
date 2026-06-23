@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
@@ -36,6 +36,61 @@ function MiniBar({ value, max, color = 'var(--accent)' }) {
         <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 400ms' }} />
       </div>
       <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-2)', minWidth: 32, textAlign: 'right' }}>{value.toLocaleString()}</span>
+    </div>
+  )
+}
+
+const HEAT_DOW = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+
+// Mapa de calor dia-da-semana × hora (horário de Brasília). grid = 7×24.
+function HourHeatmap({ grid, rgb }) {
+  if (!grid || grid.length !== 7) {
+    return <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6)' }}>Sem dados</div>
+  }
+  const flat = grid.flat()
+  const max = Math.max(1, ...flat)
+  const total = flat.reduce((a, b) => a + b, 0)
+  // Hora de pico (somando os 7 dias)
+  const hourTotals = Array.from({ length: 24 }, (_, h) => grid.reduce((s, row) => s + row[h], 0))
+  const peakHour = hourTotals.indexOf(Math.max(...hourTotals))
+
+  return (
+    <div>
+      <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto repeat(24, 1fr)', gap: 3, minWidth: 620 }}>
+          <div />
+          {Array.from({ length: 24 }, (_, h) => (
+            <div key={h} style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-4)', textAlign: 'center' }}>
+              {h % 3 === 0 ? String(h).padStart(2, '0') : ''}
+            </div>
+          ))}
+          {grid.map((row, d) => (
+            <Fragment key={d}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', display: 'flex', alignItems: 'center', paddingRight: 6 }}>{HEAT_DOW[d]}</div>
+              {row.map((v, h) => {
+                const a = v === 0 ? 0 : 0.14 + 0.86 * (v / max)
+                return (
+                  <div key={h}
+                    title={`${HEAT_DOW[d]} ${String(h).padStart(2, '0')}h — ${v}`}
+                    style={{ aspectRatio: '1', minHeight: 14, borderRadius: 3, background: v === 0 ? 'var(--bg-overlay)' : `rgba(${rgb}, ${a.toFixed(2)})` }} />
+                )
+              })}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--s2)', marginTop: 'var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+        <span>Total: <b style={{ color: 'var(--text-2)' }}>{total.toLocaleString()}</b> · Pico: <b style={{ color: `rgb(${rgb})` }}>{String(peakHour).padStart(2, '0')}h</b></span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          menos
+          <span style={{ display: 'flex', gap: 2 }}>
+            {[0.14, 0.4, 0.66, 0.92].map(a => (
+              <span key={a} style={{ width: 12, height: 12, borderRadius: 2, background: `rgba(${rgb}, ${a})` }} />
+            ))}
+          </span>
+          mais
+        </span>
+      </div>
     </div>
   )
 }
@@ -107,6 +162,7 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab]       = useState('overview')
   const [chartOverlay, setChartOverlay] = useState(false)
+  const [heatMetric, setHeatMetric]     = useState('access')
 
   const [auditLogs, setAuditLogs]       = useState(null)
   const [auditLoading, setAuditLoading] = useState(false)
@@ -237,6 +293,32 @@ export default function Analytics() {
         </div>
         <div className="card__body">
           <DualChart viewsData={stats.views_per_day} regsData={stats.registrations_per_day} showRegs={chartOverlay} />
+        </div>
+      </div>
+
+      {/* Mapa de calor — acessos / apostas por hora do dia (BRT) */}
+      <div className="card fade-in-2" style={{ marginTop: 'var(--s4)' }}>
+        <div className="card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--s2)' }}>
+          <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🔥 Mapa de Calor por Hora</span>
+          <div style={{ display: 'flex', gap: 'var(--s2)' }}>
+            <button onClick={() => setHeatMetric('access')}
+              className={`btn btn-ghost btn-sm${heatMetric === 'access' ? ' btn-ghost--active' : ''}`} style={{ fontSize: 12 }}>
+              👁 Acessos
+            </button>
+            <button onClick={() => setHeatMetric('bets')}
+              className={`btn btn-ghost btn-sm${heatMetric === 'bets' ? ' btn-ghost--active' : ''}`} style={{ fontSize: 12 }}>
+              🎯 Apostas
+            </button>
+          </div>
+        </div>
+        <div className="card__body">
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', margin: '0 0 var(--s3)', letterSpacing: '0.03em' }}>
+            Dia da semana × hora (horário de Brasília) · {selectedPeriod.label}
+          </p>
+          <HourHeatmap
+            grid={heatMetric === 'access' ? stats.access_heatmap : stats.bets_heatmap}
+            rgb={heatMetric === 'access' ? '15,122,120' : '232,196,74'}
+          />
         </div>
       </div>
 
