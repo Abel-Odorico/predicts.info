@@ -11,6 +11,7 @@ from schemas import MatchSimulationResponse
 from engine.weights import compute_weighted_lambdas, TeamInput
 from engine.monte_carlo import simulate_match
 from routers.live import fetch_world_cup_live_games, _normalize_team_name
+from auth_utils import get_current_user
 from world_cup_official import fetch_official_knockout_schedule
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -334,10 +335,19 @@ def simulate_match_endpoint(
 
 
 @router.get("/{match_id}/live-bets")
-def match_live_bets(match_id: int, db: Session = Depends(get_db)):
+def match_live_bets(
+    match_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     match = db.query(Match).filter(Match.id == match_id).first()
     if not match:
         raise HTTPException(404, "Partida não encontrada")
+
+    # Só expõe palpites alheios após o fechamento das apostas — evita copiar
+    # picks de jogos ainda abertos (integridade do bolão).
+    if _is_bet_open(match):
+        raise HTTPException(403, "Palpites liberados só após o fechamento das apostas")
 
     bets = (
         db.query(Bet, User.name.label("user_name"))

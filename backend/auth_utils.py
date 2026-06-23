@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -32,7 +33,7 @@ def create_token(user_id: int, role: str) -> str:
 def _decode(token: str) -> Optional[dict]:
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
-    except JWTError:
+    except PyJWTError:
         return None
 
 

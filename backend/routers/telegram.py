@@ -222,8 +222,10 @@ def _render(db: Session, data: str) -> tuple[str, dict]:
 # ── Webhook ─────────────────────────────────────────────────────────────────────
 @router.post("/telegram/webhook")
 async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
+    # Fail-closed: sem secret configurado o webhook fica fechado (não aceita POST
+    # anônimo). Configurar via POST /admin/telegram/setup-webhook.
     secret = _get_cfg(db, "telegram_webhook_secret")
-    if secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token") != secret:
+    if not secret or request.headers.get("X-Telegram-Bot-Api-Secret-Token") != secret:
         return {"ok": False}
 
     token, _chat = _telegram_config(db)

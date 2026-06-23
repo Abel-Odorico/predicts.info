@@ -54,7 +54,7 @@ export default function Dashboard() {
         }
         const liveMatchIds = games.filter(g => g.status === 'live' && g.match_id).map(g => g.match_id)
         if (liveMatchIds.length > 0) {
-          Promise.all(liveMatchIds.map(id => api.get(`/matches/${id}/live-bets`).catch(() => null)))
+          Promise.all(liveMatchIds.map(id => api.get(`/matches/${id}/live-bets`, token).catch(() => null)))
             .then(results => {
               if (!mounted) return
               const map = {}
@@ -81,7 +81,7 @@ export default function Dashboard() {
         setCalendar(fullCalendar?.days || [])
         const liveMatchIds = games.filter(g => g.status === 'live' && g.match_id).map(g => g.match_id)
         if (liveMatchIds.length > 0) {
-          Promise.all(liveMatchIds.map(id => api.get(`/matches/${id}/live-bets`).catch(() => null)))
+          Promise.all(liveMatchIds.map(id => api.get(`/matches/${id}/live-bets`, token).catch(() => null)))
             .then(results => {
               if (!mounted) return
               const map = {}
@@ -104,7 +104,13 @@ export default function Dashboard() {
 
   if (loading) return <Spinner text="Carregando dados da Copa..." />
 
-  const featured = matches[0]
+  const _mdTime = (m) => m.match_date
+    ? new Date(m.match_date.endsWith('Z') ? m.match_date : m.match_date + 'Z').getTime()
+    : Infinity
+  const _now = Date.now()
+  const featured = [...matches]
+    .filter(m => _mdTime(m) >= _now)
+    .sort((a, b) => _mdTime(a) - _mdTime(b))[0] || matches[0]
   const top5 = tourney?.teams?.slice(0, 5) || []
   const topProb = top5[0]?.prob_title || 1
   const liveNow = liveGames.filter(game => game.status === 'live')

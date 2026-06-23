@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import unicodedata
 from zoneinfo import ZoneInfo
@@ -18,6 +18,12 @@ router = APIRouter(prefix="/live", tags=["live"])
 
 LIVE_CACHE_KEY = "live:wc:games"
 LIVE_CACHE_TTL = 4 * 3600  # 4h — covers longest possible match window
+
+# Throttle: serve o feed computado por alguns segundos para não disparar um
+# fetch externo (httpx ao fg, timeout 15s) a cada request de cada cliente.
+FEED_CACHE_KEY = "live:wc:feed"
+FEED_CACHE_TTL_OK = 45    # fetch bem-sucedido
+FEED_CACHE_TTL_ERR = 15   # fonte fora do ar — evita pile-up de timeouts
 
 TEAM_NAME_ALIASES = {
     "republica tcheca": "czech republic",
@@ -60,6 +66,8 @@ TEAM_NAME_ALIASES = {
     "rd congo": "dr congo",
     "republica democratica do congo": "dr congo",
     "rd do congo": "dr congo",
+    "congo dr": "dr congo",
+    "congo": "dr congo",
     "paraguai": "paraguay",
     "arabia": "saudi arabia",
     "iraque": "iraq",
@@ -80,6 +88,26 @@ TEAM_NAME_ALIASES = {
     "canada": "canada",
     "argentina": "argentina",
     "argelia": "algeria",
+    "inglaterra": "england",
+    "gales": "wales",
+    "irlanda": "ireland",
+    "dinamarca": "denmark",
+    "italia": "italy",
+    "grecia": "greece",
+    "polonia": "poland",
+    "russia": "russia",
+    "ucrania": "ukraine",
+    "servia": "serbia",
+    "eslovenia": "slovenia",
+    "eslovaquia": "slovakia",
+    "hungria": "hungary",
+    "romenia": "romania",
+    "finlandia": "finland",
+    "islandia": "iceland",
+    "republica da irlanda": "ireland",
+    "coreia do norte": "north korea",
+    "emirados arabes unidos": "united arab emirates",
+    "nova caledonia": "new caledonia",
 }
 
 
@@ -181,6 +209,15 @@ def _save_cached_games(games: list[dict]) -> None:
 
 
 def fetch_world_cup_live_games() -> dict:
+    # Cache curto do feed inteiro — throttle do fetch externo
+    try:
+        r = _get_redis()
+        cached_feed = r.get(FEED_CACHE_KEY)
+        if cached_feed:
+            return json.loads(cached_feed)
+    except Exception:
+        pass
+
     try:
         response = httpx.get(settings.fg_sports_url, timeout=15.0, follow_redirects=True)
         response.raise_for_status()
@@ -223,12 +260,22 @@ def fetch_world_cup_live_games() -> dict:
     if fetch_ok:
         _save_cached_games(merged)
 
-    return {
+    result = {
         "source": "fg.peepstreaming.com",
         "updated_at": updated_at,
         "count": len(merged),
         "games": merged,
     }
+
+    # Throttle: guarda o feed por alguns segundos (TTL menor se a fonte falhou)
+    try:
+        r = _get_redis()
+        ttl = FEED_CACHE_TTL_OK if fetch_ok else FEED_CACHE_TTL_ERR
+        r.setex(FEED_CACHE_KEY, ttl, json.dumps(result, ensure_ascii=False))
+    except Exception:
+        pass
+
+    return result
 
 
 @router.get("/world-cup")
