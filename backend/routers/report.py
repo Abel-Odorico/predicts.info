@@ -96,7 +96,7 @@ def _build_report(db: Session) -> dict:
         SELECT u.name, SUM(b.points_earned) AS pts
         FROM bets b
         JOIN users u ON u.id = b.user_id
-        WHERE b.created_at >= :d AND b.evaluated = true
+        WHERE b.created_at >= :d AND b.evaluated_at IS NOT NULL
         GROUP BY u.id, u.name
         ORDER BY pts DESC
         LIMIT 5
