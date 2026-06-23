@@ -164,11 +164,11 @@ img {
   position: sticky;
   top: 0;
   z-index: 120;
-  height: var(--mobile-topbar);
+  height: calc(var(--mobile-topbar) + env(safe-area-inset-top));
   display: flex;
   align-items: center;
   gap: var(--s4);
-  padding: 0 var(--s4);
+  padding: env(safe-area-inset-top) var(--s4) 0;
   background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -408,7 +408,7 @@ img {
 }
 
 .main {
-  min-height: calc(100vh - var(--mobile-topbar));
+  min-height: calc(100vh - var(--mobile-topbar) - env(safe-area-inset-top));
 }
 
 .page {
@@ -3613,7 +3613,7 @@ img {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - var(--mobile-topbar) - var(--mobile-nav) - var(--s10));
+  min-height: calc(100vh - var(--mobile-topbar) - env(safe-area-inset-top) - var(--mobile-nav) - var(--s10));
 }
 
 .login-box {
