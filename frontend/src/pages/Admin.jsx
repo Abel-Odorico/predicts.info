@@ -2452,8 +2452,8 @@ export default function Admin() {
                   {[
                     { label: '✓ Geradas', val: analysisLogs.totals.ok },
                     { label: '✗ Erros', val: analysisLogs.totals.error },
-                    { label: 'Tokens entrada', val: analysisLogs.totals.tokens_in.toLocaleString() },
-                    { label: 'Tokens saída', val: analysisLogs.totals.tokens_out.toLocaleString() },
+                    { label: 'Tokens entrada', val: (analysisLogs.totals.tokens_in ?? 0).toLocaleString() },
+                    { label: 'Tokens saída', val: (analysisLogs.totals.tokens_out ?? 0).toLocaleString() },
                     { label: 'Custo total', val: '$' + (analysisLogs.totals.cost_usd || 0).toFixed(4) },
                     { label: 'Tempo total', val: analysisLogs.totals.duration_ms >= 60000
                         ? Math.floor(analysisLogs.totals.duration_ms/60000) + 'm ' + Math.floor((analysisLogs.totals.duration_ms%60000)/1000) + 's'
@@ -2964,12 +2964,12 @@ function AnalysisMethodologyCard() {
                   {[
                     { label: 'Usuários', value: report.data.users.total, sub: `+${report.data.users.new_today} hoje` },
                     { label: 'Views hoje', value: report.data.views.today, sub: `${report.data.views.unique_today} únicos` },
-                    { label: 'Apostas hoje', value: report.data.bets.bets_today, sub: `${report.data.bets.bettors_today} apostadores` },
-                    { label: 'Total apostas', value: report.data.bets.total, sub: `${report.data.bets.bets_week} na semana` },
+                    { label: 'Apostas hoje', value: report.data.bets.today, sub: `${report.data.bets.bettors_today} apostadores` },
+                    { label: 'Total apostas', value: report.data.bets.total, sub: `${report.data.bets.week} na semana` },
                   ].map(k => (
                     <div key={k.label} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{k.label}</div>
-                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>{k.value.toLocaleString('pt-BR')}</div>
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>{(k.value ?? 0).toLocaleString('pt-BR')}</div>
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{k.sub}</div>
                     </div>
                   ))}

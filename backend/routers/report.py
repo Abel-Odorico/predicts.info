@@ -195,8 +195,8 @@ def _format_text(data: dict) -> str:
         "",
         "🎯 *APOSTAS*",
         f"• Total geral: *{b['total']}*",
-        f"• Hoje: *{b['bets_today']}* apostas · *{b['bettors_today']}* apostadores",
-        f"• Semana: *{b['bets_week']}* apostas · *{b['bettors_week']}* apostadores",
+        f"• Hoje: *{b['today']}* apostas · *{b['bettors_today']}* apostadores",
+        f"• Semana: *{b['week']}* apostas · *{b['bettors_week']}* apostadores",
     ]
 
     # Último resultado
