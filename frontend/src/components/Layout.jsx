@@ -222,7 +222,7 @@ export default function Layout() {
             className="btn btn-sm w-full"
             style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700, marginBottom: 6 }}
           >
-            🔗 Compartilhar
+            🔗 Compartilhar o Bolão
           </button>
           <button
             type="button" onClick={cycleTheme}
@@ -322,7 +322,9 @@ export default function Layout() {
             )
           )}
           <button
-            onClick={() => { setShareOpen(true); closeDrawer() }}
+            type="button"
+            onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); setShareOpen(true) }}
+            onClick={e => { e.stopPropagation(); setShareOpen(true) }}
             className="btn btn-sm w-full"
             style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }}
           >
@@ -341,7 +343,7 @@ export default function Layout() {
       </div>
 
       {/* ── Share modal ──────────────────────────────── */}
-      {shareOpen && <ShareModal onClose={() => setShareOpen(false)} token={token} />}
+      {shareOpen && <ShareModal onClose={() => { setShareOpen(false); setDrawerOpen(false) }} token={token} />}
 
       {/* ── Mobile dock ──────────────────────────────── */}
       <nav className="mobile-dock" aria-label="Navegação principal">
