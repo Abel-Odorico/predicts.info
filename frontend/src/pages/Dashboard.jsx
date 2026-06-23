@@ -446,6 +446,25 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* ── Consultar Resultados CTA ── */}
+          <div className="card fade-in-2" style={{
+            border: '1.5px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+            background: 'color-mix(in srgb, var(--accent) 4%, var(--bg-card))',
+          }}>
+            <div className="card__body" style={{ padding: 'var(--s4)' }}>
+              <div style={{ display:'flex', alignItems:'center', gap: 'var(--s3)', marginBottom: 'var(--s3)' }}>
+                <span style={{ fontSize: 28 }}>📋</span>
+                <div>
+                  <div style={{ fontFamily:'var(--font-display)', fontSize:16, letterSpacing:'0.05em', color:'var(--text-1)' }}>RESULTADOS</div>
+                  <div style={{ fontFamily:'var(--font-cond)', fontSize:12, color:'var(--text-3)' }}>Busque por seleção, grupo ou data</div>
+                </div>
+              </div>
+              <Link to="/resultados" className="btn btn-primary w-full" style={{ fontSize:13 }}>
+                Consultar Resultados →
+              </Link>
+            </div>
+          </div>
+
           <div className="card fade-in-2">
             <div className="card__header">
               <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>

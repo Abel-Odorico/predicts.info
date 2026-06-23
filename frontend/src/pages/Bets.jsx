@@ -152,6 +152,22 @@ export default function Bets() {
         <span style={{ fontFamily:'var(--font-cond)', fontSize:13, color:'var(--accent)', fontWeight:700 }}>→</span>
       </Link>
 
+      {/* Resultados CTA */}
+      <Link to="/resultados" style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: 'var(--s3) var(--s4)',
+        background: 'color-mix(in srgb, var(--accent) 7%, var(--bg-card))',
+        border: '1.5px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+        borderRadius: 8, marginTop: 'var(--s3)',
+        textDecoration: 'none', color: 'inherit',
+        transition: 'border-color 150ms',
+      }}>
+        <span style={{ fontFamily:'var(--font-cond)', fontWeight:700, fontSize:14, color:'var(--text-1)', display:'flex', alignItems:'center', gap:'var(--s2)' }}>
+          <span>📋</span> Consultar Resultados
+        </span>
+        <span style={{ fontFamily:'var(--font-cond)', fontSize:13, color:'var(--accent)', fontWeight:700 }}>→</span>
+      </Link>
+
       <GuideBanner onShare={handleShare} shareMsg={shareMsg} />
 
       <div className="tabs mt-6">

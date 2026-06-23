@@ -15,10 +15,14 @@ const PHASE_MARKS = [
   { label: 'Final (1)',           pct: (103 / 104) * 100, color: '#f59e0b' },
 ]
 
+const norm = s => (s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+
 export default function Results() {
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [groupFilter, setGroupFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
 
   useEffect(() => {
     api.get('/matches?status=finished&limit=200')
@@ -29,9 +33,30 @@ export default function Results() {
 
   const groups = useMemo(() => [...new Set(matches.map(m => m.group_name).filter(Boolean))].sort(), [matches])
 
-  const filtered = useMemo(() =>
-    groupFilter ? matches.filter(m => m.group_name === groupFilter) : matches
-  , [matches, groupFilter])
+  // Datas disponíveis (desc) para o seletor
+  const dates = useMemo(
+    () => [...new Set(matches.map(m => m.match_date?.slice(0, 10)).filter(Boolean))].sort().reverse(),
+    [matches]
+  )
+
+  const filtered = useMemo(() => {
+    const q = norm(search)
+    return matches.filter(m => {
+      if (groupFilter && m.group_name !== groupFilter) return false
+      if (dateFilter && (m.match_date?.slice(0, 10) !== dateFilter)) return false
+      if (q) {
+        const fields = [
+          m.team_a?.name, m.team_b?.name,
+          PT_NAMES[m.team_a?.code], PT_NAMES[m.team_b?.code],
+          m.team_a?.code, m.team_b?.code,
+        ]
+        if (!fields.some(f => norm(f).includes(q))) return false
+      }
+      return true
+    })
+  }, [matches, groupFilter, search, dateFilter])
+
+  const hasFilter = !!(groupFilter || search || dateFilter)
 
   // Group by date
   const byDate = useMemo(() => {
@@ -88,23 +113,80 @@ export default function Results() {
         </div>
       </div>
 
-      {/* Group filter */}
-      <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', margin: 'var(--s5) 0 var(--s4)' }}>
-        <button
-          onClick={() => setGroupFilter('')}
-          className={`btn btn-sm ${groupFilter === '' ? 'btn-primary' : 'btn-ghost'}`}
-        >
-          Todos
-        </button>
-        {groups.map(g => (
-          <button
-            key={g}
-            onClick={() => setGroupFilter(g === groupFilter ? '' : g)}
-            className={`btn btn-sm ${groupFilter === g ? 'btn-primary' : 'btn-ghost'}`}
+      {/* Filtros */}
+      <div className="results-filters fade-in-1" style={{ margin: 'var(--s5) 0 var(--s4)' }}>
+        {/* Busca + data */}
+        <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', marginBottom: 'var(--s3)' }}>
+          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0 }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.5, pointerEvents: 'none' }}>🔍</span>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar seleção (ex: Brasil, ARG)…"
+              autoComplete="off"
+              style={{
+                width: '100%', padding: '10px 12px 10px 34px', borderRadius: 10,
+                border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 14, outline: 'none',
+              }}
+            />
+            {search && (
+              <button
+                type="button" onClick={() => setSearch('')} aria-label="Limpar busca"
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'var(--bg-overlay)', color: 'var(--text-3)', borderRadius: 6, width: 22, height: 22, cursor: 'pointer', lineHeight: 1 }}
+              >×</button>
+            )}
+          </div>
+          <select
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            style={{
+              flex: '0 1 200px', padding: '10px 12px', borderRadius: 10,
+              border: '1px solid var(--border)', background: 'var(--bg-surface)',
+              color: dateFilter ? 'var(--text-1)' : 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 14, cursor: 'pointer', outline: 'none',
+            }}
           >
-            G{g}
+            <option value="">📅 Todas as datas</option>
+            {dates.map(d => (
+              <option key={d} value={d}>{formatDate(d)}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Chips de grupo */}
+        <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            onClick={() => setGroupFilter('')}
+            className={`btn btn-sm ${groupFilter === '' ? 'btn-primary' : 'btn-ghost'}`}
+          >
+            Todos
           </button>
-        ))}
+          {groups.map(g => (
+            <button
+              key={g}
+              onClick={() => setGroupFilter(g === groupFilter ? '' : g)}
+              className={`btn btn-sm ${groupFilter === g ? 'btn-primary' : 'btn-ghost'}`}
+            >
+              G{g}
+            </button>
+          ))}
+          {hasFilter && (
+            <button
+              onClick={() => { setGroupFilter(''); setSearch(''); setDateFilter('') }}
+              className="btn btn-sm btn-ghost"
+              style={{ marginLeft: 'auto', color: 'var(--lose)' }}
+            >
+              ✕ Limpar filtros
+            </button>
+          )}
+        </div>
+
+        {hasFilter && (
+          <p style={{ marginTop: 'var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+            {filtered.length} jogo{filtered.length === 1 ? '' : 's'} encontrado{filtered.length === 1 ? '' : 's'}
+          </p>
+        )}
       </div>
 
       <div className="stack fade-in-2">
