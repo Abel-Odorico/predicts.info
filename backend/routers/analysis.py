@@ -56,6 +56,7 @@ OPENAI_DIRECT_MODELS = [
 ]
 
 GEMINI_MODELS = [
+    {"id": "gemini-3.5-flash",                "label": "Gemini 3.5 Flash (recomendado)"},
     {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash (mais rápido)"},
     {"id": "gemini-2.5-flash-preview-05-20",  "label": "Gemini 2.5 Flash Preview mai/25"},
     {"id": "gemini-2.0-flash",                "label": "Gemini 2.0 Flash"},
@@ -65,7 +66,7 @@ GEMINI_MODELS = [
 ]
 
 DEFAULT_OR_MODEL     = "meta-llama/llama-3.3-70b-instruct:free"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_PROVIDER     = "openrouter"
 
 CONFIG_KEYS = (
