@@ -30,6 +30,7 @@ from routers import awards as awards_router
 from routers import bot as bot_router
 from routers.bot import public_router as bot_public_router
 from routers import report as report_router
+from routers import telegram as telegram_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -69,6 +70,36 @@ async def _auto_sync_loop():
         else:
             print("[auto-sync] sync já em andamento, pulando", flush=True)
         await asyncio.sleep(interval)
+
+
+async def _daily_report_loop():
+    """Envia o relatório diário ao Telegram todo dia às 07:00 (horário de Brasília)."""
+    from database import SessionLocal
+    from routers.report import push_daily_report
+
+    def _seconds_until_7am():
+        now = datetime.now(_BRT)
+        target = now.replace(hour=7, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        return (target - now).total_seconds()
+
+    print("[daily-report] agendado para 07:00 BRT diariamente", flush=True)
+    while True:
+        wait = _seconds_until_7am()
+        print(f"[daily-report] próximo envio em {wait/3600:.1f}h", flush=True)
+        await asyncio.sleep(wait)
+        try:
+            db = SessionLocal()
+            try:
+                res = await push_daily_report(db)
+            finally:
+                db.close()
+            print(f"[daily-report] enviado: {res}", flush=True)
+        except Exception as e:
+            print(f"[daily-report] erro: {e}", flush=True)
+        # evita disparo duplo se o envio for muito rápido
+        await asyncio.sleep(60)
 
 
 def _run_migrations():
@@ -301,12 +332,14 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _run_migrations()
     task = asyncio.create_task(_auto_sync_loop())
+    report_task = asyncio.create_task(_daily_report_loop())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    for t in (task, report_task):
+        t.cancel()
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -355,6 +388,7 @@ app.include_router(awards_router.router,        prefix="/api")
 app.include_router(bot_router.router,           prefix="/api")
 app.include_router(bot_public_router,           prefix="/api")
 app.include_router(report_router.router,        prefix="/api")
+app.include_router(telegram_router.router,      prefix="/api")
 
 
 @app.get("/api")

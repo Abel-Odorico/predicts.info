@@ -257,6 +257,31 @@ def get_daily_report(
     }
 
 
+async def push_daily_report(db: Session) -> dict:
+    """Envia o relatório diário ao Telegram. Reusável por endpoint e scheduler."""
+    tg_token, tg_chat = _telegram_config(db)
+    if not tg_token or not tg_chat:
+        return {"ok": False, "reason": "telegram_not_configured"}
+
+    msg = _format_text(_build_report(db))
+    url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
+    payload = {
+        "chat_id": tg_chat,
+        "text": msg,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": False,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(url, json=payload)
+    body = resp.json() if resp.content else {}
+    return {
+        "ok": resp.status_code == 200,
+        "status": resp.status_code,
+        "message_id": body.get("result", {}).get("message_id"),
+        "detail": None if resp.status_code == 200 else body,
+    }
+
+
 @router.post("/daily-report/send")
 async def send_daily_report(
     db: Session = Depends(get_db),
@@ -265,23 +290,7 @@ async def send_daily_report(
     tg_token, tg_chat = _telegram_config(db)
     if not tg_token or not tg_chat:
         raise HTTPException(400, "Telegram não configurado. Adicione o token e chat_id no painel de Configurações.")
-
-    data = _build_report(db)
-    msg = _format_text(data)
-
-    url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
-    payload = {
-        "chat_id": tg_chat,
-        "text": msg,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": False,
-    }
-
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, json=payload)
-
-    if resp.status_code != 200:
-        detail = resp.json() if resp.content else resp.text
-        raise HTTPException(502, f"Telegram recusou: {detail}")
-
-    return {"ok": True, "message_id": resp.json().get("result", {}).get("message_id")}
+    res = await push_daily_report(db)
+    if not res["ok"]:
+        raise HTTPException(502, f"Telegram recusou: {res.get('detail')}")
+    return {"ok": True, "message_id": res["message_id"]}
