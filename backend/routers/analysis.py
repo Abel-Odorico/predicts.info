@@ -230,8 +230,10 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
             model=model,
             contents=prompt,
             config=genai_types.GenerateContentConfig(
-                max_output_tokens=3000,
+                max_output_tokens=8192,
                 temperature=0.7,
+                response_mime_type="application/json",
+                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
             ),
         )
         text_out = response.text
@@ -247,7 +249,12 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
             headers={"Content-Type": "application/json"},
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"maxOutputTokens": 3000, "temperature": 0.7},
+                "generationConfig": {
+                    "maxOutputTokens": 8192,
+                    "temperature": 0.7,
+                    "responseMimeType": "application/json",
+                    "thinkingConfig": {"thinkingBudget": 0},
+                },
             },
             timeout=90,
         )
