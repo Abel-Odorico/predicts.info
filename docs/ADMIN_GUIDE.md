@@ -132,11 +132,39 @@ configuracoes nem pelo `/admin`. O agendamento vive no **codigo do backend**:
 
 - `backend/main.py` -> `_daily_report_loop()` (loop asyncio).
 - Iniciado no startup do FastAPI: `report_task = asyncio.create_task(_daily_report_loop())`.
-- Dorme ate as **07:00 BRT** e chama `push_daily_report` (`routers/report.py`); repete diariamente.
-- Para mudar o horario: editar `target.replace(hour=7, ...)` em `main.py` e reiniciar o backend.
+- Horarios definidos na constante `_DAILY_REPORT_TIMES = [(7, 0), (14, 0)]` em
+  `main.py` — envia o relatorio **as 07:00 e as 14:00 BRT**, todo dia.
+- O loop calcula o proximo horario da lista e chama `push_daily_report`
+  (`routers/report.py`).
+- Para adicionar/mudar horario: editar a lista `_DAILY_REPORT_TIMES` (tuplas
+  `(hora, minuto)`) e reiniciar o backend (`docker compose restart api`).
 
 A pagina de configuracoes so guarda token/chat id e permite teste manual —
 o disparo automatico e do processo do servidor.
+
+### Notificacao de novo usuario
+
+Alem do relatorio agendado, o admin recebe um aviso no Telegram **toda vez
+que um novo usuario se cadastra** — automatico, sem configuracao extra.
+
+- Disparado em `POST /auth/register` (`routers/auth.py`) via `BackgroundTask`,
+  apos a resposta do cadastro (nao bloqueia/atrasa o registro).
+- Funcao: `notify_new_user_telegram(name, email, username)` em
+  `routers/report.py` — best-effort (engole erro, nunca quebra o cadastro).
+- Usa o mesmo bot/chat do relatorio (`telegram_bot_token` / `telegram_chat_id`
+  em `site-config`; fallback `settings.telegram_*`). Se nao houver token/chat,
+  apenas nao envia.
+- Mensagem (HTML): nome, email, @username (se houver) e total de usuarios.
+
+```
+🆕 Novo usuário no Predicts
+
+👤 [nome]
+✉️ [email]
+🔖 @[username]
+
+📊 Total de usuários: [N]
+```
 
 ## `/admin/analytics`
 
