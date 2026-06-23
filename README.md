@@ -31,6 +31,7 @@ Plataforma web para simulacao da Copa do Mundo 2026 com previsoes estatisticas, 
 - Credito publico "Desenvolvido por" editavel no admin
 - Grupos privados de usuarios com convite e aceite
 - Painel admin para cobertura de apostas por jogo
+- Widget flutuante de jogo ao vivo (global, todas as paginas)
 
 ## Rotas principais do frontend
 
@@ -110,6 +111,17 @@ O sistema possui dois conceitos diferentes:
 - As tabelas novas de grupos privados sao criadas no startup da API via `Base.metadata.create_all(bind=engine)`.
 - Endpoints autenticados retornam `401` sem token, o que ajuda a validar rapidamente se a rota esta registrada.
 - O frontend usa persistencia local para auth e tema visual.
+
+## Widget de jogo ao vivo (LiveFloating)
+
+Componente `frontend/src/components/LiveFloating.jsx`, montado globalmente no `Layout.jsx` — aparece em todas as paginas do app.
+
+- Fonte de dados: `GET /api/live/world-cup` (router `backend/routers/live.py`, feed `fg.peepstreaming.com`), poll a cada 10s.
+- Filtra apenas jogos com `status === 'live'`. Sem jogo ao vivo, nao renderiza (`return null`).
+- Pilula fixa no topo-centro (`position: fixed`, `top: env(safe-area-inset-top) + 70px`, `z-index: 8000`): bandeiras + placar + minuto/`status_raw` + dot pulsante vermelho.
+- Permanece visivel ao rolar/tocar (sem auto-hide). Clique abre modal (portal `z-index 9000`) com todos os jogos ao vivo: placar, canais de transmissao, local e botao "Abrir partida" -> `/partida/:id`.
+
+> Historico: era montado so em `/resultados` e sumia ao rolar (auto-hide por inatividade). Em 2026-06-23 virou global e fixo, com pilula maior.
 
 ## Documentacao complementar
 

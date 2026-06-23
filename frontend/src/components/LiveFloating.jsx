@@ -1,23 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 
 const POLL_MS = 10000   // refresh feed
-const IDLE_MS = 1800    // tempo parado p/ reaparecer após "comando"
-
-// Eventos que contam como "manipular a página" -> oculta o widget
-const ACTIVITY_EVENTS = ['scroll', 'wheel', 'keydown', 'pointerdown', 'touchstart', 'touchmove']
 
 export default function LiveFloating() {
   const navigate = useNavigate()
   const [games, setGames] = useState([])
-  const [visible, setVisible] = useState(true)
   const [open, setOpen] = useState(false)
   const widgetRef = useRef(null)
-  const idleTimer = useRef(null)
-  const openRef = useRef(false)
-  useEffect(() => { openRef.current = open }, [open])
 
   // Feed ao vivo (poll)
   useEffect(() => {
@@ -30,23 +22,6 @@ export default function LiveFloating() {
     const id = window.setInterval(load, POLL_MS)
     return () => { alive = false; window.clearInterval(id) }
   }, [])
-
-  // Detecta atividade -> oculta; ao parar (idle) -> reaparece
-  const onActivity = useCallback((e) => {
-    if (openRef.current) return                                   // modal aberto: ignora
-    if (widgetRef.current && e.target && widgetRef.current.contains(e.target)) return // interação no próprio widget
-    setVisible(false)
-    if (idleTimer.current) window.clearTimeout(idleTimer.current)
-    idleTimer.current = window.setTimeout(() => setVisible(true), IDLE_MS)
-  }, [])
-
-  useEffect(() => {
-    ACTIVITY_EVENTS.forEach(ev => window.addEventListener(ev, onActivity, { passive: true }))
-    return () => {
-      ACTIVITY_EVENTS.forEach(ev => window.removeEventListener(ev, onActivity))
-      if (idleTimer.current) window.clearTimeout(idleTimer.current)
-    }
-  }, [onActivity])
 
   if (games.length === 0) return null
 
@@ -63,26 +38,25 @@ export default function LiveFloating() {
         title="Ver detalhes do ao vivo"
         style={{
           position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 70px)', left: '50%',
-          transform: `translateX(-50%) translateY(${visible ? '0' : '-16px'})`,
-          opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none',
+          transform: 'translateX(-50%)',
           transition: 'opacity .25s ease, transform .25s ease', zIndex: 8000,
-          display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-          padding: '8px 14px', borderRadius: 999,
+          display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+          padding: '11px 20px', borderRadius: 999,
           background: 'rgba(20,20,24,0.82)', backdropFilter: 'blur(10px)',
           border: '1px solid rgba(232,82,82,0.45)',
-          boxShadow: '0 8px 28px rgba(0,0,0,0.4)', maxWidth: 'min(92vw, 420px)',
+          boxShadow: '0 8px 28px rgba(0,0,0,0.4)', maxWidth: 'min(94vw, 480px)',
         }}
       >
         <span style={{
-          width: 8, height: 8, borderRadius: '50%', background: 'var(--lose, #e85252)',
+          width: 10, height: 10, borderRadius: '50%', background: 'var(--lose, #e85252)',
           boxShadow: '0 0 0 0 rgba(232,82,82,0.7)', animation: 'livedot 1.4s infinite', flexShrink: 0,
         }} />
-        {primary.team_a_flag && <img src={primary.team_a_flag} alt={primary.team_a} style={{ height: 18, width: 'auto', borderRadius: 2 }} />}
-        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {primary.team_a_flag && <img src={primary.team_a_flag} alt={primary.team_a} style={{ height: 24, width: 'auto', borderRadius: 2 }} />}
+        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 18, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {primary.score_a ?? '-'} : {primary.score_b ?? '-'}
         </span>
-        {primary.team_b_flag && <img src={primary.team_b_flag} alt={primary.team_b} style={{ height: 18, width: 'auto', borderRadius: 2 }} />}
-        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--lose, #e85252)', fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+        {primary.team_b_flag && <img src={primary.team_b_flag} alt={primary.team_b} style={{ height: 24, width: 'auto', borderRadius: 2 }} />}
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--lose, #e85252)', fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
           {primary.status_raw || 'AO VIVO'}{extra > 0 ? ` +${extra}` : ''}
         </span>
         <style>{`@keyframes livedot{0%{box-shadow:0 0 0 0 rgba(232,82,82,.7)}70%{box-shadow:0 0 0 7px rgba(232,82,82,0)}100%{box-shadow:0 0 0 0 rgba(232,82,82,0)}}`}</style>

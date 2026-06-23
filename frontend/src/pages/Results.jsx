@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
-import LiveFloating from '../components/LiveFloating'
 import { PT_NAMES } from '../utils/teamNames'
 
 const TOTAL_MATCHES = 104
@@ -81,7 +80,6 @@ export default function Results() {
 
   return (
     <div className="page">
-      <LiveFloating />
       <div className="fade-in-1">
         <h1 className="page-title">RESULTADOS</h1>
         <p className="page-subtitle">{finishedCount} de {TOTAL_MATCHES} jogos finalizados</p>

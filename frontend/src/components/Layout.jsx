@@ -8,6 +8,7 @@ import { api } from '../api'
 import ShareModal from './ShareModal'
 import AppPopups from './AppPopups'
 import NotificationBell from './NotificationBell'
+import LiveFloating from './LiveFloating'
 
 const THEMES = ['light', 'dark', 'system']
 const THEME_META = {
@@ -347,6 +348,9 @@ export default function Layout() {
 
       {/* ── Popups (novidades de versão + palpite de campeão) ── */}
       <AppPopups />
+
+      {/* ── Widget jogo ao vivo flutuante (global, todas as páginas) ── */}
+      <LiveFloating />
 
       {/* ── Mobile dock ──────────────────────────────── */}
       <nav className="mobile-dock" aria-label="Navegação principal">
