@@ -141,7 +141,10 @@ export default function ShareModal({ onClose, token }) {
 
   useEffect(() => {
     if (!token) return
-    api.get('/user-groups', token).then(gs => setGroups(gs || [])).catch(() => {})
+    // GET /user-groups retorna { groups, pending_invites, ... } — extrair o array
+    api.get('/user-groups', token)
+      .then(res => setGroups(Array.isArray(res) ? res : (res?.groups || [])))
+      .catch(() => {})
   }, [token])
 
   function copy() {
