@@ -1,4 +1,4 @@
-const CACHE = 'predicts-v5'
+const CACHE = 'predicts-v6'
 const ICON  = '/icon-192.png'
 const BADGE = '/favicon-32x32.png'
 
@@ -27,8 +27,6 @@ self.addEventListener('activate', e => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => clients.claim())
-      .then(() => self.clients.matchAll({ type: 'window' }))
-      .then(wins => wins.forEach(w => w.navigate(w.url)))
   )
 })
 
