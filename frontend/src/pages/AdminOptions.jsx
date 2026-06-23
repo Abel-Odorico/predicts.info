@@ -192,6 +192,8 @@ export default function AdminOptions() {
   const [tgTesting, setTgTesting]   = useState(false)
   const [tgMsg, setTgMsg]           = useState(null)
   const [showToken, setShowToken]   = useState(false)
+  const [tgHook, setTgHook]         = useState(false)
+  const [tgHookInfo, setTgHookInfo] = useState(null)
 
   useEffect(() => {
     api.get('/site-config/all', token)
@@ -267,6 +269,37 @@ export default function AdminOptions() {
     } finally {
       setTgTesting(false)
     }
+  }
+
+  async function setupWebhook() {
+    setTgHook(true)
+    setTgMsg(null)
+    try {
+      await api.post('/site-config/bulk', {
+        updates: {
+          telegram_bot_token: config.telegram_bot_token || '',
+          telegram_chat_id:   config.telegram_chat_id   || '',
+        }
+      }, token)
+      const r = await api.post('/admin/telegram/setup-webhook', {}, token)
+      if (r?.ok) {
+        setTgMsg({ type: 'ok', text: '🤖 Bot ativado! Mande /menu no Telegram para abrir o painel.' })
+        loadWebhookInfo()
+      } else {
+        setTgMsg({ type: 'err', text: 'Falha ao ativar: ' + (r?.reason || JSON.stringify(r?.telegram || r)) })
+      }
+    } catch (e) {
+      setTgMsg({ type: 'err', text: e.message })
+    } finally {
+      setTgHook(false)
+    }
+  }
+
+  async function loadWebhookInfo() {
+    try {
+      const r = await api.get('/admin/telegram/webhook-info', token)
+      setTgHookInfo(r?.result || r)
+    } catch { setTgHookInfo(null) }
   }
 
   async function saveKey(key) {
@@ -656,7 +689,38 @@ export default function AdminOptions() {
               >
                 {tgTesting ? '⏳ Enviando...' : '📨 Testar envio agora'}
               </button>
+              <button
+                className="btn btn-ghost"
+                onClick={setupWebhook}
+                disabled={tgHook || !config.telegram_bot_token || !config.telegram_chat_id}
+                title="Ativa o menu interativo (/menu) no bot"
+              >
+                {tgHook ? '⏳ Ativando...' : '🤖 Ativar bot/menu'}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={loadWebhookInfo}
+                disabled={!config.telegram_bot_token}
+              >
+                🔍 Status do bot
+              </button>
             </div>
+
+            {tgHookInfo && (
+              <div style={{
+                padding: 'var(--s3) var(--s4)', borderRadius: 'var(--r2)',
+                background: 'var(--bg-overlay)', border: '1px solid var(--border)',
+                fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-2)',
+                lineHeight: 1.7, wordBreak: 'break-all',
+              }}>
+                <div>Webhook: <b style={{ color: tgHookInfo.url ? 'var(--win)' : 'var(--lose)' }}>{tgHookInfo.url || '(não configurado)'}</b></div>
+                <div>Updates pendentes: {tgHookInfo.pending_update_count ?? '—'}</div>
+                {tgHookInfo.last_error_message && (
+                  <div style={{ color: 'var(--lose)' }}>Último erro: {tgHookInfo.last_error_message}</div>
+                )}
+                <div style={{ color: 'var(--text-4)', marginTop: 4 }}>Relatório automático: todo dia às 07:00 (Brasília)</div>
+              </div>
+            )}
 
             {tgMsg && (
               <div style={{
