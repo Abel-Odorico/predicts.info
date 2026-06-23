@@ -323,8 +323,7 @@ export default function Layout() {
           )}
           <button
             type="button"
-            onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); setShareOpen(true) }}
-            onClick={e => { e.stopPropagation(); setShareOpen(true) }}
+            onClick={() => { setDrawerOpen(false); setShareOpen(true) }}
             className="btn btn-sm w-full"
             style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }}
           >
