@@ -315,7 +315,7 @@ def bot_bets(db: Session = Depends(get_db), _admin: User = Depends(_require_admi
         db.query(Bet)
         .filter(Bet.user_id == bot.id)
         .join(Bet.match)
-        .order_by(Match.match_date.desc().nullslast(), Match.id.desc())
+        .order_by(Match.match_date.asc().nullslast(), Match.id.asc())
         .all()
     )
 
@@ -406,7 +406,7 @@ def bot_public(db: Session = Depends(get_db)):
         db.query(Bet)
         .filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None))
         .join(Bet.match)
-        .order_by(Match.match_date.desc().nullslast())
+        .order_by(Match.match_date.asc().nullslast())
         .limit(20)
         .all()
     )
