@@ -127,6 +127,37 @@ def _run_sync(db_url: str, trigger: str = "manual"):
             daemon=True,
         ).start()
         _append_log("● Análises IA: geração de pendentes iniciada em background")
+
+        # Bot: gera palpites para partidas abertas ainda sem aposta
+        try:
+            from routers.bot import _get_bot, _predict_score, BOT_EMAIL
+            from models import Bet, Match, MatchStatus, SimulationCache
+            from database import SessionLocal
+            from datetime import datetime, timezone
+
+            db_bot = SessionLocal()
+            bot = _get_bot(db_bot)
+            if bot:
+                now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+                open_matches = db_bot.query(Match).filter(Match.status == MatchStatus.scheduled).all()
+                existing_ids = {b.match_id for b in db_bot.query(Bet.match_id).filter(Bet.user_id == bot.id).all()}
+                created = 0
+                for m in open_matches:
+                    if m.id in existing_ids:
+                        continue
+                    deadline = m.bet_deadline or m.match_date
+                    if deadline and now_utc >= deadline:
+                        continue
+                    sim = db_bot.query(SimulationCache).filter(SimulationCache.match_id == m.id).first()
+                    sa, sb = _predict_score(sim, m)
+                    db_bot.add(Bet(user_id=bot.id, match_id=m.id, score_a=sa, score_b=sb, locked_at=m.match_date))
+                    created += 1
+                if created:
+                    db_bot.commit()
+                    _append_log(f"● Bot Predictor IA: {created} novo(s) palpite(s) gerado(s)")
+                db_bot.close()
+        except Exception as exc_bot:
+            _append_log(f"⚠ Bot sync: {exc_bot}")
     except Exception as exc:
         errors.append("sync_failed")
         _append_log(f"✗ Falha geral: {exc}")
