@@ -23,13 +23,16 @@ export default function Results() {
   const [groupFilter, setGroupFilter] = useState('')
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('finished')
 
   useEffect(() => {
-    api.get('/matches?status=finished&limit=200')
+    api.get('/matches?limit=300')
       .then(d => setMatches(d.sort((a, b) => new Date(b.match_date) - new Date(a.match_date))))
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
+
+  const finishedCount = useMemo(() => matches.filter(m => m.status === 'finished' || m.result).length, [matches])
 
   const groups = useMemo(() => [...new Set(matches.map(m => m.group_name).filter(Boolean))].sort(), [matches])
 
@@ -42,6 +45,9 @@ export default function Results() {
   const filtered = useMemo(() => {
     const q = norm(search)
     return matches.filter(m => {
+      const isFinished = m.status === 'finished' || !!m.result
+      if (statusFilter === 'finished' && !isFinished) return false
+      if (statusFilter === 'scheduled' && isFinished) return false
       if (groupFilter && m.group_name !== groupFilter) return false
       if (dateFilter && (m.match_date?.slice(0, 10) !== dateFilter)) return false
       if (q) {
@@ -54,9 +60,9 @@ export default function Results() {
       }
       return true
     })
-  }, [matches, groupFilter, search, dateFilter])
+  }, [matches, groupFilter, search, dateFilter, statusFilter])
 
-  const hasFilter = !!(groupFilter || search || dateFilter)
+  const hasFilter = !!(groupFilter || search || dateFilter || statusFilter !== 'finished')
 
   // Group by date
   const byDate = useMemo(() => {
@@ -75,7 +81,7 @@ export default function Results() {
     <div className="page">
       <div className="fade-in-1">
         <h1 className="page-title">RESULTADOS</h1>
-        <p className="page-subtitle">{matches.length} de {TOTAL_MATCHES} jogos finalizados</p>
+        <p className="page-subtitle">{finishedCount} de {TOTAL_MATCHES} jogos finalizados</p>
       </div>
 
       {/* Progress bar */}
@@ -83,7 +89,7 @@ export default function Results() {
         <div className="copa-progress__bar-track" style={{ position: 'relative' }}>
           <div
             className="copa-progress__bar-fill"
-            style={{ width: `${(matches.length / TOTAL_MATCHES) * 100}%` }}
+            style={{ width: `${(finishedCount / TOTAL_MATCHES) * 100}%` }}
           />
           {/* Phase markers */}
           {PHASE_MARKS.map(p => (
@@ -99,9 +105,9 @@ export default function Results() {
           ))}
         </div>
         <div className="copa-progress__labels">
-          <span><strong>{matches.length}</strong> jogos</span>
-          <span>{Math.round((matches.length / TOTAL_MATCHES) * 100)}% da Copa</span>
-          <span>{TOTAL_MATCHES - matches.length} restantes</span>
+          <span><strong>{finishedCount}</strong> jogos</span>
+          <span>{Math.round((finishedCount / TOTAL_MATCHES) * 100)}% da Copa</span>
+          <span>{TOTAL_MATCHES - finishedCount} restantes</span>
         </div>
         <div className="copa-progress__phases">
           {PHASE_MARKS.map(p => (
@@ -154,6 +160,23 @@ export default function Results() {
           </select>
         </div>
 
+        {/* Chips de status */}
+        <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', marginBottom: 'var(--s3)' }}>
+          {[
+            { v: 'finished',  label: '✅ Finalizados' },
+            { v: 'scheduled', label: '🗓 Agendados' },
+            { v: 'all',       label: '⚽ Todos' },
+          ].map(s => (
+            <button
+              key={s.v}
+              onClick={() => setStatusFilter(s.v)}
+              className={`btn btn-sm ${statusFilter === s.v ? 'btn-primary' : 'btn-ghost'}`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
         {/* Chips de grupo */}
         <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
@@ -173,7 +196,7 @@ export default function Results() {
           ))}
           {hasFilter && (
             <button
-              onClick={() => { setGroupFilter(''); setSearch(''); setDateFilter('') }}
+              onClick={() => { setGroupFilter(''); setSearch(''); setDateFilter(''); setStatusFilter('finished') }}
               className="btn btn-sm btn-ghost"
               style={{ marginLeft: 'auto', color: 'var(--lose)' }}
             >
@@ -214,9 +237,11 @@ export default function Results() {
 
 function ResultCard({ match }) {
   const r = match.result
-  const sa = r?.score_a ?? '?'
-  const sb = r?.score_b ?? '?'
-  const outcome = r?.score_a > r?.score_b ? 'a' : r?.score_b > r?.score_a ? 'b' : 'draw'
+  const isFinished = match.status === 'finished' || !!r
+  const sa = r?.score_a ?? '–'
+  const sb = r?.score_b ?? '–'
+  const outcome = !isFinished ? null
+    : r?.score_a > r?.score_b ? 'a' : r?.score_b > r?.score_a ? 'b' : 'draw'
   const ta = match.team_a
   const tb = match.team_b
 
@@ -230,11 +255,16 @@ function ResultCard({ match }) {
         <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginLeft: 'auto' }}>
           {formatTime(match.match_date)}
         </span>
+        {!isFinished && (
+          <span className="badge" style={{ background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', fontSize: 9 }}>
+            AGENDADO
+          </span>
+        )}
       </div>
 
       <div className="result-card__body">
         {/* Team A */}
-        <div className={`result-card__team ${outcome === 'a' ? 'winner' : outcome === 'draw' ? '' : 'loser'}`}>
+        <div className={`result-card__team ${!outcome ? '' : outcome === 'a' ? 'winner' : 'loser'}`}>
           {ta.flag_url && <img src={ta.flag_url} alt={ta.code} className="result-card__flag" />}
           <span className="result-card__name">{PT_NAMES[ta.code] || ta.name}</span>
         </div>
@@ -247,7 +277,7 @@ function ResultCard({ match }) {
         </div>
 
         {/* Team B */}
-        <div className={`result-card__team result-card__team--right ${outcome === 'b' ? 'winner' : outcome === 'draw' ? '' : 'loser'}`}>
+        <div className={`result-card__team result-card__team--right ${!outcome ? '' : outcome === 'b' ? 'winner' : 'loser'}`}>
           <span className="result-card__name">{PT_NAMES[tb.code] || tb.name}</span>
           {tb.flag_url && <img src={tb.flag_url} alt={tb.code} className="result-card__flag" />}
         </div>

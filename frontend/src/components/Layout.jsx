@@ -6,6 +6,7 @@ import { useAdSense } from '../hooks/useAdSense'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { api } from '../api'
 import ShareModal from './ShareModal'
+import AppPopups from './AppPopups'
 import NotificationBell from './NotificationBell'
 
 const THEMES = ['light', 'dark', 'system']
@@ -16,8 +17,8 @@ const THEME_META = {
 }
 
 const NAV_DRAWER = [
-  { to: '/torneio',    icon: '🏆', label: 'Torneio'     },
   { to: '/resultados', icon: '📋', label: 'Resultados'  },
+  { to: '/torneio',    icon: '🏆', label: 'Torneio'     },
   { to: '/grupos',     icon: '🗂',  label: 'Classificação'},
   { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos' },
   { to: '/votacao',    icon: '🗳',  label: 'Votação'     },
@@ -138,8 +139,8 @@ export default function Layout() {
         <div className="sidebar__nav">
           {[
             { to: '/',             icon: '⚽', label: 'Dashboard',    end: true },
-            { to: '/torneio',      icon: '🏆', label: 'Torneio'           },
             { to: '/resultados',   icon: '📋', label: 'Resultados'        },
+            { to: '/torneio',      icon: '🏆', label: 'Torneio'           },
             { to: '/grupos',       icon: '🗂',  label: 'Classificação'     },
             { to: '/apostas',      icon: '🎯', label: 'Palpites'          },
             { to: '/ranking',      icon: '🏅', label: 'Ranking'           },
@@ -343,6 +344,9 @@ export default function Layout() {
 
       {/* ── Share modal ──────────────────────────────── */}
       {shareOpen && <ShareModal onClose={() => { setShareOpen(false); setDrawerOpen(false) }} token={token} />}
+
+      {/* ── Popups (novidades de versão + palpite de campeão) ── */}
+      <AppPopups />
 
       {/* ── Mobile dock ──────────────────────────────── */}
       <nav className="mobile-dock" aria-label="Navegação principal">
