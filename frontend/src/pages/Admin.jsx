@@ -60,6 +60,7 @@ const TABS = [
   { id: 'knockout',   label: 'Mata-Mata',    icon: '⚔️' },
   { id: 'analyses',   label: 'Análises IA',  icon: '🤖' },
   { id: 'bot',        label: 'Apostador IA', icon: '🎮' },
+  { id: 'report',     label: 'Relatório',    icon: '📨' },
 ]
 
 const PHASE_LABELS_ADMIN = {
@@ -164,6 +165,13 @@ export default function Admin() {
   const [botBetPhase,     setBotBetPhase]     = useState('all')
   const [botBetLoading,   setBotBetLoading]   = useState(false)
   const [botChampLoading, setBotChampLoading] = useState(false)
+
+  // ── Relatório ────────────────────────────────────────────────────────────────
+  const [report,        setReport]        = useState(null)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportSending, setReportSending] = useState(false)
+  const [reportMsg,     setReportMsg]     = useState('')
+  const [reportCopied,  setReportCopied]  = useState(false)
 
   // ── Análises IA ──────────────────────────────────────────────────────────────
   const [analysisConfig, setAnalysisConfig]   = useState(null)
@@ -457,6 +465,29 @@ export default function Admin() {
     finally { setBotChampLoading(false) }
   }
 
+  async function loadReport() {
+    setReportLoading(true); setReportMsg('')
+    try { setReport(await api.get('/admin/daily-report', token)) }
+    catch (e) { setReportMsg(`✗ ${e?.message || 'erro'}`) }
+    finally { setReportLoading(false) }
+  }
+
+  function copyReport() {
+    if (!report?.text) return
+    navigator.clipboard.writeText(report.text).then(() => {
+      setReportCopied(true); setTimeout(() => setReportCopied(false), 2500)
+    })
+  }
+
+  async function sendReport() {
+    setReportSending(true); setReportMsg('')
+    try {
+      const r = await api.post('/admin/daily-report/send', {}, token)
+      setReportMsg(`✓ Enviado! message_id: ${r.message_id}`)
+    } catch (e) { setReportMsg(`✗ ${e?.message || 'erro'}`) }
+    finally { setReportSending(false) }
+  }
+
   function toggleSeries(key) {
     setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -484,6 +515,7 @@ export default function Admin() {
     if (tab === 'analyses' && !analysisStatus) loadAnalysisStatus()
     if (tab === 'analyses') fetchProgress()
     if (tab === 'bot' && !botStatus && !botLoading) loadBot()
+    if (tab === 'report' && !report && !reportLoading) loadReport()
   }, [tab])
 
   useEffect(() => {
@@ -2908,6 +2940,142 @@ function AnalysisMethodologyCard() {
 
           <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(15,122,120,0.08)', border: '1px solid rgba(15,122,120,0.2)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
             <strong style={{ color: 'var(--accent)' }}>Fluxo:</strong> Sync Wikipedia (1h) → atualiza times/convocados/placares → Simulação Monte Carlo → cache em simulations_cache → Geração de análise IA (admin manual ou "Gerar todas") → cache em match_analyses → Exibição pública em /sim/:id e no painel de odds de cada jogo.
+          </div>
+        </div>
+      )}
+
+      {/* ── Relatório ─────────────────────────────────────────────────────── */}
+      {tab === 'report' && (
+        <div className="adm-pane fade-in-1">
+          <div className="adm-card">
+            <div className="adm-card__header">
+              <span className="adm-card__title">📨 Relatório da Plataforma</span>
+              <button className="btn btn-sm" onClick={loadReport} disabled={reportLoading}>
+                {reportLoading ? '…' : '↻ Gerar'}
+              </button>
+            </div>
+
+            {reportLoading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>Coletando dados…</div>}
+
+            {report && !reportLoading && (
+              <>
+                {/* KPI strip */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10, marginBottom: 16 }}>
+                  {[
+                    { label: 'Usuários', value: report.data.users.total, sub: `+${report.data.users.new_today} hoje` },
+                    { label: 'Views hoje', value: report.data.views.today, sub: `${report.data.views.unique_today} únicos` },
+                    { label: 'Apostas hoje', value: report.data.bets.bets_today, sub: `${report.data.bets.bettors_today} apostadores` },
+                    { label: 'Total apostas', value: report.data.bets.total, sub: `${report.data.bets.bets_week} na semana` },
+                  ].map(k => (
+                    <div key={k.label} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{k.label}</div>
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>{k.value.toLocaleString('pt-BR')}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{k.sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Ranking top 10 */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>🏆 Ranking Geral — Top 10</div>
+                  <table className="adm-table" style={{ fontSize: 13 }}>
+                    <thead><tr><th>#</th><th>Nome</th><th>Pts</th><th>Exatos</th></tr></thead>
+                    <tbody>
+                      {report.data.ranking_top10.map(r => (
+                        <tr key={r.pos}>
+                          <td style={{ fontFamily: 'var(--font-data)', color: r.pos <= 3 ? 'var(--accent)' : 'var(--text-3)' }}>
+                            {r.pos === 1 ? '🥇' : r.pos === 2 ? '🥈' : r.pos === 3 ? '🥉' : r.pos}
+                          </td>
+                          <td style={{ fontWeight: r.pos <= 3 ? 700 : 400 }}>{r.name}</td>
+                          <td style={{ fontFamily: 'var(--font-data)', color: 'var(--accent)', fontWeight: 700 }}>{r.pts}</td>
+                          <td style={{ fontFamily: 'var(--font-data)', color: 'var(--text-3)' }}>{r.exact}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Ranking do dia */}
+                {report.data.ranking_day?.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>🌟 Destaque do Dia</div>
+                    <table className="adm-table" style={{ fontSize: 13 }}>
+                      <thead><tr><th>#</th><th>Nome</th><th>Pts</th></tr></thead>
+                      <tbody>
+                        {report.data.ranking_day.map(r => (
+                          <tr key={r.pos}>
+                            <td style={{ fontFamily: 'var(--font-data)', color: r.pos <= 3 ? 'var(--accent)' : 'var(--text-3)' }}>
+                              {r.pos === 1 ? '🥇' : r.pos === 2 ? '🥈' : r.pos === 3 ? '🥉' : r.pos}
+                            </td>
+                            <td style={{ fontWeight: r.pos <= 3 ? 700 : 400 }}>{r.name}</td>
+                            <td style={{ fontFamily: 'var(--font-data)', color: 'var(--accent)', fontWeight: 700 }}>{r.pts}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Preview do texto */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Preview do texto (Telegram MarkdownV2)</div>
+                  <pre style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 280, overflowY: 'auto', margin: 0 }}>
+                    {report.text}
+                  </pre>
+                </div>
+
+                {/* Ações */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={copyReport}
+                    style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: reportCopied ? 'var(--win)' : 'transparent', color: reportCopied ? '#fff' : 'var(--text-1)', transition: 'all .2s' }}
+                  >
+                    {reportCopied ? '✓ Copiado!' : '📋 Copiar texto'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={sendReport}
+                    disabled={reportSending || !report.telegram_configured}
+                    title={!report.telegram_configured ? 'Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env' : ''}
+                    style={{ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: report.telegram_configured ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: report.telegram_configured ? 'var(--accent)' : 'var(--bg-overlay)', color: report.telegram_configured ? '#fff' : 'var(--text-4)', opacity: reportSending ? 0.6 : 1, transition: 'all .2s' }}
+                  >
+                    {reportSending ? '⏳ Enviando…' : '📤 Enviar Telegram'}
+                  </button>
+                </div>
+
+                {!report.telegram_configured && (
+                  <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(232,196,74,0.1)', border: '1px solid rgba(232,196,74,0.3)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--amber)' }}>
+                    ⚠ Telegram não configurado. Adicione no <code>.env</code>:<br />
+                    <code>TELEGRAM_BOT_TOKEN=seu_token_aqui</code><br />
+                    <code>TELEGRAM_CHAT_ID=-100xxxxxxxxxx</code><br />
+                    Depois: <code>docker compose up -d api</code>
+                  </div>
+                )}
+              </>
+            )}
+
+            {reportMsg && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, fontFamily: 'var(--font-cond)', fontSize: 12, background: reportMsg.startsWith('✓') ? 'rgba(46,201,128,0.1)' : 'rgba(232,82,82,0.1)', color: reportMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
+                {reportMsg}
+              </div>
+            )}
+          </div>
+
+          {/* Instruções Telegram */}
+          <div className="adm-card" style={{ marginTop: 16 }}>
+            <div className="adm-card__header">
+              <span className="adm-card__title">🤖 Como configurar o Bot Telegram</span>
+            </div>
+            <ol style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 2, paddingLeft: 20, margin: 0 }}>
+              <li>Abra <strong>@BotFather</strong> no Telegram e envie <code>/newbot</code></li>
+              <li>Dê um nome e username ao bot (ex: <code>PredictsPeepBot</code>)</li>
+              <li>Copie o <strong>token</strong> gerado (formato <code>123456:ABC-DEF...</code>)</li>
+              <li>Adicione o bot no grupo/canal e envie uma mensagem</li>
+              <li>Acesse <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> para pegar o <strong>chat_id</strong></li>
+              <li>Edite <code>/opt/predicts/.env</code> e adicione as variáveis</li>
+              <li>Execute <code>docker compose up -d api</code> para recarregar</li>
+            </ol>
           </div>
         </div>
       )}

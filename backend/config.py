@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_claims_email: str = "noreplypeep@gmail.com"
 
+    # Telegram
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 
