@@ -9,6 +9,81 @@ const SCORING_RULES = [
   { pts: '0 pt', title: 'Sem acerto', desc: 'Nao pontua quando o resultado previsto falha.' },
 ]
 
+const FLOAT_ITEMS = [
+  { text: '78% precisão',        x: 8,  y: 72, delay: 0,    dur: 7   },
+  { text: '4.2M predições',       x: 25, y: 55, delay: 1.8,  dur: 8.5 },
+  { text: 'Acerto médio 82%',    x: 52, y: 78, delay: 3.2,  dur: 6.5 },
+  { text: 'Top 1% global',        x: 72, y: 48, delay: 0.9,  dur: 9   },
+  { text: '32 seleções',          x: 15, y: 40, delay: 4.5,  dur: 7.5 },
+  { text: '97 países',            x: 62, y: 65, delay: 2.1,  dur: 6   },
+  { text: 'Copa do Mundo 2026',  x: 38, y: 85, delay: 5.3,  dur: 8   },
+  { text: 'Tempo real',           x: 78, y: 35, delay: 1.2,  dur: 7   },
+  { text: '1.2M usuários',        x: 33, y: 60, delay: 6.8,  dur: 6.5 },
+]
+
+const TICKER_ITEMS = [
+  '78% de precisão média',
+  '4.2M predições realizadas',
+  '97 países participantes',
+  'Copa do Mundo 2026',
+  '32 seleções classificadas',
+  'Simulador estatístico #1',
+  'Rankings atualizados ao vivo',
+  'Simulações em tempo real',
+]
+
+function FloatingStats() {
+  return (
+    <div className="lbg__floats">
+      {FLOAT_ITEMS.map((item, i) => (
+        <span
+          key={i}
+          className="lbg__float-item"
+          style={{
+            left: `${item.x}%`,
+            top: `${item.y}%`,
+            '--delay': `${item.delay}s`,
+            '--dur': `${item.dur}s`,
+          }}
+        >
+          {item.text}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function LiveBars() {
+  const bars = [0.45, 0.80, 0.35, 1.0, 0.65, 0.75, 0.55, 0.90, 0.40, 0.70, 0.85, 0.50, 0.60, 0.95, 0.30]
+  return (
+    <div className="lbg__bars">
+      {bars.map((h, i) => (
+        <div
+          key={i}
+          className="lbg__bar"
+          style={{ '--bar-h': `${h * 100}%`, '--i': i }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function StatsTicker() {
+  const repeated = [...TICKER_ITEMS, ...TICKER_ITEMS]
+  return (
+    <div className="login-ticker">
+      <div className="login-ticker__track">
+        {repeated.map((item, i) => (
+          <span key={i} className="login-ticker__item">
+            <span className="login-ticker__dot" />
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Login() {
   const { login, user } = useAuth()
   const navigate = useNavigate()
@@ -111,166 +186,193 @@ export default function Login() {
   }
 
   return (
-    <div className="page login-shell">
-      <div className="login-box">
-        <div className="login-brand fade-in-1">
-          <div className="login-brand__logo">PREDICTS</div>
-          <div className="login-brand__subtitle">Simulador Estatístico</div>
-        </div>
+    <div className="login-shell">
 
-        <div className="card card--accent fade-in-2">
-          <div className="login-tabs">
-            {[
-              { id: 'login', label: 'Entrar' },
-              { id: 'register', label: 'Criar Conta' },
-            ].map(t => (
-              <button
-                key={t.id}
-                onClick={() => { setMode(t.id); setErr('') }}
-                className={mode === t.id ? 'active' : ''}
-              >
-                {t.label}
-              </button>
+      {/* Animated background canvas */}
+      <div className="lbg" aria-hidden="true">
+        <div className="lbg__glow" />
+        <FloatingStats />
+        <LiveBars />
+      </div>
+
+      {/* Desktop left panel — brand + stats */}
+      <div className="login-left" aria-hidden="true">
+        <div className="login-hero-brand">
+          <div className="login-hero-brand__word">
+            {'PREDICTS'.split('').map((l, i) => (
+              <span key={i} className="login-hero-brand__letter" style={{ '--i': i }}>{l}</span>
             ))}
           </div>
+          <div className="login-hero-brand__line" />
+          <div className="login-hero-brand__sub">Simulador Estatístico · Copa 2026</div>
+        </div>
+        <StatsTicker />
+      </div>
 
-          <form onSubmit={handleSubmit} className="login-form">
-            {mode === 'register' && (
-              <div className="form-group">
-                <label className="form-label">Nome</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Seu nome"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  required={mode === 'register'}
-                  autoComplete="name"
-                />
-              </div>
-            )}
+      {/* Form panel */}
+      <div className="login-right">
+        <div className="login-box">
 
-            {mode === 'register' && (
-              <>
+          {/* Mobile-only brand */}
+          <div className="login-brand login-brand--mobile fade-in-1">
+            <div className="login-brand__logo">PREDICTS</div>
+            <div className="login-brand__subtitle">Simulador Estatístico</div>
+          </div>
+
+          <div className="card card--accent login-card fade-in-2">
+            <div className="login-tabs">
+              {[
+                { id: 'login', label: 'Entrar' },
+                { id: 'register', label: 'Criar Conta' },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => { setMode(t.id); setErr('') }}
+                  className={mode === t.id ? 'active' : ''}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleSubmit} className="login-form">
+              {mode === 'register' && (
                 <div className="form-group">
-                  <label className="form-label">Usuário <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(3–30 chars)</span></label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontFamily: 'var(--font-data)', fontSize: 14 }}>@</span>
-                    <input
-                      type="text"
-                      className="form-input"
-                      style={{ paddingLeft: 28 }}
-                      placeholder="seu_usuario"
-                      value={username}
-                      onChange={e => { setUsername(e.target.value); setErr('') }}
-                      required
-                      maxLength={30}
-                      autoComplete="username"
+                  <label className="form-label">Nome</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Seu nome"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    required={mode === 'register'}
+                    autoComplete="name"
+                  />
+                </div>
+              )}
+
+              {mode === 'register' && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Usuário <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(3–30 chars)</span></label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontFamily: 'var(--font-data)', fontSize: 14 }}>@</span>
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{ paddingLeft: 28 }}
+                        placeholder="seu_usuario"
+                        value={username}
+                        onChange={e => { setUsername(e.target.value); setErr('') }}
+                        required
+                        maxLength={30}
+                        autoComplete="username"
+                      />
+                    </div>
+                    <UsernameAvailability
+                      checking={checkingUsername}
+                      invalid={usernameInvalid}
+                      status={usernameStatus}
+                      onPick={value => { setUsername(value); setUsernameStatus({ username: value, available: true, suggestions: [] }); setErr('') }}
                     />
                   </div>
-                  <UsernameAvailability
-                    checking={checkingUsername}
-                    invalid={usernameInvalid}
-                    status={usernameStatus}
-                    onPick={value => { setUsername(value); setUsernameStatus({ username: value, available: true, suggestions: [] }); setErr('') }}
-                  />
-                </div>
 
-                <div className="form-group">
-                  <label className="form-label">Celular / WhatsApp</label>
-                  <input
-                    type="tel"
-                    className="form-input"
-                    placeholder="(11) 99999-9999"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    required
-                    autoComplete="tel"
-                  />
-                </div>
-              </>
-            )}
+                  <div className="form-group">
+                    <label className="form-label">Celular / WhatsApp</label>
+                    <input
+                      type="tel"
+                      className="form-input"
+                      placeholder="(11) 99999-9999"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      required
+                      autoComplete="tel"
+                    />
+                  </div>
+                </>
+              )}
 
-            <div className="form-group">
-              <label className="form-label">E-mail</label>
-              <input
-                type="email"
-                className="form-input"
-                placeholder="email@exemplo.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Senha</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="••••••••"
-                value={pass}
-                onChange={e => setPass(e.target.value)}
-                required
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              />
-            </div>
-
-            {err && <div className="alert alert-error">{err}</div>}
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ marginTop: 'var(--s2)' }}
-              disabled={loading || registerBlocked}
-            >
-              {loading
-                ? 'Aguarde...'
-                : mode === 'login' ? 'Entrar' : 'Criar Conta'}
-            </button>
-
-            {mode === 'login' && (
-              <div style={{ textAlign: 'center', marginTop: 'var(--s2)' }}>
-                <Link
-                  to="/esqueci-senha"
-                  style={{
-                    fontFamily: 'var(--font-cond)', fontSize: 13,
-                    color: 'var(--text-3)', textDecoration: 'none',
-                    letterSpacing: '0.03em',
-                  }}
-                >
-                  Esqueci minha senha
-                </Link>
+              <div className="form-group">
+                <label className="form-label">E-mail</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  placeholder="email@exemplo.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
               </div>
-            )}
 
-            {mode === 'register' && (
-              <div className="register-explainer">
-                <div className="register-explainer__title">Como funciona a pontuacao das apostas</div>
-                <div className="guide-rules">
-                  {SCORING_RULES.map(rule => (
-                    <div key={rule.title} className="guide-rule">
-                      <span className="guide-rule__pts">{rule.pts}</span>
-                      <div>
-                        <div className="guide-rule__title">{rule.title}</div>
-                        <div className="guide-rule__desc">{rule.desc}</div>
+              <div className="form-group">
+                <label className="form-label">Senha</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  placeholder="••••••••"
+                  value={pass}
+                  onChange={e => setPass(e.target.value)}
+                  required
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+              </div>
+
+              {err && <div className="alert alert-error">{err}</div>}
+
+              <button
+                type="submit"
+                className="btn btn-primary login-submit-btn"
+                style={{ marginTop: 'var(--s2)' }}
+                disabled={loading || registerBlocked}
+              >
+                {loading
+                  ? 'Aguarde...'
+                  : mode === 'login' ? 'Entrar' : 'Criar Conta'}
+              </button>
+
+              {mode === 'login' && (
+                <div style={{ textAlign: 'center', marginTop: 'var(--s2)' }}>
+                  <Link
+                    to="/esqueci-senha"
+                    style={{
+                      fontFamily: 'var(--font-cond)', fontSize: 13,
+                      color: 'var(--text-3)', textDecoration: 'none',
+                      letterSpacing: '0.03em',
+                    }}
+                  >
+                    Esqueci minha senha
+                  </Link>
+                </div>
+              )}
+
+              {mode === 'register' && (
+                <div className="register-explainer">
+                  <div className="register-explainer__title">Como funciona a pontuacao das apostas</div>
+                  <div className="guide-rules">
+                    {SCORING_RULES.map(rule => (
+                      <div key={rule.title} className="guide-rule">
+                        <span className="guide-rule__pts">{rule.pts}</span>
+                        <div>
+                          <div className="guide-rule__title">{rule.title}</div>
+                          <div className="guide-rule__desc">{rule.desc}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </form>
-        </div>
+              )}
+            </form>
+          </div>
 
-        <div style={{ textAlign: 'center', marginTop: 'var(--s4)' }} className="fade-in-3">
-          <Link to="/" style={{
-            fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)',
-            textDecoration: 'none', letterSpacing: '0.04em'
-          }}>
-            ← Voltar sem entrar
-          </Link>
+          <div style={{ textAlign: 'center', marginTop: 'var(--s4)' }} className="fade-in-3">
+            <Link to="/" style={{
+              fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)',
+              textDecoration: 'none', letterSpacing: '0.04em'
+            }}>
+              ← Voltar sem entrar
+            </Link>
+          </div>
         </div>
       </div>
     </div>
