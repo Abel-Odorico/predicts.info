@@ -97,6 +97,7 @@ export default function ShareModal({ onClose, token }) {
 
   const [phone, setPhone] = useState('')
   const [phoneError, setPhoneError] = useState('')
+  const [waLink, setWaLink] = useState('')
 
   const [groups, setGroups] = useState([])
   const [imgSource, setImgSource] = useState('geral')
@@ -155,17 +156,11 @@ export default function ShareModal({ onClose, token }) {
     navigator.share({ title: active.nativeTitle, text: active.nativeText, url: active.url }).catch(() => {})
   }
 
-  function openWhatsAppNumber() {
+  function generateWhatsAppLink() {
     const digits = phone.replace(/\D/g, '')
     if (digits.length < 10) { setPhoneError('Número inválido — use DDI + DDD + número, ex: 5511999998888'); return }
     setPhoneError('')
-    const text = encodeURIComponent(active.waText)
-    if (hasNativeShare) {
-      // Mobile: deep link whatsapp:// — OS intercepta, não navega o browser
-      window.location.href = `whatsapp://send?phone=${digits}&text=${text}`
-    } else {
-      openExternal(`https://wa.me/${digits}?text=${text}`)
-    }
+    setWaLink(`https://wa.me/${digits}?text=${encodeURIComponent(active.waText)}`)
   }
 
   async function generateImage() {
@@ -270,7 +265,7 @@ export default function ShareModal({ onClose, token }) {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => { setTarget(t.id); setCopied(false) }}
+                    onClick={() => { setTarget(t.id); setCopied(false); setWaLink('') }}
                     style={{
                       flex: 1, padding: '7px 6px', borderRadius: 8, border: 'none', cursor: 'pointer',
                       fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700,
@@ -374,24 +369,35 @@ export default function ShareModal({ onClose, token }) {
                 type="tel"
                 placeholder="5511999998888"
                 value={phone}
-                onChange={e => { setPhone(e.target.value); setPhoneError('') }}
-                onKeyDown={e => { if (e.key === 'Enter') openWhatsAppNumber() }}
+                onChange={e => { setPhone(e.target.value); setPhoneError(''); setWaLink('') }}
+                onKeyDown={e => { if (e.key === 'Enter') generateWhatsAppLink() }}
                 style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: `1px solid ${phoneError ? 'var(--lose)' : 'var(--border)'}`, background: 'var(--bg-overlay)', color: 'var(--text-1)', fontFamily: 'var(--font-data)', fontSize: 14, outline: 'none', transition: 'border-color .15s' }}
               />
               <button
                 type="button"
-                onClick={openWhatsAppNumber}
-                style={{ padding: '10px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: '#25D366', color: '#fff', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'opacity .15s' }}
+                onClick={generateWhatsAppLink}
+                style={{ padding: '10px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, flexShrink: 0, transition: 'opacity .15s' }}
                 onMouseOver={e => e.currentTarget.style.opacity = '.85'}
                 onMouseOut={e => e.currentTarget.style.opacity = '1'}
               >
-                <WhatsAppIcon /> Enviar
+                Gerar Link
               </button>
             </div>
             {phoneError
               ? <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--lose)', marginTop: 5 }}>{phoneError}</div>
               : <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 5 }}>DDI + DDD + número · Ex: 55 11 9 9999-8888 → 5511999998888</div>
             }
+            {waLink && (
+              <a
+                href={waLink}
+                rel="noopener noreferrer"
+                style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 10, background: '#25D366', color: '#fff', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'opacity .15s' }}
+                onMouseOver={e => e.currentTarget.style.opacity = '.85'}
+                onMouseOut={e => e.currentTarget.style.opacity = '1'}
+              >
+                <WhatsAppIcon /> Abrir WhatsApp
+              </a>
+            )}
           </div>
 
           {/* Divider — imagem */}

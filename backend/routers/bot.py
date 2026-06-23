@@ -282,15 +282,13 @@ def bot_pick_champion(db: Session = Depends(get_db), _admin: User = Depends(_req
 
     pick = db.query(ChampionPick).filter(ChampionPick.user_id == bot.id).first()
     if pick:
-        pick.team_id          = champion_id
+        pick.team_id           = champion_id
         pick.runner_up_team_id = vice_id
-        pick.picked_at        = _utcnow()
     else:
         pick = ChampionPick(
             user_id=bot.id,
             team_id=champion_id,
             runner_up_team_id=vice_id,
-            picked_at=_utcnow(),
         )
         db.add(pick)
 
