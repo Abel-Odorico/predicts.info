@@ -5771,6 +5771,73 @@ button.admin-options-quick__card {
   margin: var(--s2) 0 0;
   line-height: 1.6;
 }
+.groups-switcher {
+  display: flex;
+  gap: var(--s2);
+  margin-top: var(--s5);
+  padding-bottom: var(--s2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.groups-switcher__tab {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 140px;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--bg-surface);
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms, background 150ms, color 150ms;
+}
+.groups-switcher__tab:hover { border-color: var(--accent); }
+.groups-switcher__tab.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+  color: var(--text-1);
+}
+.groups-switcher__name {
+  font-family: var(--font-cond);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.groups-switcher__meta {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  color: var(--text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.groups-switcher__tab.is-active .groups-switcher__meta { color: var(--accent); }
+.groups-switcher__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--lose, #e85252);
+  color: #fff;
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .groups-list-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

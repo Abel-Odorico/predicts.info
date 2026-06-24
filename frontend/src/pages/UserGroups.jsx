@@ -45,6 +45,10 @@ export default function UserGroups() {
   const [createMsg, setCreateMsg] = useState('')
   const [creating, setCreating] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [activeGroupId, setActiveGroupId] = useState(() => {
+    const v = Number(localStorage.getItem('ug_active'))
+    return Number.isFinite(v) && v > 0 ? v : null
+  })
 
   async function loadGroups() {
     if (!token) return
@@ -113,6 +117,10 @@ export default function UserGroups() {
   const totalMembers = groups.reduce((sum, g) => sum + (g.members?.length ?? 0), 0)
   const totalGroupInvites = groups.reduce((sum, g) => sum + (g.pending_invites?.length ?? 0), 0)
   const totalConvites = pendingInvites.length + totalGroupInvites
+
+  // Grupo em foco: respeita seleção salva; cai no 1º se inválida.
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null
+  const selectGroup = id => { setActiveGroupId(id); localStorage.setItem('ug_active', String(id)) }
 
   return (
     <div className="page">
@@ -193,20 +201,50 @@ export default function UserGroups() {
           </div>
         </section>
       ) : (
-        <section className="groups-list-grid fade-in-3" aria-label="Lista de grupos">
-          {groups.map(group => (
-            <UserGroupCard
-              key={group.id}
-              group={group}
-              token={token}
-              currentUser={user}
-              onRefresh={loadGroups}
-              matchStats={matchStats}
-              nextMatch={nextMatch}
-              myBetNext={myBetNext}
-            />
-          ))}
-        </section>
+        <>
+          {groups.length > 1 && (
+            <nav className="groups-switcher fade-in-3" aria-label="Selecionar grupo">
+              {groups.map(group => {
+                const members = group.members?.length ?? 0
+                const sorted = [...(group.members ?? [])].sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0))
+                const pos = sorted.findIndex(m => m.user_id === user?.id) + 1
+                const invites = group.pending_invites?.length ?? 0
+                const active = group.id === activeGroup?.id
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    className={`groups-switcher__tab${active ? ' is-active' : ''}`}
+                    onClick={() => selectGroup(group.id)}
+                    aria-pressed={active}
+                  >
+                    <span className="groups-switcher__name">{group.name}</span>
+                    <span className="groups-switcher__meta">
+                      {members} membro{members !== 1 ? 's' : ''}
+                      {pos > 0 && <> · {pos}º</>}
+                    </span>
+                    {invites > 0 && <span className="groups-switcher__badge">{invites}</span>}
+                  </button>
+                )
+              })}
+            </nav>
+          )}
+
+          <section className="groups-list-grid fade-in-3" aria-label="Grupo selecionado">
+            {activeGroup && (
+              <UserGroupCard
+                key={activeGroup.id}
+                group={activeGroup}
+                token={token}
+                currentUser={user}
+                onRefresh={loadGroups}
+                matchStats={matchStats}
+                nextMatch={nextMatch}
+                myBetNext={myBetNext}
+              />
+            )}
+          </section>
+        </>
       )}
     </div>
   )
