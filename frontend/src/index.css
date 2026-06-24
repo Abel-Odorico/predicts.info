@@ -5838,6 +5838,100 @@ button.admin-options-quick__card {
   font-weight: 700;
 }
 
+/* Raio-X do grupo */
+.group-xray {
+  margin: 0 var(--s4) var(--s2);
+  padding: var(--s3) var(--s3) var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--bg-overlay);
+}
+.group-xray__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--s3);
+}
+.group-xray__title {
+  font-family: var(--font-cond);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+}
+.group-xray__share { font-size: 11px; white-space: nowrap; }
+.group-xray__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s2);
+}
+.group-xray__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s3) var(--s2);
+  border-radius: var(--r1, 8px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.group-xray__tile-icon { font-size: 15px; line-height: 1; }
+.group-xray__tile-value {
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1.1;
+  color: var(--accent);
+}
+.group-xray__tile-label {
+  font-family: var(--font-cond);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  line-height: 1.15;
+}
+.group-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+.group-highlight {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r1, 8px);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.group-highlight__icon { font-size: 18px; line-height: 1; flex-shrink: 0; }
+.group-highlight__body { display: flex; flex-direction: column; min-width: 0; }
+.group-highlight__label {
+  font-family: var(--font-cond);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-weight: 700;
+}
+.group-highlight__name {
+  font-family: var(--font-cond);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.group-highlight__val {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  color: var(--text-3);
+}
+
 .groups-list-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

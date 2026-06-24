@@ -291,6 +291,63 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   const visibleMembers = showAllMembers ? sortedMembers : sortedMembers.slice(0, 4)
   const extraMembers = Math.max(sortedMembers.length - 4, 0)
 
+  const [shared, setShared] = useState('')
+
+  // Raio-X do grupo (tudo derivado dos membros — sem chamada extra à API)
+  const gStats = (() => {
+    const sum = k => sortedMembers.reduce((a, m) => a + (m[k] || 0), 0)
+    const points = sum('total_points')
+    const bets = sum('total_bets')
+    const exacts = sum('exact_scores')
+    const correct = sum('correct_results')
+    const members = sortedMembers.length
+    return {
+      points, bets, exacts, correct, members,
+      exactRate: bets > 0 ? Math.round((exacts / bets) * 100) : 0,
+      avgPoints: members > 0 ? Math.round(points / members) : 0,
+      efficiency: bets > 0 ? Math.round((points / (bets * 25)) * 100) : 0,
+    }
+  })()
+
+  const highlights = (() => {
+    const pool = sortedMembers.filter(m => (m.total_bets || 0) > 0)
+    if (!pool.length) return []
+    const out = []
+    const lead = sortedMembers[0]
+    if (lead && lead.total_points > 0) out.push({ icon: '👑', label: 'Líder', m: lead, val: `${lead.total_points} pts` })
+    const snipers = pool.filter(m => m.total_bets >= 3 && m.exact_scores > 0)
+    if (snipers.length) {
+      const s = snipers.reduce((b, m) => (m.exact_scores / m.total_bets > b.exact_scores / b.total_bets ? m : b))
+      out.push({ icon: '🎯', label: 'Sniper', m: s, val: `${Math.round((s.exact_scores / s.total_bets) * 100)}% exatos` })
+    }
+    const mara = pool.reduce((b, m) => (m.total_bets > b.total_bets ? m : b))
+    if (mara.total_bets > 0) out.push({ icon: '⚡', label: 'Maratonista', m: mara, val: `${mara.total_bets} palpites` })
+    const hot = m => (m.recent_form || []).reduce((a, f) => a + (f === 'E' ? 2 : f === 'C' ? 1 : 0), 0)
+    const hotPool = pool.filter(m => (m.recent_form || []).length >= 3 && hot(m) > 0)
+    if (hotPool.length) {
+      const h = hotPool.reduce((b, m) => (hot(m) > hot(b) ? m : b))
+      out.push({ icon: '🔥', label: 'Em alta', m: h, val: 'embalado' })
+    }
+    return out
+  })()
+
+  async function shareGroup() {
+    const lead = sortedMembers[0]
+    const text = [
+      `🏆 ${group.name} — Bolão Copa 2026`,
+      lead ? `👑 Líder: ${lead.name} (${lead.total_points} pts)` : '',
+      `👥 ${gStats.members} membros · 🎯 ${gStats.exacts} placares exatos · 📊 ${gStats.bets} palpites`,
+      `⭐ ${gStats.points} pts no total · aproveitamento ${gStats.efficiency}%`,
+      inviteLink ? `Entre no bolão: ${inviteLink}` : `Jogue em ${window.location.origin}`,
+    ].filter(Boolean).join('\n')
+    try {
+      if (navigator.share) { await navigator.share({ title: group.name, text }); setShared('✓ Compartilhado') }
+      else if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); setShared('✓ Copiado') }
+      else setShared('Copie o texto')
+    } catch (e) { if (e?.name !== 'AbortError') setShared('✗ Falhou') }
+    setTimeout(() => setShared(''), 2500)
+  }
+
   async function deleteGroup() {
     if (!window.confirm(`Excluir o grupo "${group.name}"? Esta ação não pode ser desfeita.`)) return
     setDeleting(true)
@@ -543,6 +600,38 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
         </div>
       </div>
 
+      {/* Raio-X do grupo + compartilhar */}
+      <div className="group-xray">
+        <div className="group-xray__head">
+          <span className="group-xray__title">📊 Raio-X do grupo</span>
+          <button type="button" className="btn btn-ghost btn-sm group-xray__share" onClick={shareGroup}>
+            {shared || '🔗 Compartilhar'}
+          </button>
+        </div>
+        <div className="group-xray__grid">
+          <XrayTile icon="⭐" value={gStats.points}            label="Pontos do grupo" />
+          <XrayTile icon="📊" value={gStats.bets}              label="Palpites" />
+          <XrayTile icon="🎯" value={gStats.exacts}            label="Placares exatos" />
+          <XrayTile icon="✅" value={gStats.correct}           label="Acertos de resultado" />
+          <XrayTile icon="📈" value={`${gStats.exactRate}%`}   label="Taxa de exatos" />
+          <XrayTile icon="🧮" value={gStats.avgPoints}         label="Média / membro" />
+        </div>
+        {highlights.length > 0 && (
+          <div className="group-highlights">
+            {highlights.map(h => (
+              <div key={h.label} className="group-highlight">
+                <span className="group-highlight__icon">{h.icon}</span>
+                <div className="group-highlight__body">
+                  <span className="group-highlight__label">{h.label}</span>
+                  <span className="group-highlight__name" title={h.m.name}>{h.m.name}</span>
+                  <span className="group-highlight__val">{h.val}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="group-manager-card__body">
         {/* Members section */}
         <section className="group-manager-section">
@@ -739,6 +828,16 @@ function GroupStat({ label, value, compact = false }) {
     <div className="group-stat">
       <span>{label}</span>
       <strong className={compact ? 'group-stat__value--text' : undefined}>{value}</strong>
+    </div>
+  )
+}
+
+function XrayTile({ icon, value, label }) {
+  return (
+    <div className="group-xray__tile">
+      <span className="group-xray__tile-icon">{icon}</span>
+      <span className="group-xray__tile-value">{value}</span>
+      <span className="group-xray__tile-label">{label}</span>
     </div>
   )
 }
