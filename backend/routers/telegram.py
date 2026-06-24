@@ -65,7 +65,8 @@ def _menu_kb() -> dict:
         [{"text": "👥 Usuários", "callback_data": "u"}, {"text": "📈 Acessos", "callback_data": "a"}],
         [{"text": "🔐 Logins", "callback_data": "l"}, {"text": "🎯 Apostas", "callback_data": "b"}],
         [{"text": "🏆 Ranking", "callback_data": "r"}, {"text": "🌍 Geografia", "callback_data": "g"}],
-        [{"text": "📱 Dispositivos", "callback_data": "d"}, {"text": "📊 Resumo completo", "callback_data": "f"}],
+        [{"text": "📱 Dispositivos", "callback_data": "d"}, {"text": "🔮 Oráculo IA", "callback_data": "o"}],
+        [{"text": "📊 Resumo completo", "callback_data": "f"}],
         [{"text": "🔄 Atualizar", "callback_data": "m"}],
     ]}
 
@@ -202,9 +203,42 @@ def _sec_devices(db) -> str:
     return "\n".join(out)
 
 
+def _sec_oracle(db) -> str:
+    from html import escape as e
+    rows = db.execute(text("""
+        SELECT action, new_a, new_b, source, confidence, reason, created_at,
+               meta->>'team_a'              AS ta,
+               meta->>'team_b'              AS tb,
+               (meta->'baseline'->>0)       AS ba,
+               (meta->'baseline'->>1)       AS bb
+        FROM bot_decision_logs
+        ORDER BY created_at DESC
+        LIMIT 6
+    """)).fetchall()
+    if not rows:
+        return ("🔮 <b>ORÁCULO PREDICTOR</b>\n"
+                "Nenhuma re-análise registrada ainda.\n"
+                "A IA reavalia cada jogo ~1h antes do apito.")
+    act = {"changed": "🔁", "created": "🆕", "kept": "✅", "skipped": "⏭"}
+    out = ["🔮 <b>ORÁCULO PREDICTOR — últimas análises</b>"]
+    for r in rows:
+        ico = act.get(r.action, "•")
+        base = f"{r.ba}×{r.bb}" if r.ba is not None else "—"
+        final = f"{r.new_a}×{r.new_b}"
+        overrode = (str(r.ba), str(r.bb)) != (str(r.new_a), str(r.new_b))
+        tag = " 🔥" if overrode else ""
+        conf = f" · {r.confidence}%" if r.confidence is not None else ""
+        out.append("")
+        out.append(f"{ico} <b>{e(str(r.ta or '?'))}×{e(str(r.tb or '?'))}</b> — "
+                   f"Modelo {base} → IA <b>{final}</b>{tag}{conf}")
+        if r.reason:
+            out.append(f"<i>{e(r.reason[:240])}</i>")
+    return "\n".join(out)
+
+
 _RENDERERS = {
     "u": _sec_users, "a": _sec_access, "l": _sec_logins, "b": _sec_bets,
-    "r": _sec_ranking, "g": _sec_geo, "d": _sec_devices,
+    "r": _sec_ranking, "g": _sec_geo, "d": _sec_devices, "o": _sec_oracle,
 }
 
 
