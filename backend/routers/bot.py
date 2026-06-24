@@ -8,24 +8,26 @@ Estratégia:
     Fallback: Elo das seleções.
 """
 
+import html as _html
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth_utils import get_current_user
 from database import get_db
 from models import (
-    Bet, Match, MatchPhase, MatchResult, MatchStatus,
+    Bet, BotDecisionLog, Match, MatchPhase, MatchResult, MatchStatus,
     Ranking, SimulationCache, Team, TournamentSimulation, User, UserRole
 )
 from routers.champion import ChampionPick
 from world_cup_sync import _score_points_v2
 
 BOT_EMAIL = "bot@predicts.info"
-BOT_NAME  = "🤖 Predictor IA"
+BOT_NAME  = "🔮 Oráculo Predictor"
 BOT_USER  = "predictor_ia"
 
 router = APIRouter(prefix="/admin/bot", tags=["bot"])
@@ -367,6 +369,545 @@ def bot_bets(db: Session = Depends(get_db), _admin: User = Depends(_require_admi
             else: bp["erros"] += 1
 
     return {"bets": rows, "by_phase": by_phase}
+
+
+# ── Oráculo Predictor — IA dedicada + re-análise pré-jogo ────────────────────────
+
+# Config própria do Oráculo (site_config, prefixo oracle_*), independente da
+# análise de partidas. Fallback: herda a config de análise geral se nada definido.
+ORACLE_CONFIG_KEYS = (
+    "oracle_provider",
+    "oracle_gemini_key", "oracle_gemini_model",
+    "oracle_openrouter_key", "oracle_openrouter_model",
+    "oracle_openai_key", "oracle_openai_model",
+)
+
+ORACLE_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+ORACLE_DEFAULT_OR_MODEL     = "meta-llama/llama-3.3-70b-instruct:free"
+
+
+def _oracle_raw_config(db: Session) -> dict:
+    from sqlalchemy import text
+    rows = db.execute(
+        text("SELECT key, value FROM site_config WHERE key = ANY(:keys)"),
+        {"keys": list(ORACLE_CONFIG_KEYS)},
+    ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def _oracle_llm_cfg(db: Session) -> tuple[dict, str]:
+    """
+    Monta o cfg (formato esperado por analysis._call_llm) para a IA DEDICADA do
+    Oráculo. Se nenhuma chave própria existir, herda a IA de análise geral.
+    Retorna (cfg, origem).
+    """
+    from routers.analysis import _get_config
+    raw = _oracle_raw_config(db)
+    has_own = any(raw.get(k) for k in ("oracle_gemini_key", "oracle_openrouter_key", "oracle_openai_key"))
+    if not has_own:
+        return _get_config(db), "herdado (análise geral)"
+    cfg = {
+        "provider":         raw.get("oracle_provider", "gemini"),
+        "gemini_key":       raw.get("oracle_gemini_key", ""),
+        "gemini_key_2":     "",
+        "gemini_model":     raw.get("oracle_gemini_model", ORACLE_DEFAULT_GEMINI_MODEL),
+        "openai_key":       raw.get("oracle_openai_key", ""),
+        "openai_model":     raw.get("oracle_openai_model", "gpt-4o-mini"),
+        "openrouter_key":   raw.get("oracle_openrouter_key", ""),
+        "openrouter_model": raw.get("oracle_openrouter_model", ORACLE_DEFAULT_OR_MODEL),
+        "prompt_template":  "",
+    }
+    return cfg, "dedicada"
+
+
+def pick_oracle_llm(db: Session) -> tuple[dict | None, str | None, str]:
+    """
+    Escolhe a melhor IA disponível para o Oráculo (1ª da cadeia de fallback).
+    Retorna (cfg, label_do_modelo, origem). cfg=None se nada configurado.
+    """
+    from routers.analysis import _get_provider_chain
+    cfg, origin = _oracle_llm_cfg(db)
+    chain = _get_provider_chain(cfg)
+    if not chain:
+        return None, None, origin
+    return cfg, chain[0]["label"], origin
+
+
+def _build_oracle_prompt(db: Session, match: Match, base: tuple[int, int]) -> str:
+    from routers.analysis import _get_mc_prob, _get_recent_results
+    ta, tb = match.team_a, match.team_b
+    mc = _get_mc_prob(db, match.id)
+    ra = _get_recent_results(db, ta.code) if ta else []
+    rb = _get_recent_results(db, tb.code) if tb else []
+
+    def fmt(results):
+        return "; ".join(
+            f"{r['team_a']} {r['score_a']}-{r['score_b']} {r['team_b']}" for r in results[:5]
+        ) or "sem dados"
+
+    mc_line = "indisponível"
+    if mc:
+        top = "  ".join(f"{s['score']} ({s['prob']:.0f}%)" for s in mc.get("top_scores", [])[:4])
+        mc_line = (
+            f"Vitória {ta.name}: {mc['prob_a']:.0f}% | Empate: {mc['prob_draw']:.0f}% | Vitória {tb.name}: {mc['prob_b']:.0f}%\n"
+            f"xG esperado: {ta.name} {mc['lambda_a']:.2f} x {mc['lambda_b']:.2f} {tb.name}\n"
+            f"Placares mais prováveis: {top}"
+        )
+
+    phase = match.phase.value if match.phase else "grupo"
+    return (
+        "Você é o ORÁCULO PREDICTOR, IA especialista em prever o placar EXATO de partidas de futebol.\n"
+        f"Partida: {ta.name} ({ta.code}) x {tb.name} ({tb.code}) — fase {phase}.\n\n"
+        f"Palpite atual do modelo estatístico (Monte Carlo): {base[0]}x{base[1]}\n"
+        f"Probabilidades Monte Carlo:\n{mc_line}\n\n"
+        f"ELO: {ta.name} {ta.elo_rating or 'N/D'} x {tb.name} {tb.elo_rating or 'N/D'}\n"
+        f"Forma {ta.name} (últimos 5): {ta.form_5 or 'N/D'} | {tb.name}: {tb.form_5 or 'N/D'}\n"
+        f"Resultados recentes {ta.name}: {fmt(ra)}\n"
+        f"Resultados recentes {tb.name}: {fmt(rb)}\n\n"
+        "Analise os dados e cenários e decida o placar EXATO mais provável. Você pode CONFIRMAR o palpite do "
+        "modelo ou ALTERÁ-LO se a análise justificar. Seja cirúrgico.\n\n"
+        "Responda em JSON PURO (sem markdown, sem ```):\n"
+        "{\n"
+        f'  "score_a": <int gols {ta.code}>,\n'
+        f'  "score_b": <int gols {tb.code}>,\n'
+        '  "confidence": <int 0-100>,\n'
+        '  "reason": "2-4 frases em PT-BR justificando o placar; se alterou o palpite do modelo, explique claramente o porquê"\n'
+        "}"
+    )
+
+
+def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
+    """Decide o placar via IA dedicada. Fallback: baseline Monte Carlo/Elo."""
+    sim = db.query(SimulationCache).filter(SimulationCache.match_id == match.id).first()
+    base_a, base_b = _predict_score(sim, match)
+    base_source = "monte_carlo" if (sim and sim.top_scores) else ("poisson" if (sim and sim.lambda_a) else "elo")
+    probs = None
+    if sim:
+        probs = (
+            round(float(sim.prob_a or 0) * 100, 2) if sim.prob_a is not None else None,
+            round(float(sim.prob_draw or 0) * 100, 2) if sim.prob_draw is not None else None,
+            round(float(sim.prob_b or 0) * 100, 2) if sim.prob_b is not None else None,
+        )
+    result = {
+        "score_a": base_a, "score_b": base_b, "source": base_source,
+        "model_tag": None, "confidence": None, "reason": None,
+        "probs": probs, "baseline": (base_a, base_b),
+    }
+    if not cfg:
+        result["reason"] = "IA não configurada — usado o modelo estatístico."
+        return result
+    from routers.analysis import _call_llm
+    try:
+        prompt = _build_oracle_prompt(db, match, (base_a, base_b))
+        content, model_tag, _usage = _call_llm(cfg, prompt)
+        sa, sb = int(content.get("score_a")), int(content.get("score_b"))
+        if not (0 <= sa <= 20 and 0 <= sb <= 20):
+            raise ValueError("placar fora de faixa")
+        conf = content.get("confidence")
+        result.update({
+            "score_a": sa, "score_b": sb,
+            "source": f"llm/{model_tag}", "model_tag": model_tag,
+            "confidence": int(conf) if conf is not None else None,
+            "reason": str(content.get("reason") or "").strip()[:1000] or None,
+        })
+    except Exception as e:
+        result["reason"] = f"IA indisponível ({str(e)[:120]}) — mantido modelo estatístico {base_a}x{base_b}."
+    return result
+
+
+def _oracle_telegram(db: Session, match: Match, decision: dict, action: str, old) -> bool:
+    """Dispara a análise do Oráculo no Telegram. Best-effort, nunca levanta."""
+    try:
+        import httpx
+        from routers.report import _telegram_config
+        token, chat = _telegram_config(db)
+        if not token or not chat:
+            return False
+        ta, tb = match.team_a, match.team_b
+        act_label = {
+            "created": "🆕 Novo palpite",
+            "changed": "🔁 Palpite ALTERADO",
+            "kept":    "✅ Palpite mantido",
+        }.get(action, action)
+        sa, sb = decision["score_a"], decision["score_b"]
+        lines = [
+            "🔮 <b>ORÁCULO PREDICTOR</b> — análise pré-jogo",
+            f"<b>{_html.escape(ta.name if ta else '?')}</b> x <b>{_html.escape(tb.name if tb else '?')}</b>",
+            "",
+            f"{act_label}: <b>{sa} x {sb}</b>",
+        ]
+        if action == "changed" and old:
+            lines.append(f"<i>Palpite anterior: {old[0]} x {old[1]}</i>")
+        if decision.get("confidence") is not None:
+            lines.append(f"🎯 Confiança: <b>{decision['confidence']}%</b>")
+        if decision.get("probs") and decision["probs"][0] is not None:
+            pa, pd, pb = decision["probs"]
+            lines.append(f"📊 Probabilidades: {pa:.0f}% / {pd:.0f}% / {pb:.0f}%")
+        if decision.get("reason"):
+            lines += ["", f"💬 {_html.escape(decision['reason'])}"]
+        if decision.get("model_tag"):
+            lines += ["", f"<i>IA: {_html.escape(decision['model_tag'])}</i>"]
+        httpx.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat, "text": "\n".join(lines),
+                  "parse_mode": "HTML", "disable_web_page_preview": True},
+            timeout=10,
+        )
+        return True
+    except Exception:
+        return False
+
+
+# ── Slack (Incoming Webhook) ────────────────────────────────────────────────────
+
+def _slack_config(db: Session) -> str:
+    """URL do Incoming Webhook do Slack (site_config tem prioridade sobre .env)."""
+    from sqlalchemy import text
+    row = db.execute(
+        text("SELECT value FROM site_config WHERE key = 'slack_webhook_url'")
+    ).fetchone()
+    url = (row[0] if row else "") or ""
+    from config import settings
+    return url or settings.slack_webhook_url
+
+
+def _slack_enabled(db: Session) -> bool:
+    from sqlalchemy import text
+    row = db.execute(
+        text("SELECT value FROM site_config WHERE key = 'oracle_slack_enabled'")
+    ).fetchone()
+    if row and row[0] is not None:
+        return str(row[0]).lower() in ("1", "true", "yes", "on")
+    from config import settings
+    return settings.oracle_slack_enabled
+
+
+def _build_slack_blocks(match: Match, decision: dict, action: str, old) -> list:
+    """Monta os Block Kit do Slack para a análise do Oráculo."""
+    ta, tb = match.team_a, match.team_b
+    sa, sb = decision["score_a"], decision["score_b"]
+    act = {
+        "created": "🆕 Novo palpite",
+        "changed": "🔁 Palpite ALTERADO",
+        "kept":    "✅ Palpite mantido",
+    }.get(action, action)
+
+    name_a = ta.name if ta else "?"
+    name_b = tb.name if tb else "?"
+    header = f"🔮 Oráculo Predictor · {name_a} x {name_b}"
+
+    fields = [{"type": "mrkdwn", "text": f"*{act}*\n`{sa} x {sb}`"}]
+    if action == "changed" and old:
+        fields.append({"type": "mrkdwn", "text": f"*Anterior*\n~`{old[0]} x {old[1]}`~"})
+    if decision.get("confidence") is not None:
+        fields.append({"type": "mrkdwn", "text": f"*🎯 Confiança*\n{decision['confidence']}%"})
+    if decision.get("probs") and decision["probs"][0] is not None:
+        pa, pd, pb = decision["probs"]
+        fields.append({"type": "mrkdwn", "text": f"*📊 Probabilidades*\n{pa:.0f}% / {pd:.0f}% / {pb:.0f}%"})
+
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": header[:150], "emoji": True}},
+        {"type": "section", "fields": fields},
+    ]
+    if decision.get("reason"):
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"💬 {decision['reason'][:2900]}"},
+        })
+    ctx = []
+    if decision.get("model_tag"):
+        ctx.append(f"IA: {decision['model_tag']}")
+    ctx.append(f"fonte: {decision.get('source', '?')}")
+    blocks.append({
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": " · ".join(ctx)}],
+    })
+    return blocks
+
+
+def _oracle_slack(db: Session, match: Match, decision: dict, action: str, old,
+                  webhook: str | None = None) -> bool:
+    """Dispara a análise do Oráculo no Slack. Best-effort, nunca levanta."""
+    try:
+        import httpx
+        url = webhook if webhook is not None else _slack_config(db)
+        if not url:
+            return False
+        ta, tb = match.team_a, match.team_b
+        sa, sb = decision["score_a"], decision["score_b"]
+        fallback = f"🔮 Oráculo: {ta.name if ta else '?'} x {tb.name if tb else '?'} → {sa} x {sb}"
+        r = httpx.post(
+            url,
+            json={"text": fallback, "blocks": _build_slack_blocks(match, decision, action, old)},
+            timeout=10,
+        )
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def run_oracle_prediction(db: Session, trigger: str = "pre_match",
+                          window_minutes: int = 60, force: bool = False,
+                          telegram: bool = True) -> dict:
+    """
+    Re-analisa partidas que começam dentro de `window_minutes` (≈1h antes),
+    deixando a IA dedicada confirmar ou alterar o palpite do Oráculo.
+    `pre_match`: dedupe por partida (1x na janela). `manual`: sempre roda.
+    """
+    bot = _get_bot(db)
+    if not bot:
+        return {"error": "bot_not_created", "processed": 0}
+
+    cfg, llm_label, origin = pick_oracle_llm(db)
+    slack_url = _slack_config(db) if _slack_enabled(db) else ""
+    now = _utcnow()
+    horizon = now + timedelta(minutes=window_minutes)
+
+    matches = (
+        db.query(Match)
+        .filter(
+            Match.status == MatchStatus.scheduled,
+            Match.match_date.isnot(None),
+            Match.match_date > now,
+            Match.match_date <= horizon,
+        )
+        .order_by(Match.match_date.asc())
+        .all()
+    )
+
+    summary = {
+        "trigger": trigger, "llm": llm_label, "llm_origin": origin,
+        "window_minutes": window_minutes, "processed": 0,
+        "created": 0, "changed": 0, "kept": 0, "skipped": 0,
+        "telegram_sent": 0, "slack_sent": 0, "items": [],
+    }
+
+    for match in matches:
+        if trigger == "pre_match" and not force:
+            already = db.query(BotDecisionLog.id).filter(
+                BotDecisionLog.match_id == match.id,
+                BotDecisionLog.trigger == "pre_match",
+            ).first()
+            if already:
+                continue
+
+        bet = db.query(Bet).filter(Bet.user_id == bot.id, Bet.match_id == match.id).first()
+        deadline = match.bet_deadline or match.match_date
+        closed = bool(deadline and now >= deadline)
+
+        decision = _oracle_decide(db, match, cfg)
+        sa, sb = decision["score_a"], decision["score_b"]
+        old = (bet.score_a, bet.score_b) if bet else None
+
+        if bet is None:
+            if closed:
+                action = "skipped"
+                decision["reason"] = (decision.get("reason") or "") + " (aposta fechada — não criada)"
+            else:
+                bet = Bet(user_id=bot.id, match_id=match.id, score_a=sa, score_b=sb, locked_at=match.match_date)
+                db.add(bet)
+                db.flush()
+                action = "created"
+        else:
+            if (bet.score_a, bet.score_b) == (sa, sb):
+                action = "kept"
+            elif closed:
+                action = "skipped"
+                decision["reason"] = (decision.get("reason") or "") + " (aposta já fechada — palpite mantido)"
+            else:
+                bet.score_a, bet.score_b = sa, sb
+                action = "changed"
+
+        probs = decision.get("probs") or (None, None, None)
+        notify = action in ("created", "changed", "kept")
+        sent = False
+        slack_ok = False
+        if notify and telegram:
+            sent = _oracle_telegram(db, match, decision, action, old)
+            if sent:
+                summary["telegram_sent"] += 1
+        if notify and slack_url:
+            slack_ok = _oracle_slack(db, match, decision, action, old, webhook=slack_url)
+            if slack_ok:
+                summary["slack_sent"] += 1
+
+        log = BotDecisionLog(
+            match_id=match.id,
+            bet_id=bet.id if bet else None,
+            action=action, trigger=trigger,
+            old_a=old[0] if old else None, old_b=old[1] if old else None,
+            new_a=sa, new_b=sb,
+            source=decision["source"], confidence=decision.get("confidence"),
+            prob_a=probs[0], prob_draw=probs[1], prob_b=probs[2],
+            reason=decision.get("reason"), telegram_sent=sent, slack_sent=slack_ok,
+            meta={
+                "baseline": list(decision["baseline"]),
+                "model": decision.get("model_tag"),
+                "team_a": match.team_a.code if match.team_a else None,
+                "team_b": match.team_b.code if match.team_b else None,
+            },
+        )
+        db.add(log)
+
+        summary["processed"] += 1
+        summary[action] = summary.get(action, 0) + 1
+        summary["items"].append({
+            "match_id": match.id,
+            "teams": f"{match.team_a.code if match.team_a else '?'}x{match.team_b.code if match.team_b else '?'}",
+            "action": action, "score": f"{sa}x{sb}",
+            "old": f"{old[0]}x{old[1]}" if old else None,
+            "baseline": f"{decision['baseline'][0]}x{decision['baseline'][1]}",
+            "ai_overrode": tuple(decision["baseline"]) != (sa, sb),
+            "source": decision["source"], "telegram": sent, "slack": slack_ok,
+        })
+
+    db.commit()
+    return summary
+
+
+@router.post("/run-prediction")
+def bot_run_prediction(
+    window: int | None = None,
+    telegram: bool = True,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(_require_admin),
+):
+    """Dispara manualmente a re-análise do Oráculo (ignora dedupe da janela)."""
+    from config import settings
+    win = window or settings.oracle_window_minutes
+    return run_oracle_prediction(db, trigger="manual", window_minutes=win, force=True, telegram=telegram)
+
+
+@router.get("/logs")
+def bot_logs(limit: int = 50, db: Session = Depends(get_db), _admin: User = Depends(_require_admin)):
+    rows = (
+        db.query(BotDecisionLog)
+        .order_by(BotDecisionLog.created_at.desc())
+        .limit(min(limit, 200))
+        .all()
+    )
+    items = []
+    for l in rows:
+        m = db.query(Match).get(l.match_id) if l.match_id else None
+        ta = m.team_a if m else None
+        tb = m.team_b if m else None
+        meta = l.meta or {}
+        items.append({
+            "id": l.id, "match_id": l.match_id,
+            "team_a_code": ta.code if ta else meta.get("team_a"),
+            "team_b_code": tb.code if tb else meta.get("team_b"),
+            "team_a_flag": ta.flag_url if ta else None,
+            "team_b_flag": tb.flag_url if tb else None,
+            "action": l.action, "trigger": l.trigger,
+            "old": f"{l.old_a}x{l.old_b}" if l.old_a is not None else None,
+            "new": f"{l.new_a}x{l.new_b}" if l.new_a is not None else None,
+            "baseline": (lambda b: f"{b[0]}x{b[1]}" if b and len(b) == 2 else None)(meta.get("baseline")),
+            "ai_overrode": (lambda b, n: bool(b) and len(b) == 2 and (b[0], b[1]) != (l.new_a, l.new_b))(meta.get("baseline"), None),
+            "source": l.source, "confidence": l.confidence,
+            "prob_a": float(l.prob_a) if l.prob_a is not None else None,
+            "prob_draw": float(l.prob_draw) if l.prob_draw is not None else None,
+            "prob_b": float(l.prob_b) if l.prob_b is not None else None,
+            "reason": l.reason, "telegram_sent": l.telegram_sent, "slack_sent": l.slack_sent,
+            "created_at": str(l.created_at),
+        })
+    return {"items": items}
+
+
+@router.get("/oracle-config")
+def get_oracle_config(db: Session = Depends(get_db), _admin: User = Depends(_require_admin)):
+    from routers.analysis import (
+        _mask, GEMINI_MODELS, OPENROUTER_FREE_MODELS,
+        OPENROUTER_PAID_MODELS, OPENAI_DIRECT_MODELS,
+    )
+    raw = _oracle_raw_config(db)
+    _cfg, llm_label, origin = pick_oracle_llm(db)
+    return {
+        "provider":              raw.get("oracle_provider", "gemini"),
+        "gemini_model":          raw.get("oracle_gemini_model", ORACLE_DEFAULT_GEMINI_MODEL),
+        "gemini_key_masked":     _mask(raw.get("oracle_gemini_key", "")),
+        "gemini_has_key":        bool(raw.get("oracle_gemini_key")),
+        "openrouter_model":      raw.get("oracle_openrouter_model", ORACLE_DEFAULT_OR_MODEL),
+        "openrouter_key_masked": _mask(raw.get("oracle_openrouter_key", "")),
+        "openrouter_has_key":    bool(raw.get("oracle_openrouter_key")),
+        "openai_model":          raw.get("oracle_openai_model", "gpt-4o-mini"),
+        "openai_key_masked":     _mask(raw.get("oracle_openai_key", "")),
+        "openai_has_key":        bool(raw.get("oracle_openai_key")),
+        "gemini_models":         GEMINI_MODELS,
+        "openrouter_free_models": OPENROUTER_FREE_MODELS,
+        "openrouter_paid_models": OPENROUTER_PAID_MODELS,
+        "openai_models":         OPENAI_DIRECT_MODELS,
+        "active_llm":            llm_label,
+        "llm_origin":            origin,
+        # Slack
+        "slack_webhook_masked":  _mask(_slack_config(db)),
+        "slack_has_webhook":     bool(_slack_config(db)),
+        "slack_enabled":         _slack_enabled(db),
+    }
+
+
+class OracleConfigIn(BaseModel):
+    provider: str = "gemini"
+    gemini_key: str = ""
+    gemini_model: str = ORACLE_DEFAULT_GEMINI_MODEL
+    openrouter_key: str = ""
+    openrouter_model: str = ORACLE_DEFAULT_OR_MODEL
+    openai_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    slack_webhook: str | None = None
+    slack_enabled: bool | None = None
+
+
+@router.post("/oracle-config")
+def save_oracle_config(body: OracleConfigIn, db: Session = Depends(get_db), _admin: User = Depends(_require_admin)):
+    from sqlalchemy import text
+    pairs = [
+        ("oracle_provider",         body.provider),
+        ("oracle_gemini_model",     body.gemini_model),
+        ("oracle_openrouter_model", body.openrouter_model),
+        ("oracle_openai_model",     body.openai_model),
+    ]
+    if body.gemini_key and not body.gemini_key.startswith("•"):
+        pairs.append(("oracle_gemini_key", body.gemini_key))
+    if body.openrouter_key and not body.openrouter_key.startswith("•"):
+        pairs.append(("oracle_openrouter_key", body.openrouter_key))
+    if body.openai_key and not body.openai_key.startswith("•"):
+        pairs.append(("oracle_openai_key", body.openai_key))
+    # Slack: webhook só sobrescreve se não estiver mascarado
+    if body.slack_webhook is not None and body.slack_webhook and not body.slack_webhook.startswith("•"):
+        pairs.append(("slack_webhook_url", body.slack_webhook.strip()))
+    if body.slack_enabled is not None:
+        pairs.append(("oracle_slack_enabled", "true" if body.slack_enabled else "false"))
+    for k, v in pairs:
+        db.execute(
+            text("INSERT INTO site_config (key,value) VALUES (:k,:v) ON CONFLICT (key) DO UPDATE SET value=:v"),
+            {"k": k, "v": v},
+        )
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/test-slack")
+def test_slack(db: Session = Depends(get_db), _admin: User = Depends(_require_admin)):
+    """Envia uma mensagem de teste ao webhook do Slack configurado."""
+    url = _slack_config(db)
+    if not url:
+        raise HTTPException(400, "Webhook do Slack não configurado")
+    try:
+        import httpx
+        r = httpx.post(url, json={
+            "text": "🔮 Oráculo Predictor — teste de conexão",
+            "blocks": [
+                {"type": "header", "text": {"type": "plain_text", "text": "🔮 Oráculo Predictor", "emoji": True}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": "✅ Webhook do Slack conectado com sucesso. As análises pré-jogo chegarão aqui."}},
+            ],
+        }, timeout=10)
+        if r.status_code != 200:
+            raise HTTPException(502, f"Slack retornou {r.status_code}: {r.text[:200]}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Falha ao enviar: {str(e)[:200]}")
+    return {"ok": True}
 
 
 # ── Endpoint público (sem autenticação) ────────────────────────────────────────

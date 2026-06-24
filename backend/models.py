@@ -219,6 +219,31 @@ class Bet(Base):
     match = relationship("Match", back_populates="bets")
 
 
+class BotDecisionLog(Base):
+    """Log visual das decisões do Oráculo Predictor (re-análise pré-jogo)."""
+    __tablename__ = "bot_decision_logs"
+
+    id         = Column(Integer, primary_key=True)
+    match_id   = Column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), index=True)
+    bet_id     = Column(Integer, nullable=True)
+    action     = Column(String(20))   # created | changed | kept | skipped | error
+    trigger    = Column(String(20))   # pre_match | manual | auto
+    old_a      = Column(Integer, nullable=True)
+    old_b      = Column(Integer, nullable=True)
+    new_a      = Column(Integer, nullable=True)
+    new_b      = Column(Integer, nullable=True)
+    source     = Column(String(80), nullable=True)   # llm/<model> | monte_carlo | poisson | elo
+    confidence = Column(Integer, nullable=True)       # 0-100 (LLM)
+    prob_a     = Column(Numeric(6, 2), nullable=True)
+    prob_draw  = Column(Numeric(6, 2), nullable=True)
+    prob_b     = Column(Numeric(6, 2), nullable=True)
+    reason     = Column(Text, nullable=True)          # justificativa da IA
+    telegram_sent = Column(Boolean, default=False)
+    slack_sent = Column(Boolean, default=False)
+    meta       = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+
+
 class Ranking(Base):
     __tablename__ = "rankings"
 

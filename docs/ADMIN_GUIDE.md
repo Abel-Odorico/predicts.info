@@ -296,3 +296,32 @@ Com usuario autenticado:
 - criar grupo
 - enviar convite
 - aceitar convite com o usuario convidado
+
+## Atalhos do painel admin (v2.4.0)
+
+Header do `/admin`:
+
+- `🎯 Apostas` -> `/apostas`
+- `📋 Resultados` -> `/resultados`
+- `📊 Analytics` -> `/admin/analytics`
+- `🔐 Auditoria` -> `/admin/analytics?tab=audit` (abre direto na aba; `Analytics` le `?tab=` da URL)
+- `⚙️ Config` -> `/admin/options`
+
+Tabela de usuarios: botao `📜 Historico` por linha -> `/usuarios/<id>/historico` (palpites do usuario).
+
+## Auditoria de apostas
+
+Tentativas de aposta bloqueadas sao registradas em `audit_logs` com `action='bet.rejected'`.
+
+- Motivos: `bets_closed` (prazo encerrado / jogo `finished`), `match_not_found`.
+- Detalhes gravados: `match_id`, `score_a/score_b` tentados, `match_status`, `match_date`, IP.
+- Ver em `/admin/analytics` -> aba `🔐 Auditoria`, filtro de acao `bet.rejected`.
+
+Util quando usuario diz "apostei mas nao salvou": se houver `bet.rejected`, a aposta foi enviada apos o prazo (kickoff). Sem registro = aposta nunca chegou ao servidor.
+
+## Sincronizacao de jogos / pontuacao
+
+- Cron a cada 5 min: `/opt/predicts/scripts/update_world_cup_data.sh`. Re-parseia Wikipedia, recria `match_results`, reavalia todas as apostas e reconstroi `rankings`.
+- Apostas fecham no `match_date` (kickoff, UTC) OU quando o jogo vira `finished`.
+- Jogo que ganha artigo proprio na Wikipedia (`{{#lst:...}}`) e seguido ate o sub-artigo pelo parser (corrigido em v2.4.0). Antes era pulado em silencio -> apostas nao pontuavam.
+- Re-pontuar manualmente apos editar dados: `docker compose exec api python3 /app/update_world_cup_data.py`.

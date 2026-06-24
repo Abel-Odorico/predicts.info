@@ -68,7 +68,7 @@ const TABS = [
   { id: 'pwa',        label: 'Ícone PWA',    icon: '🖼' },
   { id: 'knockout',   label: 'Mata-Mata',    icon: '⚔️' },
   { id: 'analyses',   label: 'Análises IA',  icon: '🤖' },
-  { id: 'bot',        label: 'Apostador IA', icon: '🎮' },
+  { id: 'bot',        label: 'Oráculo Predictor', icon: '🔮' },
   { id: 'report',     label: 'Relatório',    icon: <TgIcon size={20} /> },
 ]
 
@@ -260,7 +260,7 @@ export default function Admin() {
   const [champAllPicks, setChampAllPicks] = useState(null)
   const [champStats, setChampStats] = useState(null)
 
-  // ── Bot / Apostador IA ───────────────────────────────────────────────────────
+  // ── Bot / Oráculo Predictor ──────────────────────────────────────────────────
   const [botStatus,       setBotStatus]       = useState(null)
   const [botBets,         setBotBets]         = useState(null)
   const [botLoading,      setBotLoading]      = useState(false)
@@ -268,6 +268,11 @@ export default function Admin() {
   const [botBetPhase,     setBotBetPhase]     = useState('all')
   const [botBetLoading,   setBotBetLoading]   = useState(false)
   const [botChampLoading, setBotChampLoading] = useState(false)
+  const [botLogs,         setBotLogs]         = useState([])
+  const [botPredLoading,  setBotPredLoading]  = useState(false)
+  const [oracleCfg,       setOracleCfg]       = useState(null)
+  const [oracleForm,      setOracleForm]      = useState(null)
+  const [oracleSaving,    setOracleSaving]    = useState(false)
 
   // ── Relatório ────────────────────────────────────────────────────────────────
   const [report,        setReport]        = useState(null)
@@ -527,14 +532,44 @@ export default function Admin() {
   async function loadBot() {
     setBotLoading(true)
     try {
-      const [status, bets] = await Promise.all([
+      const [status, bets, logs, ocfg] = await Promise.all([
         api.get('/admin/bot/status', token),
         api.get('/admin/bot/bets', token),
+        api.get('/admin/bot/logs?limit=80', token).catch(() => ({ items: [] })),
+        api.get('/admin/bot/oracle-config', token).catch(() => null),
       ])
       setBotStatus(status)
       setBotBets(bets)
+      setBotLogs(logs?.items || [])
+      setOracleCfg(ocfg)
+      if (ocfg && !oracleForm) setOracleForm({
+        provider: ocfg.provider || 'gemini',
+        gemini_key: '', gemini_model: ocfg.gemini_model,
+        openrouter_key: '', openrouter_model: ocfg.openrouter_model,
+        openai_key: '', openai_model: ocfg.openai_model,
+      })
     } catch {}
     finally { setBotLoading(false) }
+  }
+
+  async function runBotPrediction() {
+    setBotPredLoading(true); setBotMsg('')
+    try {
+      const r = await api.post('/admin/bot/run-prediction', {}, token)
+      setBotMsg(`✓ Oráculo: ${r.processed} partida(s) · ${r.changed} alterados · ${r.kept} mantidos · ${r.created} criados · 📲 ${r.telegram_sent} no Telegram (IA: ${r.llm || '—'})`)
+      loadBot()
+    } catch (e) { setBotMsg(`✗ ${e?.message || 'erro'}`) }
+    finally { setBotPredLoading(false) }
+  }
+
+  async function saveOracleConfig() {
+    setOracleSaving(true); setBotMsg('')
+    try {
+      await api.post('/admin/bot/oracle-config', oracleForm, token)
+      setBotMsg('✓ Configuração do Oráculo salva')
+      loadBot()
+    } catch (e) { setBotMsg(`✗ ${e?.message || 'erro'}`) }
+    finally { setOracleSaving(false) }
   }
 
   async function createBot() {
@@ -843,7 +878,10 @@ export default function Admin() {
           <div className="adm-header__sub">predicts.info · painel de controle</div>
         </div>
         <div className="adm-header__actions">
+          <a href="/apostas"         className="btn btn-ghost btn-sm">🎯 Apostas</a>
+          <a href="/resultados"      className="btn btn-ghost btn-sm">📋 Resultados</a>
           <a href="/admin/analytics" className="btn btn-ghost btn-sm">📊 Analytics</a>
+          <a href="/admin/analytics?tab=audit" className="btn btn-ghost btn-sm">🔐 Auditoria</a>
           <a href="/admin/options"   className="btn btn-ghost btn-sm">⚙️ Config</a>
         </div>
       </div>
@@ -1074,13 +1112,22 @@ export default function Admin() {
                       )}
                     </td>
                     <td>
-                      <button
-                        className={`btn btn-sm ${u.role === 'admin' ? 'btn-ghost' : 'btn-primary'}`}
-                        disabled={savingUserId === u.id || (u.id === user.id && u.role === 'admin')}
-                        onClick={() => updateUserRole(u.id, u.role === 'admin' ? 'user' : 'admin')}
-                      >
-                        {savingUserId === u.id ? '...' : u.role === 'admin' ? '− Admin' : '+ Admin'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <a
+                          href={`/usuarios/${u.id}/historico`}
+                          className="btn btn-ghost btn-sm"
+                          title="Ver apostas deste usuário"
+                        >
+                          📜 Histórico
+                        </a>
+                        <button
+                          className={`btn btn-sm ${u.role === 'admin' ? 'btn-ghost' : 'btn-primary'}`}
+                          disabled={savingUserId === u.id || (u.id === user.id && u.role === 'admin')}
+                          onClick={() => updateUserRole(u.id, u.role === 'admin' ? 'user' : 'admin')}
+                        >
+                          {savingUserId === u.id ? '...' : u.role === 'admin' ? '− Admin' : '+ Admin'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -2812,14 +2859,14 @@ export default function Admin() {
         </div>
       )}
 
-      {/* ── 🎮 Apostador IA ──────────────────────────────────────────────────── */}
+      {/* ── 🔮 Oráculo Predictor ─────────────────────────────────────────────── */}
       {tab === 'bot' && (
         <div className="adm-pane fade-in-1">
 
           {/* Status card */}
           <div className="adm-card">
             <div className="adm-card__header">
-              <span className="adm-card__title">🎮 Apostador IA — Status</span>
+              <span className="adm-card__title">🔮 Oráculo Predictor — Status</span>
               <button className="btn btn-sm" onClick={loadBot} disabled={botLoading}>
                 {botLoading ? '…' : '↻ Atualizar'}
               </button>
@@ -2830,7 +2877,7 @@ export default function Admin() {
               ) : !botStatus.exists ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)' }}>Bot ainda não criado.</div>
-                  <button className="btn btn-primary" onClick={createBot}>🤖 Criar Bot Apostador</button>
+                  <button className="btn btn-primary" onClick={createBot}>🔮 Criar Oráculo Predictor</button>
                 </div>
               ) : (
                 <div>
@@ -2883,6 +2930,24 @@ export default function Admin() {
                 <span className="adm-card__title">⚡ Ações</span>
               </div>
               <div className="adm-card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Re-análise pré-jogo (Oráculo) */}
+                <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                    Re-análise pré-jogo (IA)
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+                    Roda automaticamente ~1h antes de cada jogo: a IA reavalia dados e cenários, confirma ou altera o palpite e dispara a análise no Telegram. Use o botão para rodar agora (ignora a janela).
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={runBotPrediction}
+                    disabled={botPredLoading}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    {botPredLoading ? '⏳ Analisando…' : '🔮 Rodar Re-análise Agora'}
+                  </button>
+                </div>
 
                 {/* Gerar palpites */}
                 <div>
@@ -2940,6 +3005,131 @@ export default function Admin() {
                 {botMsg && (
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: botMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)', background: 'var(--bg-overlay)', borderRadius: 8, padding: '8px 12px', border: `1px solid ${botMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)'}` }}>
                     {botMsg}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* IA dedicada do Oráculo */}
+          {botStatus?.exists && oracleCfg && oracleForm && (
+            <div className="adm-card">
+              <div className="adm-card__header">
+                <span className="adm-card__title">🧠 IA do Oráculo (dedicada)</span>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: oracleCfg.active_llm ? 'var(--win)' : 'var(--lose)' }}>
+                  {oracleCfg.active_llm ? `Ativa: ${oracleCfg.active_llm} · ${oracleCfg.llm_origin}` : 'Nenhuma IA disponível'}
+                </span>
+              </div>
+              <div className="adm-card__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+                  IA exclusiva do Oráculo, separada da análise de partidas. Se nenhuma chave for definida aqui, ele herda a IA da aba Análises. Cadeia de fallback: Gemini → OpenAI → OpenRouter.
+                </div>
+
+                {/* Provider preferido */}
+                <div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Provider preferido</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {[{ id: 'gemini', l: 'Gemini' }, { id: 'openai', l: 'OpenAI' }, { id: 'openrouter', l: 'OpenRouter' }].map(p => (
+                      <button key={p.id} className={`btn btn-sm${oracleForm.provider === p.id ? ' btn-primary' : ''}`} onClick={() => setOracleForm({ ...oracleForm, provider: p.id })} style={{ fontSize: 11 }}>{p.l}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Gemini */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                    Gemini — chave {oracleCfg.gemini_has_key && <span style={{ color: 'var(--win)' }}>({oracleCfg.gemini_key_masked})</span>}
+                    <input className="form-input" type="password" placeholder="AIzaSy…" value={oracleForm.gemini_key} onChange={e => setOracleForm({ ...oracleForm, gemini_key: e.target.value })} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                    Gemini — modelo
+                    <select className="form-input" value={oracleForm.gemini_model} onChange={e => setOracleForm({ ...oracleForm, gemini_model: e.target.value })}>
+                      {oracleCfg.gemini_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                    OpenAI — chave {oracleCfg.openai_has_key && <span style={{ color: 'var(--win)' }}>({oracleCfg.openai_key_masked})</span>}
+                    <input className="form-input" type="password" placeholder="sk-…" value={oracleForm.openai_key} onChange={e => setOracleForm({ ...oracleForm, openai_key: e.target.value })} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                    OpenAI — modelo
+                    <select className="form-input" value={oracleForm.openai_model} onChange={e => setOracleForm({ ...oracleForm, openai_model: e.target.value })}>
+                      {oracleCfg.openai_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                    OpenRouter — chave {oracleCfg.openrouter_has_key && <span style={{ color: 'var(--win)' }}>({oracleCfg.openrouter_key_masked})</span>}
+                    <input className="form-input" type="password" placeholder="sk-or-v1-…" value={oracleForm.openrouter_key} onChange={e => setOracleForm({ ...oracleForm, openrouter_key: e.target.value })} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                    OpenRouter — modelo
+                    <select className="form-input" value={oracleForm.openrouter_model} onChange={e => setOracleForm({ ...oracleForm, openrouter_model: e.target.value })}>
+                      <optgroup label="Grátis">{oracleCfg.openrouter_free_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</optgroup>
+                      <optgroup label="Pagos">{oracleCfg.openrouter_paid_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</optgroup>
+                    </select>
+                  </label>
+                </div>
+
+                <div>
+                  <button className="btn btn-primary" onClick={saveOracleConfig} disabled={oracleSaving}>
+                    {oracleSaving ? '⏳ Salvando…' : '💾 Salvar IA do Oráculo'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Logs de decisão do Oráculo */}
+          {botStatus?.exists && (
+            <div className="adm-card">
+              <div className="adm-card__header">
+                <span className="adm-card__title">📜 Logs do Oráculo</span>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>{botLogs.length} registros</span>
+              </div>
+              <div className="adm-card__body" style={{ padding: botLogs.length ? 0 : undefined }}>
+                {botLogs.length === 0 ? (
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Sem decisões registradas ainda. A re-análise roda ~1h antes de cada jogo.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {botLogs.map(l => {
+                      const c = l.action === 'changed' ? 'var(--amber)' : l.action === 'created' ? 'var(--accent)' : l.action === 'kept' ? 'var(--win)' : 'var(--text-4)'
+                      const actLabel = l.action === 'changed' ? '🔁 Alterou' : l.action === 'created' ? '🆕 Criou' : l.action === 'kept' ? '✅ Manteve' : '⏭ Pulou'
+                      const isLLM = (l.source || '').startsWith('llm/')
+                      const modelTag = isLLM ? l.source.split('/').slice(2).join('/') || l.source.replace('llm/', '') : null
+                      return (
+                        <div key={l.id} style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6, borderLeft: l.ai_overrode ? '3px solid var(--amber)' : '3px solid transparent' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            {l.team_a_flag && <img src={l.team_a_flag} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} />}
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12 }}>{l.team_a_code} × {l.team_b_code}</span>
+                            {l.team_b_flag && <img src={l.team_b_flag} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} />}
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: c }}>{actLabel}</span>
+                            {l.confidence != null && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>🎯 {l.confidence}%</span>}
+                            {l.telegram_sent && <span title="Enviado no Telegram" style={{ fontSize: 11 }}>📲</span>}
+                            {l.slack_sent && <span title="Enviado no Slack" style={{ fontSize: 11 }}>💬</span>}
+                            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>{l.created_at?.slice(0, 16).replace('T', ' ')}</span>
+                          </div>
+                          {/* Modelo → IA: deixa explícito onde a IA atuou sobre o baseline estatístico */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: 'var(--font-data)', fontSize: 12 }}>
+                            {l.baseline && (
+                              <span style={{ color: 'var(--text-4)' }}>
+                                Modelo <b style={{ color: 'var(--text-3)' }}>{l.baseline}</b>
+                              </span>
+                            )}
+                            <span style={{ color: 'var(--text-4)' }}>→</span>
+                            <span style={{ color: l.ai_overrode ? 'var(--amber)' : 'var(--win)', fontWeight: 700 }}>
+                              IA {l.new}
+                            </span>
+                            {l.ai_overrode
+                              ? <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--amber)', background: 'var(--bg-overlay)', border: '1px solid var(--amber)', borderRadius: 6, padding: '1px 6px' }}>🔥 IA MUDOU</span>
+                              : <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', border: '1px solid var(--border)', borderRadius: 6, padding: '1px 6px' }}>= confirmou modelo</span>}
+                          </div>
+                          {l.reason && <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>💬 {l.reason}</div>}
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>
+                            {modelTag ? `🧠 ${modelTag}` : (l.source || '')} · {l.trigger}{l.prob_a != null ? ` · MC ${l.prob_a.toFixed(0)}%/${l.prob_draw.toFixed(0)}%/${l.prob_b.toFixed(0)}%` : ''}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

@@ -10,7 +10,7 @@ function useCountdownStr(targetDateStr) {
   useEffect(() => {
     if (!targetDateStr) return
     function tick() {
-      const diff = new Date(targetDateStr) - new Date()
+      const diff = new Date(targetDateStr.endsWith('Z') ? targetDateStr : targetDateStr + 'Z') - new Date()
       if (diff <= 0) { setStr('Agora!'); return }
       const h = Math.floor(diff / 3600000)
       const m = Math.floor((diff % 3600000) / 60000)

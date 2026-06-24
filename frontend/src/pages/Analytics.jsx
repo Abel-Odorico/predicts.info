@@ -160,7 +160,7 @@ export default function Analytics() {
   const [recent, setRecent] = useState([])
   const [days, setDays]     = useState(7)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab]       = useState('overview')
+  const [tab, setTab]       = useState(() => new URLSearchParams(window.location.search).get('tab') || 'overview')
   const [chartOverlay, setChartOverlay] = useState(false)
   const [heatMetric, setHeatMetric]     = useState('access')
 

@@ -110,6 +110,45 @@ async def _daily_report_loop():
         await asyncio.sleep(60)
 
 
+async def _oracle_predictor_loop():
+    """
+    Oráculo Predictor: ~1h antes de cada jogo, a IA dedicada re-analisa dados e
+    cenários e confirma ou altera o palpite do bot. Dispara a análise no Telegram.
+    """
+    if not settings.oracle_enabled:
+        print("[oraculo] desativado (oracle_enabled=false)", flush=True)
+        return
+    from database import SessionLocal
+    from routers.bot import run_oracle_prediction
+
+    loop_seconds = max(60, settings.oracle_loop_minutes * 60)
+    print(f"[oraculo] agendado a cada {settings.oracle_loop_minutes}min — janela {settings.oracle_window_minutes}min antes do jogo", flush=True)
+    await asyncio.sleep(45)
+    while True:
+        try:
+            loop = asyncio.get_event_loop()
+
+            def _job():
+                db = SessionLocal()
+                try:
+                    return run_oracle_prediction(
+                        db, trigger="pre_match",
+                        window_minutes=settings.oracle_window_minutes,
+                        telegram=True,
+                    )
+                finally:
+                    db.close()
+
+            res = await loop.run_in_executor(None, _job)
+            if res and res.get("processed"):
+                print(f"[oraculo] {res['processed']} partida(s): "
+                      f"{res.get('created',0)} criados, {res.get('changed',0)} alterados, "
+                      f"{res.get('kept',0)} mantidos, {res.get('telegram_sent',0)} no Telegram", flush=True)
+        except Exception as e:
+            print(f"[oraculo] erro: {e}", flush=True)
+        await asyncio.sleep(loop_seconds)
+
+
 def _run_migrations():
     from sqlalchemy import text
     with engine.connect() as conn:
@@ -327,6 +366,12 @@ def _run_migrations():
             "ALTER TABLE analysis_logs ADD COLUMN IF NOT EXISTS trigger VARCHAR(20) DEFAULT 'manual'",
             "ALTER TABLE page_views ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
             "CREATE INDEX IF NOT EXISTS ix_page_views_user_id ON page_views (user_id) WHERE user_id IS NOT NULL",
+            # Renomeia o bot p/ Oráculo Predictor
+            "UPDATE users SET name = '🔮 Oráculo Predictor' WHERE email = 'bot@predicts.info'",
+            # Slack: canal de notificação do Oráculo
+            "ALTER TABLE bot_decision_logs ADD COLUMN IF NOT EXISTS slack_sent BOOLEAN DEFAULT FALSE",
+            # source pode guardar tag de modelo longa (ex: llm/openrouter/anthropic/claude-sonnet-4-5)
+            "ALTER TABLE bot_decision_logs ALTER COLUMN source TYPE VARCHAR(80)",
         ]:
             try:
                 conn.execute(text(alter))
@@ -341,8 +386,9 @@ async def lifespan(app: FastAPI):
     _run_migrations()
     task = asyncio.create_task(_auto_sync_loop())
     report_task = asyncio.create_task(_daily_report_loop())
+    oracle_task = asyncio.create_task(_oracle_predictor_loop())
     yield
-    for t in (task, report_task):
+    for t in (task, report_task, oracle_task):
         t.cancel()
         try:
             await t

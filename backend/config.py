@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # Oráculo Predictor (bot re-análise pré-jogo)
+    oracle_enabled: bool = True
+    oracle_window_minutes: int = 60      # quão perto do jogo dispara (≈1h antes)
+    oracle_loop_minutes: int = 10        # frequência de verificação do cron
+
+    # Slack — canal de notificação do Oráculo (Incoming Webhook)
+    slack_webhook_url: str = ""
+    oracle_slack_enabled: bool = True
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

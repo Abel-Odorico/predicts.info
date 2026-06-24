@@ -320,16 +320,43 @@ def _parse_group_page(client: httpx.Client, group: str) -> tuple[list[dict], lis
             }
         )
 
-    match_pattern = re.compile(
-        rf'<section begin="?({group}\d)"? />\{{\{{#invoke:football box\|main(.*?)\}}\}}<section end="?\1"? />',
+    # Each fixture sits in a <section begin="F1"/> ... <section end="F1"/> block.
+    # Normally the block holds an inline {{#invoke:football box}}. For matches
+    # notable enough to get their own article, Wikipedia replaces the inline box
+    # with a labelled-section transclusion {{#lst:Sub article|F4}} — we follow it
+    # to the sub-article and parse the same section there.
+    section_pattern = re.compile(
+        rf'<section begin="?({group}\d)"? />(.*?)<section end="?\1"? />',
         flags=re.S,
     )
+    lst_pattern = re.compile(r"\{\{#lst:([^|}]+)\|([^|}]+)\}\}")
+    subpage_cache: dict[str, str] = {}
     matches = []
-    for section, block in match_pattern.findall(text):
+    for section, block in section_pattern.findall(text):
+        lst = lst_pattern.search(block)
+        if lst:
+            page_title, label = lst.group(1).strip(), lst.group(2).strip()
+            if page_title not in subpage_cache:
+                subpage_cache[page_title] = _fetch_raw_page(client, page_title.replace(" ", "_"))
+            sub_text = subpage_cache[page_title]
+            sub_match = re.search(
+                rf'<section begin="?{re.escape(label)}"? />(.*?)<section end="?{re.escape(label)}"? />',
+                sub_text,
+                flags=re.S,
+            )
+            if not sub_match:
+                raise ValueError(f"Could not parse transcluded fixture {group}/{section} from {page_title}")
+            block = sub_match.group(1)
+
+        if "#invoke:football box" not in block:
+            raise ValueError(f"Could not parse fixture block {group}/{section}")
+
         team_a_match = re.search(r"\|team1=\{\{#invoke:flag\|fb(?:-rt)?\|([A-Z]{3})\}\}", block)
         team_b_match = re.search(r"\|team2=\{\{#invoke:flag\|fb(?:-rt)?\|([A-Z]{3})\}\}", block)
         stadium_match = re.search(r"\|stadium=(.+)", block)
-        score_match = re.search(r"\|score=\{\{score link\|[^|]+\|(\d+)–(\d+)\}\}", block)
+        # Score may carry an optional 3rd param (the article name) when the box
+        # lives in a dedicated sub-article: {{score link|...|0–4|Tunisia v Japan ...}}
+        score_match = re.search(r"\|score=\{\{score link\|[^|]+\|(\d+)–(\d+)(?:\|[^}]*)?\}\}", block)
 
         if not team_a_match or not team_b_match:
             raise ValueError(f"Could not parse fixture block {group}/{section}")

@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, desc, func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from auth_utils import get_current_user
 from models import Bet, Match, MatchStatus, Ranking, User
 from schemas import BetCreate, RankingRow
+from routers.audit import log_action
 
 router = APIRouter(tags=["bets"])
 
@@ -85,13 +86,35 @@ def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranki
 @router.post("/bets", status_code=201)
 def place_bet(
     payload: BetCreate,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    ip = request.client.host if request.client else None
+
+    def _log_rejected(reason: str, match: Match | None = None):
+        log_action(
+            db,
+            user.id,
+            "bet.rejected",
+            {
+                "match_id": payload.match_id,
+                "score_a": payload.score_a,
+                "score_b": payload.score_b,
+                "reason": reason,
+                "match_status": match.status.value if match and match.status else None,
+                "match_date": match.match_date.isoformat() if match and match.match_date else None,
+            },
+            ip,
+        )
+        db.commit()
+
     match = db.query(Match).filter(Match.id == payload.match_id).first()
     if not match:
+        _log_rejected("match_not_found")
         raise HTTPException(404, "Match not found")
     if not _is_open(match):
+        _log_rejected("bets_closed", match)
         raise HTTPException(409, "Bets closed for this match")
 
     existing = db.query(Bet).filter(
