@@ -275,6 +275,10 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
       })()
 
   const [open, setOpen]         = useState(initStillOpen)
+  // autoFocus só quando o usuário abre a linha (clique/autoOpen). No load
+  // inicial todas as linhas abrem expandidas; sem este guard, o último input
+  // com autoFocus rouba o foco e rola a página até o fim da lista.
+  const [focusScore, setFocusScore] = useState(false)
   const [sa, setSa]             = useState(existingBet?.score_a ?? 0)
   const [sb, setSb]             = useState(existingBet?.score_b ?? 0)
   const [msg, setMsg]           = useState('')
@@ -301,6 +305,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
   useEffect(() => {
     if (autoOpen) {
       setOpen(true)
+      setFocusScore(true)
       onAutoOpenDone?.()
     }
   }, [autoOpen])
@@ -559,7 +564,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
             <button
               type="button"
               className={`btn btn-sm ${open ? 'btn-ghost' : hasBet ? 'btn-ghost' : 'btn-primary'}`}
-              onClick={() => { setOpen(v => !v); setMsg('') }}
+              onClick={() => { setOpen(v => { if (!v) setFocusScore(true); return !v }); setMsg('') }}
             >
               {open ? 'Cancelar' : hasBet ? 'Alterar' : 'Dar Palpite'}
             </button>
@@ -572,7 +577,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
           <div className="bet-inline-teams">
             <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} compact />
             <div className="bet-inline-inputs">
-              <ScoreInput value={sa} onChange={setSa} autoFocus />
+              <ScoreInput value={sa} onChange={setSa} autoFocus={focusScore} />
               <span className="score-sep">×</span>
               <ScoreInput value={sb} onChange={setSb} />
             </div>
