@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
+import LiveClassificationCard from '../components/LiveClassificationCard'
 import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
 
@@ -167,6 +168,8 @@ export default function Dashboard() {
       </div>
 
       <MyChampionCard compact />
+
+      <LiveClassificationCard />
 
       <div className="card fade-in-1 mt-6">
         <div className="card__body" style={{ paddingTop: 'var(--s4)', paddingBottom: 'var(--s4)' }}>

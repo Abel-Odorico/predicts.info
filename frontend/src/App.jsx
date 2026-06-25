@@ -11,6 +11,7 @@ const Dashboard     = lazy(() => import('./pages/Dashboard'))
 const MatchSim      = lazy(() => import('./pages/MatchSim'))
 const Tournament    = lazy(() => import('./pages/Tournament'))
 const Groups        = lazy(() => import('./pages/Groups'))
+const Decisivos     = lazy(() => import('./pages/Decisivos'))
 const Ranking       = lazy(() => import('./pages/Ranking'))
 const Bets          = lazy(() => import('./pages/Bets'))
 const Admin         = lazy(() => import('./pages/Admin'))
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="/partida/:id" element={<MatchSim />} />
               <Route path="/torneio"     element={<Tournament />} />
               <Route path="/grupos"      element={<Groups />} />
+              <Route path="/decisivos"   element={<Decisivos />} />
               <Route path="/resultados"  element={<Results />} />
               <Route path="/apostas"     element={<Bets />} />
               <Route path="/ranking"     element={<Ranking />} />

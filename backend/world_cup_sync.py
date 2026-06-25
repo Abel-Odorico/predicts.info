@@ -279,7 +279,7 @@ def _parse_group_page(client: httpx.Client, group: str) -> tuple[list[dict], lis
     title = f"2026_FIFA_World_Cup_Group_{group}"
     text = _fetch_raw_page(client, title)
 
-    intro = re.search(r"The group consists of (.+?)\. The top two teams", text, flags=re.S)
+    intro = re.search(r"The group consist(?:s|ed) of (.+?)\.\s", text, flags=re.S)
     if not intro:
         raise ValueError(f"Could not parse intro for Group {group}")
     team_names = re.findall(r"\[\[(?:[^|\]]+\|)?([^\]]+)\]\]", intro.group(1))

@@ -8,11 +8,11 @@ _BRT = ZoneInfo("America/Sao_Paulo")
 import httpx
 import redis as redis_lib
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from config import settings
 from database import get_db
-from models import Match
+from models import Match, MatchPhase, Team
 
 router = APIRouter(prefix="/live", tags=["live"])
 
@@ -130,16 +130,19 @@ def _is_world_cup_game(item: dict) -> bool:
     return "copa do mundo" in competition or "world cup" in competition or "fifa wc" in competition
 
 
-def _game_status_from_raw(raw_status: str, time_label: str) -> str:
+def _game_status_from_raw(raw_status: str, time_label: str, has_score: bool = False) -> str:
     raw = raw_status.strip()
+    upper = raw.upper()
+    if raw and ("FIM" in upper or "ENCERR" in upper or "FINALIZ" in upper or upper in {"FT", "AET", "PEN"}):
+        return "finished"
+    live_keywords = {"VIVO", "LIVE", "INT", "INTERVALO", "HT", "ET", "PRORROG", "PENALT", "1T", "2T", "1H", "2H"}
+    if raw and (any(kw in upper for kw in live_keywords) or any(ch.isdigit() for ch in raw)):
+        return "live"
+    # placar presente + dentro da janela de jogo = ao vivo, mesmo sem status textual
+    if has_score and _infer_status_from_time(time_label) in ("live", "finished"):
+        return "live"
     if not raw:
         return _infer_status_from_time(time_label)
-    upper = raw.upper()
-    if "FIM" in upper or "ENCERR" in upper or "FINALIZ" in upper or upper in {"FT", "AET", "PEN"}:
-        return "finished"
-    live_keywords = {"VIVO", "LIVE", "INTERVALO", "HT", "ET", "PRORROG", "PENALT", "1T", "2T", "1H", "2H"}
-    if any(kw in upper for kw in live_keywords) or any(ch.isdigit() for ch in raw):
-        return "live"
     return "scheduled"
 
 
@@ -168,11 +171,12 @@ def _game_key(game: dict) -> str:
 def _build_game(item: dict) -> dict:
     time_label = str(item.get("horario") or "").strip()
     raw_status = str(item.get("status") or "")
+    has_score = item.get("placar_time1") not in (None, "") and item.get("placar_time2") not in (None, "")
     return {
         "competition": item.get("competicao"),
         "date_label": item.get("data_jogo"),
         "time_label": time_label,
-        "status": _game_status_from_raw(raw_status, time_label),
+        "status": _game_status_from_raw(raw_status, time_label, has_score),
         "status_raw": raw_status,
         "team_a": item.get("time1"),
         "team_b": item.get("time2"),
@@ -299,3 +303,245 @@ def world_cup_live_feed(db: Session = Depends(get_db)):
         game["match_id"] = match_lookup.get(key)
 
     return data
+
+
+# ── Classificação projetada ao vivo ─────────────────────────────────────────
+# Sobrepõe placares de jogos de grupo em andamento à tabela (só resultados
+# encerrados) e recalcula posições + classificados (top 2 + 8 melhores 3ºs).
+
+def _new_row(team: Team) -> dict:
+    return {
+        "id": team.id, "code": team.code, "name": team.name,
+        "group_name": team.group_name, "elo_rating": float(team.elo_rating),
+        "flag_url": team.flag_url,
+        "points": 0, "played": 0, "wins": 0, "draws": 0, "losses": 0,
+        "gf": 0, "ga": 0, "gd": 0,
+    }
+
+
+def _apply_score(a: dict, b: dict, sa: int, sb: int) -> None:
+    a["played"] += 1; b["played"] += 1
+    a["gf"] += sa; a["ga"] += sb; b["gf"] += sb; b["ga"] += sa
+    if sa > sb:
+        a["wins"] += 1; a["points"] += 3; b["losses"] += 1
+    elif sb > sa:
+        b["wins"] += 1; b["points"] += 3; a["losses"] += 1
+    else:
+        a["draws"] += 1; b["draws"] += 1; a["points"] += 1; b["points"] += 1
+
+
+def _build_tables(teams: list[Team], scored: list[tuple]) -> dict:
+    """scored = list of (team_a_id, team_b_id, score_a, score_b)."""
+    rows: dict[int, dict] = {t.id: _new_row(t) for t in teams}
+    groups: dict[str, list] = {}
+    for t in teams:
+        groups.setdefault(t.group_name, []).append(rows[t.id])
+
+    for a_id, b_id, sa, sb in scored:
+        a, b = rows.get(a_id), rows.get(b_id)
+        if a and b:
+            _apply_score(a, b, sa, sb)
+
+    thirds = []
+    for rws in groups.values():
+        for r in rws:
+            r["gd"] = r["gf"] - r["ga"]
+        rws.sort(key=lambda x: (-x["points"], -x["gd"], -x["gf"], -x["elo_rating"], x["name"]))
+        for i, r in enumerate(rws, start=1):
+            r["position"] = i
+        if len(rws) >= 3:
+            thirds.append(rws[2])
+
+    thirds.sort(key=lambda x: (-x["points"], -x["gd"], -x["gf"], -x["elo_rating"], x["name"]))
+    best_third_ids = {r["id"] for r in thirds[:8]}
+    qual_ids = set()
+    for rws in groups.values():
+        for r in rws[:2]:
+            qual_ids.add(r["id"])
+    qual_ids |= best_third_ids
+    return {"groups": groups, "rows": rows, "thirds": thirds,
+            "best_third_ids": best_third_ids, "qual_ids": qual_ids}
+
+
+@router.get("/classification")
+def live_classification(db: Session = Depends(get_db)):
+    teams = db.query(Team).filter(Team.group_name.isnot(None)).all()
+    matches = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+        .filter(Match.phase == MatchPhase.group)
+        .all()
+    )
+
+    # Placares encerrados (baseline)
+    finished = [
+        (m.team_a_id, m.team_b_id, m.result.score_a, m.result.score_b)
+        for m in matches if m.result
+    ]
+
+    # Feed ao vivo → lookup por par de chaves normalizadas
+    feed = fetch_world_cup_live_games()
+    live_by_key: dict[tuple, dict] = {}
+    for g in feed.get("games", []):
+        if g.get("status") != "live":
+            continue
+        if g.get("score_a") is None or g.get("score_b") is None:
+            continue
+        live_by_key[(g.get("team_a_key") or "", g.get("team_b_key") or "")] = g
+
+    # Casa jogos de grupo (sem resultado) ao feed ao vivo
+    live_overlay: list[tuple] = []
+    live_team_ids: set[int] = set()
+    live_match_ids: set[int] = set()
+    for m in matches:
+        if m.result or not m.team_a or not m.team_b:
+            continue
+        ka = _normalize_team_name(m.team_a.name)
+        kb = _normalize_team_name(m.team_b.name)
+        g = live_by_key.get((ka, kb)) or live_by_key.get((kb, ka))
+        if not g:
+            continue
+        sa, sb = int(g["score_a"]), int(g["score_b"])
+        # se feed inverteu mando, alinha pelo par
+        if live_by_key.get((kb, ka)) and not live_by_key.get((ka, kb)):
+            sa, sb = sb, sa
+        live_overlay.append((m.team_a_id, m.team_b_id, sa, sb))
+        live_team_ids.update({m.team_a_id, m.team_b_id})
+        live_match_ids.add(m.id)
+
+    baseline = _build_tables(teams, finished)
+    projected = _build_tables(teams, finished + live_overlay)
+
+    base_qual = baseline["qual_ids"]
+    proj_qual = projected["qual_ids"]
+
+    def _status(r: dict) -> str:
+        if r["position"] <= 2:
+            return "top2"
+        if r["id"] in projected["best_third_ids"]:
+            return "third"
+        return "out"
+
+    def _delta(team_id: int):
+        if team_id in proj_qual and team_id not in base_qual:
+            return "in"
+        if team_id in base_qual and team_id not in proj_qual:
+            return "out"
+        return None
+
+    def _row_out(r: dict) -> dict:
+        return {
+            **{k: r[k] for k in ("id", "code", "name", "group_name", "flag_url",
+                                 "points", "played", "wins", "draws", "losses",
+                                 "gf", "ga", "gd", "position")},
+            "qualifying": r["id"] in proj_qual,
+            "status": _status(r),
+            "delta": _delta(r["id"]),
+            "live": r["id"] in live_team_ids,
+        }
+
+    out_groups = {
+        g: [_row_out(r) for r in rows]
+        for g, rows in sorted(projected["groups"].items())
+    }
+
+    # Jogos decisivos: ao vivo OU 3ª rodada (ambos times já jogaram 2 e jogo não encerrado)
+    proj_rows = projected["rows"]
+    base_rows = baseline["rows"]
+    decisive = []
+    for m in matches:
+        if m.result or not m.team_a or not m.team_b:
+            continue
+        is_live = m.id in live_match_ids
+        ba = base_rows.get(m.team_a_id, {}).get("played", 0)
+        bb = base_rows.get(m.team_b_id, {}).get("played", 0)
+        is_md3 = ba >= 2 and bb >= 2
+        if not (is_live or is_md3):
+            continue
+        live_g = None
+        if is_live:
+            ka = _normalize_team_name(m.team_a.name)
+            kb = _normalize_team_name(m.team_b.name)
+            live_g = live_by_key.get((ka, kb)) or live_by_key.get((kb, ka))
+
+        def _team_brief(team_id: int, team: Team) -> dict:
+            pr = proj_rows.get(team_id, {})
+            return {
+                "id": team.id, "code": team.code, "name": team.name,
+                "flag_url": team.flag_url,
+                "group_name": team.group_name,
+                "position": pr.get("position"),
+                "points": pr.get("points", 0),
+                "qualifying": team_id in proj_qual,
+                "delta": _delta(team_id),
+            }
+
+        decisive.append({
+            "match_id": m.id,
+            "group_name": m.team_a.group_name,
+            "live": is_live,
+            "status_raw": (live_g or {}).get("status_raw") if is_live else "",
+            "time_label": (live_g or {}).get("time_label") if is_live else None,
+            "match_date": m.match_date.isoformat() if m.match_date else None,
+            "score_a": (live_g or {}).get("score_a") if is_live else None,
+            "score_b": (live_g or {}).get("score_b") if is_live else None,
+            "team_a": _team_brief(m.team_a_id, m.team_a),
+            "team_b": _team_brief(m.team_b_id, m.team_b),
+        })
+
+    decisive.sort(key=lambda d: (not d["live"], d["match_date"] or "9999"))
+
+    qp = projected["rows"]
+
+    def _qual_list(ids):
+        return sorted(
+            ({**{k: qp[i][k] for k in ("id", "code", "name", "group_name", "flag_url", "points")},
+              "delta": _delta(i)} for i in ids),
+            key=lambda x: (x["group_name"] or "", -x["points"]),
+        )
+
+    winners_ids = [rows[0]["id"] for rows in projected["groups"].values()]
+    runners_ids = [rows[1]["id"] for rows in projected["groups"].values() if len(rows) > 1]
+
+    # Confrontos projetados das Oitavas (R32) — resolvidos pela tabela ao vivo
+    bracket = []
+    try:
+        from world_cup_official import fetch_official_knockout_schedule, resolve_slot, candidate_thirds
+        table_compat = {"groups": projected["groups"], "thirds": projected["thirds"]}
+
+        def _slot_brief(label):
+            slot = resolve_slot(label, table_compat)
+            if not slot:
+                cands = candidate_thirds(label, table_compat)
+                slot = cands[0] if cands else None
+            if not slot:
+                return None
+            return {"id": slot["id"], "code": slot["code"], "name": slot["name"],
+                    "flag_url": slot["flag_url"], "group_name": slot["group_name"]}
+
+        for item in fetch_official_knockout_schedule():
+            if item.get("phase") != "r32":
+                continue
+            bracket.append({
+                "section": item.get("section"),
+                "team_a_label": item.get("team_a_label"),
+                "team_b_label": item.get("team_b_label"),
+                "team_a": _slot_brief(item.get("team_a_label", "")),
+                "team_b": _slot_brief(item.get("team_b_label", "")),
+            })
+    except Exception:
+        bracket = []
+
+    return {
+        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        "has_live": len(live_overlay) > 0,
+        "live_count": len(live_overlay),
+        "groups": out_groups,
+        "decisive_games": decisive,
+        "bracket": bracket,
+        "qualified_picture": {
+            "winners": _qual_list(winners_ids),
+            "runners_up": _qual_list(runners_ids),
+            "best_thirds": _qual_list(projected["best_third_ids"]),
+        },
+    }
