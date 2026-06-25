@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toPng } from 'html-to-image'
 import {
@@ -240,6 +240,12 @@ export default function Admin() {
   const [groupsLoading, setGroupsLoading] = useState(false)
   const [security, setSecurity] = useState(null)
   const [securityLoading, setSecurityLoading] = useState(false)
+  const [groupSearch, setGroupSearch] = useState('')
+  const [groupFilter, setGroupFilter] = useState('all')
+  const [groupSort, setGroupSort] = useState({ key: 'members_count', dir: 'desc' })
+  const [expandedGroup, setExpandedGroup] = useState(null)
+  const [groupMembers, setGroupMembers] = useState({})
+  const [membersLoading, setMembersLoading] = useState(null)
   const [engSegment, setEngSegment] = useState(null) // 'period'|'never'|'inactive'|'top'
   const [engPeriod, setEngPeriod] = useState('7d')   // today|7d|30d|all
 
@@ -815,6 +821,26 @@ export default function Admin() {
     finally { setSecurityLoading(false) }
   }
 
+  async function toggleGroup(id) {
+    if (expandedGroup === id) { setExpandedGroup(null); return }
+    setExpandedGroup(id)
+    if (!groupMembers[id]) {
+      setMembersLoading(id)
+      try {
+        const data = await api.get(`/admin/groups/${id}/members`, token)
+        setGroupMembers(prev => ({ ...prev, [id]: data }))
+      } catch {}
+      finally { setMembersLoading(null) }
+    }
+  }
+
+  function sortGroupsBy(key) {
+    setGroupSort(prev => ({
+      key,
+      dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc',
+    }))
+  }
+
   async function loadSuggestions() {
     setSuggestionsLoading(true)
     try { setSuggestions(await api.get('/admin/poll/suggestions', token)) } catch {}
@@ -1184,43 +1210,179 @@ export default function Admin() {
             </div>
           </div>
 
+          {/* ── Cards informativos ──────────────────────── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 8 }}>
+            {/* Destaques */}
+            <div className="card" style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>🏅 Destaques</div>
+              <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                <div>🥇 Maior: <b>{groupsData?.highlights?.biggest?.name || '—'}</b> {groupsData?.highlights?.biggest && <span style={{ color: 'var(--text-3)' }}>({groupsData.highlights.biggest.members} membros)</span>}</div>
+                <div>🔥 Mais ativo: <b>{groupsData?.highlights?.most_active?.name || '—'}</b> {groupsData?.highlights?.most_active && <span style={{ color: 'var(--text-3)' }}>({groupsData.highlights.most_active.bets} palpites)</span>}</div>
+                <div>👑 Top gestor: <b>{groupsData?.highlights?.top_owner?.name || '—'}</b> {groupsData?.highlights?.top_owner && <span style={{ color: 'var(--text-3)' }}>({groupsData.highlights.top_owner.groups} grupos)</span>}</div>
+              </div>
+            </div>
+            {/* Saúde */}
+            <div className="card" style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>🩺 Saúde</div>
+              <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                <div>Vazios (só dono): <b style={{ color: (groupsData?.health?.empty_count ? 'var(--lose)' : 'var(--text-1)') }}>{groupsData?.health?.empty_count ?? '—'}</b></div>
+                <div>Sem palpites: <b style={{ color: (groupsData?.health?.inactive_count ? 'var(--lose)' : 'var(--text-1)') }}>{groupsData?.health?.inactive_count ?? '—'}</b></div>
+                <div>Média de membros: <b>{groupsData?.health?.avg_members ?? '—'}</b></div>
+              </div>
+            </div>
+            {/* Convites */}
+            <div className="card" style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>✉️ Convites</div>
+              <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                <div>Pendentes: <b>{groupsData?.invites?.pending ?? '—'}</b></div>
+                <div>Aceitos / Recusados: <b style={{ color: 'var(--win)' }}>{groupsData?.invites?.accepted ?? '—'}</b> / <b style={{ color: 'var(--lose)' }}>{groupsData?.invites?.rejected ?? '—'}</b></div>
+                <div>Taxa de aceitação: <b>{groupsData?.invites?.acceptance_rate ?? '—'}%</b></div>
+              </div>
+            </div>
+            {/* Crescimento */}
+            <div className="card" style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>📈 Grupos criados</div>
+              {groupsData?.growth?.length ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 60 }}>
+                  {(() => {
+                    const max = Math.max(...groupsData.growth.map(p => p.count), 1)
+                    return groupsData.growth.map((p, i) => (
+                      <div key={i} title={`${p.label}: ${p.count}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                        <div style={{ width: '100%', height: `${(p.count / max) * 44}px`, minHeight: 2, background: 'var(--accent)', borderRadius: 2 }} />
+                        <span style={{ fontSize: 9, color: 'var(--text-3)' }}>{p.label}</span>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              ) : <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Sem dados.</div>}
+            </div>
+          </div>
+
+          {/* ── Toolbar: busca + filtros ────────────────── */}
+          <div className="adm-pane__toolbar" style={{ marginTop: 16, flexWrap: 'wrap', gap: 8 }}>
+            <input
+              type="text"
+              className="form-input"
+              style={{ maxWidth: 260 }}
+              placeholder="Buscar grupo ou gestor…"
+              value={groupSearch}
+              onChange={e => setGroupSearch(e.target.value)}
+            />
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'active', label: 'Ativos' },
+              { id: 'empty', label: 'Vazios' },
+              { id: 'pending', label: 'Com convites' },
+            ].map(f => (
+              <button
+                key={f.id}
+                className={`btn btn-sm ${groupFilter === f.id ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setGroupFilter(f.id)}
+              >{f.label}</button>
+            ))}
+          </div>
+
+          {/* ── Tabela ordenável + expansível ───────────── */}
           <div className="adm-table-wrap" style={{ marginTop: 8 }}>
             <table className="adm-table">
               <thead>
                 <tr>
                   <th>Grupo</th>
                   <th>Gestor</th>
-                  <th className="adm-table__num">Membros</th>
-                  <th className="adm-table__num">Convites pend.</th>
-                  <th>Criado em</th>
+                  <th className="adm-table__num" style={{ cursor: 'pointer' }} onClick={() => sortGroupsBy('members_count')}>
+                    Membros {groupSort.key === 'members_count' ? (groupSort.dir === 'desc' ? '▼' : '▲') : ''}
+                  </th>
+                  <th className="adm-table__num" style={{ cursor: 'pointer' }} onClick={() => sortGroupsBy('bets_count')}>
+                    Palpites {groupSort.key === 'bets_count' ? (groupSort.dir === 'desc' ? '▼' : '▲') : ''}
+                  </th>
+                  <th className="adm-table__num">Conv.</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => sortGroupsBy('created_at')}>
+                    Criado {groupSort.key === 'created_at' ? (groupSort.dir === 'desc' ? '▼' : '▲') : ''}
+                  </th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {groupsLoading && (
-                  <tr><td colSpan={5} className="adm-table__empty">Carregando...</td></tr>
+                  <tr><td colSpan={7} className="adm-table__empty">Carregando...</td></tr>
                 )}
-                {!groupsLoading && groupsData?.groups?.length === 0 && (
-                  <tr><td colSpan={5} className="adm-table__empty">Nenhum grupo criado.</td></tr>
-                )}
-                {!groupsLoading && groupsData?.groups?.map(g => (
-                  <tr key={g.id}>
-                    <td>
-                      <div className="adm-table__name">{g.name}</div>
-                      <div className="adm-table__id">ID {g.id}</div>
-                    </td>
-                    <td>
-                      {g.owner ? (
-                        <>
-                          <div className="adm-table__name">{g.owner.name}</div>
-                          <div className="adm-table__id">{g.owner.email}</div>
-                        </>
-                      ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
-                    </td>
-                    <td className="adm-table__num">{g.members_count}</td>
-                    <td className="adm-table__num">{g.pending_invites || 0}</td>
-                    <td>{g.created_at ? new Date(g.created_at).toLocaleDateString('pt-BR') : '—'}</td>
-                  </tr>
-                ))}
+                {!groupsLoading && (() => {
+                  const term = groupSearch.trim().toLowerCase()
+                  let list = (groupsData?.groups || [])
+                    .filter(g => {
+                      if (groupFilter === 'active') return g.bets_count > 0
+                      if (groupFilter === 'empty') return g.members_count <= 1
+                      if (groupFilter === 'pending') return (g.pending_invites || 0) > 0
+                      return true
+                    })
+                    .filter(g => !term || g.name.toLowerCase().includes(term) || (g.owner && (g.owner.name.toLowerCase().includes(term) || g.owner.email.toLowerCase().includes(term))))
+                  list = [...list].sort((a, b) => {
+                    const k = groupSort.key
+                    let av = a[k], bv = b[k]
+                    if (k === 'created_at') { av = new Date(av).getTime(); bv = new Date(bv).getTime() }
+                    return groupSort.dir === 'desc' ? bv - av : av - bv
+                  })
+                  if (list.length === 0) {
+                    return <tr><td colSpan={7} className="adm-table__empty">Nenhum grupo encontrado.</td></tr>
+                  }
+                  return list.map(g => (
+                    <Fragment key={g.id}>
+                      <tr style={{ cursor: 'pointer' }} onClick={() => toggleGroup(g.id)}>
+                        <td>
+                          <div className="adm-table__name">{expandedGroup === g.id ? '▼ ' : '▶ '}{g.name}</div>
+                          <div className="adm-table__id">ID {g.id}</div>
+                        </td>
+                        <td>
+                          {g.owner ? (
+                            <>
+                              <div className="adm-table__name">{g.owner.name}</div>
+                              <div className="adm-table__id">{g.owner.email}</div>
+                            </>
+                          ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                        </td>
+                        <td className="adm-table__num">{g.members_count}</td>
+                        <td className="adm-table__num">{g.bets_count}</td>
+                        <td className="adm-table__num">{g.pending_invites || 0}</td>
+                        <td>{g.created_at ? new Date(g.created_at).toLocaleDateString('pt-BR') : '—'}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--accent)', fontSize: 12 }}>{expandedGroup === g.id ? 'Fechar' : 'Ranking'}</td>
+                      </tr>
+                      {expandedGroup === g.id && (
+                        <tr>
+                          <td colSpan={7} style={{ background: 'var(--bg-overlay)', padding: 12 }}>
+                            {membersLoading === g.id && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Carregando membros...</div>}
+                            {membersLoading !== g.id && groupMembers[g.id] && (
+                              <table className="adm-table" style={{ margin: 0 }}>
+                                <thead>
+                                  <tr>
+                                    <th className="adm-table__num">#</th>
+                                    <th>Membro</th>
+                                    <th className="adm-table__num">Pontos</th>
+                                    <th className="adm-table__num">Palpites</th>
+                                    <th>Campeão</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {groupMembers[g.id].members.map(m => (
+                                    <tr key={m.user_id}>
+                                      <td className="adm-table__num">{m.position}</td>
+                                      <td>
+                                        <div className="adm-table__name">{m.name} {m.is_owner && <span className="badge badge-group" style={{ marginLeft: 4 }}>gestor</span>}</div>
+                                        <div className="adm-table__id">{m.email}</div>
+                                      </td>
+                                      <td className="adm-table__num"><b>{m.total_points}</b></td>
+                                      <td className="adm-table__num">{m.bets_count}</td>
+                                      <td>{m.champion_pick || <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))
+                })()}
               </tbody>
             </table>
           </div>

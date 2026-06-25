@@ -965,26 +965,162 @@ def list_groups(
         .group_by(UserGroupInvite.group_id)
         .all()
     )
+    # Atividade por grupo = palpites dos seus membros (proxy)
+    bet_rows = (
+        db.query(
+            UserGroupMember.group_id,
+            func.count(Bet.id),
+            func.max(Bet.created_at),
+        )
+        .join(Bet, Bet.user_id == UserGroupMember.user_id)
+        .group_by(UserGroupMember.group_id)
+        .all()
+    )
+    bet_counts = {gid: int(c or 0) for gid, c, _ in bet_rows}
+    last_bet = {gid: lb for gid, _, lb in bet_rows}
+
     total_grouped_users = db.query(func.count(func.distinct(UserGroupMember.user_id))).scalar() or 0
+
+    groups_out = [
+        {
+            "id": g.id,
+            "name": g.name,
+            "created_at": g.created_at,
+            "owner": (
+                {"id": g.owner.id, "name": g.owner.name, "email": g.owner.email}
+                if g.owner else None
+            ),
+            "members_count": int(member_counts.get(g.id, 0)),
+            "pending_invites": int(pending_counts.get(g.id, 0)),
+            "bets_count": bet_counts.get(g.id, 0),
+            "last_bet_at": last_bet.get(g.id),
+        }
+        for g in groups
+    ]
+
+    # ── Destaques ──────────────────────────────────────
+    def _brief(g):
+        return {"id": g["id"], "name": g["name"], "value": None} if g else None
+
+    biggest = max(groups_out, key=lambda g: g["members_count"], default=None)
+    most_active = max(groups_out, key=lambda g: g["bets_count"], default=None)
+    owner_counts = (
+        db.query(User.id, User.name, func.count(UserGroup.id).label("n"))
+        .join(UserGroup, UserGroup.owner_user_id == User.id)
+        .group_by(User.id, User.name)
+        .order_by(func.count(UserGroup.id).desc())
+        .first()
+    )
+
+    # ── Saúde ──────────────────────────────────────────
+    empty_count = sum(1 for g in groups_out if g["members_count"] <= 1)
+    inactive_count = sum(1 for g in groups_out if g["bets_count"] == 0)
+    avg_members = round(sum(g["members_count"] for g in groups_out) / len(groups_out), 1) if groups_out else 0
+
+    # ── Convites ───────────────────────────────────────
+    inv_rows = dict(
+        db.query(UserGroupInvite.status, func.count(UserGroupInvite.id))
+        .group_by(UserGroupInvite.status)
+        .all()
+    )
+    inv_pending = int(inv_rows.get(GroupInviteStatus.pending, 0))
+    inv_accepted = int(inv_rows.get(GroupInviteStatus.accepted, 0))
+    inv_rejected = int(inv_rows.get(GroupInviteStatus.rejected, 0))
+    inv_total = inv_pending + inv_accepted + inv_rejected
+    acceptance_rate = round(inv_accepted / inv_total * 100, 1) if inv_total else 0
+
+    # ── Crescimento (grupos criados por semana, últimas 12) ─
+    growth_rows = (
+        db.query(
+            func.date_trunc("week", UserGroup.created_at).label("bucket"),
+            func.count(UserGroup.id),
+        )
+        .group_by("bucket")
+        .order_by("bucket")
+        .all()
+    )
+    growth = [
+        {"label": b.strftime("%d/%m") if b else "—", "count": int(c)}
+        for b, c in growth_rows
+    ][-12:]
 
     return {
         "total_groups": len(groups),
         "total_grouped_users": int(total_grouped_users),
-        "groups": [
-            {
-                "id": g.id,
-                "name": g.name,
-                "created_at": g.created_at,
-                "owner": (
-                    {"id": g.owner.id, "name": g.owner.name, "email": g.owner.email}
-                    if g.owner else None
-                ),
-                "members_count": int(member_counts.get(g.id, 0)),
-                "pending_invites": int(pending_counts.get(g.id, 0)),
-            }
-            for g in groups
-        ],
+        "highlights": {
+            "biggest": {"id": biggest["id"], "name": biggest["name"], "members": biggest["members_count"]} if biggest else None,
+            "most_active": {"id": most_active["id"], "name": most_active["name"], "bets": most_active["bets_count"]} if most_active else None,
+            "top_owner": {"id": owner_counts[0], "name": owner_counts[1], "groups": int(owner_counts[2])} if owner_counts else None,
+        },
+        "health": {
+            "empty_count": empty_count,
+            "inactive_count": inactive_count,
+            "avg_members": avg_members,
+        },
+        "invites": {
+            "pending": inv_pending,
+            "accepted": inv_accepted,
+            "rejected": inv_rejected,
+            "total": inv_total,
+            "acceptance_rate": acceptance_rate,
+        },
+        "growth": growth,
+        "groups": groups_out,
     }
+
+
+@router.get("/groups/{group_id}/members")
+def group_members_detail(
+    group_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Membros de um grupo com pontos e nº de palpites — serve para expandir / ver ranking."""
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+
+    members = (
+        db.query(UserGroupMember)
+        .options(
+            joinedload(UserGroupMember.user),
+            joinedload(UserGroupMember.champion_pick),
+        )
+        .filter(UserGroupMember.group_id == group_id)
+        .all()
+    )
+    user_ids = [m.user_id for m in members]
+
+    points = dict(
+        db.query(Ranking.user_id, Ranking.total_points)
+        .filter(Ranking.user_id.in_(user_ids))
+        .all()
+    ) if user_ids else {}
+    bet_counts = dict(
+        db.query(Bet.user_id, func.count(Bet.id))
+        .filter(Bet.user_id.in_(user_ids))
+        .group_by(Bet.user_id)
+        .all()
+    ) if user_ids else {}
+
+    rows = [
+        {
+            "user_id": m.user_id,
+            "name": m.user.name if m.user else None,
+            "email": m.user.email if m.user else None,
+            "is_owner": bool(m.is_owner),
+            "joined_at": m.joined_at,
+            "total_points": int(points.get(m.user_id, 0) or 0),
+            "bets_count": int(bet_counts.get(m.user_id, 0) or 0),
+            "champion_pick": m.champion_pick.name if m.champion_pick else None,
+        }
+        for m in members
+    ]
+    rows.sort(key=lambda r: r["total_points"], reverse=True)
+    for i, r in enumerate(rows, start=1):
+        r["position"] = i
+
+    return {"group_id": group_id, "group_name": group.name, "members": rows}
 
 
 @router.get("/security-summary")
