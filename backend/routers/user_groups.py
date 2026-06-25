@@ -242,6 +242,7 @@ def create_group(
     db.add(group)
     db.flush()
     db.add(UserGroupMember(group_id=group.id, user_id=user.id, is_owner=True))
+    log_action(db, user.id, "group.create", {"group_id": group.id, "group_name": group.name})
     db.commit()
     loaded = _load_group(group.id, db)
     return _group_payload(loaded)
@@ -323,6 +324,12 @@ def invite_to_group(
         invitee_email=invitee_email,
     )
     db.add(invite)
+    db.flush()
+    log_action(db, user.id, "group.invite_sent", {
+        "group_id": group_id,
+        "invite_id": invite.id,
+        "invitee_email": invitee_email,
+    })
     db.commit()
     db.refresh(invite)
     return {
@@ -363,6 +370,7 @@ def accept_group_invite(
     invite.invitee_user_id = user.id
     invite.status = GroupInviteStatus.accepted
     invite.responded_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    log_action(db, user.id, "group.invite_accept", {"group_id": invite.group_id, "invite_id": invite.id})
     db.commit()
     group = _load_group(invite.group_id, db)
     return _group_payload(group)
@@ -385,6 +393,7 @@ def reject_group_invite(
     invite.invitee_user_id = user.id
     invite.status = GroupInviteStatus.rejected
     invite.responded_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    log_action(db, user.id, "group.invite_reject", {"group_id": invite.group_id, "invite_id": invite.id})
     db.commit()
     return {"status": "rejected", "invite_id": invite.id}
 
@@ -997,6 +1006,7 @@ def set_champion_pick(
     if not team:
         raise HTTPException(404, "Time não encontrado")
     member.champion_pick_team_id = body.team_id
+    log_action(db, user.id, "group.champion_pick", {"group_id": group_id, "team_id": body.team_id, "team": team.name})
     db.commit()
     return {"team_id": body.team_id, "team_name": team.name, "team_code": team.code}
 

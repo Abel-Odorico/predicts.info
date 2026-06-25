@@ -26,6 +26,17 @@ const ACTION_LABEL = {
   'group.delete':            '🗑 Grupo excluído',
   'group.remove_member':     '👤 Membro removido',
   'group.join':              '➕ Entrou no grupo',
+  'group.create':            '🆕 Grupo criado',
+  'group.leave':             '🚪 Saiu do grupo',
+  'group.cancel_invite':     '✖️ Convite cancelado',
+  'group.invite_sent':       '✉️ Convite enviado',
+  'group.invite_accept':     '✅ Convite aceito',
+  'group.invite_reject':     '🚫 Convite recusado',
+  'group.champion_pick':     '🏆 Campeão do grupo',
+  'bet.place':               '🎯 Palpite feito',
+  'bet.rejected':            '⚠️ Palpite rejeitado',
+  'register':                '🌟 Cadastro',
+  'password.reset':          '🔑 Senha redefinida (e-mail)',
 }
 
 function MiniBar({ value, max, color = 'var(--accent)' }) {

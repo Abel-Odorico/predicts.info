@@ -59,6 +59,7 @@ const TABS = [
   { id: 'growth',      label: 'Crescimento',  icon: '📈' },
   { id: 'engagement',  label: 'Engajamento',  icon: '🔥' },
   { id: 'users',       label: 'Usuários',     icon: '👥' },
+  { id: 'grupos',      label: 'Grupos',       icon: '👫' },
   { id: 'results',     label: 'Resultados',   icon: '⚽' },
   { id: 'sync',        label: 'Sincronização', icon: '🔄' },
   { id: 'bets',        label: 'Apostas',      icon: '🎯' },
@@ -235,6 +236,10 @@ export default function Admin() {
   // Engagement
   const [engagement, setEngagement] = useState(null)
   const [engagementLoading, setEngagementLoading] = useState(false)
+  const [groupsData, setGroupsData] = useState(null)
+  const [groupsLoading, setGroupsLoading] = useState(false)
+  const [security, setSecurity] = useState(null)
+  const [securityLoading, setSecurityLoading] = useState(false)
   const [engSegment, setEngSegment] = useState(null) // 'period'|'never'|'inactive'|'top'
   const [engPeriod, setEngPeriod] = useState('7d')   // today|7d|30d|all
 
@@ -640,6 +645,7 @@ export default function Admin() {
   useEffect(() => {
     if (tab === 'growth')      loadGrowth(growthPeriod)
     if (tab === 'engagement' && !engagement && !engagementLoading) loadEngagement()
+    if (tab === 'grupos' && !groupsData && !groupsLoading) { loadGroupsAdmin(); loadSecurity() }
     if (tab === 'results' && matches.length === 0 && !matchesLoading) loadMatches()
     if (tab === 'bets' && !allBets && !betsLoading) loadBets()
     if (tab === 'coverage' && !betCoverage && !coverageLoading) loadCoverage('scheduled')
@@ -795,6 +801,18 @@ export default function Admin() {
       setEngPeriod(period)
     } catch {}
     finally { setEngagementLoading(false) }
+  }
+
+  async function loadGroupsAdmin() {
+    setGroupsLoading(true)
+    try { setGroupsData(await api.get('/admin/groups', token)) } catch {}
+    finally { setGroupsLoading(false) }
+  }
+
+  async function loadSecurity() {
+    setSecurityLoading(true)
+    try { setSecurity(await api.get('/admin/security-summary', token)) } catch {}
+    finally { setSecurityLoading(false) }
   }
 
   async function loadSuggestions() {
@@ -1129,6 +1147,113 @@ export default function Admin() {
                         </button>
                       </div>
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab: Grupos ───────────────────────────────── */}
+      {tab === 'grupos' && (
+        <div className="adm-pane fade-in-1">
+          <div className="adm-pane__toolbar">
+            <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>👫 Bolões & Gestores</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => { loadGroupsAdmin(); loadSecurity() }} disabled={groupsLoading || securityLoading}>
+              {(groupsLoading || securityLoading) ? '⏳' : '↻'}
+            </button>
+          </div>
+
+          <div className="adm-kpi-strip">
+            <div className="adm-kpi">
+              <div className="adm-kpi__val">{groupsData?.total_groups ?? '—'}</div>
+              <div className="adm-kpi__label">Grupos</div>
+            </div>
+            <div className="adm-kpi">
+              <div className="adm-kpi__val" style={{ color: 'var(--accent)' }}>{groupsData?.total_grouped_users ?? '—'}</div>
+              <div className="adm-kpi__label">Usuários em grupos</div>
+            </div>
+            <div className="adm-kpi">
+              <div className="adm-kpi__val" style={{ color: 'var(--win)' }}>{security?.password_changes?.total ?? '—'}</div>
+              <div className="adm-kpi__label">Trocas de senha</div>
+            </div>
+            <div className="adm-kpi">
+              <div className="adm-kpi__val">{security?.password_changes?.last_7d ?? '—'}</div>
+              <div className="adm-kpi__label">Trocas (7 dias)</div>
+            </div>
+          </div>
+
+          <div className="adm-table-wrap" style={{ marginTop: 8 }}>
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>Grupo</th>
+                  <th>Gestor</th>
+                  <th className="adm-table__num">Membros</th>
+                  <th className="adm-table__num">Convites pend.</th>
+                  <th>Criado em</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupsLoading && (
+                  <tr><td colSpan={5} className="adm-table__empty">Carregando...</td></tr>
+                )}
+                {!groupsLoading && groupsData?.groups?.length === 0 && (
+                  <tr><td colSpan={5} className="adm-table__empty">Nenhum grupo criado.</td></tr>
+                )}
+                {!groupsLoading && groupsData?.groups?.map(g => (
+                  <tr key={g.id}>
+                    <td>
+                      <div className="adm-table__name">{g.name}</div>
+                      <div className="adm-table__id">ID {g.id}</div>
+                    </td>
+                    <td>
+                      {g.owner ? (
+                        <>
+                          <div className="adm-table__name">{g.owner.name}</div>
+                          <div className="adm-table__id">{g.owner.email}</div>
+                        </>
+                      ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                    </td>
+                    <td className="adm-table__num">{g.members_count}</td>
+                    <td className="adm-table__num">{g.pending_invites || 0}</td>
+                    <td>{g.created_at ? new Date(g.created_at).toLocaleDateString('pt-BR') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="adm-pane__toolbar" style={{ marginTop: 20 }}>
+            <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🔑 Trocas de senha recentes</span>
+          </div>
+          <div className="adm-table-wrap">
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>Usuário</th>
+                  <th>Tipo</th>
+                  <th>IP</th>
+                  <th>Quando</th>
+                </tr>
+              </thead>
+              <tbody>
+                {securityLoading && (
+                  <tr><td colSpan={4} className="adm-table__empty">Carregando...</td></tr>
+                )}
+                {!securityLoading && security?.recent_password_changes?.length === 0 && (
+                  <tr><td colSpan={4} className="adm-table__empty">Nenhuma troca de senha registrada.</td></tr>
+                )}
+                {!securityLoading && security?.recent_password_changes?.map((r, i) => (
+                  <tr key={i}>
+                    <td>
+                      <div className="adm-table__name">{r.user_name || '—'}</div>
+                      <div className="adm-table__id">{r.user_email || `ID ${r.user_id}`}</div>
+                    </td>
+                    <td>{r.action === 'password.reset' ? 'Reset por e-mail' : 'Troca no perfil'}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.ip || '—'}</td>
+                    <td>{r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : '—'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -123,6 +123,11 @@ def place_bet(
     if existing:
         existing.score_a = payload.score_a
         existing.score_b = payload.score_b
+        log_action(db, user.id, "bet.place", {
+            "match_id": payload.match_id,
+            "score": f"{payload.score_a}-{payload.score_b}",
+            "updated": True,
+        })
         db.commit()
         db.refresh(existing)
         return {
@@ -145,6 +150,13 @@ def place_bet(
         locked_at=locked_at,
     )
     db.add(bet)
+    db.flush()
+    log_action(db, user.id, "bet.place", {
+        "match_id": payload.match_id,
+        "score": f"{payload.score_a}-{payload.score_b}",
+        "updated": False,
+        "bet_id": bet.id,
+    })
     db.commit()
     db.refresh(bet)
     return {

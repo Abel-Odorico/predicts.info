@@ -19,7 +19,8 @@ from config import settings
 from auth_utils import require_admin
 from models import (
     Match, MatchResult, MatchStatus, Team, Player,
-    Bet, Ranking, TournamentSimulation, User, UserRole, Notification, PageView
+    Bet, Ranking, TournamentSimulation, User, UserRole, Notification, PageView,
+    UserGroup, UserGroupMember, UserGroupInvite, GroupInviteStatus, AuditLog
 )
 from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate
 from engine.elo import update_ratings
@@ -937,4 +938,98 @@ def engagement(
         "activity_series": activity_series,
         "top_bettors": top_bettors,
         "inactive": inactive,
+    }
+
+
+@router.get("/groups")
+def list_groups(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Visão geral de todos os bolões (grupos) e seus gestores. Somente leitura."""
+    groups = (
+        db.query(UserGroup)
+        .options(joinedload(UserGroup.owner))
+        .order_by(UserGroup.created_at.desc())
+        .all()
+    )
+
+    member_counts = dict(
+        db.query(UserGroupMember.group_id, func.count(UserGroupMember.id))
+        .group_by(UserGroupMember.group_id)
+        .all()
+    )
+    pending_counts = dict(
+        db.query(UserGroupInvite.group_id, func.count(UserGroupInvite.id))
+        .filter(UserGroupInvite.status == GroupInviteStatus.pending)
+        .group_by(UserGroupInvite.group_id)
+        .all()
+    )
+    total_grouped_users = db.query(func.count(func.distinct(UserGroupMember.user_id))).scalar() or 0
+
+    return {
+        "total_groups": len(groups),
+        "total_grouped_users": int(total_grouped_users),
+        "groups": [
+            {
+                "id": g.id,
+                "name": g.name,
+                "created_at": g.created_at,
+                "owner": (
+                    {"id": g.owner.id, "name": g.owner.name, "email": g.owner.email}
+                    if g.owner else None
+                ),
+                "members_count": int(member_counts.get(g.id, 0)),
+                "pending_invites": int(pending_counts.get(g.id, 0)),
+            }
+            for g in groups
+        ],
+    }
+
+
+@router.get("/security-summary")
+def security_summary(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Resumo de eventos de segurança/comportamento a partir do audit log."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    d7 = now - timedelta(days=7)
+    d30 = now - timedelta(days=30)
+
+    def _count(actions: list[str], since=None) -> int:
+        q = db.query(func.count(AuditLog.id)).filter(AuditLog.action.in_(actions))
+        if since is not None:
+            q = q.filter(AuditLog.created_at >= since)
+        return int(q.scalar() or 0)
+
+    pw_actions = ["profile.password_change", "password.reset"]
+    recent = (
+        db.query(AuditLog)
+        .options(joinedload(AuditLog.user))
+        .filter(AuditLog.action.in_(pw_actions))
+        .order_by(AuditLog.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    return {
+        "password_changes": {
+            "total": _count(pw_actions),
+            "last_7d": _count(pw_actions, d7),
+            "last_30d": _count(pw_actions, d30),
+        },
+        "logins": {"total": _count(["login"]), "last_7d": _count(["login"], d7)},
+        "registrations": {"total": _count(["register"]), "last_7d": _count(["register"], d7)},
+        "recent_password_changes": [
+            {
+                "user_id": r.user_id,
+                "user_name": r.user.name if r.user else None,
+                "user_email": r.user.email if r.user else None,
+                "action": r.action,
+                "ip": r.ip,
+                "created_at": r.created_at,
+            }
+            for r in recent
+        ],
     }

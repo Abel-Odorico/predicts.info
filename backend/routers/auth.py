@@ -156,6 +156,9 @@ def register(payload: UserCreate, background_tasks: BackgroundTasks, request: Re
     db.commit()
     db.refresh(user)
 
+    log_action(db, user.id, "register", {"email": user.email, "username": user.username}, ip)
+    db.commit()
+
     try:
         from datetime import datetime, timezone as tz
         from routers.champion import DEADLINE
@@ -374,5 +377,6 @@ def reset_password(payload: ResetPasswordPayload, db: Session = Depends(get_db))
 
     user.password_hash = hash_password(payload.new_password)
     rec.used_at = now
+    log_action(db, user.id, "password.reset", None, None)
     db.commit()
     return {"status": "ok", "message": "Senha redefinida com sucesso"}
