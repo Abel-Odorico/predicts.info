@@ -149,6 +149,18 @@ async def _oracle_predictor_loop():
         await asyncio.sleep(loop_seconds)
 
 
+def _alembic_upgrade():
+    """Aplica migrations versionadas (Alembic) até head. No-op se já atualizado."""
+    import os
+    from alembic.config import Config
+    from alembic import command
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    cfg = Config(os.path.join(base_dir, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(base_dir, "alembic"))
+    command.upgrade(cfg, "head")
+    print("[alembic] upgrade head concluído", flush=True)
+
+
 def _run_migrations():
     from sqlalchemy import text
     with engine.connect() as conn:
@@ -382,8 +394,8 @@ def _run_migrations():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    _run_migrations()
+    _alembic_upgrade()        # migrations versionadas (Alembic) — fonte de verdade do schema
+    _run_migrations()         # DDL legado idempotente (compat; remover quando tudo migrar p/ Alembic)
     task = asyncio.create_task(_auto_sync_loop())
     report_task = asyncio.create_task(_daily_report_loop())
     oracle_task = asyncio.create_task(_oracle_predictor_loop())
