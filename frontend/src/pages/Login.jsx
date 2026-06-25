@@ -159,6 +159,7 @@ export default function Login() {
           navigate('/')
         }
       } else {
+        if (pass.length < 8) { setErr('A senha deve ter ao menos 8 caracteres'); setLoad(false); return }
         await api.post('/auth/register', { email, password: pass, name, username: normalizedUsername, phone })
         const data = await api.login(email, pass)
         const me = await api.get('/auth/me', data.access_token)

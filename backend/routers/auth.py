@@ -114,7 +114,12 @@ def check_username(
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
-def register(payload: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def register(payload: UserCreate, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)):
+    ip = (
+        request.headers.get("X-Real-IP", "").strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    _check_login_rate(ip)
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(409, "Email already registered")
 
@@ -258,8 +263,8 @@ def change_password(
 ):
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(400, "Senha atual incorreta")
-    if len(payload.new_password) < 6:
-        raise HTTPException(400, "Nova senha deve ter ao menos 6 caracteres")
+    if len(payload.new_password) < 8:
+        raise HTTPException(400, "Nova senha deve ter ao menos 8 caracteres")
     user.password_hash = hash_password(payload.new_password)
     db.flush()
     log_action(db, user.id, "profile.password_change", None, request.client.host if request.client else None)
@@ -351,8 +356,8 @@ def validate_reset_token(token: str = Query(...), db: Session = Depends(get_db))
 
 @router.post("/reset-password")
 def reset_password(payload: ResetPasswordPayload, db: Session = Depends(get_db)):
-    if len(payload.new_password) < 6:
-        raise HTTPException(400, "Nova senha deve ter ao menos 6 caracteres")
+    if len(payload.new_password) < 8:
+        raise HTTPException(400, "Nova senha deve ter ao menos 8 caracteres")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     rec = db.query(PasswordResetToken).filter(

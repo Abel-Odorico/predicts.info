@@ -129,7 +129,7 @@ class InjuryUpdate(BaseModel):
 class UserCreate(BaseModel):
     email: EmailStr
     name: str
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=8)
     username: str | None = None
     phone: str | None = None
 

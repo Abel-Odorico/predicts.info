@@ -45,3 +45,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Falha hard se valores sensíveis ficaram no default (ex.: .env não carregou)
+_INSECURE_DEFAULTS = {
+    "jwt_secret": "dev_secret_change_in_production",
+    "database_url": "postgresql://copa:copa@db:5432/copa2026",
+}
+for _field, _default in _INSECURE_DEFAULTS.items():
+    if getattr(settings, _field) == _default:
+        raise RuntimeError(
+            f"Config insegura: '{_field}' está no valor padrão. "
+            f"Defina via .env antes de subir o serviço."
+        )

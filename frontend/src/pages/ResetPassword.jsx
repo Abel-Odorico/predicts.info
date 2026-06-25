@@ -28,7 +28,7 @@ export default function ResetPassword() {
   async function handleSubmit(e) {
     e.preventDefault()
     setErr('')
-    if (pass.length < 6) { setErr('A senha deve ter ao menos 6 caracteres'); return }
+    if (pass.length < 8) { setErr('A senha deve ter ao menos 8 caracteres'); return }
     if (pass !== passConfirm) { setErr('As senhas não coincidem'); return }
     setLoading(true)
     try {
@@ -112,7 +112,7 @@ export default function ResetPassword() {
                   <input
                     type="password"
                     className="form-input"
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres"
                     value={pass}
                     onChange={e => setPass(e.target.value)}
                     required
@@ -144,7 +144,7 @@ export default function ResetPassword() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={loading || pass.length < 6 || pass !== passConfirm}
+                  disabled={loading || pass.length < 8 || pass !== passConfirm}
                   style={{ marginTop: 'var(--s2)' }}
                 >
                   {loading ? 'Salvando...' : 'Redefinir Senha'}

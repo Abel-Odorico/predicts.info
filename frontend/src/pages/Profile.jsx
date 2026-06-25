@@ -71,7 +71,7 @@ export default function Profile() {
     e.preventDefault()
     setPwdMsg('')
     if (newPwd !== confPwd) { setPwdMsg('✗ As senhas não coincidem'); return }
-    if (newPwd.length < 6) { setPwdMsg('✗ Senha deve ter ao menos 6 caracteres'); return }
+    if (newPwd.length < 8) { setPwdMsg('✗ Senha deve ter ao menos 8 caracteres'); return }
     setSavingPwd(true)
     try {
       await api.patch('/auth/password', { current_password: curPwd, new_password: newPwd }, token)
@@ -209,7 +209,7 @@ export default function Profile() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Nova senha <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(mínimo 6 caracteres)</span></label>
+              <label className="form-label">Nova senha <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(mínimo 8 caracteres)</span></label>
               <input
                 type="password"
                 className="form-input"
