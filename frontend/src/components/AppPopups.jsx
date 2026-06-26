@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
@@ -8,6 +8,7 @@ import { invalidateChampionCache } from './MyChampionCard'
 const CHAMP_DEADLINE = new Date('2026-06-26T12:00:00Z')
 const SEEN_VERSION_KEY = 'predicts_seen_version'
 const CHAMP_DISMISS_KEY = 'predicts_champ_popup_dismissed'  // guarda a data (YYYY-MM-DD)
+const PUSH_DISMISS_KEY  = 'predicts_push_prompt_dismissed'  // timestamp dismiss 7 dias
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10)
@@ -278,10 +279,148 @@ function ChampionPopup({ token, onClose }) {
   )
 }
 
+/* ───────────────────────── Push prompt ───────────────────────── */
+function _urlB64ToUint8(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+}
+
+function PushPromptPopup({ token, onClose }) {
+  const [status, setStatus] = useState('idle') // idle | loading | done | denied | error
+
+  async function enable() {
+    setStatus('loading')
+    try {
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') { setStatus('denied'); return }
+
+      // Busca VAPID key
+      const { publicKey } = await api.get('/push/vapid-key')
+      if (!publicKey) { setStatus('error'); return }
+
+      const reg = await navigator.serviceWorker.ready
+      let sub = await reg.pushManager.getSubscription()
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: _urlB64ToUint8(publicKey),
+        })
+      }
+      const key  = sub.getKey('p256dh')
+      const auth = sub.getKey('auth')
+      await api.post('/push/subscribe', {
+        endpoint: sub.endpoint,
+        p256dh:  key  ? btoa(String.fromCharCode(...new Uint8Array(key)))  : '',
+        auth:    auth ? btoa(String.fromCharCode(...new Uint8Array(auth))) : '',
+      }, token)
+      setStatus('done')
+      setTimeout(onClose, 1800)
+    } catch (e) {
+      console.error('push subscribe', e)
+      setStatus('error')
+    }
+  }
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9400,
+        background: 'rgba(3,8,14,0.72)', backdropFilter: 'blur(5px)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        padding: '0 0 24px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="fade-in-1"
+        style={{
+          width: '100%', maxWidth: 420,
+          background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+          borderRadius: 16, padding: '20px 20px 18px',
+          boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
+          margin: '0 16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+          <span style={{ fontSize: 32, lineHeight: 1, flexShrink: 0 }}>🔔</span>
+          <div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginBottom: 4 }}>
+              Ativar notificações
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5 }}>
+              Receba alertas de resultados de apostas, lembretes de jogos e atualizações do ranking — mesmo com o app fechado.
+            </div>
+          </div>
+        </div>
+
+        {status === 'done' && (
+          <div style={{ textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--win)', padding: '8px 0' }}>
+            ✓ Notificações ativadas!
+          </div>
+        )}
+        {status === 'denied' && (
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', marginBottom: 10 }}>
+            Permissão negada. Acesse as configurações do navegador para desbloquear.
+          </div>
+        )}
+        {status === 'error' && (
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', marginBottom: 10 }}>
+            Erro ao ativar. Tente pelo Perfil → Notificações.
+          </div>
+        )}
+
+        {(status === 'idle' || status === 'loading') && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={enable}
+              disabled={status === 'loading'}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
+                background: 'var(--accent)', color: '#fff',
+                fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
+                opacity: status === 'loading' ? 0.7 : 1,
+              }}
+            >
+              {status === 'loading' ? 'Ativando…' : 'Ativar notificações'}
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                padding: '10px 16px', borderRadius: 9, border: '1px solid var(--border)',
+                background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer',
+                fontFamily: 'var(--font-cond)', fontSize: 13,
+              }}
+            >
+              Agora não
+            </button>
+          </div>
+        )}
+
+        {(status === 'denied' || status === 'error') && (
+          <button
+            onClick={onClose}
+            style={{
+              width: '100%', padding: '10px 0', borderRadius: 9, border: '1px solid var(--border)',
+              background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer',
+              fontFamily: 'var(--font-cond)', fontSize: 13,
+            }}
+          >
+            Fechar
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 /* ───────────────────────── Orchestrator ───────────────────────── */
 export default function AppPopups() {
   const { token } = useAuth()
-  const [active, setActive] = useState(null)   // 'version' | 'champion' | null
+  const [active, setActive] = useState(null)   // 'version' | 'champion' | 'push' | null
   const [versionData, setVersionData] = useState(null)
 
   useEffect(() => {
@@ -308,7 +447,7 @@ export default function AppPopups() {
         const pick = await api.get('/champion/pick', token)
         if (mounted && (!pick?.champion || !pick?.runner_up)) setActive('champion')
       } catch {
-        if (mounted) setActive('champion')   // sem pick ainda
+        if (mounted) setActive('champion')
       }
     }
 
@@ -316,10 +455,29 @@ export default function AppPopups() {
     return () => { mounted = false; clearTimeout(t) }
   }, [token])
 
+  // Push prompt: logado + suportado + não dispensado + não subscrito ainda
+  useEffect(() => {
+    if (!token) return
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    if (typeof Notification === 'undefined' || Notification.permission === 'denied') return
+    if (Notification.permission === 'granted') return  // já tem permissão, sw cuida
+
+    const dismissed = localStorage.getItem(PUSH_DISMISS_KEY)
+    if (dismissed && Date.now() < parseInt(dismissed, 10)) return
+
+    const t = setTimeout(async () => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration()
+        const sub = await reg?.pushManager?.getSubscription()
+        if (!sub) setActive(prev => prev === null ? 'push' : prev)
+      } catch {}
+    }, 12000)
+    return () => clearTimeout(t)
+  }, [token])
+
   function closeVersion() {
     if (versionData?.version) localStorage.setItem(SEEN_VERSION_KEY, versionData.version)
     setActive(null)
-    // encadeia o popup do campeão
     setTimeout(() => {
       if (!token) return
       if (CHAMP_DEADLINE - Date.now() <= 0) return
@@ -335,7 +493,13 @@ export default function AppPopups() {
     setActive(null)
   }
 
+  function closePush() {
+    localStorage.setItem(PUSH_DISMISS_KEY, String(Date.now() + 7 * 24 * 60 * 60 * 1000))
+    setActive(null)
+  }
+
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
   if (active === 'champion') return <ChampionPopup token={token} onClose={closeChampion} />
+  if (active === 'push') return <PushPromptPopup token={token} onClose={closePush} />
   return null
 }

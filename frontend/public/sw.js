@@ -1,4 +1,4 @@
-const CACHE = 'predicts-v11'
+const CACHE = 'predicts-v12'
 const ICON  = '/icon-192.png'
 const BADGE = '/favicon-32x32.png'
 
@@ -111,18 +111,22 @@ self.addEventListener('push', e => {
       body: data.body || '',
       icon: ICON,
       badge: BADGE,
-      data: { url: data.url || '/dashboard' },
-      vibrate: [100, 50, 100],
+      tag: data.tag || 'predicts-push',
+      renotify: true,
+      requireInteraction: false,
+      data: { url: data.url || '/' },
+      vibrate: [200, 100, 200],
+      actions: data.url ? [{ action: 'open', title: 'Abrir' }] : [],
     })
   )
 })
 
 self.addEventListener('notificationclick', e => {
   e.notification.close()
+  const url = e.notification.data?.url || '/'
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const url = e.notification.data?.url || '/dashboard'
-      const existing = list.find(c => c.url.includes(self.registration.scope) && 'focus' in c)
+      const existing = list.find(c => c.focus)
       if (existing) return existing.navigate(url).then(c => c.focus())
       return clients.openWindow(url)
     })
