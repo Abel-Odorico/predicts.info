@@ -39,15 +39,17 @@ export default function Tournament() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       api.get(`/tournament/simulate?n=${simN}`),
       api.get('/tournament/official-bracket'),
       api.get('/groups'),
       api.get('/tournament/phases'),
-    ])
-      .then(([sim, br, gr, ph]) => { setData(sim); setBracket(br); setGroups(gr.groups || {}); setPhases(ph) })
-      .catch(console.error)
-      .finally(() => setLoad(false))
+    ]).then(([simR, brR, grR, phR]) => {
+      if (simR.status === 'fulfilled') setData(simR.value)
+      if (brR.status === 'fulfilled') setBracket(brR.value)
+      if (grR.status === 'fulfilled') setGroups(grR.value.groups || {})
+      if (phR.status === 'fulfilled') setPhases(phR.value)
+    }).finally(() => setLoad(false))
   }, [])
 
   async function runSim(n) {
@@ -1363,12 +1365,13 @@ function PhaseMatchCard({ match, phaseKey, expanded, onToggle, allByNum, simByCo
   const borderColor = isFinished ? 'var(--border)' : isLive ? 'var(--win)' : expanded ? 'var(--accent)' : 'var(--border)'
 
   return (
+    <div style={{ borderRadius: 12, overflow: 'hidden' }}>
     <div style={{
       background: 'var(--bg-card)',
       border: `1.5px solid ${borderColor}`,
-      borderRadius: 12,
+      borderRadius: expanded ? '12px 12px 0 0' : 12,
       overflow: 'hidden',
-      transition: 'border-color 200ms',
+      transition: 'border-color 200ms, border-radius 200ms',
     }}>
       {/* Header */}
       <div style={{
@@ -1499,7 +1502,7 @@ function PhaseMatchCard({ match, phaseKey, expanded, onToggle, allByNum, simByCo
         )}
       </div>
 
-      {/* Expanded: next phase detail */}
+    </div>
       {expanded && match.next_match_number && (
         <PathPanel
           match={match}
@@ -1568,8 +1571,10 @@ function PathPanel({ match, adversary, allByNum }) {
 
   return (
     <div style={{
+      border: '1.5px solid var(--accent)',
       borderTop: '2px solid var(--accent)',
       background: 'rgba(15,122,120,0.04)',
+      borderRadius: '0 0 12px 12px',
       padding: '14px',
     }}>
       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
