@@ -5,20 +5,44 @@ import { useAuth } from '../stores/authStore'
 
 const DEADLINE = new Date('2026-06-26T12:00:00Z')
 
+// Session-level cache — survives SPA navigation, cleared on logout/token change
+let _pickCache = null
+let _pickCacheToken = null
+export function invalidateChampionCache() { _pickCache = null; _pickCacheToken = null }
+
 export default function MyChampionCard({ compact = false }) {
   const { token } = useAuth()
-  const [pick, setPick]   = useState(null)
-  const [ready, setReady] = useState(false)
+  const cached = (token && token === _pickCacheToken) ? _pickCache : null
+  const [pick, setPick]   = useState(cached)
+  const [ready, setReady] = useState(cached !== null)
 
   useEffect(() => {
-    if (!token) { setReady(true); return }
+    if (!token) { _pickCache = null; _pickCacheToken = null; setReady(true); return }
+    // If cache is stale (different token), reset
+    if (token !== _pickCacheToken) { _pickCache = null; setPick(null); setReady(false) }
     api.get('/champion/pick', token)
-      .then(setPick)
-      .catch(() => setPick(null))
+      .then(data => {
+        _pickCache = data; _pickCacheToken = token
+        setPick(data)
+      })
+      .catch(err => {
+        // Only clear on 404 (no pick). Keep cache on network/server errors.
+        if (err?.message?.includes('404') || err?.detail?.status === 404 || String(err?.message).match(/404/)) {
+          _pickCache = null; _pickCacheToken = token
+          setPick(null)
+        }
+        // else: keep whatever is already in state
+      })
       .finally(() => setReady(true))
   }, [token])
 
-  if (!token || !ready) return null
+  if (!token) return null
+  // While loading with no cache: show compact skeleton to avoid layout shift
+  if (!ready) {
+    return compact
+      ? <div style={{ height: 42, marginBottom: 'var(--s4)', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border)' }} />
+      : <div style={{ height: 90, marginBottom: 'var(--s4)', borderRadius: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)' }} />
+  }
 
   const open = Date.now() < DEADLINE.getTime()
   const hasChamp = !!pick?.champion

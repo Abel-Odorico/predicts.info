@@ -57,13 +57,13 @@ export default function Bets() {
       api.get('/matches?status=finished&limit=100'),
     ]
     if (token) reqs.push(api.get('/bets/mine', token))
-    Promise.all(reqs)
-      .then(([m, f, b]) => {
-        setMatches(m)
-        setFinished(Array.isArray(f) ? f : [])
-        if (token && b) setBets(b)
+    // allSettled: one failure doesn't wipe the other data
+    Promise.allSettled(reqs)
+      .then(([mRes, fRes, bRes]) => {
+        if (mRes.status === 'fulfilled') setMatches(mRes.value)
+        if (fRes.status === 'fulfilled') setFinished(Array.isArray(fRes.value) ? fRes.value : [])
+        if (token && bRes?.status === 'fulfilled' && bRes.value) setBets(bRes.value)
       })
-      .catch(console.error)
       .finally(() => setLoad(false))
   }, [token])
 

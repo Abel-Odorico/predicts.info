@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
+import { invalidateChampionCache } from '../components/MyChampionCard'
 
 const DEADLINE = new Date('2026-06-26T12:00:00Z')
 
@@ -159,6 +160,7 @@ export default function ChampionPick() {
         : { runner_up_team_id: team.id }
       const res = await api.post('/champion/pick', body, token)
       setMyPick(res)
+      invalidateChampionCache()
       const label = type === 'champion' ? 'Campeão' : 'Vice-campeão'
       setMsg(`✓ ${label} salvo — ${team.name || team.code}`)
       const [statsData, picksData] = await Promise.all([

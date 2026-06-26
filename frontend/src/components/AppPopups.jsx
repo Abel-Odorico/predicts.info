@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
+import { invalidateChampionCache } from './MyChampionCard'
 
 const CHAMP_DEADLINE = new Date('2026-06-26T12:00:00Z')
 const SEEN_VERSION_KEY = 'predicts_seen_version'
@@ -190,6 +191,7 @@ function ChampionPopup({ token, onClose }) {
       const body = type === 'champion' ? { team_id: team.id } : { runner_up_team_id: team.id }
       const res = await api.post('/champion/pick', body, token)
       setMyPick(res)
+      invalidateChampionCache()
       if (type === 'champion') setStep('runner_up')
       else setMsg('✓ Palpites salvos!')
     } catch (e) {
