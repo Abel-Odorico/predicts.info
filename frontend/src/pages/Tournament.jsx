@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, CONF_HEX, heatClass } from '../api'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
@@ -34,14 +35,17 @@ export default function Tournament() {
   const [confFilter, setConf] = useState('')
 
   const [groups, setGroups] = useState(null)
+  const [phases, setPhases] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     Promise.all([
       api.get(`/tournament/simulate?n=${simN}`),
       api.get('/tournament/official-bracket'),
       api.get('/groups'),
+      api.get('/tournament/phases'),
     ])
-      .then(([sim, br, gr]) => { setData(sim); setBracket(br); setGroups(gr.groups || {}) })
+      .then(([sim, br, gr, ph]) => { setData(sim); setBracket(br); setGroups(gr.groups || {}); setPhases(ph) })
       .catch(console.error)
       .finally(() => setLoad(false))
   }, [])
@@ -112,6 +116,12 @@ export default function Tournament() {
           <span className="phase-nav__icon">⚔️</span>Chaveamento
         </button>
         <button
+          className={`phase-nav__tab${pageTab === 'fases' ? ' active' : ''}`}
+          onClick={() => setPageTab('fases')}
+        >
+          <span className="phase-nav__icon">📅</span>Confrontos
+        </button>
+        <button
           className={`phase-nav__tab${pageTab === 'sim' ? ' active' : ''}`}
           onClick={() => setPageTab('sim')}
         >
@@ -125,6 +135,11 @@ export default function Tournament() {
           <CompetitionSection bracket={bracket} groups={groups} className="mt-6 fade-in-1" />
           <KnockoutBracket bracket={bracket} className="mt-6 fade-in-2" />
         </>
+      )}
+
+      {/* ── CONFRONTOS TAB ── */}
+      {pageTab === 'fases' && phases && (
+        <PhasesSection phases={phases} simData={data} navigate={navigate} />
       )}
 
       {/* ── SIMULAÇÃO TAB ── */}
@@ -1170,6 +1185,522 @@ function KnockoutBracket({ bracket, className }) {
       <div className="bk2-mobile-view">
         <BkMobileView matchLookup={matchLookup} />
       </div>
+    </div>
+  )
+}
+
+// ─── Phases / Confrontos Section ──────────────────────────────────────────────
+
+const ROAD_ROAD_PHASE_KEYS = ['r32', 'r16', 'qf', 'sf', 'final']
+const ROAD_ROAD_PHASE_META = {
+  r32:   { label: 'Round de 32',        icon: '⚽', short: 'R32'      },
+  r16:   { label: 'Oitavas de Final',   icon: '⚔️', short: 'Oitavas' },
+  qf:    { label: 'Quartas de Final',   icon: '🔥', short: 'Quartas'  },
+  sf:    { label: 'Semifinal',          icon: '⭐', short: 'Semi'     },
+  final: { label: 'Grande Final',       icon: '🏆', short: 'Final'    },
+}
+
+function toUTC(val) {
+  if (!val) return null
+  const s = String(val)
+  return new Date(s.endsWith('Z') ? s : s + 'Z')
+}
+function fmtDateBRT(val) {
+  const d = toUTC(val)
+  if (!d || isNaN(d)) return '—'
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' })
+}
+function fmtTimeBRT(val) {
+  const d = toUTC(val)
+  if (!d || isNaN(d)) return '—'
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) + ' BRT'
+}
+function parseFeedMatchNum(label) {
+  const m = (label || '').match(/Match (\d+)/)
+  return m ? parseInt(m[1]) : null
+}
+
+function PhasesSection({ phases, simData, navigate }) {
+  const [activePhase, setActivePhase] = useState('r32')
+  const [expandedMatch, setExpandedMatch] = useState(null)
+
+  // flat lookup: match_number → match entry across all phases
+  const allByNum = useMemo(() => {
+    const map = {}
+    for (const key of ROAD_PHASE_KEYS) {
+      for (const m of (phases[key] || [])) {
+        if (m.match_number) map[m.match_number] = { ...m, phaseKey: key }
+      }
+    }
+    return map
+  }, [phases])
+
+  // sim team lookup by code
+  const simByCode = useMemo(() => {
+    const map = {}
+    for (const t of (simData?.teams || [])) map[t.code] = t
+    return map
+  }, [simData])
+
+  const matches = phases[activePhase] || []
+
+  return (
+    <div className="fade-in-1 mt-6">
+      {/* Phase pills */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--s5)' }}>
+        {ROAD_PHASE_KEYS.map(key => {
+          const count = phases[key]?.length || 0
+          const active = activePhase === key
+          return (
+            <button
+              key={key}
+              onClick={() => { setActivePhase(key); setExpandedMatch(null) }}
+              style={{
+                padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: active ? 700 : 400,
+                background: active ? 'var(--accent)' : 'var(--bg-surface)',
+                color: active ? '#fff' : 'var(--text-3)',
+                border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                transition: 'all 150ms',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {ROAD_PHASE_META[key].icon} {ROAD_PHASE_META[key].short}
+              <span style={{
+                marginLeft: 6, fontFamily: 'var(--font-mono)', fontSize: 10,
+                background: active ? 'rgba(255,255,255,0.2)' : 'var(--bg-overlay)',
+                borderRadius: 10, padding: '1px 6px',
+              }}>{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Match cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+        {matches.map(m => (
+          <PhaseMatchCard
+            key={m.match_number}
+            match={m}
+            phaseKey={activePhase}
+            expanded={expandedMatch === m.match_number}
+            onToggle={() => setExpandedMatch(prev => prev === m.match_number ? null : m.match_number)}
+            allByNum={allByNum}
+            simByCode={simByCode}
+            navigate={navigate}
+          />
+        ))}
+        {matches.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 'var(--s8)', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 14 }}>
+            Nenhum jogo nesta fase ainda
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PhaseMatchCard({ match, phaseKey, expanded, onToggle, allByNum, simByCode, navigate }) {
+  const isFinished  = match.status === 'finished'
+  const isLive      = match.status === 'live'
+  const hasSim      = !!match.id  // only R32 DB matches have id
+  const meta        = ROAD_PHASE_META[phaseKey] || ROAD_PHASE_META.r32
+
+  // Resolve team from label (e.g. "Winner Match 73") → { code, name, flag_url }
+  function resolveTeam(team, label) {
+    if (team) return team  // direct DB team (R32)
+    const mn = parseFeedMatchNum(label)
+    if (!mn) return null
+    const src = allByNum[mn]
+    return src ? null : null  // label matches not yet resolved
+  }
+
+  // For display: either real team or label text
+  function teamDisplay(team, label) {
+    if (team) return { name: PT_NAMES[team.code] || team.name, code: team.code, flag: team.flag_url, resolved: true }
+    const mn = parseFeedMatchNum(label)
+    if (mn) {
+      const src = allByNum[mn]
+      if (src?.team_a && src?.team_b) {
+        // show as "KOR/SUI" to indicate one of these two
+        const na = PT_NAMES[src.team_a.code] || src.team_a.name
+        const nb = PT_NAMES[src.team_b.code] || src.team_b.name
+        return { name: `${na} / ${nb}`, code: null, flag: null, resolved: false, srcMatch: src, srcA: src.team_a, srcB: src.team_b }
+      }
+    }
+    return { name: label || '?', code: null, flag: null, resolved: false }
+  }
+
+  const tA = teamDisplay(match.team_a, match.team_a_label)
+  const tB = teamDisplay(match.team_b, match.team_b_label)
+
+  // Find the adversary in the next match
+  function findAdversary() {
+    if (!match.next_match_number) return null
+    const nextM = allByNum[match.next_match_number]
+    if (!nextM) return null
+    const lA = nextM.team_a_label || ''
+    const lB = nextM.team_b_label || ''
+    const mnA = parseFeedMatchNum(lA)
+    const mnB = parseFeedMatchNum(lB)
+    const advLabel = mnA === match.match_number ? lB : lA
+    const advMn    = mnA === match.match_number ? mnB : mnA
+    const advSrc   = advMn ? allByNum[advMn] : null
+    return {
+      label: advLabel,
+      matchNumber: advMn,
+      teams: advSrc?.team_a && advSrc?.team_b ? { a: advSrc.team_a, b: advSrc.team_b } : null,
+      phaseMeta: advSrc ? ROAD_PHASE_META[advSrc.phaseKey] : null,
+    }
+  }
+
+  const adversary = findAdversary()
+
+  // Prob from sim data
+  const probA = match.team_a ? (simByCode[match.team_a.code]?.prob_title || 0) : 0
+  const probB = match.team_b ? (simByCode[match.team_b.code]?.prob_title || 0) : 0
+
+  const borderColor = isFinished ? 'var(--border)' : isLive ? 'var(--win)' : expanded ? 'var(--accent)' : 'var(--border)'
+
+  return (
+    <div style={{
+      background: 'var(--bg-card)',
+      border: `1.5px solid ${borderColor}`,
+      borderRadius: 12,
+      overflow: 'hidden',
+      transition: 'border-color 200ms',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px',
+        background: isFinished ? 'var(--bg-overlay)' : isLive ? 'rgba(46,201,128,0.06)' : 'var(--bg-surface)',
+        borderBottom: '1px solid var(--border)',
+        flexWrap: 'wrap', gap: 6,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+            color: 'var(--accent)', background: 'rgba(15,122,120,0.12)',
+            border: '1px solid rgba(15,122,120,0.3)', borderRadius: 4,
+            padding: '2px 7px', letterSpacing: '0.04em',
+          }}>
+            {meta.icon} {meta.label}
+          </span>
+          {match.half && (
+            <span className={`half-badge half-badge--${match.half}`}>Lado {match.half}</span>
+          )}
+          {isLive && <span className="badge badge-live">Ao vivo</span>}
+          {isFinished && <span className="badge badge-done">Encerrado</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+              {fmtDateBRT(match.match_date)}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>
+              {fmtTimeBRT(match.match_date)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Venue */}
+      {(match.venue || match.city) && (
+        <div style={{ padding: '6px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12 }}>📍</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+            {[match.venue, match.city].filter(Boolean).join(' · ')}
+          </span>
+        </div>
+      )}
+
+      {/* Teams */}
+      <div style={{ padding: '14px', display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 10, alignItems: 'center' }}>
+        {/* Team A */}
+        <TeamSlot t={tA} align="left" />
+
+        {/* Score / VS */}
+        <div style={{ textAlign: 'center', minWidth: 60 }}>
+          {isFinished && match.score_a != null ? (
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--text-1)', letterSpacing: 2 }}>
+              {match.score_a} – {match.score_b}
+            </div>
+          ) : (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 15, color: 'var(--text-4)', fontWeight: 700 }}>VS</div>
+          )}
+          {match.match_number && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', marginTop: 2 }}>
+              #{match.match_number}
+            </div>
+          )}
+        </div>
+
+        {/* Team B */}
+        <TeamSlot t={tB} align="right" />
+      </div>
+
+      {/* Sim probabilities bar (only when real teams known) */}
+      {match.team_a && match.team_b && (probA > 0 || probB > 0) && (
+        <div style={{ padding: '0 14px 10px' }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', minWidth: 36 }}>{probA.toFixed(1)}%</span>
+            <div style={{ flex: 1, height: 4, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${(probA / (probA + probB)) * 100}%`,
+                background: 'var(--accent)', borderRadius: 2,
+              }} />
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)', minWidth: 36, textAlign: 'right' }}>{probB.toFixed(1)}%</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', marginTop: 2 }}>
+            <span>prob. título</span><span>prob. título</span>
+          </div>
+        </div>
+      )}
+
+      {/* Footer actions */}
+      <div style={{
+        padding: '10px 14px',
+        borderTop: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+      }}>
+        {hasSim ? (
+          <button
+            onClick={() => navigate(`/partida/${match.id}`)}
+            style={{
+              padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)',
+              background: 'var(--bg-surface)', color: 'var(--accent)',
+              fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Simular ▶
+          </button>
+        ) : (
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+            {ROAD_PHASE_META[phaseKey]?.label}
+          </span>
+        )}
+
+        {match.next_match_number && (
+          <button
+            onClick={onToggle}
+            style={{
+              padding: '5px 12px', borderRadius: 6, border: 'none',
+              background: expanded ? 'var(--accent)' : 'var(--bg-overlay)',
+              color: expanded ? '#fff' : 'var(--text-2)',
+              fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5, transition: 'all 150ms',
+            }}
+          >
+            {expanded ? 'Fechar ▲' : 'Ver caminho ▼'}
+          </button>
+        )}
+      </div>
+
+      {/* Expanded: next phase detail */}
+      {expanded && match.next_match_number && (
+        <PathPanel
+          match={match}
+          adversary={adversary}
+          allByNum={allByNum}
+        />
+      )}
+    </div>
+  )
+}
+
+function TeamSlot({ t, align }) {
+  const right = align === 'right'
+  if (!t) return <div />
+
+  if (t.resolved && t.flag) {
+    // Real team — full display
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', gap: 4,
+      }}>
+        <img src={t.flag} alt={t.code} style={{ width: 36, height: 26, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border)' }} />
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)', textAlign: right ? 'right' : 'left', lineHeight: 1.2 }}>
+          {t.name}
+        </div>
+      </div>
+    )
+  }
+
+  if (!t.resolved && t.srcA && t.srcB) {
+    // Two possible teams — show both flags small
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', gap: 4,
+      }}>
+        <div style={{ display: 'flex', gap: 3, flexDirection: right ? 'row-reverse' : 'row' }}>
+          {[t.srcA, t.srcB].map(team => (
+            <div key={team.code} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <img src={team.flag_url} alt={team.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)', opacity: 0.7 }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>{team.code}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', fontStyle: 'italic', textAlign: right ? 'right' : 'left' }}>
+          vencedor
+        </div>
+      </div>
+    )
+  }
+
+  // Generic label
+  return (
+    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', fontStyle: 'italic', textAlign: right ? 'right' : 'left' }}>
+      {t.name}
+    </div>
+  )
+}
+
+function PathPanel({ match, adversary, allByNum }) {
+  const nextM = match.next_match_number ? allByNum[match.next_match_number] : null
+  const nextPhaseMeta = nextM ? ROAD_PHASE_META[nextM.phaseKey] : null
+
+  // After next: the match that next feeds into
+  const afterM = nextM?.next_match_number ? allByNum[nextM.next_match_number] : null
+  const afterPhaseMeta = afterM ? ROAD_PHASE_META[afterM.phaseKey] : null
+
+  return (
+    <div style={{
+      borderTop: '2px solid var(--accent)',
+      background: 'rgba(15,122,120,0.04)',
+      padding: '14px',
+    }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
+        CAMINHO ATÉ A FINAL
+      </div>
+
+      {/* Next match */}
+      {nextM && (
+        <div style={{
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: '12px 14px', marginBottom: 'var(--s3)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            <div>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                color: 'var(--accent)', background: 'rgba(15,122,120,0.12)',
+                border: '1px solid rgba(15,122,120,0.3)', borderRadius: 4,
+                padding: '1px 7px', letterSpacing: '0.04em',
+              }}>
+                {nextPhaseMeta?.icon} {nextPhaseMeta?.label || 'Próxima fase'} · #{nextM.match_number}
+              </span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>
+                {fmtDateBRT(nextM.match_date || match.next_match_date)}
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)' }}>
+                {fmtTimeBRT(nextM.match_date || match.next_match_date)}
+              </div>
+            </div>
+          </div>
+
+          {(nextM.venue || nextM.city || match.next_venue) && (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span>📍</span>
+              {[nextM.venue || match.next_venue, nextM.city || match.next_city].filter(Boolean).join(' · ')}
+            </div>
+          )}
+
+          {adversary && (
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.05em', marginBottom: 6 }}>
+                ADVERSÁRIO POTENCIAL
+              </div>
+              <AdversaryDisplay adversary={adversary} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Further path (if exists) */}
+      {afterM && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px',
+          background: 'var(--bg-overlay)', borderRadius: 8,
+          marginBottom: 'var(--s2)',
+        }}>
+          <span style={{ fontSize: 14 }}>→</span>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>
+              {afterPhaseMeta?.icon} {afterPhaseMeta?.label || 'Próxima'} · #{afterM.match_number}
+            </span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginLeft: 8 }}>
+              {fmtDateBRT(afterM.match_date || nextM?.next_match_date)}
+            </span>
+          </div>
+          {(afterM.venue || afterM.city) && (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textAlign: 'right' }}>
+              {afterM.city || match.next_city}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Final destination if not yet shown */}
+      {!afterM && nextM?.next_match_number && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px',
+          background: 'var(--bg-overlay)', borderRadius: 8,
+        }}>
+          <span>→</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+            {ROAD_PHASE_META[
+              Object.keys(ROAD_PHASE_META).find(k => {
+                const ph = nextM?.next_phase
+                return ph === k
+              }) || 'final'
+            ]?.icon} {nextM.next_city || ''} · {fmtDateBRT(nextM.next_match_date)}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AdversaryDisplay({ adversary }) {
+  if (!adversary) return null
+
+  if (adversary.teams) {
+    const na = PT_NAMES[adversary.teams.a.code] || adversary.teams.a.name
+    const nb = PT_NAMES[adversary.teams.b.code] || adversary.teams.b.name
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', fontStyle: 'italic' }}>Vencedor de</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <img src={adversary.teams.a.flag_url} alt={adversary.teams.a.code}
+            style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)' }} />
+          <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>{na}</span>
+        </div>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>vs</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <img src={adversary.teams.b.flag_url} alt={adversary.teams.b.code}
+            style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)' }} />
+          <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>{nb}</span>
+        </div>
+        {adversary.matchNumber && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)' }}>(#{adversary.matchNumber})</span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', fontStyle: 'italic' }}>
+      {adversary.label || 'A definir'}
+      {adversary.matchNumber && (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, marginLeft: 6 }}>(#{adversary.matchNumber})</span>
+      )}
     </div>
   )
 }

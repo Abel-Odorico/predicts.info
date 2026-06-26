@@ -253,6 +253,133 @@ def bracket_sides(db: Session = Depends(get_db)):
     return {"half_a": half_a, "half_b": half_b}
 
 
+@router.get("/phases")
+def knockout_phases(db: Session = Depends(get_db)):
+    """
+    Consolidated view of all knockout matches with next-round info.
+    R32: resolved from DB (has real team data).
+    R16+: from official schedule (team_a/b_label until resolved).
+    Each match includes `next_match_number` so the UI can draw the path.
+    """
+    from sqlalchemy.orm import joinedload
+    import re
+
+    # ── Build next-match map from schedule labels ─────────────────────────────
+    # e.g. "Winner Match 73" → extract 73 → that match feeds into this schedule entry
+    schedule = fetch_official_knockout_schedule()
+    # map: source_match_number → schedule_entry (the next match)
+    feeds_into: dict[int, dict] = {}
+    for entry in schedule:
+        for label in [entry.get("team_a_label", ""), entry.get("team_b_label", "")]:
+            m = re.search(r"Match (\d+)", label or "")
+            if m:
+                feeds_into[int(m.group(1))] = entry
+
+    # ── R32 matches from DB ───────────────────────────────────────────────────
+    def _team(t: Team | None) -> dict | None:
+        if not t:
+            return None
+        return {"id": t.id, "code": t.code, "name": t.name, "flag_url": t.flag_url}
+
+    r32_matches = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+        .filter(Match.phase == MatchPhase.r32)
+        .order_by(Match.match_date, Match.match_number)
+        .all()
+    )
+
+    r32 = []
+    for m in r32_matches:
+        next_entry = feeds_into.get(m.match_number)
+        r32.append({
+            "id": m.id,
+            "match_number": m.match_number,
+            "match_date": m.match_date.isoformat() if m.match_date else None,
+            "venue": m.venue,
+            "city": m.city,
+            "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+            "team_a": _team(m.team_a),
+            "team_b": _team(m.team_b),
+            "score_a": m.result.score_a if m.result else None,
+            "score_b": m.result.score_b if m.result else None,
+            "half": "A" if m.match_number in HALF_A_R32 else ("B" if m.match_number in HALF_B_R32 else None),
+            "next_match_number": next_entry["match_number"] if next_entry else None,
+            "next_match_date": next_entry["match_date"] if next_entry else None,
+            "next_venue": next_entry.get("venue") if next_entry else None,
+            "next_city": next_entry.get("city") if next_entry else None,
+            "next_phase": next_entry.get("phase") if next_entry else None,
+        })
+
+    # ── R16+ from schedule, enriched with feeds_into ─────────────────────────
+    def _enrich_schedule(phase_key: str) -> list[dict]:
+        out = []
+        for entry in schedule:
+            if entry["phase"] != phase_key:
+                continue
+            next_e = feeds_into.get(entry["match_number"])
+            out.append({
+                "match_number": entry["match_number"],
+                "match_date": str(entry["match_date"]) if entry.get("match_date") else None,
+                "venue": entry.get("venue"),
+                "city": entry.get("city"),
+                "phase": entry["phase"],
+                "section": entry.get("section"),
+                "team_a_label": entry.get("team_a_label"),
+                "team_b_label": entry.get("team_b_label"),
+                "resolved_team_a": entry.get("resolved_team_a"),
+                "resolved_team_b": entry.get("resolved_team_b"),
+                "next_match_number": next_e["match_number"] if next_e else None,
+                "next_match_date": str(next_e["match_date"]) if next_e and next_e.get("match_date") else None,
+                "next_venue": next_e.get("venue") if next_e else None,
+                "next_city": next_e.get("city") if next_e else None,
+                "next_phase": next_e.get("phase") if next_e else None,
+            })
+        out.sort(key=lambda x: (x["match_date"] or "", x["match_number"] or 0))
+        return out
+
+    # Final (match 104 if exists, else derive from SF)
+    sf_entries = _enrich_schedule("sf")
+    final_label_a = None
+    final_label_b = None
+    if len(sf_entries) >= 2:
+        final_label_a = f"Winner Match {sf_entries[0]['match_number']}"
+        final_label_b = f"Winner Match {sf_entries[1]['match_number']}"
+
+    final_entry = {
+        "match_number": 104,
+        "match_date": "2026-07-19T19:00:00",
+        "venue": "MetLife Stadium",
+        "city": "East Rutherford",
+        "phase": "final",
+        "section": "FINAL",
+        "team_a_label": final_label_a or "Winner SF1",
+        "team_b_label": final_label_b or "Winner SF2",
+        "resolved_team_a": None,
+        "resolved_team_b": None,
+        "next_match_number": None,
+        "next_match_date": None,
+        "next_venue": None,
+        "next_city": None,
+        "next_phase": None,
+    }
+    # Wire SF into Final
+    for e in sf_entries:
+        e["next_match_number"] = 104
+        e["next_match_date"] = final_entry["match_date"]
+        e["next_venue"] = final_entry["venue"]
+        e["next_city"] = final_entry["city"]
+        e["next_phase"] = "final"
+
+    return {
+        "r32": r32,
+        "r16": _enrich_schedule("r16"),
+        "qf":  _enrich_schedule("qf"),
+        "sf":  sf_entries,
+        "final": [final_entry],
+    }
+
+
 @router.get("/official-bracket")
 def official_bracket(db: Session = Depends(get_db)):
     table = compute_group_tables(db)
