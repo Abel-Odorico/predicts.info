@@ -1,4 +1,4 @@
-const CACHE = 'predicts-v12'
+const CACHE = 'predicts-v13'
 const ICON  = '/icon-192.png'
 const BADGE = '/favicon-32x32.png'
 
@@ -26,7 +26,10 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-      .then(() => clients.claim())
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window' })
+        .then(all => all.forEach(c => c.postMessage({ type: 'SW_ACTIVATED', cache: CACHE })))
+      )
   )
 })
 

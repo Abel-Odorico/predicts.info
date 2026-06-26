@@ -41,6 +41,7 @@ export default function App() {
       <div className="app">
         <Layout />
         <main className="main">
+          <UpdateBanner />
           <VotacaoBanner />
           <ProfileCompletionNotice />
           <Onboarding />
@@ -82,6 +83,57 @@ export default function App() {
   )
 }
 
+
+// ── Banner de atualização do PWA ──────────────────────────────────────────────
+function UpdateBanner() {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setShow(true)
+    window.addEventListener('sw-update-ready', handler)
+    return () => window.removeEventListener('sw-update-ready', handler)
+  }, [])
+
+  if (!show) return null
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 72, left: 12, right: 12, zIndex: 8500,
+      background: 'var(--bg-card)', border: '1.5px solid var(--accent)',
+      borderRadius: 12, padding: '12px 14px',
+      display: 'flex', alignItems: 'center', gap: 10,
+      boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+      animation: 'fadeSlideUp 300ms ease',
+    }}>
+      <span style={{ fontSize: 20, flexShrink: 0 }}>🚀</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>
+          Nova versão disponível
+        </div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+          Toque em Atualizar para aplicar
+        </div>
+      </div>
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+          background: 'var(--accent)', color: '#fff',
+          fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, flexShrink: 0,
+        }}
+      >
+        Atualizar
+      </button>
+      <button
+        onClick={() => setShow(false)}
+        style={{
+          width: 26, height: 26, borderRadius: 6, border: 'none', cursor: 'pointer',
+          background: 'var(--bg-overlay)', color: 'var(--text-3)', fontSize: 14, flexShrink: 0,
+        }}
+      >×</button>
+    </div>
+  )
+}
 
 function ProfileCompletionNotice() {
   const { user } = useAuth()
