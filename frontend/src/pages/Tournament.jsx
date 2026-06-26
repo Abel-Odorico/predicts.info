@@ -1193,8 +1193,8 @@ function KnockoutBracket({ bracket, className }) {
 
 // ─── Phases / Confrontos Section ──────────────────────────────────────────────
 
-const ROAD_ROAD_PHASE_KEYS = ['r32', 'r16', 'qf', 'sf', 'final']
-const ROAD_ROAD_PHASE_META = {
+const ROAD_PHASE_KEYS = ['r32', 'r16', 'qf', 'sf', 'final']
+const ROAD_PHASE_META = {
   r32:   { label: 'Round de 32',        icon: '⚽', short: 'R32'      },
   r16:   { label: 'Oitavas de Final',   icon: '⚔️', short: 'Oitavas' },
   qf:    { label: 'Quartas de Final',   icon: '🔥', short: 'Quartas'  },
