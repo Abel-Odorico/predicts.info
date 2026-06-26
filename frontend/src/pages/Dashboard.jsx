@@ -218,6 +218,7 @@ export default function Dashboard() {
   const [topBettors, setTopBettors]   = useState([])
   const [liveBets, setLiveBets]       = useState({})
   const [appVersion, setAppVersion]   = useState(null)
+  const [competition, setCompetition] = useState(null)
   const [awards, setAwards]           = useState(null)
   const [loading, setLoading]         = useState(true)
   const [showConvPopup,  setShowConvPopup]  = useState(false)
@@ -265,6 +266,7 @@ export default function Dashboard() {
           setTopBettors(Array.isArray(bettors) ? bettors.filter(b => b.total_points > 0) : [])
         }).catch(() => {})
         api.get('/version/latest').then(v => { if (mounted) setAppVersion(v) }).catch(() => {})
+        api.get('/competition/active').then(c => { if (mounted) setCompetition(c || null) }).catch(() => {})
         api.get('/tournament/awards').then(a => { if (mounted) setAwards(a) }).catch(() => {})
         if (token) {
           api.get('/bets/mine', token).then(myBets => {
@@ -435,6 +437,38 @@ export default function Dashboard() {
       <MyChampionCard compact />
 
       <InstallBanner />
+
+      {/* ── Competição de Fase ── */}
+      {competition && (
+        <Link
+          to="/ranking"
+          style={{ textDecoration: 'none', display: 'block', margin: '12px 0' }}
+          onClick={() => {}}
+        >
+          <div style={{
+            padding: '14px 16px',
+            background: 'linear-gradient(135deg, rgba(232,196,74,0.14) 0%, rgba(232,196,74,0.05) 100%)',
+            border: '1.5px solid rgba(232,196,74,0.35)', borderRadius: 12,
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--amber)', letterSpacing: '0.05em' }}>
+                NOVA FASE DA COMPETIÇÃO
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
+                {competition.name}
+              </div>
+              {competition.promo_text && (
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                  {competition.promo_text}
+                </div>
+              )}
+            </div>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--amber)', flexShrink: 0 }}>Ver →</span>
+          </div>
+        </Link>
+      )}
 
       {token && (
         <button

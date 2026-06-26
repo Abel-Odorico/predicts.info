@@ -69,8 +69,9 @@ const TABS = [
   { id: 'pwa',        label: 'Ícone PWA',    icon: '🖼' },
   { id: 'knockout',   label: 'Mata-Mata',    icon: '⚔️' },
   { id: 'analyses',   label: 'Análises IA',  icon: '🤖' },
-  { id: 'bot',        label: 'Oráculo Predictor', icon: '🔮' },
-  { id: 'report',     label: 'Relatório',    icon: <TgIcon size={20} /> },
+  { id: 'bot',         label: 'Oráculo Predictor', icon: '🔮' },
+  { id: 'report',      label: 'Relatório',    icon: <TgIcon size={20} /> },
+  { id: 'competition', label: 'Competição',   icon: '⚡' },
 ]
 
 const PHASE_LABELS_ADMIN = {
@@ -3663,6 +3664,139 @@ export default function Admin() {
         </div>
       )}
 
+      {/* ── Tab: Competição ──────────────────────────────── */}
+      {tab === 'competition' && <CompetitionTab token={token} />}
+
+    </div>
+  )
+}
+
+// ── CompetitionTab ─────────────────────────────────────────────────────────
+function CompetitionTab({ token }) {
+  const [comps,   setComps]   = useState([])
+  const [editing, setEditing] = useState(null)
+  const [saving,  setSaving]  = useState(false)
+  const [msg,     setMsg]     = useState('')
+
+  const EMPTY = { name: '', description: '', start_date: '', end_date: '', active: true, promo_text: '' }
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    try { setComps(await api.get('/admin/competitions', token)) } catch {}
+  }
+
+  async function save(e) {
+    e.preventDefault(); setSaving(true); setMsg('')
+    try {
+      if (editing.id) await api.patch(`/admin/competition/${editing.id}`, editing, token)
+      else             await api.post('/admin/competition', editing, token)
+      setMsg('✓ Salvo'); setEditing(null); load()
+    } catch (err) { setMsg(`✗ ${err?.message || 'Erro'}`) }
+    finally { setSaving(false) }
+  }
+
+  async function del(id) {
+    if (!window.confirm('Excluir esta competição?')) return
+    try { await api.delete(`/admin/competition/${id}`, token); load() } catch {}
+  }
+
+  const active = comps.find(c => c.active)
+
+  return (
+    <div className="adm-pane fade-in-1">
+      <div className="adm-card" style={{ marginBottom: 16 }}>
+        <div className="adm-card__header">
+          <span className="adm-card__title">⚡ Competição Ativa</span>
+          <button className="btn btn-sm btn-primary" onClick={() => setEditing({ ...EMPTY })}>+ Nova</button>
+        </div>
+        {active ? (
+          <div style={{ padding: '12px 0' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent)', marginBottom: 4 }}>{active.name}</div>
+            {active.description && <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', marginBottom: 8 }}>{active.description}</div>}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)' }}>
+              <span>Início: {active.start_date ? new Date(active.start_date + 'Z').toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}</span>
+              {active.end_date && <span>Fim: {new Date(active.end_date + 'Z').toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span>}
+            </div>
+            {active.promo_text && (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(15,122,120,0.08)', border: '1px solid rgba(15,122,120,0.2)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>
+                "{active.promo_text}"
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', padding: '12px 0' }}>
+            Nenhuma competição ativa. Crie uma para exibir no Ranking e Dashboard.
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <div className="adm-card" style={{ marginBottom: 16 }}>
+          <div className="adm-card__header">
+            <span className="adm-card__title">{editing.id ? 'Editar' : 'Nova Competição'}</span>
+            <button className="btn btn-sm btn-ghost" onClick={() => { setEditing(null); setMsg('') }}>✕</button>
+          </div>
+          <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label className="form-label">Nome *</label>
+              <input className="form-input" value={editing.name} onChange={e => setEditing(p => ({ ...p, name: e.target.value }))} placeholder="ex: Fase Eliminatória — Copa 2026" required />
+            </div>
+            <div>
+              <label className="form-label">Descrição</label>
+              <input className="form-input" value={editing.description || ''} onChange={e => setEditing(p => ({ ...p, description: e.target.value }))} placeholder="Breve descrição exibida no ranking" />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label className="form-label">Data início * (UTC)</label>
+                <input className="form-input" type="datetime-local" value={editing.start_date} onChange={e => setEditing(p => ({ ...p, start_date: e.target.value }))} required />
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>BRT = UTC-3 · ex: 29/06 17h BRT → 29/06T20:00</div>
+              </div>
+              <div>
+                <label className="form-label">Data fim (opcional)</label>
+                <input className="form-input" type="datetime-local" value={editing.end_date || ''} onChange={e => setEditing(p => ({ ...p, end_date: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="form-label">Texto promo (compartilhamento)</label>
+              <input className="form-input" value={editing.promo_text || ''} onChange={e => setEditing(p => ({ ...p, promo_text: e.target.value }))} placeholder="ex: A Copa entrou na fase decisiva! Comece do zero agora →" />
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={editing.active} onChange={e => setEditing(p => ({ ...p, active: e.target.checked }))} />
+              Ativa (exibir no site)
+            </label>
+            {msg && <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: msg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>{msg}</div>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving ? '…' : 'Salvar'}</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditing(null); setMsg('') }}>Cancelar</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {comps.length > 0 && (
+        <div className="adm-card">
+          <div className="adm-card__header"><span className="adm-card__title">Histórico</span></div>
+          {comps.map(c => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>{c.name}</span>
+                  {c.active && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, background: 'rgba(15,122,120,0.15)', color: 'var(--accent)', borderRadius: 4, padding: '2px 6px' }}>ATIVA</span>}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>
+                  {c.start_date ? new Date(c.start_date + 'Z').toLocaleDateString('pt-BR') : '—'}
+                  {c.end_date && ` → ${new Date(c.end_date + 'Z').toLocaleDateString('pt-BR')}`}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => setEditing({ ...c, start_date: c.start_date?.slice(0,16)||'', end_date: c.end_date?.slice(0,16)||'' })}>Editar</button>
+                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--lose)' }} onClick={() => del(c.id)}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

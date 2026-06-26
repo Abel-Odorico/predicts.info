@@ -31,6 +31,7 @@ from routers import bot as bot_router
 from routers.bot import public_router as bot_public_router
 from routers import report as report_router
 from routers import telegram as telegram_router
+from routers import competition as competition_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -384,6 +385,17 @@ def _run_migrations():
             "ALTER TABLE bot_decision_logs ADD COLUMN IF NOT EXISTS slack_sent BOOLEAN DEFAULT FALSE",
             # source pode guardar tag de modelo longa (ex: llm/openrouter/anthropic/claude-sonnet-4-5)
             "ALTER TABLE bot_decision_logs ALTER COLUMN source TYPE VARCHAR(80)",
+            # phase_competitions — competição paralela por fase do torneio
+            """CREATE TABLE IF NOT EXISTS phase_competitions (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(200) NOT NULL,
+                description VARCHAR(500),
+                start_date TIMESTAMP NOT NULL,
+                end_date TIMESTAMP,
+                active BOOLEAN DEFAULT TRUE,
+                promo_text VARCHAR(300),
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
         ]:
             try:
                 conn.execute(text(alter))
@@ -458,6 +470,7 @@ app.include_router(bot_router.router,           prefix="/api")
 app.include_router(bot_public_router,           prefix="/api")
 app.include_router(report_router.router,        prefix="/api")
 app.include_router(telegram_router.router,      prefix="/api")
+app.include_router(competition_router.router,   prefix="/api")
 
 
 @app.get("/api")

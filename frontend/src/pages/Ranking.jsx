@@ -69,6 +69,10 @@ export default function Ranking() {
   const [champPicks,  setChampPicks]  = useState({})
   const [allPicks,    setAllPicks]    = useState([])
   const [showLiga,    setShowLiga]    = useState(false)
+  const [competition, setCompetition] = useState(null)  // competição ativa
+  const [compView,    setCompView]    = useState(false)  // true = vendo ranking da fase
+  const [compData,    setCompData]    = useState([])
+  const [compLoad,    setCompLoad]    = useState(false)
 
   useEffect(() => {
     api.get('/champion/picks/all')
@@ -77,7 +81,23 @@ export default function Ranking() {
         setChampPicks(Object.fromEntries(rows.map(r => [r.user_id, r])))
       })
       .catch(() => {})
+    api.get('/competition/active')
+      .then(c => setCompetition(c || null))
+      .catch(() => {})
   }, [])
+
+  // Carrega ranking da fase quando entra na aba
+  useEffect(() => {
+    if (!compView || !competition) return
+    setCompLoad(true)
+    const start = competition.start_date.slice(0, 10)
+    const end   = competition.end_date ? competition.end_date.slice(0, 10) : ''
+    const qs    = `date_from=${start}${end ? `&date_to=${end}` : ''}&limit=100`
+    api.get(`/ranking?${qs}`)
+      .then(rows => setCompData(rows))
+      .catch(() => setCompData([]))
+      .finally(() => setCompLoad(false))
+  }, [compView, competition])
 
   const loadSilent = useCallback((silent = false) => {
     if (!silent) setLoad(true)
@@ -146,7 +166,92 @@ export default function Ranking() {
 
       <MyChampionCard compact />
 
-      {/* ── Cards de destaque ─────────────────────────────────────────── */}
+      {/* ── Switcher Geral / Fase ─────────────────────────────────────── */}
+      {competition && (
+        <div style={{ display: 'flex', gap: 6, margin: '14px 0 4px', background: 'var(--bg-overlay)', borderRadius: 10, padding: 4 }}>
+          <button
+            onClick={() => setCompView(false)}
+            style={{
+              flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: !compView ? 'var(--bg-surface)' : 'transparent',
+              boxShadow: !compView ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
+              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+              color: !compView ? 'var(--text-1)' : 'var(--text-4)', transition: 'all 150ms',
+            }}
+          >
+            🏆 Ranking Geral
+          </button>
+          <button
+            onClick={() => setCompView(true)}
+            style={{
+              flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: compView ? 'var(--bg-surface)' : 'transparent',
+              boxShadow: compView ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
+              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+              color: compView ? 'var(--accent)' : 'var(--text-4)', transition: 'all 150ms',
+            }}
+          >
+            ⚡ {competition.name}
+          </button>
+        </div>
+      )}
+
+      {/* ── Ranking da Fase ───────────────────────────────────────────── */}
+      {compView && competition && (
+        <div className="fade-in-1">
+          <div style={{
+            margin: '8px 0 16px', padding: '14px 16px',
+            background: 'linear-gradient(135deg,rgba(15,122,120,0.12) 0%,rgba(15,122,120,0.04) 100%)',
+            border: '1.5px solid rgba(15,122,120,0.3)', borderRadius: 12,
+          }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent)', letterSpacing: '0.04em', marginBottom: 4 }}>
+              ⚡ {competition.name}
+            </div>
+            {competition.description && (
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                {competition.description}
+              </div>
+            )}
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)', marginTop: 6 }}>
+              Contabiliza palpites de jogos a partir de {new Date(competition.start_date + 'Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+              {competition.end_date && ` até ${new Date(competition.end_date + 'Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`}
+            </div>
+            {competition.promo_text && (
+              <div style={{ marginTop: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', fontStyle: 'italic' }}>
+                "{competition.promo_text}"
+              </div>
+            )}
+          </div>
+
+          {compLoad ? (
+            <div style={{ textAlign: 'center', padding: 24, fontFamily: 'var(--font-cond)', color: 'var(--text-4)' }}>Carregando...</div>
+          ) : compData.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 24, fontFamily: 'var(--font-cond)', color: 'var(--text-4)' }}>Nenhum palpite nesta fase ainda.</div>
+          ) : (
+            <div className="ranking-table fade-in-1">
+              <div className="ranking-head">
+                <span>#</span><span>Jogador</span><span>Pts</span><span>Palpites</span><span>Exatos</span><span>Aprov.</span>
+              </div>
+              {compData.map((r, i) => (
+                <div key={r.user_id} className={`ranking-row${i < 3 ? ` ranking-row--top${i+1}` : ''}`}>
+                  <span className="rk-pos">{i + 1}</span>
+                  <span className="rk-name">{r.name}</span>
+                  <span className="rk-pts" style={{ color: 'var(--accent)' }}>{r.total_points}</span>
+                  <span className="rk-bets">{r.total_bets}</span>
+                  <span className="rk-exact">{r.exact_scores}</span>
+                  <span className="rk-aprov">
+                    {r.total_bets > 0 ? `${Math.round(r.total_points / (r.total_bets * 25) * 100)}%` : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Cards de destaque (só no ranking geral) ─────────────────────── */}
+      {!compView && (
+      <div>
       {!loading && data.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s6)' }} className="fade-in-2">
           <HighlightCard
@@ -504,6 +609,9 @@ export default function Ranking() {
             ))}
           </div>
         </div>
+      )}
+
+      </div>
       )}
 
       {/* CTA Liga Privada */}

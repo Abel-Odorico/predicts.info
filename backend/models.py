@@ -447,3 +447,16 @@ class AppVersion(Base):
     changes     = Column(JSONB, nullable=True)
     notified_at = Column(DateTime, nullable=True)
     created_at  = Column(DateTime, default=_utcnow, index=True)
+
+
+class PhaseCompetition(Base):
+    __tablename__ = "phase_competitions"
+
+    id          = Column(Integer, primary_key=True)
+    name        = Column(String(200), nullable=False)
+    description = Column(String(500), nullable=True)
+    start_date  = Column(DateTime, nullable=False)   # UTC — primeiro jogo que conta
+    end_date    = Column(DateTime, nullable=True)    # opcional
+    active      = Column(Boolean, default=True)
+    promo_text  = Column(String(300), nullable=True) # texto para compartilhar
+    created_at  = Column(DateTime, default=_utcnow)
