@@ -5,10 +5,73 @@ import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
 import LiveClassificationCard from '../components/LiveClassificationCard'
+import { InstallAppPopup } from '../components/AppPopups'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
 
-const CONV_DISMISS_KEY = 'predicts_conv_popup_v1'
+const CONV_DISMISS_KEY    = 'predicts_conv_popup_v1'
+const INSTALL_BANNER_KEY  = 'predicts_install_banner_v1'
+
+function InstallBanner() {
+  const { install, isStandalone, installed, hasPrompt } = useInstallPrompt()
+  const [showPopup,     setShowPopup]     = useState(false)
+  const [dismissed,     setDismissed]     = useState(() => {
+    const v = localStorage.getItem(INSTALL_BANNER_KEY)
+    return v ? Date.now() < parseInt(v, 10) : false
+  })
+
+  if (isStandalone || installed || dismissed) return null
+
+  function handleInstall() {
+    if (hasPrompt) install()
+    else setShowPopup(true)
+  }
+
+  function handleDismiss() {
+    localStorage.setItem(INSTALL_BANNER_KEY, String(Date.now() + 7 * 86400000))
+    setDismissed(true)
+  }
+
+  return (
+    <>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12, margin: '12px 0',
+        background: 'rgba(15,122,120,0.08)', border: '1px solid rgba(15,122,120,0.25)',
+        borderRadius: 12, padding: '12px 14px',
+      }}>
+        <span style={{ fontSize: 24, flexShrink: 0 }}>📲</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>
+            Instale o app
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+            Acesso rápido + notificações de jogos
+          </div>
+        </div>
+        <button
+          onClick={handleInstall}
+          style={{
+            flexShrink: 0, padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+            background: 'var(--accent)', color: '#fff',
+            fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+          }}
+        >
+          Instalar
+        </button>
+        <button
+          onClick={handleDismiss}
+          style={{
+            flexShrink: 0, width: 26, height: 26, borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: 'var(--bg-overlay)', color: 'var(--text-4)', fontSize: 14, lineHeight: 1,
+          }}
+          aria-label="Fechar"
+        >×</button>
+      </div>
+      {showPopup && <InstallAppPopup onClose={() => setShowPopup(false)} />}
+    </>
+  )
+}
 
 function ConversionPopup({ top3, onClose }) {
   return createPortal(
@@ -357,6 +420,8 @@ export default function Dashboard() {
       </div>
 
       <MyChampionCard compact />
+
+      <InstallBanner />
 
       <LiveClassificationCard />
 
