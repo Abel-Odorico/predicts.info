@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Layout        from './components/Layout'
 import VotacaoBanner from './components/VotacaoBanner'
@@ -41,6 +41,7 @@ export default function App() {
       <div className="app">
         <Layout />
         <main className="main">
+          <PullToRefresh />
           <UpdateBanner />
           <VotacaoBanner />
           <ProfileCompletionNotice />
@@ -87,50 +88,168 @@ export default function App() {
 // ── Banner de atualização do PWA ──────────────────────────────────────────────
 function UpdateBanner() {
   const [show, setShow] = useState(false)
+  const [version, setVersion] = useState(null)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
-    const handler = () => setShow(true)
+    const handler = async () => {
+      setShow(true)
+      try {
+        const v = await api.get('/version/latest')
+        setVersion(v)
+      } catch {}
+    }
     window.addEventListener('sw-update-ready', handler)
     return () => window.removeEventListener('sw-update-ready', handler)
   }, [])
 
   if (!show) return null
 
+  const changes = version?.changes || []
+
   return (
     <div style={{
-      position: 'fixed', bottom: 72, left: 12, right: 12, zIndex: 8500,
-      background: 'var(--bg-card)', border: '1.5px solid var(--accent)',
-      borderRadius: 12, padding: '12px 14px',
-      display: 'flex', alignItems: 'center', gap: 10,
-      boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-      animation: 'fadeSlideUp 300ms ease',
+      position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 68px)',
+      left: 12, right: 12, zIndex: 8500,
+      background: 'var(--bg-card)',
+      border: '2px solid var(--accent)',
+      borderRadius: 14,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
+      animation: 'fadeSlideUp 350ms cubic-bezier(.22,.68,0,1.2)',
+      overflow: 'hidden',
     }}>
-      <span style={{ fontSize: 20, flexShrink: 0 }}>🚀</span>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>
-          Nova versão disponível
+      {/* row principal */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 14px' }}>
+        <span style={{ fontSize: 22, flexShrink: 0 }}>🚀</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)', lineHeight: 1.2 }}>
+            {version ? `v${version.version} — ${version.title}` : 'Nova versão disponível'}
+          </div>
+          {!expanded && changes.length > 0 && (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {changes[0]}
+            </div>
+          )}
         </div>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
-          Toque em Atualizar para aplicar
-        </div>
+        {changes.length > 0 && (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{
+              flexShrink: 0, width: 26, height: 26, borderRadius: 6, border: '1px solid var(--border)',
+              background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer', fontSize: 11,
+            }}
+          >{expanded ? '▲' : '▼'}</button>
+        )}
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            flexShrink: 0, padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+            background: 'var(--accent)', color: '#fff',
+            fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+          }}
+        >Atualizar</button>
+        <button
+          onClick={() => setShow(false)}
+          style={{
+            flexShrink: 0, width: 26, height: 26, borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: 'var(--bg-overlay)', color: 'var(--text-4)', fontSize: 14,
+          }}
+        >×</button>
       </div>
-      <button
-        onClick={() => window.location.reload()}
-        style={{
-          padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-          background: 'var(--accent)', color: '#fff',
-          fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, flexShrink: 0,
-        }}
-      >
-        Atualizar
-      </button>
-      <button
-        onClick={() => setShow(false)}
-        style={{
-          width: 26, height: 26, borderRadius: 6, border: 'none', cursor: 'pointer',
-          background: 'var(--bg-overlay)', color: 'var(--text-3)', fontSize: 14, flexShrink: 0,
-        }}
-      >×</button>
+
+      {/* changelog expandido */}
+      {expanded && changes.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px 14px' }}>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {changes.map((c, i) => (
+              <li key={i} style={{ display: 'flex', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+                <span style={{ color: 'var(--accent)', flexShrink: 0 }}>＋</span>{c}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Pull-to-refresh no PWA standalone ─────────────────────────────────────────
+function PullToRefresh() {
+  const [pullY, setPullY] = useState(0)
+  const [state, setState] = useState('idle') // idle | pulling | releasing | refreshing
+  const startYRef = useRef(0)
+  const THRESHOLD = 72
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || !!window.navigator.standalone
+    if (!isStandalone) return
+
+    function onTouchStart(e) {
+      if (window.scrollY > 2) return
+      startYRef.current = e.touches[0].clientY
+      setState('pulling')
+    }
+
+    function onTouchMove(e) {
+      if (!startYRef.current) return
+      const delta = e.touches[0].clientY - startYRef.current
+      if (delta <= 0) { setPullY(0); return }
+      // ease resistance beyond threshold
+      const y = delta < THRESHOLD ? delta : THRESHOLD + (delta - THRESHOLD) * 0.3
+      setPullY(Math.min(y, THRESHOLD + 30))
+      if (delta > 8) e.preventDefault()
+    }
+
+    function onTouchEnd() {
+      if (!startYRef.current) return
+      startYRef.current = 0
+      if (pullY >= THRESHOLD) {
+        setState('refreshing')
+        setPullY(THRESHOLD)
+        setTimeout(() => window.location.reload(), 500)
+      } else {
+        setState('releasing')
+        setPullY(0)
+        setTimeout(() => setState('idle'), 300)
+      }
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    document.addEventListener('touchend',   onTouchEnd)
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove',  onTouchMove)
+      document.removeEventListener('touchend',   onTouchEnd)
+    }
+  }, [pullY])
+
+  if (state === 'idle') return null
+
+  const progress = Math.min(pullY / THRESHOLD, 1)
+  const isReady  = progress >= 1 || state === 'refreshing'
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
+      height: pullY,
+      background: 'var(--bg-card)',
+      borderBottom: `2px solid ${isReady ? 'var(--accent)' : 'var(--border)'}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+      transition: state === 'releasing' ? 'height 250ms ease, border-color 200ms' : 'border-color 200ms',
+    }}>
+      {state === 'refreshing' ? (
+        <span style={{ fontSize: 20, animation: 'spinCW 0.5s linear infinite', display: 'block' }}>↻</span>
+      ) : (
+        <span style={{
+          fontSize: 18, display: 'block', opacity: progress,
+          transform: `rotate(${progress * 180}deg)`,
+          transition: 'transform 100ms',
+          color: isReady ? 'var(--accent)' : 'var(--text-3)',
+        }}>↓</span>
+      )}
     </div>
   )
 }
