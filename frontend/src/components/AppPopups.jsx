@@ -1,21 +1,46 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+/**
+ * AppPopups — Central de Popups do Predicts.info
+ *
+ * Registro de popups (ordem de prioridade):
+ * ┌─────────────────┬──────────┬──────────────────────────────────────────┐
+ * │ ID              │ Delay    │ Condição                                 │
+ * ├─────────────────┼──────────┼──────────────────────────────────────────┤
+ * │ version         │ 0.8s     │ Nova versão não vista                    │
+ * │ champion        │ 0.8s     │ Logado + prazo aberto + pick incompleto  │
+ * │ install_app     │ 20s      │ Não está em modo standalone (PWA)        │
+ * │ push_prompt     │ 12s      │ Logado + PWA + sem subscription push     │
+ * └─────────────────┴──────────┴──────────────────────────────────────────┘
+ *
+ * Regra: só um popup por vez. Ao fechar, orquestrador passa para o próximo
+ * da fila que ainda não foi exibido nessa sessão.
+ */
+
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import { invalidateChampionCache } from './MyChampionCard'
 
-const CHAMP_DEADLINE = new Date('2026-06-26T12:00:00Z')
-const SEEN_VERSION_KEY = 'predicts_seen_version'
-const CHAMP_DISMISS_KEY = 'predicts_champ_popup_dismissed'  // guarda a data (YYYY-MM-DD)
-const PUSH_DISMISS_KEY  = 'predicts_push_prompt_dismissed'  // timestamp dismiss 7 dias
+// ── Dismiss keys (localStorage) ───────────────────────────────────────────────
+const SEEN_VERSION_KEY   = 'predicts_seen_version'
+const CHAMP_DISMISS_KEY  = 'predicts_champ_popup_dismissed'   // data YYYY-MM-DD
+const INSTALL_DISMISS_KEY = 'predicts_install_popup_v1'       // timestamp
+const PUSH_DISMISS_KEY   = 'predicts_push_prompt_dismissed'   // timestamp
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10)
+const CHAMP_DEADLINE = new Date('2026-06-26T12:00:00Z')
+
+function todayKey() { return new Date().toISOString().slice(0, 10) }
+function isDismissed(key) {
+  const v = localStorage.getItem(key)
+  return v ? Date.now() < parseInt(v, 10) : false
+}
+function dismiss(key, days) {
+  localStorage.setItem(key, String(Date.now() + days * 86400000))
 }
 
-/* ───────────────────────── Modal shell ───────────────────────── */
-function ModalShell({ onClose, children, maxWidth = 460 }) {
+// ── Shared: ModalShell (centro da tela) ───────────────────────────────────────
+function ModalShell({ onClose, children, maxWidth = 460, zIndex = 9500 }) {
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -27,8 +52,8 @@ function ModalShell({ onClose, children, maxWidth = 460 }) {
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 9500,
-        background: 'rgba(3,8,14,0.72)', backdropFilter: 'blur(4px)',
+        position: 'fixed', inset: 0, zIndex,
+        background: 'rgba(3,8,14,0.75)', backdropFilter: 'blur(5px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
       }}
     >
@@ -36,7 +61,7 @@ function ModalShell({ onClose, children, maxWidth = 460 }) {
         onClick={e => e.stopPropagation()}
         className="fade-in-1"
         style={{
-          width: '100%', maxWidth, maxHeight: '88vh', overflowY: 'auto',
+          width: '100%', maxWidth, maxHeight: '90vh', overflowY: 'auto',
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
           position: 'relative',
@@ -57,7 +82,40 @@ function ModalShell({ onClose, children, maxWidth = 460 }) {
   )
 }
 
-/* ───────────────────────── Version popup ───────────────────────── */
+// ── Shared: BottomSheet (mobile-friendly) ─────────────────────────────────────
+function BottomSheet({ onClose, children, zIndex = 9400 }) {
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex,
+        background: 'rgba(3,8,14,0.72)', backdropFilter: 'blur(5px)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        padding: '0 0 env(safe-area-inset-bottom, 16px)',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="fade-in-1"
+        style={{
+          width: '100%', maxWidth: 440,
+          background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+          borderRadius: '16px 16px 0 0', padding: '20px 20px 24px',
+          boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* drag handle */}
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 16px' }} />
+        {children}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 1. POPUP: VERSÃO
+// ═════════════════════════════════════════════════════════════════════════════
 function VersionPopup({ version, onClose }) {
   return (
     <ModalShell onClose={onClose}>
@@ -66,7 +124,7 @@ function VersionPopup({ version, onClose }) {
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>
           NOVIDADES · v{version.version}
         </div>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--text-1)', margin: '6px 0 10px', letterSpacing: '0.02em' }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--text-1)', margin: '6px 0 10px' }}>
           {version.title}
         </h2>
         {version.description && (
@@ -74,7 +132,7 @@ function VersionPopup({ version, onClose }) {
             {version.description}
           </p>
         )}
-        {!!(version.changes && version.changes.length) && (
+        {!!(version.changes?.length) && (
           <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {version.changes.map((c, i) => (
               <li key={i} style={{ display: 'flex', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
@@ -96,7 +154,9 @@ function VersionPopup({ version, onClose }) {
   )
 }
 
-/* ───────────────────────── Champion popup (pick inline) ───────────────────────── */
+// ═════════════════════════════════════════════════════════════════════════════
+// 2. POPUP: CAMPEÃO & VICE
+// ═════════════════════════════════════════════════════════════════════════════
 function MiniTeamGrid({ teams, myId, blockedSet, statMap, halfMap, onPick, saving, accent }) {
   const [q, setQ] = useState('')
   const filtered = teams.filter(t =>
@@ -150,7 +210,7 @@ function ChampionPopup({ token, onClose }) {
   const [halfMap, setHalfMap] = useState({})
   const [myPick, setMyPick] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [step, setStep] = useState('champion')   // 'champion' | 'runner_up'
+  const [step, setStep] = useState('champion')
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
@@ -172,19 +232,17 @@ function ChampionPopup({ token, onClose }) {
     })()
   }, [token])
 
-  const myChampId = myPick?.champion?.team_id
+  const myChampId    = myPick?.champion?.team_id
   const myRunnerUpId = myPick?.runner_up?.team_id
-  const champStatMap = useMemo(() => Object.fromEntries((stats.champion || []).map(s => [s.team_id, s])), [stats])
-  const ruStatMap = useMemo(() => Object.fromEntries((stats.runner_up || []).map(s => [s.team_id, s])), [stats])
-
-  // Vice não pode ser do mesmo lado do campeão (se encontrariam antes da final)
-  const champHalf = myChampId ? halfMap[myChampId] : null
-  const blockedForRu = useMemo(() => {
+  const champStatMap = Object.fromEntries((stats.champion || []).map(s => [s.team_id, s]))
+  const ruStatMap    = Object.fromEntries((stats.runner_up || []).map(s => [s.team_id, s]))
+  const champHalf    = myChampId ? halfMap[myChampId] : null
+  const blockedForRu = (() => {
     if (!champHalf) return new Set(myChampId ? [myChampId] : [])
     const s = new Set(Object.entries(halfMap).filter(([, h]) => h === champHalf).map(([id]) => Number(id)))
     if (myChampId) s.add(myChampId)
     return s
-  }, [champHalf, halfMap, myChampId])
+  })()
 
   async function pick(team, type) {
     setSaving(true); setMsg('')
@@ -202,7 +260,7 @@ function ChampionPopup({ token, onClose }) {
     }
   }
 
-  const done = myChampId && myRunnerUpId
+  const done   = myChampId && myRunnerUpId
   const accent = step === 'champion' ? 'var(--accent)' : '#d4af37'
 
   return (
@@ -212,11 +270,9 @@ function ChampionPopup({ token, onClose }) {
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-1)', margin: '0 0 4px' }}>
           Palpite de Campeão & Vice
         </h2>
-        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: '0 0 14px' }}>
-          Acerte o campeão (+100 pts) e o vice (+50 pts). Escolha direto aqui 👇
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+          Acerte o campeão (+100 pts) e o vice (+50 pts).
         </p>
-
-        {/* Resumo */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           {[
             { label: '🏆 Campeão', pick: myPick?.champion, color: 'var(--accent)', s: 'champion' },
@@ -231,11 +287,11 @@ function ChampionPopup({ token, onClose }) {
                 borderRadius: 10, padding: '9px 11px',
               }}
             >
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginBottom: 3 }}>{label}</div>
               {p ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <img src={p.flag} alt={p.code} style={{ width: 26, height: 18, objectFit: 'cover', borderRadius: 2 }} />
-                  <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>{p.code}</span>
+                  <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13 }}>{p.code}</span>
                 </div>
               ) : (
                 <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', fontStyle: 'italic' }}>escolher</span>
@@ -243,7 +299,6 @@ function ChampionPopup({ token, onClose }) {
             </button>
           ))}
         </div>
-
         {!done && (
           <>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: accent, marginBottom: 8, letterSpacing: '0.04em' }}>
@@ -261,11 +316,9 @@ function ChampionPopup({ token, onClose }) {
             />
           </>
         )}
-
         {msg && (
           <div style={{ marginTop: 12, fontFamily: 'var(--font-cond)', fontSize: 13, color: done ? 'var(--win)' : 'var(--lose)' }}>{msg}</div>
         )}
-
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <Link to="/campeao" onClick={onClose} className="btn btn-ghost btn-sm" style={{ flex: 1, textAlign: 'center' }}>
             Página completa
@@ -279,7 +332,151 @@ function ChampionPopup({ token, onClose }) {
   )
 }
 
-/* ───────────────────────── Push prompt ───────────────────────── */
+// ═════════════════════════════════════════════════════════════════════════════
+// 3. POPUP: INSTALAR APP (novo)
+// ═════════════════════════════════════════════════════════════════════════════
+const INSTALL_STEPS = {
+  android: [
+    { icon: '🌐', text: 'Abra predicts.info no Chrome (Android)' },
+    { icon: '⋮',  text: 'Toque no menu ⋮ no canto superior direito' },
+    { icon: '📲', text: 'Selecione "Instalar app" ou "Adicionar à tela inicial"' },
+    { icon: '✅', text: 'Confirme — o ícone aparece na sua tela inicial' },
+    { icon: '🔔', text: 'Abra o app e aceite as notificações para não perder nada' },
+  ],
+  ios: [
+    { icon: '🧭', text: 'Abra predicts.info no Safari (não Chrome nem Firefox)' },
+    { icon: '⎙',  text: 'Toque em Compartilhar ⎙ na barra inferior do Safari' },
+    { icon: '📲', text: 'Role para baixo e toque "Adicionar à Tela de Início"' },
+    { icon: '✅', text: 'Toque "Adicionar" — o ícone aparece na sua tela inicial' },
+    { icon: '🔔', text: 'Abra o app instalado e aceite as notificações' },
+  ],
+}
+
+function InstallAppPopup({ onClose }) {
+  const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const isAndroid = /android/i.test(navigator.userAgent)
+  const [platform, setPlatform] = useState(isIOS ? 'ios' : 'android')
+
+  const steps = INSTALL_STEPS[platform]
+
+  return (
+    <ModalShell onClose={onClose} maxWidth={480} zIndex={9300}>
+      <div style={{ padding: '28px 24px 22px' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 44, marginBottom: 8 }}>📲</div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-1)', margin: '0 0 6px', letterSpacing: '0.03em' }}>
+            Instale o app grátis
+          </h2>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+            Acesso rápido, notificações de jogos e resultados, funciona offline.
+          </p>
+        </div>
+
+        {/* Platform tabs */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--bg-overlay)', borderRadius: 10, padding: 4 }}>
+          {[
+            { id: 'android', label: '🤖 Android', sub: 'Chrome' },
+            { id: 'ios',     label: '🍎 iPhone / iPad', sub: 'Safari' },
+          ].map(p => (
+            <button
+              key={p.id}
+              onClick={() => setPlatform(p.id)}
+              style={{
+                flex: 1, padding: '8px 6px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: platform === p.id ? 'var(--bg-card)' : 'transparent',
+                boxShadow: platform === p.id ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
+                transition: 'all 150ms',
+              }}
+            >
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: platform === p.id ? 'var(--text-1)' : 'var(--text-4)' }}>
+                {p.label}
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: platform === p.id ? 'var(--accent)' : 'var(--text-4)', marginTop: 1 }}>
+                {p.sub}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Steps */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{
+                flexShrink: 0, width: 34, height: 34, borderRadius: 10,
+                background: i === steps.length - 1 ? 'rgba(15,122,120,0.12)' : 'var(--bg-surface)',
+                border: `1.5px solid ${i === steps.length - 1 ? 'rgba(15,122,120,0.3)' : 'var(--border)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: s.icon === '⋮' || s.icon === '⎙' ? 18 : 16,
+                fontFamily: 'monospace', fontWeight: 700,
+                color: i === steps.length - 1 ? 'var(--accent)' : 'var(--text-2)',
+              }}>
+                {s.icon}
+              </div>
+              <div style={{ paddingTop: 6 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13.5, color: 'var(--text-1)', lineHeight: 1.4 }}>
+                  {s.text}
+                </div>
+                {i === 1 && platform === 'ios' && (
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 3 }}>
+                    Se não aparecer, role a lista de opções para baixo
+                  </div>
+                )}
+                {i === 1 && platform === 'android' && (
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 3 }}>
+                    Nos três pontinhos no topo — pode aparecer como "Instalar app"
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Notification tip */}
+        <div style={{
+          background: 'rgba(15,122,120,0.07)', border: '1px solid rgba(15,122,120,0.2)',
+          borderRadius: 10, padding: '12px 14px', marginBottom: 18,
+        }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)', fontWeight: 700, marginBottom: 4 }}>
+            🔔 Por que ativar notificações?
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
+            Resultado das suas apostas em tempo real · Lembrete antes do jogo começar · Sua posição no ranking atualizada
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1, padding: '11px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
+              background: 'var(--accent)', color: '#fff',
+              fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
+            }}
+          >
+            Já instalei! ✓
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '11px 18px', borderRadius: 9, border: '1px solid var(--border)',
+              background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer',
+              fontFamily: 'var(--font-cond)', fontSize: 13,
+            }}
+          >
+            Depois
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 4. POPUP: ATIVAR NOTIFICAÇÕES PUSH
+// ═════════════════════════════════════════════════════════════════════════════
 function _urlB64ToUint8(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -296,7 +493,6 @@ function PushPromptPopup({ token, onClose }) {
       const perm = await Notification.requestPermission()
       if (perm !== 'granted') { setStatus('denied'); return }
 
-      // Busca VAPID key
       const { publicKey } = await api.get('/push/vapid-key')
       if (!publicKey) { setStatus('error'); return }
 
@@ -312,8 +508,8 @@ function PushPromptPopup({ token, onClose }) {
       const auth = sub.getKey('auth')
       await api.post('/push/subscribe', {
         endpoint: sub.endpoint,
-        p256dh:  key  ? btoa(String.fromCharCode(...new Uint8Array(key)))  : '',
-        auth:    auth ? btoa(String.fromCharCode(...new Uint8Array(auth))) : '',
+        p256dh: key  ? btoa(String.fromCharCode(...new Uint8Array(key)))  : '',
+        auth:   auth ? btoa(String.fromCharCode(...new Uint8Array(auth))) : '',
       }, token)
       setStatus('done')
       setTimeout(onClose, 1800)
@@ -323,148 +519,128 @@ function PushPromptPopup({ token, onClose }) {
     }
   }
 
-  return createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9400,
-        background: 'rgba(3,8,14,0.72)', backdropFilter: 'blur(5px)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-        padding: '0 0 24px',
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        className="fade-in-1"
-        style={{
-          width: '100%', maxWidth: 420,
-          background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-          borderRadius: 16, padding: '20px 20px 18px',
-          boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
-          margin: '0 16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-          <span style={{ fontSize: 32, lineHeight: 1, flexShrink: 0 }}>🔔</span>
-          <div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginBottom: 4 }}>
-              Ativar notificações
-            </div>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5 }}>
-              Receba alertas de resultados de apostas, lembretes de jogos e atualizações do ranking — mesmo com o app fechado.
-            </div>
+  return (
+    <BottomSheet onClose={onClose} zIndex={9400}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
+        <span style={{ fontSize: 32, lineHeight: 1, flexShrink: 0 }}>🔔</span>
+        <div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginBottom: 4 }}>
+            Ativar notificações
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5 }}>
+            Resultados de apostas · Lembretes de jogos · Ranking atualizado — mesmo com o app fechado.
           </div>
         </div>
+      </div>
 
-        {status === 'done' && (
-          <div style={{ textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--win)', padding: '8px 0' }}>
-            ✓ Notificações ativadas!
-          </div>
-        )}
-        {status === 'denied' && (
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', marginBottom: 10 }}>
-            Permissão negada. Acesse as configurações do navegador para desbloquear.
-          </div>
-        )}
-        {status === 'error' && (
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', marginBottom: 10 }}>
-            Erro ao ativar. Tente pelo Perfil → Notificações.
-          </div>
-        )}
+      {status === 'done' && (
+        <div style={{ textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--win)', padding: '8px 0' }}>
+          ✓ Notificações ativadas!
+        </div>
+      )}
+      {status === 'denied' && (
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', marginBottom: 10 }}>
+          Permissão negada. Acesse Configurações do site para desbloquear.
+        </div>
+      )}
+      {status === 'error' && (
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)', marginBottom: 10 }}>
+          Erro ao ativar. Tente em Perfil → Notificações.
+        </div>
+      )}
 
-        {(status === 'idle' || status === 'loading') && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={enable}
-              disabled={status === 'loading'}
-              style={{
-                flex: 1, padding: '10px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
-                background: 'var(--accent)', color: '#fff',
-                fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
-                opacity: status === 'loading' ? 0.7 : 1,
-              }}
-            >
-              {status === 'loading' ? 'Ativando…' : 'Ativar notificações'}
-            </button>
-            <button
-              onClick={onClose}
-              style={{
-                padding: '10px 16px', borderRadius: 9, border: '1px solid var(--border)',
-                background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer',
-                fontFamily: 'var(--font-cond)', fontSize: 13,
-              }}
-            >
-              Agora não
-            </button>
-          </div>
-        )}
-
-        {(status === 'denied' || status === 'error') && (
+      {(status === 'idle' || status === 'loading') && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={enable}
+            disabled={status === 'loading'}
+            style={{
+              flex: 1, padding: '11px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
+              background: 'var(--accent)', color: '#fff',
+              fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
+              opacity: status === 'loading' ? 0.7 : 1,
+            }}
+          >
+            {status === 'loading' ? 'Ativando…' : 'Ativar notificações'}
+          </button>
           <button
             onClick={onClose}
             style={{
-              width: '100%', padding: '10px 0', borderRadius: 9, border: '1px solid var(--border)',
+              padding: '11px 16px', borderRadius: 9, border: '1px solid var(--border)',
               background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer',
               fontFamily: 'var(--font-cond)', fontSize: 13,
             }}
           >
-            Fechar
+            Agora não
           </button>
-        )}
-      </div>
-    </div>,
-    document.body
+        </div>
+      )}
+
+      {(status === 'denied' || status === 'error') && (
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%', padding: '11px 0', borderRadius: 9, border: '1px solid var(--border)',
+            background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer',
+            fontFamily: 'var(--font-cond)', fontSize: 13,
+          }}
+        >
+          Fechar
+        </button>
+      )}
+    </BottomSheet>
   )
 }
 
-/* ───────────────────────── Orchestrator ───────────────────────── */
+// ═════════════════════════════════════════════════════════════════════════════
+// ORQUESTRADOR — controla qual popup aparece e em que ordem
+// ═════════════════════════════════════════════════════════════════════════════
 export default function AppPopups() {
   const { token } = useAuth()
-  const [active, setActive] = useState(null)   // 'version' | 'champion' | 'push' | null
+  const [active, setActive] = useState(null)
   const [versionData, setVersionData] = useState(null)
 
+  // ── 1 & 2: Version → Champion (800ms, logado) ─────────────────────────────
   useEffect(() => {
     let mounted = true
     async function decide() {
-      // 1) Versão nova ainda não vista
       try {
         const v = await api.get('/version/latest')
         if (mounted && v?.version && localStorage.getItem(SEEN_VERSION_KEY) !== v.version) {
-          setVersionData(v)
-          setActive('version')
-          return
+          setVersionData(v); setActive('version'); return
         }
       } catch {}
-      // 2) Campeão (só logado, prazo aberto, palpite incompleto, não dispensado hoje)
-      await maybeChampion()
-    }
-
-    async function maybeChampion() {
       if (!token) return
       if (CHAMP_DEADLINE - Date.now() <= 0) return
       if (localStorage.getItem(CHAMP_DISMISS_KEY) === todayKey()) return
       try {
         const pick = await api.get('/champion/pick', token)
         if (mounted && (!pick?.champion || !pick?.runner_up)) setActive('champion')
-      } catch {
-        if (mounted) setActive('champion')
-      }
+      } catch { if (mounted) setActive('champion') }
     }
-
-    const t = setTimeout(decide, 700)
+    const t = setTimeout(decide, 800)
     return () => { mounted = false; clearTimeout(t) }
   }, [token])
 
-  // Push prompt: logado + suportado + não dispensado + não subscrito ainda
+  // ── 3: Instalar app (20s, qualquer usuário, fora do PWA) ─────────────────
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || !!window.navigator.standalone
+    if (isStandalone) return                         // já instalado
+    if (isDismissed(INSTALL_DISMISS_KEY)) return
+    const t = setTimeout(() => {
+      setActive(prev => prev === null ? 'install_app' : prev)
+    }, 20000)
+    return () => clearTimeout(t)
+  }, [])
+
+  // ── 4: Push prompt (12s, logado, PWA, sem subscription) ──────────────────
   useEffect(() => {
     if (!token) return
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
-    if (typeof Notification === 'undefined' || Notification.permission === 'denied') return
-    if (Notification.permission === 'granted') return  // já tem permissão, sw cuida
-
-    const dismissed = localStorage.getItem(PUSH_DISMISS_KEY)
-    if (dismissed && Date.now() < parseInt(dismissed, 10)) return
-
+    if (typeof Notification === 'undefined') return
+    if (Notification.permission === 'denied' || Notification.permission === 'granted') return
+    if (isDismissed(PUSH_DISMISS_KEY)) return
     const t = setTimeout(async () => {
       try {
         const reg = await navigator.serviceWorker.getRegistration()
@@ -475,17 +651,17 @@ export default function AppPopups() {
     return () => clearTimeout(t)
   }, [token])
 
+  // ── Handlers de fechamento ─────────────────────────────────────────────────
   function closeVersion() {
     if (versionData?.version) localStorage.setItem(SEEN_VERSION_KEY, versionData.version)
     setActive(null)
     setTimeout(() => {
-      if (!token) return
-      if (CHAMP_DEADLINE - Date.now() <= 0) return
+      if (!token || CHAMP_DEADLINE - Date.now() <= 0) return
       if (localStorage.getItem(CHAMP_DISMISS_KEY) === todayKey()) return
       api.get('/champion/pick', token)
         .then(p => { if (!p?.champion || !p?.runner_up) setActive('champion') })
         .catch(() => setActive('champion'))
-    }, 350)
+    }, 400)
   }
 
   function closeChampion() {
@@ -493,13 +669,20 @@ export default function AppPopups() {
     setActive(null)
   }
 
-  function closePush() {
-    localStorage.setItem(PUSH_DISMISS_KEY, String(Date.now() + 7 * 24 * 60 * 60 * 1000))
+  function closeInstall() {
+    dismiss(INSTALL_DISMISS_KEY, 14)
     setActive(null)
   }
 
+  function closePush() {
+    dismiss(PUSH_DISMISS_KEY, 7)
+    setActive(null)
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
-  if (active === 'champion') return <ChampionPopup token={token} onClose={closeChampion} />
-  if (active === 'push') return <PushPromptPopup token={token} onClose={closePush} />
+  if (active === 'champion')               return <ChampionPopup token={token} onClose={closeChampion} />
+  if (active === 'install_app')            return <InstallAppPopup onClose={closeInstall} />
+  if (active === 'push')                   return <PushPromptPopup token={token} onClose={closePush} />
   return null
 }
