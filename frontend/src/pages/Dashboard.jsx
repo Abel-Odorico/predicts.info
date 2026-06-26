@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
@@ -6,6 +7,131 @@ import MyChampionCard from '../components/MyChampionCard'
 import LiveClassificationCard from '../components/LiveClassificationCard'
 import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
+
+const CONV_DISMISS_KEY = 'predicts_conv_popup_v1'
+
+function ConversionPopup({ top3, onClose }) {
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9000,
+        background: 'rgba(3,8,14,0.78)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="fade-in-1"
+        style={{
+          width: '100%', maxWidth: 440,
+          background: 'var(--bg-card)', border: '1.5px solid var(--accent)',
+          borderRadius: 18, boxShadow: '0 24px 60px rgba(0,0,0,0.55)',
+          overflow: 'hidden', position: 'relative',
+        }}
+      >
+        {/* Header accent bar */}
+        <div style={{ height: 4, background: 'linear-gradient(90deg, var(--accent) 0%, #d4af37 100%)' }} />
+
+        <button
+          onClick={onClose}
+          aria-label="Fechar"
+          style={{
+            position: 'absolute', top: 14, right: 14, zIndex: 2,
+            width: 28, height: 28, borderRadius: 7, border: 'none', cursor: 'pointer',
+            background: 'var(--bg-overlay)', color: 'var(--text-2)', fontSize: 15, lineHeight: 1,
+          }}
+        >×</button>
+
+        <div style={{ padding: '20px 22px 22px' }}>
+          {/* Eyebrow */}
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.1em', marginBottom: 6 }}>
+            🏆 COPA DO MUNDO 2026 · FASE ELIMINATÓRIA
+          </div>
+
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-1)', margin: '0 0 4px', letterSpacing: '0.03em', lineHeight: 1.15 }}>
+            Quem vai chegar à Final?
+          </h2>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: '0 0 16px', lineHeight: 1.5 }}>
+            Acompanhe o caminho de cada seleção até o título. Faça seus palpites, entre no bolão e compita com amigos.
+          </p>
+
+          {/* Top 3 favoritos */}
+          {top3.length > 0 && (
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 10 }}>
+                FAVORITOS AO TÍTULO
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {top3.map((t, i) => (
+                  <div key={t.code} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, minWidth: 22, color: i === 0 ? 'var(--accent)' : 'var(--text-4)' }}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
+                    </span>
+                    {t.flag_url && <img src={t.flag_url} alt={t.code} style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 2 }} />}
+                    <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, flex: 1, color: 'var(--text-1)' }}>
+                      {PT_NAMES[t.code] || t.name}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: i === 0 ? 'var(--accent)' : 'var(--text-3)' }}>
+                      {t.prob_title?.toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CTA principal */}
+          <Link
+            to="/login?tab=register"
+            onClick={onClose}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '100%', padding: '12px 0', borderRadius: 10, marginBottom: 8,
+              background: 'var(--accent)', color: '#fff', textDecoration: 'none',
+              fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, letterSpacing: '0.04em',
+            }}
+          >
+            Criar conta grátis e fazer palpites →
+          </Link>
+
+          {/* CTAs secundários */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link
+              to="/torneio"
+              onClick={onClose}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '9px 0', borderRadius: 8, textDecoration: 'none',
+                background: 'var(--bg-overlay)', color: 'var(--text-2)',
+                fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, border: '1px solid var(--border)',
+              }}
+            >
+              📅 Ver confrontos
+            </Link>
+            <Link
+              to="/login"
+              onClick={onClose}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '9px 0', borderRadius: 8, textDecoration: 'none',
+                background: 'var(--bg-overlay)', color: 'var(--text-2)',
+                fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, border: '1px solid var(--border)',
+              }}
+            >
+              Já tenho conta
+            </Link>
+          </div>
+
+          <div style={{ marginTop: 12, textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+            100% gratuito · sem anúncios intrusivos
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
 
 export default function Dashboard() {
   const { token }                     = useAuth()
@@ -20,7 +146,25 @@ export default function Dashboard() {
   const [appVersion, setAppVersion]   = useState(null)
   const [awards, setAwards]           = useState(null)
   const [loading, setLoading]         = useState(true)
+  const [showConvPopup, setShowConvPopup] = useState(false)
   const navigate = useNavigate()
+
+  // Popup de conversão: só para anônimos, 10s de delay, dismiss por 3 dias
+  useEffect(() => {
+    if (token) return
+    const dismissed = localStorage.getItem(CONV_DISMISS_KEY)
+    if (dismissed) {
+      const until = parseInt(dismissed, 10)
+      if (Date.now() < until) return
+    }
+    const t = setTimeout(() => setShowConvPopup(true), 10000)
+    return () => clearTimeout(t)
+  }, [token])
+
+  function closeConvPopup() {
+    localStorage.setItem(CONV_DISMISS_KEY, String(Date.now() + 3 * 24 * 60 * 60 * 1000))
+    setShowConvPopup(false)
+  }
 
   useEffect(() => {
     let mounted = true
@@ -28,7 +172,7 @@ export default function Dashboard() {
     async function loadAll() {
       try {
         const [sched, done, tour, live, fullCalendar] = await Promise.all([
-          api.get('/matches?status=scheduled&limit=10'),
+          api.get('/matches?status=scheduled&limit=50'),
           api.get('/matches?status=finished&limit=10'),
           api.get('/tournament/simulate?n=50000'),
           api.get('/live/world-cup'),
@@ -115,7 +259,7 @@ export default function Dashboard() {
   const top5 = tourney?.teams?.slice(0, 5) || []
   const topProb = top5[0]?.prob_title || 1
   const liveNow = liveGames.filter(game => game.status === 'live')
-  const todaysGames = liveGames.filter(game => game.status !== 'finished')
+  const todaysGames = liveGames
   const totalCalendarMatches = calendar.reduce((sum, day) => sum + day.matches.length, 0)
   const liveUpdatedAt = liveGames.length > 0 ? 'Feed ativo' : 'Sem feed'
   const highlightedGames = [...liveGames]
@@ -126,8 +270,53 @@ export default function Dashboard() {
     })
     .slice(0, 3)
 
+  const top3 = tourney?.teams?.slice(0, 3) || []
+
   return (
     <div className="page">
+
+      {showConvPopup && <ConversionPopup top3={top3} onClose={closeConvPopup} />}
+
+      {/* Hero para usuários não logados */}
+      {!token && !loading && (
+        <div className="fade-in-1" style={{
+          background: 'linear-gradient(135deg, rgba(15,122,120,0.12) 0%, rgba(15,122,120,0.04) 100%)',
+          border: '1.5px solid rgba(15,122,120,0.25)',
+          borderRadius: 14, padding: '20px 22px', marginBottom: 'var(--s5)',
+        }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', letterSpacing: '0.1em', marginBottom: 6 }}>
+            🏆 COPA DO MUNDO 2026 · SIMULADOR + BOLÃO ONLINE
+          </div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-1)', margin: '0 0 6px', letterSpacing: '0.03em', lineHeight: 1.2 }}>
+            Faça palpites · Entre no bolão · Acompanhe a Copa
+          </h2>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Palpite no placar dos jogos, escolha seu campeão e vice, veja o caminho de cada seleção até a final e compita com amigos no bolão gratuito.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link to="/login?tab=register" style={{
+              padding: '9px 18px', borderRadius: 8, background: 'var(--accent)', color: '#fff',
+              textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+            }}>
+              Criar conta grátis →
+            </Link>
+            <Link to="/torneio" style={{
+              padding: '9px 18px', borderRadius: 8, background: 'var(--bg-surface)', color: 'var(--text-2)',
+              textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
+              border: '1px solid var(--border)',
+            }}>
+              📅 Ver confrontos
+            </Link>
+            <Link to="/login" style={{
+              padding: '9px 18px', borderRadius: 8, background: 'transparent', color: 'var(--text-3)',
+              textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13,
+            }}>
+              Entrar
+            </Link>
+          </div>
+        </div>
+      )}
+
       <div className="fade-in-1">
         <div className="dash-header">
           <div>
@@ -333,7 +522,7 @@ export default function Dashboard() {
                 Próximas Partidas
               </span>
             </div>
-            {matches.slice(1, 8).map(m => <MatchRow key={m.id} match={m} />)}
+            {matches.filter(m => m.id !== featured?.id).map(m => <MatchRow key={m.id} match={m} />)}
             {matches.length === 0 && (
               <p style={{ padding: 'var(--s6)', color: 'var(--text-3)', textAlign: 'center', fontFamily: 'var(--font-cond)' }}>
                 Sem partidas agendadas
@@ -602,6 +791,11 @@ function MatchRow({ match, done, bet }) {
     : hasLiveScore
       ? `${match.live_score_a ?? '-'}–${match.live_score_b ?? '-'}`
       : 'vs'
+  const _md = match.match_date
+    ? new Date(match.match_date.endsWith('Z') ? match.match_date : match.match_date + 'Z')
+    : null
+  const matchTime = _md ? _md.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null
+  const matchDateStr = _md ? _md.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : null
 
   const betBadge = done && bet
     ? bet.result === 'exact'   ? { label: '🎯 +3', color: 'var(--accent)' }
@@ -623,6 +817,11 @@ function MatchRow({ match, done, bet }) {
         </div>
         <span className="match-card__sep">
           {scoreLabel}
+          {!done && !isLive && matchTime && (
+            <span style={{ display: 'block', fontSize: 10, color: 'var(--text-4)', fontFamily: 'var(--font-mono)', marginTop: 2, lineHeight: 1 }}>
+              {matchDateStr} {matchTime}
+            </span>
+          )}
         </span>
         <div className="match-card__team">
           {match.team_b.flag_url && (
