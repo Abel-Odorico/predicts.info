@@ -7,6 +7,7 @@ import MyChampionCard from '../components/MyChampionCard'
 import LiveClassificationCard from '../components/LiveClassificationCard'
 import { InstallAppPopup } from '../components/AppPopups'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
+import LigaFlowModal from '../components/LigaFlowModal'
 import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
 
@@ -219,7 +220,8 @@ export default function Dashboard() {
   const [appVersion, setAppVersion]   = useState(null)
   const [awards, setAwards]           = useState(null)
   const [loading, setLoading]         = useState(true)
-  const [showConvPopup, setShowConvPopup] = useState(false)
+  const [showConvPopup,  setShowConvPopup]  = useState(false)
+  const [showLigaModal,  setShowLigaModal]  = useState(false)
   const navigate = useNavigate()
 
   // Popup de conversão: só para anônimos, 10s de delay, dismiss por 3 dias
@@ -349,6 +351,7 @@ export default function Dashboard() {
     <div className="page">
 
       {showConvPopup && <ConversionPopup top3={top3} onClose={closeConvPopup} />}
+      {showLigaModal && <LigaFlowModal token={token} onClose={() => setShowLigaModal(false)} />}
 
       {/* Hero para usuários não logados */}
       {!token && !loading && (
@@ -432,6 +435,31 @@ export default function Dashboard() {
       <MyChampionCard compact />
 
       <InstallBanner />
+
+      {token && (
+        <button
+          type="button"
+          onClick={() => setShowLigaModal(true)}
+          style={{
+            width: '100%', margin: '12px 0', padding: '13px 16px',
+            display: 'flex', alignItems: 'center', gap: 12,
+            background: 'linear-gradient(135deg, rgba(15,122,120,0.12) 0%, rgba(15,122,120,0.06) 100%)',
+            border: '1.5px solid rgba(15,122,120,0.3)', borderRadius: 12,
+            cursor: 'pointer', textAlign: 'left',
+          }}
+        >
+          <span style={{ fontSize: 26, flexShrink: 0 }}>🏆</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--accent)', letterSpacing: '0.06em' }}>
+              MONTE SUA LIGA PRIVADA
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+              Convide amigos e dispute só com sua turma
+            </div>
+          </div>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)', flexShrink: 0 }}>Criar →</span>
+        </button>
+      )}
 
       <LiveClassificationCard />
 

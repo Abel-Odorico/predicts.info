@@ -728,15 +728,43 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
               <p className="group-tool-note">Nenhum link ativo. Solicite ao dono do grupo.</p>
             )
           ) : (
-            <div className="group-link-row">
-              <input readOnly value={inviteLink} className="group-link-row__input" />
-              <button type="button" className="btn btn-primary btn-sm" onClick={shareLink}>
-                {copied ? '✓' : '📤'}
-              </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={copyLink} title="Copiar">
-                📋
-              </button>
-            </div>
+            <>
+              <div className="group-link-row">
+                <input readOnly value={inviteLink} className="group-link-row__input" />
+                <button type="button" className="btn btn-primary btn-sm" onClick={shareLink}>
+                  {copied ? '✓' : '📤'}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={copyLink} title="Copiar">
+                  📋
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`🏆 *${group.name} — Bolão Copa 2026*\n\nVem disputar comigo no Predicts!\n\n👉 ${inviteLink}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                    padding: '9px 0', borderRadius: 8, textDecoration: 'none',
+                    background: '#25D366', color: '#fff',
+                    fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+                  }}
+                >
+                  WhatsApp
+                </a>
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(`🏆 ${group.name} — venha disputar no Predicts!`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                    padding: '9px 0', borderRadius: 8, textDecoration: 'none',
+                    background: '#0088cc', color: '#fff',
+                    fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+                  }}
+                >
+                  Telegram
+                </a>
+              </div>
+            </>
           )}
         </section>
 

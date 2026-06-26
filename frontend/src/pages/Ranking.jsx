@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
+import LigaFlowModal from '../components/LigaFlowModal'
+import { useAuth } from '../stores/authStore'
 
 const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L']
 
@@ -54,6 +56,7 @@ function erros(r) {
 }
 
 export default function Ranking() {
+  const { token } = useAuth()
   const [data,        setData]      = useState([])
   const [todayTop,    setTodayTop]  = useState(null)
   const [loading,     setLoad]      = useState(true)
@@ -65,6 +68,7 @@ export default function Ranking() {
   const [flashUpdate, setFlashUpdate] = useState(false)
   const [champPicks,  setChampPicks]  = useState({})
   const [allPicks,    setAllPicks]    = useState([])
+  const [showLiga,    setShowLiga]    = useState(false)
 
   useEffect(() => {
     api.get('/champion/picks/all')
@@ -501,6 +505,50 @@ export default function Ranking() {
           </div>
         </div>
       )}
+
+      {/* CTA Liga Privada */}
+      <div style={{
+        margin: '24px 0 8px', padding: '18px 16px',
+        background: 'linear-gradient(135deg, rgba(15,122,120,0.10) 0%, rgba(15,122,120,0.04) 100%)',
+        border: '1.5px solid rgba(15,122,120,0.25)', borderRadius: 14,
+        display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <span style={{ fontSize: 32, flexShrink: 0 }}>🏆</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--accent)', letterSpacing: '0.05em' }}>
+            QUER VER O RANKING DA SUA TURMA?
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--text-3)', marginTop: 3, lineHeight: 1.5 }}>
+            Crie uma liga privada, convide seus amigos e dispute separado do ranking geral.
+          </div>
+        </div>
+        {token ? (
+          <button
+            type="button"
+            onClick={() => setShowLiga(true)}
+            style={{
+              flexShrink: 0, padding: '9px 16px', borderRadius: 9, border: 'none', cursor: 'pointer',
+              background: 'var(--accent)', color: '#fff',
+              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+            }}
+          >
+            Criar liga
+          </button>
+        ) : (
+          <Link
+            to="/login"
+            style={{
+              flexShrink: 0, padding: '9px 16px', borderRadius: 9, textDecoration: 'none',
+              background: 'var(--accent)', color: '#fff',
+              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+            }}
+          >
+            Entrar
+          </Link>
+        )}
+      </div>
+
+      {showLiga && <LigaFlowModal token={token} onClose={() => setShowLiga(false)} />}
     </div>
   )
 }
