@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from database import Base, get_db
 from auth_utils import get_current_user, require_admin
-from models import User
+from models import User, UserRole
 from config import settings
 
 router = APIRouter(tags=["push"])
@@ -101,15 +101,18 @@ def vapid_key():
 @router.post("/push/subscribe", status_code=201)
 def subscribe(
     body: SubscribeBody,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    is_new = False
     existing = db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).first()
     if existing:
         existing.user_id = user.id
         existing.p256dh  = body.p256dh
         existing.auth    = body.auth
     else:
+        is_new = True
         db.add(PushSubscription(
             user_id=user.id,
             endpoint=body.endpoint,
@@ -117,6 +120,21 @@ def subscribe(
             auth=body.auth,
         ))
     db.commit()
+
+    if is_new:
+        def _notify_admins():
+            admin_ids = [
+                u.id for u in db.query(User).filter(User.role == UserRole.admin).all()
+            ]
+            if admin_ids:
+                send_push_to_users(
+                    db, admin_ids,
+                    title="🔔 Nova subscrição push",
+                    body=f"{user.name or user.email} ativou notificações",
+                    url="/admin",
+                )
+        background.add_task(_notify_admins)
+
     return {"ok": True}
 
 
