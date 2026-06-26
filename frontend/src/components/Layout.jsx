@@ -6,7 +6,7 @@ import { useAdSense } from '../hooks/useAdSense'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { api } from '../api'
 import ShareModal from './ShareModal'
-import AppPopups from './AppPopups'
+import AppPopups, { InstallAppPopup } from './AppPopups'
 import NotificationBell from './NotificationBell'
 import LiveFloating from './LiveFloating'
 
@@ -56,7 +56,9 @@ export default function Layout() {
   const [drawerOpen, setDrawerOpen]   = useState(false)
   const [shareOpen,  setShareOpen]    = useState(false)
   const [offline, setOffline]         = useState(!navigator.onLine)
-  const { canInstall, install, isIOS } = useInstallPrompt()
+  const { canInstall, install, isIOS, isStandalone, installed, hasPrompt } = useInstallPrompt()
+  const [showInstallModal, setShowInstallModal] = useState(false)
+  const showInstallBtn = !isStandalone && !installed
 
   const [theme, setThemeState] = useState(() => {
     return localStorage.getItem('predicts_theme') || 'system'
@@ -205,20 +207,14 @@ export default function Layout() {
             <span className="sidebar__credit-label">Desenvolvido por</span>
             <span className="sidebar__credit-value">{developerCredit}</span>
           </div>
-          {canInstall && (
-            isIOS ? (
-              <div className="pwa-install-tip">
-                📲 Instalar: toque em <strong>compartilhar</strong> → <strong>Adicionar à Tela Inicial</strong>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={install}
-                className="btn btn-sm w-full pwa-install-btn"
-              >
-                📲 Instalar App
-              </button>
-            )
+          {showInstallBtn && (
+            <button
+              type="button"
+              onClick={() => hasPrompt ? install() : setShowInstallModal(true)}
+              className="btn btn-sm w-full pwa-install-btn"
+            >
+              📲 Instalar App
+            </button>
           )}
           <button
             type="button"
@@ -311,19 +307,13 @@ export default function Layout() {
               <NotificationBell />
             </div>
           )}
-          {canInstall && (
-            isIOS ? (
-              <div className="pwa-install-tip">
-                📲 Toque em compartilhar → <strong>Adicionar à Tela Inicial</strong>
-              </div>
-            ) : (
-              <button
-                onClick={() => { install(); closeDrawer() }}
-                className="btn btn-sm w-full pwa-install-btn"
-              >
-                📲 Instalar App
-              </button>
-            )
+          {showInstallBtn && (
+            <button
+              onClick={() => { closeDrawer(); hasPrompt ? install() : setShowInstallModal(true) }}
+              className="btn btn-sm w-full pwa-install-btn"
+            >
+              📲 Instalar App
+            </button>
           )}
           <button
             type="button"
@@ -350,6 +340,9 @@ export default function Layout() {
 
       {/* ── Popups (novidades de versão + palpite de campeão) ── */}
       <AppPopups />
+
+      {/* ── Popup manual instalar app (Android sem beforeinstallprompt / iOS) ── */}
+      {showInstallModal && <InstallAppPopup onClose={() => setShowInstallModal(false)} />}
 
       {/* ── Widget jogo ao vivo flutuante (global, todas as páginas) ── */}
       <LiveFloating />

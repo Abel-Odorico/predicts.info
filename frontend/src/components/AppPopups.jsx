@@ -62,8 +62,8 @@ function ModalShell({ onClose, children, maxWidth = 460, zIndex = 9500 }) {
         className="fade-in-1"
         style={{
           width: '100%', maxWidth, maxHeight: '90vh', overflowY: 'auto',
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
           position: 'relative',
         }}
       >
@@ -99,7 +99,7 @@ function BottomSheet({ onClose, children, zIndex = 9400 }) {
         className="fade-in-1"
         style={{
           width: '100%', maxWidth: 440,
-          background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+          background: 'var(--bg-surface)', border: '1.5px solid var(--border)',
           borderRadius: '16px 16px 0 0', padding: '20px 20px 24px',
           boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
         }}
@@ -352,7 +352,7 @@ const INSTALL_STEPS = {
   ],
 }
 
-function InstallAppPopup({ onClose }) {
+export function InstallAppPopup({ onClose }) {
   const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent)
   const isAndroid = /android/i.test(navigator.userAgent)
   const [platform, setPlatform] = useState(isIOS ? 'ios' : 'android')

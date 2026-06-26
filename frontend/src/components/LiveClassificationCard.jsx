@@ -7,10 +7,9 @@ const POLL_MS = 10000
 const C_LIVE = 'var(--lose, #e85252)'
 const ptName = t => PT_NAMES[t.code] || t.name || t.code
 
-// Card-resumo da classificação ao vivo para o Dashboard.
-// Só aparece quando há algo decisivo (jogo de grupo ao vivo ou rodada decisiva).
 export default function LiveClassificationCard() {
   const [data, setData] = useState(null)
+  const [dismissed, setDismissed] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -24,11 +23,31 @@ export default function LiveClassificationCard() {
     return () => { alive = false; window.clearInterval(id) }
   }, [])
 
-  if (!data || (data.decisive_games || []).length === 0) return null
+  useEffect(() => {
+    function dismiss() {
+      setDismissed(true)
+      document.removeEventListener('scroll', dismiss, true)
+      document.removeEventListener('click', dismiss, true)
+      document.removeEventListener('touchmove', dismiss, true)
+    }
+    const timer = setTimeout(() => {
+      document.addEventListener('scroll', dismiss, { capture: true })
+      document.addEventListener('click', dismiss, { capture: true })
+      document.addEventListener('touchmove', dismiss, { capture: true })
+    }, 1500)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('scroll', dismiss, true)
+      document.removeEventListener('click', dismiss, true)
+      document.removeEventListener('touchmove', dismiss, true)
+    }
+  }, [])
 
-  const live = (data.decisive_games || []).filter(g => g.live)
-  const show = live.length > 0 ? live : (data.decisive_games || []).slice(0, 3)
+  if (dismissed || !data || (data.decisive_games || []).length === 0) return null
 
+  const show = data.decisive_games || []
+
+  const live = show.filter(g => g.live)
   // Grupos que têm jogo ao vivo → tabela projetada em tempo real
   const liveGroups = [...new Set(live.map(g => g.group_name))].sort()
   const groups = data.groups || {}
@@ -47,17 +66,29 @@ export default function LiveClassificationCard() {
         <span className="badge badge-group">Quem classifica →</span>
       </div>
       <div style={{ padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
-        {show.map(g => (
-          <div key={g.match_id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-            <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--accent)', minWidth: 16 }}>{g.group_name}</span>
-            <TeamMini t={g.team_a} />
-            <span style={{ fontFamily: 'var(--font-data)', fontWeight: 800, color: 'var(--text-1)' }}>
-              {g.live ? `${g.score_a ?? '-'}:${g.score_b ?? '-'}` : 'vs'}
-            </span>
-            <TeamMini t={g.team_b} right />
-            {g.live && <span className="badge badge-live" style={{ fontSize: 8, marginLeft: 'auto' }}>{g.status_raw || 'VIVO'}</span>}
-          </div>
-        ))}
+        {show.map(g => {
+          const _d = g.match_date ? new Date(g.match_date.endsWith('Z') ? g.match_date : g.match_date + 'Z') : null
+          const dateLabel = _d ? _d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : null
+          const timeLabel = _d ? _d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null
+          return (
+            <div key={g.match_id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--accent)', minWidth: 16 }}>{g.group_name}</span>
+              <TeamMini t={g.team_a} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 40 }}>
+                <span style={{ fontFamily: 'var(--font-data)', fontWeight: 800, color: 'var(--text-1)' }}>
+                  {g.live ? `${g.score_a ?? '-'}:${g.score_b ?? '-'}` : 'vs'}
+                </span>
+                {!g.live && dateLabel && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', lineHeight: 1.2, textAlign: 'center' }}>
+                    {dateLabel}<br />{timeLabel}
+                  </span>
+                )}
+              </div>
+              <TeamMini t={g.team_b} right />
+              {g.live && <span className="badge badge-live" style={{ fontSize: 8, marginLeft: 'auto' }}>{g.status_raw || 'VIVO'}</span>}
+            </div>
+          )
+        })}
       </div>
 
       {liveGroups.length > 0 && (

@@ -33,6 +33,7 @@ export function useInstallPrompt() {
 
   // Show button if: prompt available OR iOS (not standalone, not already installed)
   const canInstall = !isStandalone && !installed && (!!prompt || isIOS)
+  const hasPrompt  = !!prompt
 
-  return { canInstall, install, isIOS, installed }
+  return { canInstall, install, isIOS, installed, isStandalone, hasPrompt }
 }
