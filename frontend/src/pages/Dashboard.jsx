@@ -13,15 +13,24 @@ import { useAuth } from '../stores/authStore'
 const CONV_DISMISS_KEY    = 'predicts_conv_popup_v1'
 const INSTALL_BANNER_KEY  = 'predicts_install_banner_v1'
 
+const INSTALL_BANNER_DAYS = 30   // reaparece a cada 30 dias
+const INSTALL_BANNER_X    = 60   // dismiss manual → 60 dias
+
 function InstallBanner() {
   const { install, isStandalone, installed, hasPrompt } = useInstallPrompt()
-  const [showPopup,     setShowPopup]     = useState(false)
-  const [dismissed,     setDismissed]     = useState(() => {
-    const v = localStorage.getItem(INSTALL_BANNER_KEY)
-    return v ? Date.now() < parseInt(v, 10) : false
-  })
+  const [showPopup, setShowPopup] = useState(false)
+  const [visible,   setVisible]   = useState(false)
 
-  if (isStandalone || installed || dismissed) return null
+  useEffect(() => {
+    if (isStandalone || installed) return
+    const v = localStorage.getItem(INSTALL_BANNER_KEY)
+    if (v && Date.now() < parseInt(v, 10)) return
+    // primeira exibição ou 30 dias passados — agenda próxima em 30 dias
+    localStorage.setItem(INSTALL_BANNER_KEY, String(Date.now() + INSTALL_BANNER_DAYS * 86400000))
+    setVisible(true)
+  }, [isStandalone, installed])
+
+  if (!visible) return null
 
   function handleInstall() {
     if (hasPrompt) install()
@@ -29,8 +38,9 @@ function InstallBanner() {
   }
 
   function handleDismiss() {
-    localStorage.setItem(INSTALL_BANNER_KEY, String(Date.now() + 7 * 86400000))
-    setDismissed(true)
+    // × explícito → reseta janela para 60 dias a partir de agora
+    localStorage.setItem(INSTALL_BANNER_KEY, String(Date.now() + INSTALL_BANNER_X * 86400000))
+    setVisible(false)
   }
 
   return (

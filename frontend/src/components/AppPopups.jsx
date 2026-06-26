@@ -23,10 +23,9 @@ import { useAuth } from '../stores/authStore'
 import { invalidateChampionCache } from './MyChampionCard'
 
 // ── Dismiss keys (localStorage) ───────────────────────────────────────────────
-const SEEN_VERSION_KEY   = 'predicts_seen_version'
-const CHAMP_DISMISS_KEY  = 'predicts_champ_popup_dismissed'   // data YYYY-MM-DD
-const INSTALL_DISMISS_KEY = 'predicts_install_popup_v1'       // timestamp
-const PUSH_DISMISS_KEY   = 'predicts_push_prompt_dismissed'   // timestamp
+const SEEN_VERSION_KEY  = 'predicts_seen_version'
+const CHAMP_DISMISS_KEY = 'predicts_champ_popup_dismissed'   // data YYYY-MM-DD
+const PUSH_DISMISS_KEY  = 'predicts_push_prompt_dismissed'   // timestamp
 
 const CHAMP_DEADLINE = new Date('2026-06-26T12:00:00Z')
 
@@ -622,19 +621,7 @@ export default function AppPopups() {
     return () => { mounted = false; clearTimeout(t) }
   }, [token])
 
-  // ── 3: Instalar app (20s, qualquer usuário, fora do PWA) ─────────────────
-  useEffect(() => {
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || !!window.navigator.standalone
-    if (isStandalone) return                         // já instalado
-    if (isDismissed(INSTALL_DISMISS_KEY)) return
-    const t = setTimeout(() => {
-      setActive(prev => prev === null ? 'install_app' : prev)
-    }, 20000)
-    return () => clearTimeout(t)
-  }, [])
-
-  // ── 4: Push prompt (12s, logado, PWA, sem subscription) ──────────────────
+  // ── 3: Push prompt (12s, logado, PWA, sem subscription) ──────────────────
   useEffect(() => {
     if (!token) return
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
@@ -669,11 +656,6 @@ export default function AppPopups() {
     setActive(null)
   }
 
-  function closeInstall() {
-    dismiss(INSTALL_DISMISS_KEY, 14)
-    setActive(null)
-  }
-
   function closePush() {
     dismiss(PUSH_DISMISS_KEY, 7)
     setActive(null)
@@ -682,7 +664,6 @@ export default function AppPopups() {
   // ── Render ────────────────────────────────────────────────────────────────
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
   if (active === 'champion')               return <ChampionPopup token={token} onClose={closeChampion} />
-  if (active === 'install_app')            return <InstallAppPopup onClose={closeInstall} />
   if (active === 'push')                   return <PushPromptPopup token={token} onClose={closePush} />
   return null
 }
