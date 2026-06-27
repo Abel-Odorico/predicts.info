@@ -4,6 +4,7 @@ POST /admin/achievements/evaluate     — scan all users, grant earned achieveme
 """
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from database import get_db
 from auth_utils import get_current_user, require_admin
