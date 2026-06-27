@@ -22,6 +22,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import { invalidateChampionCache } from './MyChampionCard'
 import ShareCompetitionButton from './ShareCompetitionButton'
+import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
 
 // ── Dismiss keys (localStorage) ───────────────────────────────────────────────
 const SEEN_VERSION_KEY  = 'predicts_seen_version'
@@ -596,20 +597,24 @@ function PushPromptPopup({ token, onClose }) {
 // 5. POPUP: NOVA COMPETIÇÃO / FASE
 // ═════════════════════════════════════════════════════════════════════════════
 export function CompetitionPopup({ competition, onClose, showRankingLink = false }) {
+  const { user } = useAuth()
+  const countdown = useCountdown(competition.start_date)
+  const isFuture  = countdown && !countdown.started
   const startDate = competition.start_date
     ? new Date(competition.start_date + (competition.start_date.endsWith('Z') ? '' : 'Z'))
     : null
-  const isFuture = startDate && startDate > new Date()
-  const fmtDate  = startDate
+  const fmtDate   = startDate
     ? startDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long' })
     : null
 
-  const shareText = `⚡ Nova fase do Predicts.info!\n\n${competition.name} — pontuação zerada, todos partem do mesmo ponto.\n\n🏆 Vem competir: https://predicts.info`
-  const waHref    = `https://wa.me/?text=${encodeURIComponent(shareText)}`
-  const tgHref    = `https://t.me/share/url?url=${encodeURIComponent('https://predicts.info')}&text=${encodeURIComponent(`⚡ ${competition.name} — nova competição no Predicts!`)}`
+  const refParam   = user?.id ? `?ref=${user.id}` : ''
+  const inviteUrl  = `https://predicts.info${refParam}`
+  const shareText  = `⚡ Nova fase do Predicts.info!\n\n${competition.name} — pontuação zerada, todos partem do mesmo ponto.\n\n🏆 Vem competir: ${inviteUrl}`
+  const waHref     = `https://wa.me/?text=${encodeURIComponent(shareText)}`
+  const tgHref     = `https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(`⚡ ${competition.name} — nova competição no Predicts!`)}`
 
   function copyLink() {
-    navigator.clipboard?.writeText('https://predicts.info').catch(() => {})
+    navigator.clipboard?.writeText(inviteUrl).catch(() => {})
   }
 
   return (
@@ -633,11 +638,16 @@ export function CompetitionPopup({ competition, onClose, showRankingLink = false
               {competition.description}
             </p>
           )}
-          {fmtDate && (
-            <div style={{ marginTop: 10, fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', fontWeight: 700 }}>
-              📅 {isFuture ? `Começa em ${fmtDate}` : `Iniciou em ${fmtDate}`}
-            </div>
-          )}
+          {isFuture && countdown
+            ? <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+                <CountdownDisplay timeLeft={countdown} />
+              </div>
+            : fmtDate && (
+              <div style={{ marginTop: 10, fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', fontWeight: 700 }}>
+                📅 {isFuture ? `Começa em ${fmtDate}` : `Iniciou em ${fmtDate}`}
+              </div>
+            )
+          }
         </div>
 
         {/* Body */}
@@ -710,7 +720,7 @@ export function CompetitionPopup({ competition, onClose, showRankingLink = false
               fontFamily: 'var(--font-cond)', fontSize: 13, marginBottom: 14,
             }}
           >
-            📋 Copiar link predicts.info
+            📋 Copiar link{user?.id ? ' com meu convite' : ' predicts.info'}
           </button>
 
           {showRankingLink && (

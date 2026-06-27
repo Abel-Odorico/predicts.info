@@ -10,6 +10,7 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import LigaFlowModal from '../components/LigaFlowModal'
 import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
+import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
 
 const CONV_DISMISS_KEY    = 'predicts_conv_popup_v1'
 const INSTALL_BANNER_KEY  = 'predicts_install_banner_v1'
@@ -225,6 +226,7 @@ export default function Dashboard() {
   const [showLigaModal,  setShowLigaModal]  = useState(false)
   const [showCompPopup,  setShowCompPopup]  = useState(false)
   const navigate = useNavigate()
+  const compCountdown = useCountdown(competition?.start_date)
 
   // Popup de conversão: só para anônimos, 10s de delay, dismiss por 3 dias
   useEffect(() => {
@@ -441,13 +443,7 @@ export default function Dashboard() {
 
       {/* ── Competição de Fase ── */}
       {competition && (() => {
-        const startDate = competition.start_date
-          ? new Date(competition.start_date + (competition.start_date.endsWith('Z') ? '' : 'Z'))
-          : null
-        const isFuture  = startDate && startDate > new Date()
-        const fmtDate   = startDate
-          ? startDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })
-          : null
+        const isFuture = compCountdown && !compCountdown.started
         return (
           <button
             type="button"
@@ -463,16 +459,19 @@ export default function Dashboard() {
             <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#e8c44a', letterSpacing: '0.08em' }}>
-                {isFuture ? `EM BREVE · ${fmtDate || ''}` : 'NOVA FASE DA COMPETIÇÃO'}
+                {isFuture ? 'EM BREVE' : 'NOVA FASE DA COMPETIÇÃO'}
               </div>
               <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
                 {competition.name}
               </div>
-              {competition.promo_text && (
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                  {competition.promo_text}
-                </div>
-              )}
+              {isFuture && compCountdown
+                ? <CountdownDisplay timeLeft={compCountdown} style={{ marginTop: 4 }} />
+                : competition.promo_text && (
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                    {competition.promo_text}
+                  </div>
+                )
+              }
             </div>
             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', flexShrink: 0 }}>Ver →</span>
           </button>

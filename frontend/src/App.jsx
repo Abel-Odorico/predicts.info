@@ -35,9 +35,21 @@ const Regras        = lazy(() => import('./pages/Regras'))
 const Changelog     = lazy(() => import('./pages/Changelog'))
 const ChampionPick  = lazy(() => import('./pages/ChampionPick'))
 
+function RefCapture() {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get('ref')
+    if (ref && /^\d+$/.test(ref)) {
+      localStorage.setItem('predicts_ref', ref)
+    }
+  }, [])
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <RefCapture />
       <div className="app">
         <Layout />
         <main className="main">
@@ -65,6 +77,7 @@ export default function App() {
               <Route path="/admin/options"    element={<AdminOptions />} />
               <Route path="/admin/analytics"  element={<Analytics />} />
               <Route path="/login"            element={<Login />} />
+              <Route path="/entrar"           element={<Login initialMode="register" />} />
               <Route path="/privacidade"      element={<Privacy />} />
               <Route path="/termos"           element={<Terms />} />
               <Route path="/sobre"            element={<About />} />

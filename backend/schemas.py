@@ -132,6 +132,7 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8)
     username: str | None = None
     phone: str | None = None
+    referred_by: int | None = None
 
 
 class UserResponse(BaseModel):

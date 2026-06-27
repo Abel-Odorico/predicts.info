@@ -32,6 +32,7 @@ from routers.bot import public_router as bot_public_router
 from routers import report as report_router
 from routers import telegram as telegram_router
 from routers import competition as competition_router
+from routers import referral as referral_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -471,6 +472,7 @@ app.include_router(bot_public_router,           prefix="/api")
 app.include_router(report_router.router,        prefix="/api")
 app.include_router(telegram_router.router,      prefix="/api")
 app.include_router(competition_router.router,   prefix="/api")
+app.include_router(referral_router.router,      prefix="/api")
 
 
 @app.get("/api")

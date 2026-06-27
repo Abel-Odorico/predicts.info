@@ -3681,6 +3681,8 @@ function CompetitionTab({ token }) {
   const [msg,       setMsg]       = useState('')
   const [phaseRank, setPhaseRank] = useState([])
   const [rankLoad,  setRankLoad]  = useState(false)
+  const [blasting,  setBlasting]  = useState(false)
+  const [blastMsg,  setBlastMsg]  = useState('')
 
   const EMPTY = { name: '', description: '', start_date: '', end_date: '', active: true, promo_text: '' }
 
@@ -3722,6 +3724,20 @@ function CompetitionTab({ token }) {
     try { await api.delete(`/admin/competition/${id}`, token); load() } catch {}
   }
 
+  async function blast(comp) {
+    if (!window.confirm(`Enviar push para TODOS os usuários sobre "${comp.name}"?`)) return
+    setBlasting(true); setBlastMsg('')
+    try {
+      const r = await api.post('/admin/push/send', {
+        title: `⚡ ${comp.name}`,
+        body: comp.promo_text || 'Nova fase! Pontuação zerada — todos partem do mesmo ponto.',
+        url: '/ranking',
+      }, token)
+      setBlastMsg(`✓ Push enviado (${r?.sent ?? '—'} dispositivos)`)
+    } catch (e) { setBlastMsg(`✗ ${e?.message || 'Erro ao enviar'}`) }
+    finally { setBlasting(false); setTimeout(() => setBlastMsg(''), 6000) }
+  }
+
   const active   = comps.find(c => c.active)
   const oraculo  = phaseRank.find(r => r.user_id === ORACULO_ID)
   const oraculoPos = oraculo ? phaseRank.findIndex(r => r.user_id === ORACULO_ID) + 1 : null
@@ -3746,6 +3762,20 @@ function CompetitionTab({ token }) {
                 "{active.promo_text}"
               </div>
             )}
+            <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button className="btn btn-sm btn-ghost" onClick={() => setEditing({ ...active, start_date: active.start_date?.slice(0,16)||'', end_date: active.end_date?.slice(0,16)||'' })}>
+                ✏️ Editar
+              </button>
+              <button
+                className="btn btn-sm"
+                disabled={blasting}
+                onClick={() => blast(active)}
+                style={{ background: 'rgba(232,196,74,0.15)', color: '#e8c44a', border: '1px solid rgba(232,196,74,0.3)' }}
+              >
+                {blasting ? '📣 Enviando…' : '📣 Notificar todos'}
+              </button>
+              {blastMsg && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: blastMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>{blastMsg}</span>}
+            </div>
           </div>
         ) : (
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', padding: '12px 0' }}>

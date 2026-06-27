@@ -17,12 +17,26 @@ export default function Profile() {
   const push = usePushNotifications(token)
   const [achievements, setAchievements] = useState([])
   const [achLoading, setAchLoading] = useState(false)
+  const [referral, setReferral] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!token) return
     setAchLoading(true)
     api.get('/achievements', token).then(setAchievements).catch(() => {}).finally(() => setAchLoading(false))
   }, [token])
+
+  useEffect(() => {
+    if (!token) return
+    api.get('/me/referral', token).then(setReferral).catch(() => {})
+  }, [token])
+
+  function copyInviteLink() {
+    if (!referral?.invite_url) return
+    navigator.clipboard?.writeText(referral.invite_url).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
 
   const [name, setName]         = useState(user?.name ?? '')
   const [username, setUsername] = useState(user?.username ?? '')
@@ -120,6 +134,49 @@ export default function Profile() {
           </Link>
         </div>
       </div>
+
+      {/* ── Card de Convite / Referral ── */}
+      {referral && (
+        <div className="card mt-4 fade-in-2" style={{
+          border: '1.5px solid rgba(232,196,74,0.25)',
+          background: 'linear-gradient(135deg,rgba(232,196,74,0.07) 0%,rgba(232,196,74,0.02) 100%)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 22 }}>⚡</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: '#e8c44a' }}>
+                Convide amigos
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>
+                {referral.invited_count > 0
+                  ? `Você já trouxe ${referral.invited_count} predictor${referral.invited_count !== 1 ? 'es' : ''}! 🎉`
+                  : 'Seu link de convite pessoal'}
+              </div>
+            </div>
+            {referral.invited_count > 0 && (
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: '#e8c44a', fontWeight: 700 }}>
+                {referral.invited_count}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{
+              flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)',
+              background: 'var(--bg-overlay)', borderRadius: 8, padding: '8px 10px',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {referral.invite_url}
+            </div>
+            <button
+              onClick={copyInviteLink}
+              className="btn btn-sm"
+              style={{ background: copied ? 'rgba(46,201,128,0.15)' : 'rgba(232,196,74,0.15)', color: copied ? 'var(--win)' : '#e8c44a', border: '1px solid currentColor', flexShrink: 0 }}
+            >
+              {copied ? '✓ Copiado' : '📋 Copiar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="tabs mt-6">
         {[

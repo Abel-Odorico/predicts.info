@@ -84,10 +84,10 @@ function StatsTicker() {
   )
 }
 
-export default function Login() {
+export default function Login({ initialMode = 'login' }) {
   const { login, user } = useAuth()
   const navigate = useNavigate()
-  const [mode, setMode]     = useState('login')
+  const [mode, setMode]     = useState(initialMode)
   const [email, setEmail]   = useState('')
   const [pass, setPass]     = useState('')
   const [name, setName]     = useState('')
@@ -97,6 +97,7 @@ export default function Login() {
   const [checkingUsername, setCheckingUsername] = useState(false)
   const [err, setErr]       = useState('')
   const [loading, setLoad]  = useState(false)
+  const refId = typeof window !== 'undefined' ? localStorage.getItem('predicts_ref') : null
 
   if (user) {
     navigate('/')
@@ -160,7 +161,8 @@ export default function Login() {
         }
       } else {
         if (pass.length < 8) { setErr('A senha deve ter ao menos 8 caracteres'); setLoad(false); return }
-        await api.post('/auth/register', { email, password: pass, name, username: normalizedUsername, phone })
+        const refPayload = refId ? { referred_by: parseInt(refId, 10) } : {}
+        await api.post('/auth/register', { email, password: pass, name, username: normalizedUsername, phone, ...refPayload })
         const data = await api.login(email, pass)
         const me = await api.get('/auth/me', data.access_token)
         login(me, data.access_token)

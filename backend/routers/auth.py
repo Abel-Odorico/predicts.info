@@ -142,6 +142,12 @@ def register(payload: UserCreate, background_tasks: BackgroundTasks, request: Re
     if phone and _phone_exists(db, phone):
         raise HTTPException(409, "Telefone já cadastrado em outra conta")
 
+    referred_by_id = None
+    if payload.referred_by:
+        ref = db.query(User).filter(User.id == payload.referred_by).first()
+        if ref:
+            referred_by_id = ref.id
+
     user = User(
         email=payload.email,
         username=username,
@@ -149,6 +155,7 @@ def register(payload: UserCreate, background_tasks: BackgroundTasks, request: Re
         name=name,
         password_hash=hash_password(payload.password),
         role=UserRole.user,
+        referred_by=referred_by_id,
     )
     db.add(user)
     db.flush()
