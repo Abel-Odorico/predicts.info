@@ -246,23 +246,134 @@ export default function Ranking() {
                   <HighlightCard icon="📈" label="Melhor Aproveitamento" name={cTopAcerto?.name || '—'} stat={cTopAcerto ? `${aproveitamento(cTopAcerto) ?? 0}% aproveito` : `mín. ${MIN_APROV_BETS} palpites`} sub={cTopAcerto ? `${cTopAcerto.total_points} pts em ${cTopAcerto.total_bets} palpites` : `Ninguém com ${MIN_APROV_BETS}+ palpites`} userId={cTopAcerto?.user_id} accent="#c4e84a" />
                 </div>
 
-                {/* Tabela */}
-                <div className="ranking-table fade-in-2" style={{ '--rk-accent': AMBER }}>
-                  <div className="ranking-head">
-                    <span>#</span><span>Predictor</span><span>Pts</span><span>Palpites</span><span>Exatos</span><span>Aprov.</span>
+                {/* Tabela completa — mesma estrutura do ranking geral */}
+                <div className="card fade-in-2" style={{ border: `1px solid rgba(232,196,74,0.2)` }}>
+                  <div className="card__header">
+                    <span className="section-title" style={{ margin: 0, border: 'none', padding: 0, color: AMBER }}>
+                      ⚡ Classificação da Fase
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>
+                      {compData.length} predictor{compData.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
-                  {compData.map((r, i) => (
-                    <div key={r.user_id} className={`ranking-row${i < 3 ? ` ranking-row--top${i+1}` : ''}`}>
-                      <span className="rk-pos">{i + 1}</span>
-                      <span className="rk-name">{r.name}</span>
-                      <span className="rk-pts" style={{ color: AMBER }}>{r.total_points}</span>
-                      <span className="rk-bets">{r.total_bets}</span>
-                      <span className="rk-exact">{r.exact_scores}</span>
-                      <span className="rk-aprov">
-                        {r.total_bets > 0 ? `${Math.round(r.total_points / (r.total_bets * 25) * 100)}%` : '—'}
-                      </span>
-                    </div>
-                  ))}
+
+                  {/* Header */}
+                  <div className="ranking-head" style={{ padding: '6px var(--s4)' }}>
+                    <span className="rk-h" style={{ textAlign: 'center' }}>#</span>
+                    <span className="rk-h">Predictor</span>
+                    <span className="rk-h" style={{ textAlign: 'right' }}>Pts</span>
+                    <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }}>Palpites</span>
+                    <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }}>🎯 Exatos</span>
+                    <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }}>Aprov.</span>
+                    <span className="rk-h ranking-col-hide" style={{ textAlign: 'right' }}>% Res.</span>
+                  </div>
+
+                  {/* Rows */}
+                  {compData.map((r, i) => {
+                    const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
+                    const leaderPts   = compData[0]?.total_points || 1
+                    const gapLeader   = (compData[0]?.total_points ?? 0) - r.total_points
+                    const cp          = champPicks[r.user_id]
+                    return (
+                      <Link
+                        key={r.user_id}
+                        to={`/usuarios/${r.user_id}/historico`}
+                        className={`ranking-row fade-in ${podiumClass}`}
+                        style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent' }}
+                      >
+                        <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`} style={{ textAlign: 'center' }}>
+                          {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                        </span>
+
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r.name}
+                          </div>
+                          {/* Barra relativa ao líder — âmbar */}
+                          <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${(r.total_points / leaderPts) * 100}%`,
+                              background: i === 0 ? AMBER : i === 1 ? 'var(--text-2)' : i === 2 ? 'var(--win)' : 'var(--border-accent)',
+                              borderRadius: 2, transition: 'width 600ms ease',
+                            }} />
+                          </div>
+                          {cp && (cp.champion || cp.runner_up) && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                              {cp.champion && (
+                                <span title={`🏆 Campeão: ${cp.champion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <img src={cp.champion.flag} alt={cp.champion.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: AMBER }}>🏆</span>
+                                </span>
+                              )}
+                              {cp.runner_up && (
+                                <span title={`🥈 Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <img src={cp.runner_up.flag} alt={cp.runner_up.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#d4af37' }}>🥈</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div className="ranking-row__mobile-stats">
+                            <span>{r.total_bets ?? 0} palp.</span>
+                            <span>·</span>
+                            <span style={{ color: 'var(--win)' }}>✓{acertos(r)}</span>
+                            <span style={{ color: 'var(--lose)' }}>✗{erros(r)}</span>
+                            <span>·</span>
+                            <span>🎯{r.exact_scores ?? 0}</span>
+                            <span>·</span>
+                            <span>{aproveitamento(r) ?? '—'}% aprov.</span>
+                            {i > 0 && <><span>·</span><span>−{gapLeader} líder</span></>}
+                          </div>
+                        </div>
+
+                        {/* Pts */}
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: AMBER, fontWeight: 700, lineHeight: 1 }}>
+                            {r.total_points}
+                          </div>
+                          {i > 0 && gapLeader > 0 && (
+                            <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>−{gapLeader}</div>
+                          )}
+                        </div>
+
+                        {/* Palpites */}
+                        <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                          <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>{r.total_bets ?? 0}</div>
+                          {r.total_bets > 0 && (
+                            <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, marginTop: 3 }}>
+                              <span style={{ color: 'var(--win)' }}>✓{acertos(r)}</span>{' '}
+                              <span style={{ color: 'var(--lose)' }}>✗{erros(r)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Exatos */}
+                        <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                          <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: r.exact_scores ? AMBER : 'var(--text-4)' }}>
+                            {r.exact_scores ?? 0}
+                          </div>
+                          {r.total_bets > 0 && (
+                            <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>{pctExato(r) ?? 0}%</div>
+                          )}
+                        </div>
+
+                        {/* Aproveitamento */}
+                        <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                          {(() => { const v = aproveitamento(r); return v !== null
+                            ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: v >= 60 ? 'var(--win)' : v >= 30 ? AMBER : 'var(--text-3)' }}>{v}%</span>
+                            : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
+                        </div>
+
+                        {/* % Resultado */}
+                        <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                          {(() => { const v = pctResultado(r); return v !== null
+                            ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: v >= 60 ? 'var(--win)' : v >= 35 ? AMBER : 'var(--text-3)' }}>{v}%</span>
+                            : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
+                        </div>
+                      </Link>
+                    )
+                  })}
                 </div>
               </>
             )}
