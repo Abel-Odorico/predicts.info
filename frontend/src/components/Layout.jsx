@@ -59,6 +59,7 @@ export default function Layout() {
   const { canInstall, install, isIOS, isStandalone, installed, hasPrompt } = useInstallPrompt()
   const [showInstallModal, setShowInstallModal] = useState(false)
   const showInstallBtn = !isStandalone && !installed
+  const [inviteCount, setInviteCount] = useState(0)
 
   const [theme, setThemeState] = useState(() => {
     return localStorage.getItem('predicts_theme') || 'system'
@@ -100,6 +101,19 @@ export default function Layout() {
       .then(cfg => { if (cfg.developer_credit) setDeveloperCredit(cfg.developer_credit) })
       .catch(() => {})
   }, [])
+
+  // Poll pending group invites every 5 min
+  useEffect(() => {
+    if (!token) { setInviteCount(0); return }
+    function fetchInvites() {
+      api.get('/user-groups', token)
+        .then(res => setInviteCount((res?.pending_invites ?? []).length))
+        .catch(() => {})
+    }
+    fetchInvites()
+    const id = setInterval(fetchInvites, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [token])
 
   const cycleTheme = useCallback(() => {
     const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]
@@ -156,7 +170,12 @@ export default function Layout() {
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             >
               <span className="nav-item__icon">{n.icon}</span>
-              <span>{n.label}</span>
+              <span style={{ flex: 1 }}>{n.label}</span>
+              {n.to === '/meus-grupos' && inviteCount > 0 && (
+                <span style={{ minWidth: 18, height: 18, borderRadius: 9, background: 'var(--lose)', color: '#fff', fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-cond)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                  {inviteCount}
+                </span>
+              )}
             </NavLink>
           ))}
           {user?.role === 'admin' && (
@@ -277,9 +296,15 @@ export default function Layout() {
               key={n.to} to={n.to}
               onClick={closeDrawer}
               className={({ isActive }) => `mobile-drawer__item mobile-drawer__item--featured${isActive ? ' active' : ''}`}
+              style={{ position: 'relative' }}
             >
               <span className="mobile-drawer__item-icon">{n.icon}</span>
               <span className="mobile-drawer__item-label">{n.label}</span>
+              {n.to === '/meus-grupos' && inviteCount > 0 && (
+                <span style={{ position: 'absolute', top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 8, background: 'var(--lose)', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                  {inviteCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>

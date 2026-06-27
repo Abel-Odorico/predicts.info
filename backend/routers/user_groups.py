@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from auth_utils import get_current_user
 from database import get_db
-from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
+from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Notification, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
 from routers.audit import log_action
 
 router = APIRouter(prefix="/user-groups", tags=["user-groups"])
@@ -332,6 +332,28 @@ def invite_to_group(
     })
     db.commit()
     db.refresh(invite)
+
+    # Notify invitee (if registered user)
+    if invitee_user:
+        db.add(Notification(
+            user_id=invitee_user.id,
+            type="group_invite",
+            title=f"👥 Convite para '{group.name}'",
+            body=f"{user.name} te convidou para entrar no bolão",
+            meta={"group_id": group_id, "invite_id": invite.id, "group_name": group.name, "inviter_name": user.name},
+        ))
+        db.commit()
+        try:
+            from routers.push import send_push_to_users
+            send_push_to_users(
+                db, [invitee_user.id],
+                f"👥 Convite para '{group.name}'",
+                f"{user.name} te convidou para o bolão",
+                "/meus-grupos",
+            )
+        except Exception:
+            pass
+
     return {
         "id": invite.id,
         "group_id": invite.group_id,

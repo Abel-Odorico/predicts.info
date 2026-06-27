@@ -25,9 +25,10 @@ import ShareCompetitionButton from './ShareCompetitionButton'
 import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
 
 // ── Dismiss keys (localStorage) ───────────────────────────────────────────────
-const SEEN_VERSION_KEY  = 'predicts_seen_version'
-const CHAMP_DISMISS_KEY = 'predicts_champ_popup_dismissed'   // data YYYY-MM-DD
-const PUSH_DISMISS_KEY  = 'predicts_push_prompt_dismissed'   // timestamp
+const SEEN_VERSION_KEY   = 'predicts_seen_version'
+const CHAMP_DISMISS_KEY  = 'predicts_champ_popup_dismissed'   // data YYYY-MM-DD
+const PUSH_DISMISS_KEY   = 'predicts_push_prompt_dismissed'   // timestamp
+const INVITE_DISMISS_KEY = 'predicts_invite_popup_last'       // timestamp (30 min)
 
 const CHAMP_DEADLINE = new Date('2026-06-26T12:00:00Z')
 
@@ -756,6 +757,79 @@ export function CompetitionPopup({ competition, onClose, showRankingLink = false
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 6. POPUP: CONVITE PARA GRUPO
+// ═════════════════════════════════════════════════════════════════════════════
+function InvitePopup({ invites, token, onClose }) {
+  const [responding, setResponding] = useState({})
+  const [localInvites, setLocalInvites] = useState(invites)
+
+  async function respond(inviteId, action) {
+    setResponding(r => ({ ...r, [inviteId]: action }))
+    try {
+      await api.post(`/user-groups/invites/${inviteId}/${action}`, {}, token)
+      setLocalInvites(prev => prev.filter(i => i.id !== inviteId))
+    } catch {}
+    setResponding(r => { const n = {...r}; delete n[inviteId]; return n })
+  }
+
+  if (localInvites.length === 0) { onClose(); return null }
+
+  return (
+    <BottomSheet onClose={onClose}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a90e8', marginBottom: 6 }}>
+        👥 Convite{localInvites.length > 1 ? 's' : ''} para Bolão
+      </div>
+      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-1)', margin: '0 0 14px', lineHeight: 1.1 }}>
+        Você foi convidado!
+      </h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        {localInvites.map(invite => (
+          <div key={invite.id} style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginBottom: 3 }}>
+              {invite.group_name}
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+              Convite de {invite.inviter_name || 'um membro'}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => respond(invite.id, 'accept')}
+                disabled={!!responding[invite.id]}
+                style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, opacity: responding[invite.id] ? 0.6 : 1 }}
+              >
+                {responding[invite.id] === 'accept' ? '...' : '✓ Aceitar'}
+              </button>
+              <button
+                onClick={() => respond(invite.id, 'reject')}
+                disabled={!!responding[invite.id]}
+                style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-overlay)', color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 13, opacity: responding[invite.id] ? 0.6 : 1 }}
+              >
+                {responding[invite.id] === 'reject' ? '...' : '✕ Recusar'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Link
+          to="/meus-grupos"
+          onClick={onClose}
+          style={{ flex: 1, padding: '11px 0', borderRadius: 9, background: '#4a90e820', color: '#4a90e8', border: '1px solid #4a90e840', textAlign: 'center', textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}
+        >
+          Ver Meus Grupos →
+        </Link>
+        <button
+          onClick={onClose}
+          style={{ padding: '11px 18px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13 }}
+        >
+          Depois
+        </button>
+      </div>
+    </BottomSheet>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // ORQUESTRADOR — controla qual popup aparece e em que ordem
 // ═════════════════════════════════════════════════════════════════════════════
 export default function AppPopups() {
@@ -763,6 +837,7 @@ export default function AppPopups() {
   const [active, setActive] = useState(null)
   const [versionData, setVersionData] = useState(null)
   const [competitionData, setCompetitionData] = useState(null)
+  const [pendingInvites, setPendingInvites] = useState([])
 
   // ── 0: Competition popup (3s, uma vez por competition.id) ────────────────
   useEffect(() => {
@@ -800,6 +875,24 @@ export default function AppPopups() {
     }
     const t = setTimeout(decide, 800)
     return () => { mounted = false; clearTimeout(t) }
+  }, [token])
+
+  // ── 2.5: Invite popup (7s, logado, convites pendentes, 30min dismiss) ───
+  useEffect(() => {
+    if (!token) return
+    const last = parseInt(localStorage.getItem(INVITE_DISMISS_KEY) || '0', 10)
+    if (Date.now() - last < 30 * 60 * 1000) return
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.get('/user-groups', token)
+        const inv = res?.pending_invites ?? []
+        if (inv.length > 0) {
+          setPendingInvites(inv)
+          setActive(prev => prev === null ? 'invite' : prev)
+        }
+      } catch {}
+    }, 7000)
+    return () => clearTimeout(t)
   }, [token])
 
   // ── 3: Push prompt (12s, logado, PWA, sem subscription) ──────────────────
@@ -847,10 +940,16 @@ export default function AppPopups() {
     setActive(null)
   }
 
+  function closeInvite() {
+    localStorage.setItem(INVITE_DISMISS_KEY, String(Date.now()))
+    setActive(null)
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   if (active === 'competition' && competitionData) return <CompetitionPopup competition={competitionData} onClose={closeCompetition} />
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
   if (active === 'champion')               return <ChampionPopup token={token} onClose={closeChampion} />
+  if (active === 'invite' && pendingInvites.length > 0) return <InvitePopup invites={pendingInvites} token={token} onClose={closeInvite} />
   if (active === 'push')                   return <PushPromptPopup token={token} onClose={closePush} />
   return null
 }

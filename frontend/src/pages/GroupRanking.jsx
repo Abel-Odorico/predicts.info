@@ -139,8 +139,9 @@ export default function GroupRanking() {
   const [messages, setMessages] = useState([])
   const [msgText, setMsgText] = useState('')
   const [sendingMsg, setSendingMsg] = useState(false)
-  const [showChat, setShowChat] = useState(true)
+  const [showChat, setShowChat] = useState(false)
   const chatEndRef = useRef(null)
+  const chatOpenedRef = useRef(false)
   const chatPollRef = useRef(null)
 
   const today = todayStr()
@@ -199,7 +200,11 @@ export default function GroupRanking() {
   }, [groupId, token, showChat])
 
   useEffect(() => {
-    if (showChat && chatEndRef.current) {
+    if (showChat) chatOpenedRef.current = true
+  }, [showChat])
+
+  useEffect(() => {
+    if (showChat && chatOpenedRef.current && chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages, showChat])
@@ -405,8 +410,17 @@ export default function GroupRanking() {
               <WaIcon /> WhatsApp
             </button>
             <button onClick={copyShareText} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: shareCopied ? 'var(--win)' : 'var(--bg-raised)', color: shareCopied ? '#fff' : 'var(--text-1)', transition: 'all .2s' }}>
-              {shareCopied ? '✓ Copiado!' : '📋 Copiar texto'}
+              {shareCopied ? '✓ Copiado!' : '📋 Copiar'}
             </button>
+            {navigator.share && (
+              <button
+                onClick={() => navigator.share({ title: data?.group_name, text: buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, inviteLink) })}
+                style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-raised)', color: 'var(--text-2)', fontSize: 16 }}
+                title="Compartilhar"
+              >
+                ↗
+              </button>
+            )}
           </div>
         </div>
       )}

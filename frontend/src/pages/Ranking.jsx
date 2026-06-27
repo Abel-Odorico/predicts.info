@@ -74,6 +74,9 @@ export default function Ranking() {
   const [compView,    setCompView]    = useState(false)  // true = vendo ranking da fase
   const [compData,    setCompData]    = useState([])
   const [compLoad,    setCompLoad]    = useState(false)
+  const [expandedId,  setExpandedId]  = useState(null)
+  const [shareOpen,   setShareOpen]   = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
 
   useEffect(() => {
     api.get('/champion/picks/all')
@@ -151,19 +154,66 @@ export default function Ranking() {
     return `há ${Math.floor(s/60)}min`
   }
 
+  function buildRankingShareText() {
+    const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
+    const periodLabel = PERIODS.find(p => p.id === period)?.label ?? 'Geral'
+    const top5 = (compView ? compData : data).slice(0, 5)
+      .map((r, i) => `${medal(i)} ${r.name} — ${r.total_points} pts (${r.exact_scores} 🎯)`)
+      .join('\n')
+    const label = compView && competition ? `Fase: ${competition.name}` : `Ranking ${periodLabel}`
+    return `🏆 *Predicts.info — ${label}*\n\n${top5}\n\n⚽ Participe em https://predicts.info`
+  }
+  function copyRankingText() {
+    navigator.clipboard.writeText(buildRankingShareText())
+      .then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000) })
+  }
+  function shareRankingWhatsApp() {
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildRankingShareText())}`, '_blank')
+  }
+
   return (
     <div className="page">
-      <div className="fade-in-1" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--s4)' }}>
+      <div className="fade-in-1" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--s3)' }}>
         <div>
           <h1 className="page-title">RANKING</h1>
           <p className="page-subtitle">Exato = 25 pts · Vencedor+gols = 18 · Saldo = 15 · Perdedor = 12 · Resultado = 10 · Campeão = +100 · Vice = +50</p>
+          {lastUpdated && (
+            <span className={`ranking-live-badge${flashUpdate ? ' ranking-live-badge--flash' : ''}`} style={{ marginTop: 4, display: 'inline-block' }}>
+              🟢 atualizado {relUpdated()}
+            </span>
+          )}
         </div>
-        {lastUpdated && (
-          <span className={`ranking-live-badge${flashUpdate ? ' ranking-live-badge--flash' : ''}`}>
-            🟢 atualizado {relUpdated()}
-          </span>
-        )}
+        <button
+          type="button"
+          onClick={() => setShareOpen(o => !o)}
+          style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'var(--on-accent)', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, flexShrink: 0 }}
+        >
+          📤 Compartilhar
+        </button>
       </div>
+
+      {shareOpen && (
+        <div className="card fade-in-1" style={{ padding: 'var(--s4) var(--s5)', borderLeft: '3px solid var(--accent)', marginTop: 'var(--s4)' }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>Compartilhar Ranking</div>
+          <pre style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-1)', background: 'var(--bg-overlay)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
+            {buildRankingShareText()}
+          </pre>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={shareRankingWhatsApp} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: '#25D366', color: '#fff' }}>
+              <svg style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+              WhatsApp
+            </button>
+            <button onClick={copyRankingText} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: shareCopied ? 'var(--win)' : 'var(--bg-raised)', color: shareCopied ? '#fff' : 'var(--text-1)', transition: 'all .2s' }}>
+              {shareCopied ? '✓ Copiado!' : '📋 Copiar texto'}
+            </button>
+            {navigator.share && (
+              <button onClick={() => navigator.share({ title: 'Ranking Predicts', text: buildRankingShareText() })} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-raised)', color: 'var(--text-2)', fontSize: 16 }}>
+                ↗
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <MyChampionCard compact />
 
@@ -394,7 +444,7 @@ export default function Ranking() {
             icon="👑" label="Líder Geral"
             name={leader?.name}
             stat={`${leader?.total_points ?? 0} pts`}
-            sub={leader ? `${leader.total_bets * 3} em jogo · ${aproveitamento(leader) ?? 0}% aproveito` : ''}
+            sub={leader ? `${leader.total_bets} palpites · ${aproveitamento(leader) ?? 0}% aproveito` : ''}
             userId={leader?.user_id}
             accent="var(--accent)"
           />
@@ -542,113 +592,155 @@ export default function Ranking() {
               const leaderPts = data[0]?.total_points || 1
               const gapLeader = (data[0]?.total_points ?? 0) - r.total_points
               const cp = champPicks[r.user_id]
+              const isExpanded = expandedId === r.user_id
+              const aprv = aproveitamento(r)
+              const errosR = Math.max(0, (r.total_bets || 0) - acertos(r))
 
               return (
-                <Link
-                  key={r.user_id}
-                  to={`/usuarios/${r.user_id}/historico`}
-                  className={`ranking-row fade-in ${podiumClass}`}
-                  style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent' }}
-                >
-                  <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`} style={{ textAlign: 'center' }}>
-                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                  </span>
+                <div key={r.user_id}>
+                  <div
+                    className={`ranking-row fade-in ${podiumClass}`}
+                    onClick={() => setExpandedId(isExpanded ? null : r.user_id)}
+                    style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent', cursor: 'pointer', userSelect: 'none', background: isExpanded ? 'color-mix(in srgb, var(--accent) 5%, var(--bg-raised))' : undefined }}
+                  >
+                    <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`} style={{ textAlign: 'center' }}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                    </span>
 
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.name}
-                    </div>
-                    {/* Barra relativa ao líder */}
-                    <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
-                      <div style={{
-                        height: '100%',
-                        width: `${(r.total_points / leaderPts) * 100}%`,
-                        background: i === 0 ? 'var(--accent)' : i === 1 ? 'var(--text-2)' : i === 2 ? 'var(--win)' : 'var(--border-accent)',
-                        borderRadius: 2, transition: 'width 600ms ease',
-                      }} />
-                    </div>
-                    {/* Picks de campeão */}
-                    {cp && (cp.champion || cp.runner_up) && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        {cp.champion && (
-                          <span title={`🏆 Campeão: ${cp.champion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <img src={cp.champion.flag} alt={cp.champion.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
-                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--accent)' }}>🏆</span>
-                          </span>
-                        )}
-                        {cp.runner_up && (
-                          <span title={`🥈 Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <img src={cp.runner_up.flag} alt={cp.runner_up.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
-                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#d4af37' }}>🥈</span>
-                          </span>
-                        )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.name}
                       </div>
-                    )}
-                    {/* Resumo visível só no mobile */}
-                    <div className="ranking-row__mobile-stats">
-                      <span>{r.total_bets ?? 0} palp.</span>
-                      <span>·</span>
-                      <span style={{ color: 'var(--win)' }} title="Acertos">✓{acertos(r)}</span>
-                      <span style={{ color: 'var(--lose)' }} title="Erros">✗{erros(r)}</span>
-                      <span>·</span>
-                      <span title="Placares exatos">🎯{r.exact_scores ?? 0}</span>
-                      <span>·</span>
-                      <span title="Aproveitamento de pontos">{aproveitamento(r) ?? '—'}% aprov.</span>
-                      {i > 0 && <><span>·</span><span title="Diferença pro líder">−{gapLeader} líder</span></>}
-                    </div>
-                  </div>
-
-                  {/* Pts + gap pro líder */}
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700, lineHeight: 1 }}>
-                      {r.total_points}
-                    </div>
-                    {i > 0 && gapLeader > 0 && (
-                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }} title="Diferença pro líder">
-                        −{gapLeader}
+                      {/* Barra relativa ao líder */}
+                      <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${(r.total_points / leaderPts) * 100}%`,
+                          background: i === 0 ? 'var(--accent)' : i === 1 ? 'var(--text-2)' : i === 2 ? 'var(--win)' : 'var(--border-accent)',
+                          borderRadius: 2, transition: 'width 600ms ease',
+                        }} />
                       </div>
-                    )}
-                  </div>
-
-                  {/* Palpites + acertos/erros */}
-                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
-                      {r.total_bets ?? 0}
-                    </div>
-                    {r.total_bets > 0 && (
-                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, marginTop: 3 }}>
-                        <span style={{ color: 'var(--win)' }} title="Acertos">✓{acertos(r)}</span>{' '}
+                      {/* Picks de campeão */}
+                      {cp && (cp.champion || cp.runner_up) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                          {cp.champion && (
+                            <span title={`🏆 Campeão: ${cp.champion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                              <img src={cp.champion.flag} alt={cp.champion.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--accent)' }}>🏆</span>
+                            </span>
+                          )}
+                          {cp.runner_up && (
+                            <span title={`🥈 Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                              <img src={cp.runner_up.flag} alt={cp.runner_up.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#d4af37' }}>🥈</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {/* Resumo visível só no mobile */}
+                      <div className="ranking-row__mobile-stats">
+                        <span>{r.total_bets ?? 0} palp.</span>
+                        <span>·</span>
+                        <span style={{ color: 'var(--win)' }} title="Acertos">✓{acertos(r)}</span>
                         <span style={{ color: 'var(--lose)' }} title="Erros">✗{erros(r)}</span>
+                        <span>·</span>
+                        <span title="Placares exatos">🎯{r.exact_scores ?? 0}</span>
+                        <span>·</span>
+                        <span title="Aproveitamento de pontos">{aproveitamento(r) ?? '—'}% aprov.</span>
+                        {i > 0 && <><span>·</span><span title="Diferença pro líder">−{gapLeader} líder</span></>}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Exatos (nº + %) */}
-                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: r.exact_scores ? 'var(--accent)' : 'var(--text-4)' }}>
-                      {r.exact_scores ?? 0}
                     </div>
-                    {r.total_bets > 0 && (
-                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>
-                        {pctExato(r) ?? 0}%
+
+                    {/* Pts + gap + expand indicator */}
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700, lineHeight: 1 }}>
+                        {r.total_points}
                       </div>
-                    )}
+                      {i > 0 && gapLeader > 0 && (
+                        <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }} title="Diferença pro líder">
+                          −{gapLeader}
+                        </div>
+                      )}
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', lineHeight: 1, marginTop: 2 }}>{isExpanded ? '▲' : '▼'}</div>
+                    </div>
+
+                    {/* Palpites + acertos/erros */}
+                    <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
+                        {r.total_bets ?? 0}
+                      </div>
+                      {r.total_bets > 0 && (
+                        <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, marginTop: 3 }}>
+                          <span style={{ color: 'var(--win)' }} title="Acertos">✓{acertos(r)}</span>{' '}
+                          <span style={{ color: 'var(--lose)' }} title="Erros">✗{erros(r)}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Exatos (nº + %) */}
+                    <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: r.exact_scores ? 'var(--accent)' : 'var(--text-4)' }}>
+                        {r.exact_scores ?? 0}
+                      </div>
+                      {r.total_bets > 0 && (
+                        <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>
+                          {pctExato(r) ?? 0}%
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Aproveitamento */}
+                    <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                      {(() => { const v = aproveitamento(r); return v !== null
+                        ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: v >= 60 ? 'var(--win)' : v >= 30 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
+                        : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
+                    </div>
+
+                    {/* % Resultado */}
+                    <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
+                      {(() => { const v = pctResultado(r); return v !== null
+                        ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: v >= 60 ? 'var(--win)' : v >= 35 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
+                        : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
+                    </div>
                   </div>
 
-                  {/* Aproveitamento */}
-                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
-                    {(() => { const v = aproveitamento(r); return v !== null
-                      ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: v >= 60 ? 'var(--win)' : v >= 30 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
-                      : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
-                  </div>
-
-                  {/* % Resultado */}
-                  <div className="ranking-col-hide" style={{ textAlign: 'right' }}>
-                    {(() => { const v = pctResultado(r); return v !== null
-                      ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: v >= 60 ? 'var(--win)' : v >= 35 ? 'var(--accent)' : 'var(--text-3)' }}>{v}%</span>
-                      : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span> })()}
-                  </div>
-                </Link>
+                  {/* ── Expanded row ── */}
+                  {isExpanded && (
+                    <div className="fade-in-1" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-raised)', padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                        {[
+                          { icon: '🎯', label: 'Exatos',  val: r.exact_scores, color: 'var(--win)' },
+                          { icon: '✅', label: 'Certos',  val: acertos(r) - r.exact_scores, color: 'var(--accent)' },
+                          { icon: '❌', label: 'Erros',   val: errosR, color: 'var(--lose)' },
+                          { icon: '📝', label: 'Total',   val: r.total_bets, color: 'var(--text-2)' },
+                          { icon: '📊', label: 'Aprov.',  val: aprv !== null ? `${aprv}%` : '–', color: aprv !== null && aprv >= 50 ? 'var(--win)' : 'var(--text-2)' },
+                        ].map(s => (
+                          <div key={s.label} style={{ textAlign: 'center', padding: '6px 4px', borderRadius: 8, background: 'var(--bg-surface)' }}>
+                            <div style={{ fontFamily: 'var(--font-data)', fontSize: 15, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>{s.icon} {s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>
+                          {i === 0
+                            ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>👑 Líder Geral</span>
+                            : gapLeader === 0
+                              ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {data[0].name}</span>
+                              : <>−<strong style={{ color: 'var(--text-1)' }}>{gapLeader} pts</strong> para {data[0].name}</>
+                          }
+                        </span>
+                        <Link
+                          to={`/usuarios/${r.user_id}/historico`}
+                          onClick={e => e.stopPropagation()}
+                          style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: 'var(--bg-overlay)', color: 'var(--accent)', border: '1px solid var(--accent)', textDecoration: 'none' }}
+                        >
+                          📜 Histórico
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>
