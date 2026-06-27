@@ -435,43 +435,116 @@ def pick_oracle_llm(db: Session) -> tuple[dict | None, str | None, str]:
 
 def _build_oracle_prompt(db: Session, match: Match, base: tuple[int, int]) -> str:
     from routers.analysis import _get_mc_prob, _get_recent_results
+    from models import Player
     ta, tb = match.team_a, match.team_b
+
     mc = _get_mc_prob(db, match.id)
-    ra = _get_recent_results(db, ta.code) if ta else []
-    rb = _get_recent_results(db, tb.code) if tb else []
+    # Busca mais resultados recentes para contexto mais rico
+    ra = _get_recent_results(db, ta.code, limit=7) if ta else []
+    rb = _get_recent_results(db, tb.code, limit=7) if tb else []
 
-    def fmt(results):
-        return "; ".join(
-            f"{r['team_a']} {r['score_a']}-{r['score_b']} {r['team_b']}" for r in results[:5]
-        ) or "sem dados"
+    # Convocados ordenados por posição (igual ao prompt de análise)
+    pos_order  = {"FW": 0, "MF": 1, "DF": 2, "GK": 3}
+    pos_label  = {"FW": "ATA", "MF": "MEI", "DF": "DEF", "GK": "GOL"}
 
-    mc_line = "indisponível"
+    def fmt_players(team_id: int) -> str:
+        players = db.query(Player).filter_by(team_id=team_id).all()
+        if not players:
+            return "  (sem dados de convocados)"
+        priority = [p for p in players if p.is_injured or p.is_suspended]
+        rest     = [p for p in players if not p.is_injured and not p.is_suspended]
+        selected = sorted(priority + rest, key=lambda p: pos_order.get(p.position, 9))[:15]
+        lines, cur = [], None
+        for p in selected:
+            lbl = pos_label.get(p.position, p.position or "?")
+            if lbl != cur:
+                lines.append(f"  [{lbl}]")
+                cur = lbl
+            suffix = " ⚠️" if p.is_injured else " 🚫" if p.is_suspended else ""
+            lines.append(f"    • {p.name}{suffix}")
+        return "\n".join(lines)
+
+    def fmt_results(results) -> str:
+        if not results:
+            return "  Sem dados desta Copa"
+        return "\n".join(
+            f"  {r['date']}: {r['team_a']} {r['score_a']}–{r['score_b']} {r['team_b']}"
+            for r in results
+        )
+
+    # Confronto direto nesta Copa
+    def fmt_h2h() -> str:
+        codes = {ta.code, tb.code}
+        h2h = [r for r in (ra + rb) if r["team_a"] in codes and r["team_b"] in codes]
+        seen, uniq = set(), []
+        for r in h2h:
+            k = (r["team_a"], r["team_b"], r["date"])
+            if k not in seen:
+                seen.add(k)
+                uniq.append(r)
+        if not uniq:
+            return "  Não se enfrentaram ainda nesta Copa"
+        return "\n".join(
+            f"  {r['date']}: {r['team_a']} {r['score_a']}–{r['score_b']} {r['team_b']}"
+            for r in uniq[:3]
+        )
+
+    # Bloco Monte Carlo enriquecido (top 8 placares)
+    mc_block = "indisponível"
     if mc:
-        top = "  ".join(f"{s['score']} ({s['prob']:.0f}%)" for s in mc.get("top_scores", [])[:4])
-        mc_line = (
-            f"Vitória {ta.name}: {mc['prob_a']:.0f}% | Empate: {mc['prob_draw']:.0f}% | Vitória {tb.name}: {mc['prob_b']:.0f}%\n"
-            f"xG esperado: {ta.name} {mc['lambda_a']:.2f} x {mc['lambda_b']:.2f} {tb.name}\n"
-            f"Placares mais prováveis: {top}"
+        top = "  |  ".join(
+            f"{s['score']} ({s['prob']:.1f}%)" for s in mc.get("top_scores", [])[:8]
+        )
+        mc_block = (
+            f"Vitória {ta.name}: {mc['prob_a']:.1f}% | Empate: {mc['prob_draw']:.1f}% | Vitória {tb.name}: {mc['prob_b']:.1f}%\n"
+            f"xG esperado: {ta.name} {mc['lambda_a']:.2f} gols × {tb.name} {mc['lambda_b']:.2f} gols\n"
+            f"Top placares (Monte Carlo 50k sims): {top}"
         )
 
     phase = match.phase.value if match.phase else "grupo"
+    is_knockout = phase not in ("group", "grupo")
+    phase_hint = (
+        "MATA-MATA: jogos eliminatórios tendem a ser mais fechados (menos gols). "
+        "Empates no tempo normal são comuns — neste bolão, preveja o placar no tempo regulamentar (90 min)."
+        if is_knockout else
+        "FASE DE GRUPOS: times buscam vitória, mais gols esperados. "
+        "Favoritos claros (ELO >150 pts acima) vencem ~70% das vezes."
+    )
+
     return (
-        "Você é o ORÁCULO PREDICTOR, IA especialista em prever o placar EXATO de partidas de futebol.\n"
-        f"Partida: {ta.name} ({ta.code}) x {tb.name} ({tb.code}) — fase {phase}.\n\n"
-        f"Palpite atual do modelo estatístico (Monte Carlo): {base[0]}x{base[1]}\n"
-        f"Probabilidades Monte Carlo:\n{mc_line}\n\n"
-        f"ELO: {ta.name} {ta.elo_rating or 'N/D'} x {tb.name} {tb.elo_rating or 'N/D'}\n"
-        f"Forma {ta.name} (últimos 5): {ta.form_5 or 'N/D'} | {tb.name}: {tb.form_5 or 'N/D'}\n"
-        f"Resultados recentes {ta.name}: {fmt(ra)}\n"
-        f"Resultados recentes {tb.name}: {fmt(rb)}\n\n"
-        "Analise os dados e cenários e decida o placar EXATO mais provável. Você pode CONFIRMAR o palpite do "
-        "modelo ou ALTERÁ-LO se a análise justificar. Seja cirúrgico.\n\n"
+        "Você é o ORÁCULO PREDICTOR — IA especialista em prever placares EXATOS de futebol.\n"
+        "Seu objetivo é maximizar acertos de RESULTADO e PLACAR EXATO na Copa do Mundo 2026.\n\n"
+        f"## Partida\n"
+        f"{ta.name} ({ta.code}) x {tb.name} ({tb.code}) — {phase_hint}\n\n"
+        f"## Modelo Estatístico (Dixon-Coles + Monte Carlo 50k simulações)\n"
+        f"Baseline atual: {base[0]}×{base[1]}\n"
+        f"{mc_block}\n\n"
+        f"## {ta.name} ({ta.code})\n"
+        f"ELO: {ta.elo_rating or 'N/D'} | Forma (5j): {ta.form_5 or 'N/D'} | Forma (10j): {ta.form_10 or 'N/D'}\n"
+        f"Ataque: {ta.avg_goals_for or 'N/D'} gols/jogo | xG {ta.xg_for or 'N/D'} | Defesa: {ta.avg_goals_against or 'N/D'} sofridos | xGA {ta.xg_against or 'N/D'}\n"
+        f"Mundiais: {ta.world_cup_appearances or 'N/D'} participações | Melhor resultado: {ta.best_wc_result or 'N/D'}\n"
+        f"Convocados:\n{fmt_players(ta.id)}\n"
+        f"Últimos jogos nesta Copa:\n{fmt_results(ra)}\n\n"
+        f"## {tb.name} ({tb.code})\n"
+        f"ELO: {tb.elo_rating or 'N/D'} | Forma (5j): {tb.form_5 or 'N/D'} | Forma (10j): {tb.form_10 or 'N/D'}\n"
+        f"Ataque: {tb.avg_goals_for or 'N/D'} gols/jogo | xG {tb.xg_for or 'N/D'} | Defesa: {tb.avg_goals_against or 'N/D'} sofridos | xGA {tb.xg_against or 'N/D'}\n"
+        f"Mundiais: {tb.world_cup_appearances or 'N/D'} participações | Melhor resultado: {tb.best_wc_result or 'N/D'}\n"
+        f"Convocados:\n{fmt_players(tb.id)}\n"
+        f"Últimos jogos nesta Copa:\n{fmt_results(rb)}\n\n"
+        f"## Confronto direto (nesta Copa)\n{fmt_h2h()}\n\n"
+        "## Decisão\n"
+        "Analise TODOS os dados acima. Prioridade de decisão:\n"
+        "1. Se o favorito do ELO (>100 pts acima) tem xG > 1.5 e forma positiva → aposte na vitória do favorito.\n"
+        "2. Use os top-placares do Monte Carlo como âncora — desvie só se dados de forma/lesões justificarem.\n"
+        "3. Em mata-mata com times equilibrados (ELO <80 pts de diferença), prefira placar fechado (1-0, 0-1, 1-1).\n"
+        "4. Lesionados/suspensos (⚠️/🚫) nos convocados podem reduzir o poder ofensivo — ajuste os gols.\n"
+        "5. Confirme o baseline do modelo se não houver razão clara para alterar.\n\n"
         "Responda em JSON PURO (sem markdown, sem ```):\n"
         "{\n"
         f'  "score_a": <int gols {ta.code}>,\n'
         f'  "score_b": <int gols {tb.code}>,\n'
         '  "confidence": <int 0-100>,\n'
-        '  "reason": "2-4 frases em PT-BR justificando o placar; se alterou o palpite do modelo, explique claramente o porquê"\n'
+        '  "reason": "3-5 frases em PT-BR: qual dado foi decisivo, por que confirma ou altera o baseline, lesões consideradas"\n'
         "}"
     )
 
