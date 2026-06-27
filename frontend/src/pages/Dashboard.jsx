@@ -5,7 +5,7 @@ import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
 import LiveClassificationCard from '../components/LiveClassificationCard'
-import { InstallAppPopup } from '../components/AppPopups'
+import { InstallAppPopup, CompetitionPopup } from '../components/AppPopups'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import LigaFlowModal from '../components/LigaFlowModal'
 import { PT_NAMES } from '../utils/teamNames'
@@ -223,6 +223,7 @@ export default function Dashboard() {
   const [loading, setLoading]         = useState(true)
   const [showConvPopup,  setShowConvPopup]  = useState(false)
   const [showLigaModal,  setShowLigaModal]  = useState(false)
+  const [showCompPopup,  setShowCompPopup]  = useState(false)
   const navigate = useNavigate()
 
   // Popup de conversão: só para anônimos, 10s de delay, dismiss por 3 dias
@@ -440,42 +441,51 @@ export default function Dashboard() {
 
       {/* ── Competição de Fase ── */}
       {competition && (() => {
-        const startDate  = competition.start_date
+        const startDate = competition.start_date
           ? new Date(competition.start_date + (competition.start_date.endsWith('Z') ? '' : 'Z'))
           : null
-        const isFuture   = startDate && startDate > new Date()
-        const fmtDate    = startDate
+        const isFuture  = startDate && startDate > new Date()
+        const fmtDate   = startDate
           ? startDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })
           : null
         return (
-          <Link to="/ranking" style={{ textDecoration: 'none', display: 'block', margin: '12px 0' }}>
-            <div style={{
-              padding: '14px 16px',
+          <button
+            type="button"
+            onClick={() => setShowCompPopup(true)}
+            style={{
+              width: '100%', margin: '12px 0', padding: '14px 16px',
               background: 'linear-gradient(135deg, rgba(232,196,74,0.14) 0%, rgba(232,196,74,0.05) 100%)',
               border: '1.5px solid rgba(232,196,74,0.35)', borderRadius: 12,
               display: 'flex', alignItems: 'center', gap: 12,
-            }}>
-              <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#e8c44a', letterSpacing: '0.08em' }}>
-                  {isFuture ? `EM BREVE · ${fmtDate || ''}` : 'NOVA FASE DA COMPETIÇÃO'}
-                </div>
-                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
-                  {competition.name}
-                </div>
-                {competition.promo_text && (
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                    {competition.promo_text}
-                  </div>
-                )}
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#e8c44a', letterSpacing: '0.08em' }}>
+                {isFuture ? `EM BREVE · ${fmtDate || ''}` : 'NOVA FASE DA COMPETIÇÃO'}
               </div>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', flexShrink: 0 }}>
-                {isFuture ? 'Em breve →' : 'Ver →'}
-              </span>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
+                {competition.name}
+              </div>
+              {competition.promo_text && (
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                  {competition.promo_text}
+                </div>
+              )}
             </div>
-          </Link>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', flexShrink: 0 }}>Ver →</span>
+          </button>
         )
       })()}
+
+      {showCompPopup && competition && (
+        <CompetitionPopup
+          competition={competition}
+          onClose={() => setShowCompPopup(false)}
+          showRankingLink
+        />
+      )}
 
       {token && (
         <button

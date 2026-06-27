@@ -595,7 +595,7 @@ function PushPromptPopup({ token, onClose }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // 5. POPUP: NOVA COMPETIÇÃO / FASE
 // ═════════════════════════════════════════════════════════════════════════════
-export function CompetitionPopup({ competition, onClose }) {
+export function CompetitionPopup({ competition, onClose, showRankingLink = false }) {
   const startDate = competition.start_date
     ? new Date(competition.start_date + (competition.start_date.endsWith('Z') ? '' : 'Z'))
     : null
@@ -713,15 +713,31 @@ export function CompetitionPopup({ competition, onClose }) {
             📋 Copiar link predicts.info
           </button>
 
+          {showRankingLink && (
+            <Link
+              to="/ranking"
+              onClick={onClose}
+              style={{
+                display: 'block', width: '100%', padding: '12px 0', borderRadius: 10,
+                border: 'none', cursor: 'pointer', textAlign: 'center', textDecoration: 'none',
+                background: 'var(--accent)', color: '#fff',
+                fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, marginBottom: 8,
+              }}
+            >
+              ⚡ Ver ranking da fase →
+            </Link>
+          )}
           <button
             onClick={onClose}
             style={{
-              width: '100%', padding: '12px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
-              background: 'var(--accent)', color: '#fff',
-              fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700,
+              width: '100%', padding: '12px 0', borderRadius: 10, cursor: 'pointer',
+              border: showRankingLink ? '1px solid var(--border)' : 'none',
+              background: showRankingLink ? 'var(--bg-overlay)' : 'var(--accent)',
+              color: showRankingLink ? 'var(--text-3)' : '#fff',
+              fontFamily: 'var(--font-cond)', fontSize: showRankingLink ? 13 : 15, fontWeight: 700,
             }}
           >
-            {isFuture ? 'Entendi! Vou me preparar ⚡' : 'Bora competir! ⚡'}
+            {showRankingLink ? 'Fechar' : (isFuture ? 'Entendi! Vou me preparar ⚡' : 'Bora competir! ⚡')}
           </button>
         </div>
       </div>
