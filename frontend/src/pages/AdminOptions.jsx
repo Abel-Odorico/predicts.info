@@ -198,7 +198,7 @@ const TAB_KEYS = {
   paginas:      new Set([...LEGAL_PAGES.flatMap(p => [p.titleKey, p.introKey, p.contentKey]), 'contact_email', 'privacy_email']),
   avisos:       new Set([..._g('Aviso aos Usuarios'), ..._g('SEO / Google')]),
   anuncios:     new Set(_g('Google AdSense')),
-  notificacoes: new Set(['telegram_bot_token', 'telegram_chat_id']),
+  notificacoes: new Set(['telegram_bot_token', 'telegram_chat_id', 'video_upload_token']),
 }
 
 export default function AdminOptions() {
@@ -210,7 +210,8 @@ export default function AdminOptions() {
   const [dirty, setDirty]     = useState({})
   const [tgTesting, setTgTesting]   = useState(false)
   const [tgMsg, setTgMsg]           = useState(null)
-  const [showToken, setShowToken]   = useState(false)
+  const [showToken, setShowToken]       = useState(false)
+  const [showVideoToken, setShowVideoToken] = useState(false)
   const [tgHook, setTgHook]         = useState(false)
   const [tgHookInfo, setTgHookInfo] = useState(null)
   const [tab, setTab]               = useState('identidade')
@@ -820,6 +821,61 @@ export default function AdminOptions() {
             </ol>
             <div style={{ marginTop: 'var(--s3)', color: 'var(--text-3)' }}>
               Para grupos: adicione o bot ao grupo antes. O Chat ID de grupos começa com <code style={{ background: 'var(--bg-surface)', padding: '1px 5px', borderRadius: 3 }}>-100</code>.
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* Video Upload Token */}
+      {tab === 'notificacoes' && (
+      <div className="card fade-in-3" style={{ marginTop: 'var(--s6)' }}>
+        <div className="card__header">
+          <span className="section-title section-title--flush">🎬 Upload de Vídeo — Token</span>
+        </div>
+        <div className="card__body">
+          <div style={{ display: 'grid', gap: 'var(--s5)', maxWidth: 540 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 'var(--s3)',
+              padding: 'var(--s3) var(--s4)',
+              background: config.video_upload_token
+                ? 'color-mix(in srgb, var(--win) 10%, transparent)'
+                : 'color-mix(in srgb, var(--conf-caf) 10%, transparent)',
+              border: `1px solid ${config.video_upload_token ? 'color-mix(in srgb, var(--win) 35%, transparent)' : 'color-mix(in srgb, var(--conf-caf) 35%, transparent)'}`,
+              borderRadius: 'var(--r2)',
+              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
+              color: config.video_upload_token ? 'var(--win)' : 'var(--conf-caf)',
+            }}>
+              {config.video_upload_token ? '✅ Token configurado' : '⚠️ Token não definido'}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Token de acesso</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showVideoToken ? 'text' : 'password'}
+                  className="form-input"
+                  style={{ paddingRight: 44, fontFamily: 'var(--font-data)', fontSize: 13 }}
+                  placeholder="Token secreto para upload de vídeo"
+                  value={config.video_upload_token || ''}
+                  onChange={e => handleChange('video_upload_token', e.target.value)}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowVideoToken(v => !v)}
+                  style={{
+                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {showVideoToken ? 'ocultar' : 'mostrar'}
+                </button>
+              </div>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                Enviado como header <code style={{ background: 'var(--bg-surface)', padding: '1px 4px', borderRadius: 3 }}>x-token</code> em POST /api/video/upload
+              </span>
             </div>
           </div>
         </div>

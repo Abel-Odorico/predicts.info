@@ -59,6 +59,8 @@ DEFAULTS: dict[str, str] = {
     # Telegram
     "telegram_bot_token":    "",
     "telegram_chat_id":      "",
+    # Video upload
+    "video_upload_token":    "peep2026",
 }
 
 PUBLIC_KEYS = {
