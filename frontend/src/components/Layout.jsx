@@ -438,11 +438,16 @@ function SystemIcon() {
 
 function GridIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-      <rect x="3"  y="3"  width="7" height="7" rx="2"/>
-      <rect x="14" y="3"  width="7" height="7" rx="2"/>
-      <rect x="3"  y="14" width="7" height="7" rx="2"/>
-      <rect x="14" y="14" width="7" height="7" rx="2"/>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {/* 4 setas diagonais apontando para fora do centro */}
+      <line x1="12" y1="12" x2="5"  y2="5"  />
+      <polyline points="5,9 5,5 9,5"  />
+      <line x1="12" y1="12" x2="19" y2="5"  />
+      <polyline points="15,5 19,5 19,9" />
+      <line x1="12" y1="12" x2="19" y2="19" />
+      <polyline points="19,15 19,19 15,19" />
+      <line x1="12" y1="12" x2="5"  y2="19" />
+      <polyline points="9,19 5,19 5,15"  />
     </svg>
   )
 }
