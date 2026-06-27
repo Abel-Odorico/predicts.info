@@ -8,7 +8,7 @@ POST /admin/champion/award  — credita +100 campeão / +50 vice (admin, idempot
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import Column, Integer, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, DateTime, ForeignKey, func, text
 
 from database import Base, get_db
 from auth_utils import get_current_user, require_admin
@@ -16,13 +16,27 @@ from models import User, Team, Ranking, Notification
 
 router = APIRouter(tags=["champion"])
 
-DEADLINE = datetime(2026, 6, 26, 12, 0, 0)  # UTC — antes do 1º mata-mata
 CHAMPION_BONUS  = 100
 RUNNER_UP_BONUS = 50
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _deadline(db: Session) -> datetime:
+    """Retorna o horário do 1º jogo r32 no banco (deadline dinâmico)."""
+    row = db.execute(
+        text("SELECT MIN(match_date) FROM matches WHERE phase = 'r32' AND status != 'finished'")
+    ).fetchone()
+    if row and row[0]:
+        return row[0]
+    # fallback: Copa termina em julho/2026
+    return datetime(2026, 7, 15, 0, 0, 0)
+
+
+def _can_change(db: Session) -> bool:
+    return _utcnow() < _deadline(db)
 
 
 class ChampionPick(Base):
@@ -47,10 +61,6 @@ class ChampionAward(Base):
     awarded_at        = Column(DateTime, default=_utcnow)
 
 
-def _can_change() -> bool:
-    return _utcnow() < DEADLINE
-
-
 def _team_dict(t: Team) -> dict:
     return {"team_id": t.id, "code": t.code, "name": t.name, "flag": t.flag_url}
 
@@ -62,7 +72,19 @@ def _pick_response(pick: "ChampionPick", db: Session) -> dict:
         "champion":  {**_team_dict(champion),  "team_id": champion.id}  if champion  else None,
         "runner_up": {**_team_dict(runner_up), "team_id": runner_up.id} if runner_up else None,
         "picked_at":  pick.created_at,
-        "can_change": _can_change(),
+        "can_change": _can_change(db),
+        "deadline":   _deadline(db).isoformat(),
+    }
+
+
+@router.get("/champion/status")
+def champion_status(db: Session = Depends(get_db)):
+    """Estado público da janela de palpite de campeão."""
+    dl = _deadline(db)
+    return {
+        "can_change": _can_change(db),
+        "deadline":   dl.isoformat(),
+        "deadline_brt": (dl.strftime("%d/%m %H:%M") + " UTC"),
     }
 
 
@@ -76,7 +98,7 @@ def get_pick(db: Session = Depends(get_db), user: User = Depends(get_current_use
 
 @router.post("/champion/pick")
 def set_pick(body: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if not _can_change():
+    if not _can_change(db):
         raise HTTPException(403, "Prazo encerrado para palpite de campeão")
 
     team_id           = body.get("team_id")
@@ -157,6 +179,43 @@ def all_picks(db: Session = Depends(get_db)):
         }
         for pick, user in rows
     ]
+
+
+@router.post("/admin/champion/reopen-notify")
+def reopen_notify(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Envia push + notificação in-app anunciando reabertura dos palpites de campeão."""
+    from routers.push import send_push_to_all
+
+    dl = _deadline(db)
+    deadline_str = dl.strftime("%d/%m às %H:%M") + " UTC"
+
+    # Push para todos os subscribers
+    push_sent = send_push_to_all(
+        db,
+        title="🏆 Palpites de Campeão REABERTOS!",
+        body=f"Escolha ou troque seu campeão e vice até {deadline_str}. Corra!",
+        url="/campeao",
+    )
+
+    # Notificação in-app para todos os usuários registrados
+    users = db.query(User).filter(User.email != "bot@predicts.info").all()
+    notif_count = 0
+    for u in users:
+        db.add(Notification(
+            user_id=u.id,
+            type="champion_reopen",
+            title="🏆 Palpites de Campeão reabertos até " + deadline_str,
+            body="A fase eliminatória começa em breve! Escolha ou atualize seu palpite de campeão e vice-campeão.",
+            meta={"deadline": dl.isoformat(), "url": "/campeao"},
+        ))
+        notif_count += 1
+
+    db.commit()
+    return {
+        "push_sent": push_sent,
+        "notifications_sent": notif_count,
+        "deadline": dl.isoformat(),
+    }
 
 
 @router.get("/admin/champion/award")

@@ -5,19 +5,34 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { invalidateChampionCache } from '../components/MyChampionCard'
 
-const DEADLINE = new Date('2026-06-26T12:00:00Z')
+function useChampionStatus() {
+  const [deadline, setDeadline] = useState(null)
+  const [canChange, setCanChange] = useState(false)
+  const [diff, setDiff] = useState(0)
 
-function useCountdown() {
-  const [diff, setDiff] = useState(DEADLINE - Date.now())
   useEffect(() => {
-    const id = setInterval(() => setDiff(DEADLINE - Date.now()), 1000)
-    return () => clearInterval(id)
+    api.get('/champion/status').then(d => {
+      const dl = new Date(d.deadline)
+      setDeadline(dl)
+      setCanChange(d.can_change)
+      setDiff(dl - Date.now())
+    }).catch(() => {})
   }, [])
-  if (diff <= 0) return null
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  return `${h}h ${m}m ${s}s`
+
+  useEffect(() => {
+    if (!deadline) return
+    const id = setInterval(() => setDiff(deadline - Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [deadline])
+
+  const countdown = diff > 0 ? (() => {
+    const h = Math.floor(diff / 3600000)
+    const m = Math.floor((diff % 3600000) / 60000)
+    const s = Math.floor((diff % 60000) / 1000)
+    return `${h}h ${m}m ${s}s`
+  })() : null
+
+  return { countdown, canChange, deadline }
 }
 
 function TeamGrid({ teams, myTeamId, blockedSet, statMap, onPick, saving, canPick, accentColor, halfMap }) {
@@ -113,7 +128,7 @@ function CurrentPickBadge({ pick, label, color }) {
 
 export default function ChampionPick() {
   const { user, token } = useAuth()
-  const countdown = useCountdown()
+  const { countdown, canChange, deadline } = useChampionStatus()
 
   const [teams, setTeams]       = useState([])
   const [stats, setStats]       = useState({ champion: [], runner_up: [] })
@@ -181,7 +196,7 @@ export default function ChampionPick() {
   const ruStatMap      = Object.fromEntries((stats.runner_up || []).map(s => [s.team_id, s]))
   const myChampId      = myPick?.champion?.team_id
   const myRunnerUpId   = myPick?.runner_up?.team_id
-  const canPick        = !!user && !!countdown
+  const canPick        = !!user && canChange
 
   // Teams from same bracket half as champion can't also be vice (they'd meet before the final)
   const champHalf      = myChampId ? halfMap[myChampId] : null
@@ -205,6 +220,28 @@ export default function ChampionPick() {
           Escolha o campeão e o vice-campeão da Copa do Mundo 2026
         </p>
       </div>
+
+      {/* Banner de reabertura */}
+      {canChange && (
+        <div style={{
+          background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)',
+          borderRadius: 12, padding: '14px 18px', marginBottom: 'var(--s4)',
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <span style={{ fontSize: 28, flexShrink: 0 }}>🔓</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: '#fff', letterSpacing: '0.06em' }}>
+              PALPITES REABERTOS — FASE ELIMINATÓRIA
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'rgba(255,255,255,0.80)', marginTop: 2 }}>
+              {countdown
+                ? <>Fecha em <strong style={{ color: '#fff' }}>{countdown}</strong> — antes do 1º jogo do mata-mata</>
+                : 'Atualize seu palpite agora!'
+              }
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resumo dos palpites */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 'var(--s4)' }}>
