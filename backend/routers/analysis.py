@@ -272,13 +272,15 @@ def _is_quota_error(err: str) -> bool:
     return "429" in err or "too many requests" in low or "resource_exhausted" in low or "quota" in low or "rate" in low
 
 
-def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None) -> tuple[dict, str, dict]:
+def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain: list | None = None) -> tuple[dict, str, dict]:
     """
     Chama LLM com fallback automático: Gemini key1 → Gemini key2 → OpenRouter best free.
     provider_state: lista de 1 elemento [idx] compartilhada entre chamadas do mesmo lote.
+    chain: cadeia customizada (sobrescreve _get_provider_chain se fornecida).
     Returns (result, model_tag, usage_meta).
     """
-    chain = _get_provider_chain(cfg)
+    if chain is None:
+        chain = _get_provider_chain(cfg)
     if not chain:
         raise ValueError("Nenhum provider configurado (configure Gemini ou OpenRouter)")
 

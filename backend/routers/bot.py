@@ -569,10 +569,16 @@ def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
     if not cfg:
         result["reason"] = "IA não configurada — usado o modelo estatístico."
         return result
-    from routers.analysis import _call_llm
+    from routers.analysis import _call_llm, _get_provider_chain
     try:
         prompt = _build_oracle_prompt(db, match, (base_a, base_b))
-        content, model_tag, _usage = _call_llm(cfg, prompt)
+        # Monta cadeia na ordem preferida: OpenRouter → Gemini (ao contrário do default Gemini→OR)
+        full_chain = _get_provider_chain(cfg)
+        or_entries  = [p for p in full_chain if p["type"] == "openrouter"]
+        gem_entries = [p for p in full_chain if p["type"] == "gemini"]
+        oai_entries = [p for p in full_chain if p["type"] == "openai"]
+        ordered_chain = or_entries + oai_entries + gem_entries or full_chain
+        content, model_tag, _usage = _call_llm(cfg, prompt, chain=ordered_chain)
         sa, sb = int(content.get("score_a")), int(content.get("score_b"))
         if not (0 <= sa <= 20 and 0 <= sb <= 20):
             raise ValueError("placar fora de faixa")
