@@ -1,6 +1,11 @@
 import { useState } from 'react'
 
-// Gera imagem 1080×1920 com identidade Predicts via Canvas
+const TEAL  = '#0f7a78'
+const AMBER = '#e8c44a'
+const NAVY  = '#040d18'
+const WHITE = '#ffffff'
+const MARGIN = 80  // margem lateral segura
+
 function buildShareImage(competition) {
   return new Promise(resolve => {
     const W = 1080, H = 1920
@@ -8,129 +13,157 @@ function buildShareImage(competition) {
     canvas.width = W; canvas.height = H
     const ctx = canvas.getContext('2d')
 
-    // ── Background gradient ─────────────────────────────────────────────────
-    const bg = ctx.createLinearGradient(0, 0, W, H)
-    bg.addColorStop(0,   '#040d18')
-    bg.addColorStop(0.5, '#071525')
-    bg.addColorStop(1,   '#040d18')
+    // ── Background ──────────────────────────────────────────────────────────
+    const bg = ctx.createLinearGradient(0, 0, 0, H)
+    bg.addColorStop(0,   '#020a12')
+    bg.addColorStop(0.4, '#071525')
+    bg.addColorStop(1,   '#020a12')
     ctx.fillStyle = bg
     ctx.fillRect(0, 0, W, H)
 
-    // ── Grid lines (sutil) ──────────────────────────────────────────────────
-    ctx.strokeStyle = 'rgba(15,122,120,0.07)'
+    // ── Grid sutil ──────────────────────────────────────────────────────────
+    ctx.strokeStyle = 'rgba(15,122,120,0.06)'
     ctx.lineWidth = 1
-    for (let x = 0; x < W; x += 90) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke() }
-    for (let y = 0; y < H; y += 90) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke() }
+    for (let x = 0; x <= W; x += 90) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke() }
+    for (let y = 0; y <= H; y += 90) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke() }
 
-    // ── Glows circulares ────────────────────────────────────────────────────
-    const glow1 = ctx.createRadialGradient(W/2, H*0.38, 0, W/2, H*0.38, 520)
-    glow1.addColorStop(0,   'rgba(15,122,120,0.28)')
-    glow1.addColorStop(0.5, 'rgba(15,122,120,0.08)')
-    glow1.addColorStop(1,   'transparent')
-    ctx.fillStyle = glow1; ctx.fillRect(0, 0, W, H)
+    // ── Glow teal central ───────────────────────────────────────────────────
+    const CX = W / 2, CY = H * 0.35
+    const g1 = ctx.createRadialGradient(CX, CY, 0, CX, CY, 500)
+    g1.addColorStop(0,   'rgba(15,122,120,0.30)')
+    g1.addColorStop(0.6, 'rgba(15,122,120,0.07)')
+    g1.addColorStop(1,   'transparent')
+    ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H)
 
-    const glow2 = ctx.createRadialGradient(W/2, H*0.38, 0, W/2, H*0.38, 200)
-    glow2.addColorStop(0,   'rgba(232,196,74,0.18)')
-    glow2.addColorStop(1,   'transparent')
-    ctx.fillStyle = glow2; ctx.fillRect(0, 0, W, H)
+    // ── Glow âmbar menor ────────────────────────────────────────────────────
+    const g2 = ctx.createRadialGradient(CX, CY, 0, CX, CY, 180)
+    g2.addColorStop(0,   'rgba(232,196,74,0.20)')
+    g2.addColorStop(1,   'transparent')
+    ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H)
 
-    // ── Linha teal horizontal superior ─────────────────────────────────────
-    const lineGrad = ctx.createLinearGradient(0, 0, W, 0)
-    lineGrad.addColorStop(0,    'transparent')
-    lineGrad.addColorStop(0.2,  '#0f7a78')
-    lineGrad.addColorStop(0.8,  '#0f7a78')
-    lineGrad.addColorStop(1,    'transparent')
-    ctx.strokeStyle = lineGrad; ctx.lineWidth = 2
-    ctx.beginPath(); ctx.moveTo(0, 200); ctx.lineTo(W, 200); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(0, 204); ctx.lineTo(W, 204); ctx.stroke()
+    // ── Linhas teal superior ────────────────────────────────────────────────
+    const hLine = ctx.createLinearGradient(0, 0, W, 0)
+    hLine.addColorStop(0,    'transparent')
+    hLine.addColorStop(0.15, TEAL)
+    hLine.addColorStop(0.85, TEAL)
+    hLine.addColorStop(1,    'transparent')
+    ctx.strokeStyle = hLine
+    ctx.lineWidth = 2.5
+    ctx.beginPath(); ctx.moveTo(0, 190); ctx.lineTo(W, 190); ctx.stroke()
+    ctx.lineWidth = 1
+    ctx.globalAlpha = 0.4
+    ctx.beginPath(); ctx.moveTo(0, 195); ctx.lineTo(W, 195); ctx.stroke()
+    ctx.globalAlpha = 1
 
-    // ── ⚡ Troféu central estilizado ────────────────────────────────────────
-    ctx.save()
-    ctx.translate(W/2, H*0.38)
-    // círculo externo âmbar
-    ctx.beginPath()
-    ctx.arc(0, 0, 210, 0, Math.PI*2)
-    ctx.strokeStyle = 'rgba(232,196,74,0.25)'
-    ctx.lineWidth = 2; ctx.stroke()
-    // círculo interno teal
-    ctx.beginPath()
-    ctx.arc(0, 0, 170, 0, Math.PI*2)
-    ctx.strokeStyle = 'rgba(15,122,120,0.35)'
-    ctx.lineWidth = 1.5; ctx.stroke()
-    // ⚡ emoji grande
-    ctx.font = '240px serif'
+    // ── Texto topo: COPA DO MUNDO 2026 ──────────────────────────────────────
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('⚡', 0, 10)
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'
+    ctx.font = `500 36px Arial, sans-serif`
+    ctx.fillText('COPA DO MUNDO FIFA 2026', W / 2, 140)
+
+    // ── Círculos decorativos ─────────────────────────────────────────────────
+    ctx.save()
+    ctx.translate(CX, CY)
+    ctx.beginPath(); ctx.arc(0, 0, 230, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(232,196,74,0.20)`; ctx.lineWidth = 2; ctx.stroke()
+    ctx.beginPath(); ctx.arc(0, 0, 185, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(15,122,120,0.30)`; ctx.lineWidth = 1.5; ctx.stroke()
+    ctx.beginPath(); ctx.arc(0, 0, 140, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(232,196,74,0.12)`; ctx.lineWidth = 1; ctx.stroke()
+
+    // ⚡ emoji
+    ctx.font = '220px Arial, sans-serif'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('⚡', 0, 8)
     ctx.restore()
 
-    // ── PREDICTS ─────────────────────────────────────────────────────────
+    // ── PREDICTS em linha separada de .info ─────────────────────────────────
+    const PRED_Y = H * 0.59
     ctx.textAlign = 'center'
     ctx.textBaseline = 'alphabetic'
-    // sombra glow
-    ctx.shadowColor = '#0f7a78'
-    ctx.shadowBlur  = 40
-    ctx.fillStyle   = '#ffffff'
-    ctx.font        = `bold 148px 'Arial Black', Arial, sans-serif`
-    ctx.letterSpacing = '16px'
-    ctx.fillText('PREDICTS', W/2, H*0.62)
+
+    // sombra
+    ctx.shadowColor = TEAL
+    ctx.shadowBlur  = 50
+    ctx.fillStyle   = WHITE
+    ctx.font        = `900 150px Arial Black, Arial, sans-serif`
+    ctx.fillText('PREDICTS', W / 2, PRED_Y)
     ctx.shadowBlur = 0
 
-    // ── .info ──────────────────────────────────────────────────────────────
-    ctx.fillStyle = '#0f7a78'
-    ctx.font      = `bold 64px 'Arial Black', Arial, sans-serif`
-    ctx.fillText('.info', W/2 + 92, H*0.62)
+    // .info — linha separada, menor, centralizada
+    ctx.fillStyle = TEAL
+    ctx.font      = `700 70px Arial Black, Arial, sans-serif`
+    ctx.fillText('.info', W / 2, PRED_Y + 88)
 
-    // ── Linha âmbar separadora ─────────────────────────────────────────────
+    // ── Separador âmbar ──────────────────────────────────────────────────────
+    const SEP_Y = PRED_Y + 130
     const sep = ctx.createLinearGradient(0, 0, W, 0)
-    sep.addColorStop(0,   'transparent')
-    sep.addColorStop(0.25, '#e8c44a')
-    sep.addColorStop(0.75, '#e8c44a')
-    sep.addColorStop(1,   'transparent')
-    ctx.strokeStyle = sep; ctx.lineWidth = 3
-    ctx.beginPath()
-    ctx.moveTo(W*0.15, H*0.655); ctx.lineTo(W*0.85, H*0.655)
-    ctx.stroke()
+    sep.addColorStop(0,    'transparent')
+    sep.addColorStop(0.20, AMBER)
+    sep.addColorStop(0.80, AMBER)
+    sep.addColorStop(1,    'transparent')
+    ctx.strokeStyle = sep
+    ctx.lineWidth = 3
+    ctx.beginPath(); ctx.moveTo(0, SEP_Y); ctx.lineTo(W, SEP_Y); ctx.stroke()
+    ctx.globalAlpha = 0.35
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(0, SEP_Y + 5); ctx.lineTo(W, SEP_Y + 5); ctx.stroke()
+    ctx.globalAlpha = 1
 
-    // ── Nome da competição ─────────────────────────────────────────────────
+    // ── Nome da competição ────────────────────────────────────────────────────
     const compName = (competition?.name || 'Fase Eliminatória — Copa 2026').toUpperCase()
-    ctx.fillStyle = '#e8c44a'
-    ctx.font      = `bold 58px 'Arial Black', Arial, sans-serif`
-    // quebra de linha se muito longo
+    ctx.fillStyle = AMBER
+    ctx.font      = `700 62px Arial Black, Arial, sans-serif`
+    ctx.textAlign = 'center'
+
+    // quebra segura
+    const maxW = W - MARGIN * 2
     const words = compName.split(' ')
-    let line1 = '', line2 = ''
-    let mid = Math.ceil(words.length / 2)
-    line1 = words.slice(0, mid).join(' ')
-    line2 = words.slice(mid).join(' ')
-    if (compName.length <= 28) { line1 = compName; line2 = '' }
-    ctx.fillText(line1, W/2, H*0.705)
-    if (line2) ctx.fillText(line2, W/2, H*0.755)
+    const lines = []
+    let cur = ''
+    for (const w of words) {
+      const test = cur ? `${cur} ${w}` : w
+      if (ctx.measureText(test).width > maxW && cur) {
+        lines.push(cur); cur = w
+      } else { cur = test }
+    }
+    if (cur) lines.push(cur)
 
-    // ── Tagline ────────────────────────────────────────────────────────────
-    const tagY = line2 ? H*0.81 : H*0.775
-    ctx.fillStyle = 'rgba(255,255,255,0.55)'
-    ctx.font      = `500 42px Arial, sans-serif`
-    ctx.fillText('Pontuação zerada — todos no mesmo ponto', W/2, tagY)
+    const LINE_H = 78
+    const blockH  = lines.length * LINE_H
+    let compY     = SEP_Y + 60 + LINE_H / 2
+    for (const line of lines) {
+      ctx.fillText(line, W / 2, compY)
+      compY += LINE_H
+    }
 
-    // ── Convidar ───────────────────────────────────────────────────────────
-    ctx.fillStyle = 'rgba(255,255,255,0.35)'
-    ctx.font      = `400 38px Arial, sans-serif`
-    ctx.fillText('Faça seus palpites e dispute o ranking!', W/2, tagY + 64)
-
-    // ── Linha teal inferior ────────────────────────────────────────────────
-    ctx.strokeStyle = lineGrad; ctx.lineWidth = 2
-    ctx.beginPath(); ctx.moveTo(0, H - 196); ctx.lineTo(W, H - 196); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(0, H - 200); ctx.lineTo(W, H - 200); ctx.stroke()
-
-    // ── URL ────────────────────────────────────────────────────────────────
-    ctx.fillStyle = '#0f7a78'
-    ctx.font      = `bold 52px 'Arial Black', Arial, sans-serif`
-    ctx.fillText('predicts.info', W/2, H - 116)
-
-    // ── Copa 2026 ──────────────────────────────────────────────────────────
-    ctx.fillStyle = 'rgba(255,255,255,0.2)'
+    // ── Taglines ─────────────────────────────────────────────────────────────
+    const TAG_Y = SEP_Y + 60 + blockH + 50
+    ctx.fillStyle = 'rgba(255,255,255,0.65)'
+    ctx.font      = `400 40px Arial, sans-serif`
+    ctx.fillText('Pontuação zerada — todos partem do mesmo ponto.', W / 2, TAG_Y)
+    ctx.fillStyle = 'rgba(255,255,255,0.42)'
     ctx.font      = `400 36px Arial, sans-serif`
-    ctx.fillText('Copa do Mundo FIFA 2026', W/2, H - 64)
+    ctx.fillText('Entre agora e dispute o ranking!', W / 2, TAG_Y + 58)
+
+    // ── Linhas teal inferior ─────────────────────────────────────────────────
+    ctx.strokeStyle = hLine
+    ctx.lineWidth = 2.5
+    ctx.beginPath(); ctx.moveTo(0, H - 180); ctx.lineTo(W, H - 180); ctx.stroke()
+    ctx.globalAlpha = 0.4
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(0, H - 175); ctx.lineTo(W, H - 175); ctx.stroke()
+    ctx.globalAlpha = 1
+
+    // ── URL ──────────────────────────────────────────────────────────────────
+    ctx.fillStyle = TEAL
+    ctx.font      = `700 56px Arial Black, Arial, sans-serif`
+    ctx.fillText('predicts.info', W / 2, H - 108)
+
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'
+    ctx.font      = `400 34px Arial, sans-serif`
+    ctx.fillText('Simulador Estatístico · Bolão · Ranking ao vivo', W / 2, H - 58)
 
     canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.93)
   })
@@ -138,17 +171,14 @@ function buildShareImage(competition) {
 
 export default function ShareCompetitionButton({ competition, size = 'md' }) {
   const [state, setState] = useState('idle')
-
   const canShare = typeof navigator !== 'undefined' && !!navigator.share
-  const GOLD = '#e8c44a'
 
   async function handleShare() {
     setState('loading')
-    const shareText  = `⚡ ${competition?.name || 'Fase Eliminatória — Copa 2026'}\n\nNova competição no Predicts! Pontuação zerada — todos no mesmo ponto.\n\nFaça seus palpites: https://predicts.info`
+    const shareText  = `⚡ ${competition?.name || 'Fase Eliminatória — Copa 2026'}\n\nNova fase! Pontuação zerada — todos partem do mesmo ponto.\n\nFaça seus palpites: https://predicts.info`
     const shareTitle = `⚡ ${competition?.name || 'Fase Eliminatória'} — Predicts.info`
 
     try {
-      // delay proposital para manter sensação de "gerando"
       const [blob] = await Promise.all([
         buildShareImage(competition),
         new Promise(r => setTimeout(r, 1400)),
@@ -182,8 +212,8 @@ export default function ShareCompetitionButton({ competition, size = 'md' }) {
 
   const label = state === 'loading'  ? '⚡ Criando arte…'
     : state === 'done'     ? '✓ Compartilhado!'
-    : state === 'download' ? '✓ Imagem salva — abra no IG!'
-    : state === 'error'    ? '⚠ Erro — tente novamente'
+    : state === 'download' ? '✓ Imagem salva — poste no IG!'
+    : state === 'error'    ? '⚠ Tente novamente'
     : '📸 Compartilhar no Instagram'
 
   return (
@@ -191,11 +221,12 @@ export default function ShareCompetitionButton({ competition, size = 'md' }) {
       onClick={handleShare}
       disabled={state === 'loading'}
       style={{
-        width: '100%', padding: pad, borderRadius: 10, border: `1.5px solid ${GOLD}`,
+        width: '100%', padding: pad, borderRadius: 10,
+        border: `1.5px solid ${AMBER}`,
         background: state === 'done' || state === 'download'
           ? 'rgba(232,196,74,0.15)'
           : 'linear-gradient(135deg,rgba(232,196,74,0.18) 0%,rgba(232,196,74,0.06) 100%)',
-        color: GOLD, fontFamily: 'var(--font-cond)', fontSize: fs, fontWeight: 700,
+        color: AMBER, fontFamily: 'var(--font-cond)', fontSize: fs, fontWeight: 700,
         cursor: state === 'loading' ? 'not-allowed' : 'pointer',
         opacity: state === 'loading' ? 0.75 : 1,
         transition: 'all .2s', letterSpacing: '0.02em',
