@@ -3672,18 +3672,39 @@ export default function Admin() {
 }
 
 // ── CompetitionTab ─────────────────────────────────────────────────────────
+const ORACULO_ID = 34
+
 function CompetitionTab({ token }) {
-  const [comps,   setComps]   = useState([])
-  const [editing, setEditing] = useState(null)
-  const [saving,  setSaving]  = useState(false)
-  const [msg,     setMsg]     = useState('')
+  const [comps,     setComps]     = useState([])
+  const [editing,   setEditing]   = useState(null)
+  const [saving,    setSaving]    = useState(false)
+  const [msg,       setMsg]       = useState('')
+  const [phaseRank, setPhaseRank] = useState([])
+  const [rankLoad,  setRankLoad]  = useState(false)
 
   const EMPTY = { name: '', description: '', start_date: '', end_date: '', active: true, promo_text: '' }
 
   useEffect(() => { load() }, [])
 
   async function load() {
-    try { setComps(await api.get('/admin/competitions', token)) } catch {}
+    try {
+      const data = await api.get('/admin/competitions', token)
+      setComps(data)
+      const active = data.find(c => c.active)
+      if (active) loadRanking(active)
+    } catch {}
+  }
+
+  async function loadRanking(comp) {
+    if (!comp?.start_date) return
+    setRankLoad(true)
+    try {
+      const start = comp.start_date.slice(0, 10)
+      const qs    = `date_from=${start}${comp.end_date ? `&date_to=${comp.end_date.slice(0,10)}` : ''}&limit=200`
+      const rows  = await api.get(`/ranking?${qs}`)
+      setPhaseRank(rows || [])
+    } catch { setPhaseRank([]) }
+    finally { setRankLoad(false) }
   }
 
   async function save(e) {
@@ -3701,7 +3722,9 @@ function CompetitionTab({ token }) {
     try { await api.delete(`/admin/competition/${id}`, token); load() } catch {}
   }
 
-  const active = comps.find(c => c.active)
+  const active   = comps.find(c => c.active)
+  const oraculo  = phaseRank.find(r => r.user_id === ORACULO_ID)
+  const oraculoPos = oraculo ? phaseRank.findIndex(r => r.user_id === ORACULO_ID) + 1 : null
 
   return (
     <div className="adm-pane fade-in-1">
@@ -3771,6 +3794,92 @@ function CompetitionTab({ token }) {
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditing(null); setMsg('') }}>Cancelar</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ── Oráculo Predictor ── */}
+      {active && (
+        <div className="adm-card" style={{ marginBottom: 16, border: oraculo ? '1px solid rgba(15,122,120,0.3)' : '1px solid rgba(255,80,80,0.2)' }}>
+          <div className="adm-card__header">
+            <span className="adm-card__title">🔮 Oráculo Predictor</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: oraculo ? 'var(--win)' : 'var(--lose)' }}>
+              {oraculo ? '● na competição' : '○ sem palpites'}
+            </span>
+          </div>
+          {oraculo ? (
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '8px 0' }}>
+              {[
+                ['Posição', `#${oraculoPos}`],
+                ['Pontos', oraculo.total_points],
+                ['Palpites', oraculo.total_bets],
+                ['Exatos', oraculo.exact_scores],
+                ['Aproveit.', oraculo.total_bets > 0 ? `${Math.round(oraculo.total_points / (oraculo.total_bets * 25) * 100)}%` : '—'],
+              ].map(([k, v]) => (
+                <div key={k}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase' }}>{k}</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--accent)' }}>{v}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', padding: '8px 0' }}>
+              Oráculo não tem palpites na fase atual. Verifique se a data de início está correta.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Ranking da Fase ── */}
+      {active && (
+        <div className="adm-card" style={{ marginBottom: 16 }}>
+          <div className="adm-card__header">
+            <span className="adm-card__title">📊 Ranking da Fase</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)' }}>
+                {phaseRank.length} participante{phaseRank.length !== 1 ? 's' : ''}
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => loadRanking(active)} disabled={rankLoad}>
+                {rankLoad ? '…' : '↻'}
+              </button>
+            </div>
+          </div>
+          {rankLoad ? (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', padding: '12px 0' }}>Carregando…</div>
+          ) : phaseRank.length === 0 ? (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-4)', padding: '12px 0' }}>
+              Nenhum palpite registrado nesta fase ainda.
+            </div>
+          ) : (
+            <div style={{ marginTop: 4 }}>
+              {/* Header */}
+              <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 56px 48px 48px 56px', gap: 8, padding: '4px 0 8px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>
+                <span>#</span><span>Predictor</span><span style={{ textAlign: 'right' }}>Pts</span><span style={{ textAlign: 'right' }}>Palp</span><span style={{ textAlign: 'right' }}>Ex</span><span style={{ textAlign: 'right' }}>Aprov</span>
+              </div>
+              {phaseRank.map((r, i) => {
+                const isOraculo = r.user_id === ORACULO_ID
+                const aprov = r.total_bets > 0 ? `${Math.round(r.total_points / (r.total_bets * 25) * 100)}%` : '—'
+                return (
+                  <div key={r.user_id} style={{
+                    display: 'grid', gridTemplateColumns: '32px 1fr 56px 48px 48px 56px', gap: 8,
+                    padding: '7px 0', borderBottom: '1px solid var(--border)',
+                    background: isOraculo ? 'rgba(15,122,120,0.06)' : 'transparent',
+                    fontFamily: 'var(--font-cond)', fontSize: 13,
+                  }}>
+                    <span style={{ color: i < 3 ? 'var(--accent)' : 'var(--text-4)', fontWeight: 700 }}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                    </span>
+                    <span style={{ color: isOraculo ? 'var(--accent)' : 'var(--text-1)', fontWeight: isOraculo ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.name}{isOraculo ? ' ✦' : ''}
+                    </span>
+                    <span style={{ textAlign: 'right', color: 'var(--accent)', fontWeight: 700 }}>{r.total_points}</span>
+                    <span style={{ textAlign: 'right', color: 'var(--text-3)' }}>{r.total_bets}</span>
+                    <span style={{ textAlign: 'right', color: 'var(--text-3)' }}>{r.exact_scores}</span>
+                    <span style={{ textAlign: 'right', color: 'var(--text-3)' }}>{aprov}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
