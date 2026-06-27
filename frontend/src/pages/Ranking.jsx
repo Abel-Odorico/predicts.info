@@ -4,6 +4,7 @@ import { api } from '../api'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
 import LigaFlowModal from '../components/LigaFlowModal'
+import ShareCompetitionButton from '../components/ShareCompetitionButton'
 import { useAuth } from '../stores/authStore'
 
 const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L']
@@ -224,6 +225,9 @@ export default function Ranking() {
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)', marginTop: 6 }}>
                 Palpites a partir de {new Date(competition.start_date + 'Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 {competition.end_date && ` · até ${new Date(competition.end_date + 'Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`}
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <ShareCompetitionButton competition={competition} size="sm" />
               </div>
             </div>
 

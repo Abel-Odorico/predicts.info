@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import { invalidateChampionCache } from './MyChampionCard'
+import ShareCompetitionButton from './ShareCompetitionButton'
 
 // ── Dismiss keys (localStorage) ───────────────────────────────────────────────
 const SEEN_VERSION_KEY  = 'predicts_seen_version'
@@ -697,6 +698,10 @@ export function CompetitionPopup({ competition, onClose }) {
               Telegram
             </a>
           </div>
+          <div style={{ marginBottom: 10 }}>
+            <ShareCompetitionButton competition={competition} />
+          </div>
+
           <button
             onClick={copyLink}
             style={{
