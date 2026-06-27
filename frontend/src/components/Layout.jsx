@@ -437,16 +437,21 @@ function SystemIcon() {
 }
 
 function GridIcon() {
-  /* viewBox cortado ao redor da bola (cx=32 cy=30 r=16) com 2px de padding */
+  /* Bola de futebol desenhada nativa em 24×24 */
   return (
-    <svg width="38" height="38" viewBox="14 12 36 36">
-      <circle cx="32" cy="30" r="16" fill="white" opacity="0.97"/>
-      <polygon points="32,18 38.5,23 36,30.5 28,30.5 25.5,23" fill="#052e2c"/>
-      <polygon points="32,18 25.5,23 18,19 20,12" fill="#052e2c" opacity="0.65"/>
-      <polygon points="32,18 38.5,23 46,19 44,12" fill="#052e2c" opacity="0.65"/>
-      <polygon points="36,30.5 38.5,23 46,25 46,34" fill="#052e2c" opacity="0.65"/>
-      <polygon points="28,30.5 25.5,23 18,25 18,34" fill="#052e2c" opacity="0.65"/>
-      <polygon points="28,30.5 36,30.5 38,38 32,42 26,38" fill="#052e2c" opacity="0.65"/>
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+      {/* bola branca */}
+      <circle cx="12" cy="12" r="10" fill="white" opacity="0.96"/>
+      {/* patch central — pentágono */}
+      <polygon points="12,5.5 14.9,7.7 13.8,11 10.2,11 9.1,7.7" fill="#063330"/>
+      {/* patch inferior */}
+      <polygon points="10.2,13 13.8,13 15,16.2 12,18.2 9,16.2" fill="#063330" opacity="0.7"/>
+      {/* patch esquerda-cima */}
+      <polygon points="9.1,7.7 6.5,9.5 5.2,12.5 7.5,13.8 10.2,11" fill="#063330" opacity="0.55"/>
+      {/* patch direita-cima */}
+      <polygon points="14.9,7.7 17.5,9.5 18.8,12.5 16.5,13.8 13.8,11" fill="#063330" opacity="0.55"/>
+      {/* contorno sutil */}
+      <circle cx="12" cy="12" r="10" stroke="rgba(6,51,48,0.15)" strokeWidth="0.5" fill="none"/>
     </svg>
   )
 }
