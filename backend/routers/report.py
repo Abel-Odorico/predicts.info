@@ -13,7 +13,7 @@ import httpx
 from database import get_db
 from config import settings
 from auth_utils import require_admin
-from models import User, Bet, Match, MatchStatus, Ranking, PageView, SiteConfig
+from models import User, Bet, Match, MatchStatus, Ranking, PageView, SiteConfig, UserGroup, UserGroupMember
 
 
 def _telegram_config(db: Session) -> tuple[str, str]:
@@ -102,6 +102,29 @@ def _build_report(db: Session) -> dict:
         LIMIT 5
     """), {"d": today}).fetchall()
 
+    # ── Grupos (bolões) ─────────────────────────────────
+    total_groups = db.execute(text("SELECT COUNT(*) FROM user_groups")).scalar() or 0
+    new_groups_week = db.execute(
+        text("SELECT COUNT(*) FROM user_groups WHERE created_at >= :d"), {"d": week_ago}
+    ).scalar() or 0
+    # top 5 grupos por membros + apostas na semana
+    group_rows = db.execute(text("""
+        SELECT ug.name,
+               COUNT(DISTINCT ugm.user_id) AS members,
+               COALESCE(SUM(b_week.bet_count), 0) AS week_bets
+        FROM user_groups ug
+        JOIN user_group_members ugm ON ugm.group_id = ug.id
+        LEFT JOIN (
+            SELECT user_id, COUNT(*) AS bet_count
+            FROM bets
+            WHERE created_at >= :w
+            GROUP BY user_id
+        ) b_week ON b_week.user_id = ugm.user_id
+        GROUP BY ug.id, ug.name
+        ORDER BY week_bets DESC, members DESC
+        LIMIT 5
+    """), {"w": week_ago}).fetchall()
+
     # ── Próxima partida ─────────────────────────────────
     next_match = db.execute(text("""
         SELECT m.match_date, ta.name AS team_a, tb.name AS team_b,
@@ -165,6 +188,14 @@ def _build_report(db: Session) -> dict:
             "team_b": last_result.team_b,
             "score": f"{last_result.score_a}x{last_result.score_b}",
         } if last_result else None,
+        "groups": {
+            "total": total_groups,
+            "new_week": new_groups_week,
+            "top": [
+                {"name": r.name, "members": r.members, "week_bets": int(r.week_bets)}
+                for r in group_rows
+            ],
+        },
     }
 
 
@@ -219,6 +250,21 @@ def _format_text(data: dict) -> str:
             f"• {_e(nm['team_a'])} × {_e(nm['team_b'])}",
             f"• {_e(match_str)} · {nm['bettors']} apostadores",
         ]
+
+    # Grupos / bolões
+    g = data.get("groups")
+    if g:
+        lines += [
+            "",
+            "👥 <b>BOLÕES</b>",
+            f"• Total: <b>{g['total']}</b> grupos · Criados na semana: <b>{g['new_week']}</b>",
+        ]
+        if g["top"]:
+            lines.append("• <b>Mais ativos esta semana:</b>")
+            for i, gr in enumerate(g["top"], 1):
+                lines.append(
+                    f"  {i}. {_e(gr['name'])} — {gr['members']} membros · {gr['week_bets']} apostas"
+                )
 
     # Ranking geral top 10
     lines += ["", "━━━━━━━━━━━━━━━━━", "🏆 <b>RANKING GERAL — Top 10</b>"]
@@ -303,6 +349,36 @@ def notify_new_user_telegram(name: str, email: str, username: str | None = None)
             f"✉️ {_html.escape(email or '—')}\n"
             + (f"🔖 @{_html.escape(username)}\n" if username else "")
             + f"\n📊 Total de usuários: <b>{total}</b>"
+        )
+        httpx.post(
+            f"https://api.telegram.org/bot{tg_token}/sendMessage",
+            json={"chat_id": tg_chat, "text": text_msg, "parse_mode": "HTML",
+                  "disable_web_page_preview": True},
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
+def notify_new_group_telegram(group_name: str, owner_name: str) -> None:
+    """Avisa o admin no Telegram sobre um novo bolão criado. Best-effort."""
+    import html as _html
+    from database import SessionLocal
+    try:
+        db = SessionLocal()
+        try:
+            tg_token, tg_chat = _telegram_config(db)
+            if not tg_token or not tg_chat:
+                return
+            total_groups = db.execute(text("SELECT COUNT(*) FROM user_groups")).scalar() or 0
+        finally:
+            db.close()
+
+        text_msg = (
+            "🎯 <b>Novo bolão criado no Predicts</b>\n\n"
+            f"📋 <b>{_html.escape(group_name or '—')}</b>\n"
+            f"👤 Criador: {_html.escape(owner_name or '—')}\n"
+            f"\n📊 Total de bolões: <b>{total_groups}</b>"
         )
         httpx.post(
             f"https://api.telegram.org/bot{tg_token}/sendMessage",

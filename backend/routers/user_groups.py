@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr
 from datetime import timedelta
 
@@ -12,6 +12,7 @@ from auth_utils import get_current_user
 from database import get_db
 from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Notification, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
 from routers.audit import log_action
+from routers.report import notify_new_group_telegram
 
 router = APIRouter(prefix="/user-groups", tags=["user-groups"])
 
@@ -231,6 +232,7 @@ def list_user_groups(
 @router.post("", status_code=201)
 def create_group(
     payload: UserGroupCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -244,6 +246,7 @@ def create_group(
     db.add(UserGroupMember(group_id=group.id, user_id=user.id, is_owner=True))
     log_action(db, user.id, "group.create", {"group_id": group.id, "group_name": group.name})
     db.commit()
+    background_tasks.add_task(notify_new_group_telegram, group.name, user.name)
     loaded = _load_group(group.id, db)
     return _group_payload(loaded)
 
