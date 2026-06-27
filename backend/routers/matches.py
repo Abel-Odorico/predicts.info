@@ -280,7 +280,8 @@ def simulate_match_endpoint(
     ta = _team_to_input(m.team_a)
     tb = _team_to_input(m.team_b)
 
-    lambda_a, lambda_b, weights_used = compute_weighted_lambdas(ta, tb, is_neutral=m.is_neutral)
+    phase_str = m.phase.value if m.phase else "group"
+    lambda_a, lambda_b, weights_used = compute_weighted_lambdas(ta, tb, is_neutral=m.is_neutral, phase=phase_str)
 
     start = time.time()
     sim = simulate_match(lambda_a, lambda_b, n=simulations)

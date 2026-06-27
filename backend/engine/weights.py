@@ -9,11 +9,23 @@ Weights (MVP — Phase 0/1):
    5% Market value
    5% World Cup history
    5% ML ensemble (Phase 2 — falls back to Elo in MVP)
+
+Design:
+  lambda = GLOBAL_AVG_GOALS * composite  (NOT base_lambda * composite)
+
+  Base team-specific lambda is intentionally NOT used as multiplier base
+  because xG/avg_goals factors in composite already encode team strength.
+  Using team-specific base would double-count attack/defense, inflating
+  top teams' expected goals (e.g. Argentina → 3.2 vs correct ~1.9).
+
+  Phase dampening:
+  - knockout rounds naturally produce fewer goals (teams play more cautiously)
+  - round_of_32/r16 → 0.88x  |  qf/sf/final → 0.82x
 """
 
 from dataclasses import dataclass
 from engine.elo import elo_win_probabilities, elo_to_attack_multiplier
-from engine.poisson import compute_lambdas, GLOBAL_AVG_GOALS
+from engine.poisson import GLOBAL_AVG_GOALS
 
 WEIGHTS = {
     "elo": 0.35,
@@ -23,6 +35,17 @@ WEIGHTS = {
     "market_value": 0.05,
     "wc_history": 0.05,
     "ml_ensemble": 0.05,
+}
+
+# Phase dampening — Copa knockout games have ~15% fewer goals than group stage
+PHASE_FACTOR: dict[str, float] = {
+    "group":       1.00,
+    "round_of_32": 0.88,
+    "round_of_16": 0.88,
+    "quarter_final": 0.82,
+    "semi_final":  0.82,
+    "third_place": 0.85,
+    "final":       0.82,
 }
 
 
@@ -72,10 +95,13 @@ def compute_weighted_lambdas(
     team_a: TeamInput,
     team_b: TeamInput,
     is_neutral: bool = True,
+    phase: str = "group",
 ) -> tuple[float, float, dict]:
     """
     Returns (lambda_a, lambda_b, weights_used).
-    Each factor adjusts the base Poisson lambda proportionally.
+
+    Base is GLOBAL_AVG_GOALS (1.35), not team-specific avg_goals, to avoid
+    double-counting attack/defense information already present in xG factor.
     """
 
     # --- Factor 1: Elo (35%) ---
@@ -86,25 +112,27 @@ def compute_weighted_lambdas(
     if team_a.odds_win and team_b.odds_win and team_a.odds_draw:
         pa_win, _, _ = _odds_to_prob(team_a.odds_win, team_a.odds_draw, team_a.odds_lose)
         pb_win, _, _ = _odds_to_prob(team_b.odds_win, team_b.odds_draw, team_b.odds_lose)
-        odds_mult_a = max(0.5, pa_win / 0.45)
-        odds_mult_b = max(0.5, pb_win / 0.45)
+        # Normalize around 0.40 baseline; dampen extremes
+        odds_mult_a = max(0.6, min(1.6, 1.0 + (pa_win - 0.40) * 1.5))
+        odds_mult_b = max(0.6, min(1.6, 1.0 + (pb_win - 0.40) * 1.5))
     else:
-        # Elo-implied odds as proxy
         pa, _, pb = elo_win_probabilities(team_a.elo_rating, team_b.elo_rating, is_neutral)
-        odds_mult_a = max(0.5, pa / 0.40)
-        odds_mult_b = max(0.5, pb / 0.40)
+        odds_mult_a = max(0.6, min(1.6, 1.0 + (pa - 0.40) * 1.5))
+        odds_mult_b = max(0.6, min(1.6, 1.0 + (pb - 0.40) * 1.5))
 
-    # --- Factor 3: xG (15%) ---
-    xg_mult_a = max(0.5, (team_a.xg_for / GLOBAL_AVG_GOALS) * (team_b.xg_against / GLOBAL_AVG_GOALS))
-    xg_mult_b = max(0.5, (team_b.xg_for / GLOBAL_AVG_GOALS) * (team_a.xg_against / GLOBAL_AVG_GOALS))
+    # --- Factor 3: xG (15%) — encodes attack_a vs defense_b matchup ---
+    # Uses xg_for vs opponent xg_against to reflect scoring opportunity in THIS matchup.
+    # (xg_for ≈ avg_goals_for in current DB — keeps matchup specificity while
+    #  avoiding double-count since base is GLOBAL_AVG, not team avg_goals_for)
+    xg_mult_a = max(0.4, (team_a.xg_for / GLOBAL_AVG_GOALS) * (team_b.xg_against / GLOBAL_AVG_GOALS))
+    xg_mult_b = max(0.4, (team_b.xg_for / GLOBAL_AVG_GOALS) * (team_a.xg_against / GLOBAL_AVG_GOALS))
 
-    # --- Factor 4: Form last 10 (10%) ---
-    # form_10 is win ratio 0-1; normalize to multiplier around 1.0
-    form_mult_a = max(0.5, 0.5 + team_a.form_10)
-    form_mult_b = max(0.5, 0.5 + team_b.form_10)
+    # --- Factor 4: Form last 10 (10%) — narrowed range (±15%) for Copa context ---
+    # All Copa teams have reasonable form; ±50% was excessive.
+    form_mult_a = 0.85 + 0.30 * min(1.0, max(0.0, team_a.form_10))
+    form_mult_b = 0.85 + 0.30 * min(1.0, max(0.0, team_b.form_10))
 
     # --- Factor 5: Market value (5%) ---
-    # Missing market values should be neutral, not punitive.
     mv_mult_a = 1.0 if not team_a.market_value_eur else max(0.7, min(1.5, team_a.market_value_eur / GLOBAL_MV_REFERENCE))
     mv_mult_b = 1.0 if not team_b.market_value_eur else max(0.7, min(1.5, team_b.market_value_eur / GLOBAL_MV_REFERENCE))
 
@@ -114,7 +142,7 @@ def compute_weighted_lambdas(
     wc_mult_a = max(0.7, wc_score_a / 0.65)
     wc_mult_b = max(0.7, wc_score_b / 0.65)
 
-    # --- Factor 7: ML ensemble (5%) — Phase 2; uses Elo as proxy in MVP ---
+    # --- Factor 7: ML ensemble (5%) — uses Elo as proxy in MVP ---
     ml_mult_a = elo_mult_a
     ml_mult_b = elo_mult_b
 
@@ -138,18 +166,13 @@ def compute_weighted_lambdas(
         + w["ml_ensemble"] * ml_mult_b
     )
 
-    # Apply composite multiplier to Poisson base lambda
-    base_lambda_a, base_lambda_b = compute_lambdas(
-        team_a.avg_goals_for, team_a.avg_goals_against,
-        team_b.avg_goals_for, team_b.avg_goals_against,
-        home_factor=1.0,
-    )
+    # Base is GLOBAL_AVG_GOALS (not team-specific) to avoid double-counting.
+    # composite encodes all matchup-specific adjustment through xG cross-factor.
+    phase_factor = PHASE_FACTOR.get(phase, 1.0)
 
-    # Scale by injury factor
-    lambda_a = base_lambda_a * composite_a * team_a.injury_factor
-    lambda_b = base_lambda_b * composite_b * team_b.injury_factor
+    lambda_a = GLOBAL_AVG_GOALS * composite_a * team_a.injury_factor * phase_factor
+    lambda_b = GLOBAL_AVG_GOALS * composite_b * team_b.injury_factor * phase_factor
 
-    # Dampen extreme values — cap at 5.0
     lambda_a = min(5.0, max(0.3, round(lambda_a, 4)))
     lambda_b = min(5.0, max(0.3, round(lambda_b, 4)))
 

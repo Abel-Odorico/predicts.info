@@ -1,4 +1,4 @@
-export default function ScoreGrid({ scores, onSelect, selectedScore }) {
+export default function ScoreGrid({ scores, onSelect, selectedScore, highlightFirst }) {
   if (!scores?.length) return null
 
   const max = scores[0]?.prob || 1
@@ -7,6 +7,7 @@ export default function ScoreGrid({ scores, onSelect, selectedScore }) {
     <div className="score-grid">
       {scores.map((s, i) => {
         const isSelected = selectedScore === s.score
+        const isTop = highlightFirst && i === 0
         return (
           <div
             key={s.score}
@@ -22,16 +23,21 @@ export default function ScoreGrid({ scores, onSelect, selectedScore }) {
             onClick={() => onSelect?.(s.score)}
             title={onSelect ? `Apostar ${s.score}` : undefined}
           >
-            <div className="score-row__label" style={{ color: isSelected ? 'var(--accent)' : undefined, fontWeight: isSelected ? 700 : undefined }}>
+            <div className="score-row__label" style={{
+              color: (isTop || isSelected) ? 'var(--accent)' : undefined,
+              fontWeight: (isTop || isSelected) ? 700 : undefined,
+            }}>
               {s.score}
             </div>
             <div className="score-row__bar-track">
               <div
                 className="score-row__bar-fill"
-                style={{ width: `${(s.prob / max) * 100}%`, background: isSelected ? 'var(--accent)' : undefined }}
+                style={{ width: `${(s.prob / max) * 100}%`, background: (isTop || isSelected) ? 'var(--accent)' : undefined }}
               />
             </div>
-            <div className="score-row__pct">{s.prob.toFixed(1)}%</div>
+            <div className="score-row__pct" style={{ color: isTop ? 'var(--accent)' : undefined, fontWeight: isTop ? 700 : undefined }}>
+              {s.prob.toFixed(1)}%
+            </div>
           </div>
         )
       })}

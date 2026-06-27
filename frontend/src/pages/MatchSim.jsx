@@ -213,6 +213,36 @@ export default function MatchSim() {
           <div className="card__body">
             {sim ? (
               <>
+                {/* Placar recomendado — top_scores[0] */}
+                {sim.top_scores?.[0] && (
+                  <div
+                    onClick={() => (token && bettingOpen) ? handleScoreSelect(sim.top_scores[0].score) : undefined}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: 'linear-gradient(135deg, rgba(15,122,120,0.18) 0%, rgba(15,122,120,0.06) 100%)',
+                      border: '1.5px solid var(--accent)', borderRadius: 10,
+                      padding: '10px 14px', marginBottom: 'var(--s3)',
+                      cursor: (token && bettingOpen) ? 'pointer' : 'default',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--accent)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>
+                        ⭐ Placar Recomendado
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '0.04em' }}>
+                        {sim.top_scores[0].score.replace('x', ' × ')}
+                      </span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>
+                        {sim.top_scores[0].prob.toFixed(1)}%
+                      </span>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
+                        de probabilidade
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {token && bettingOpen && (
                   <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginBottom: 'var(--s3)', letterSpacing: '0.05em' }}>
                     Clique num placar para preencher sua aposta ↓
@@ -222,6 +252,7 @@ export default function MatchSim() {
                   scores={sim.top_scores}
                   onSelect={token && bettingOpen ? handleScoreSelect : undefined}
                   selectedScore={token && bettingOpen ? selectedScore : undefined}
+                  highlightFirst
                 />
               </>
             ) : <Spinner />}
