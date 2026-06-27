@@ -108,8 +108,19 @@ export default function Bets() {
     }, 150)
   }
 
-  const openMatches = matches.filter(m => isMatchOpen(m, now))
+  const openMatches = [...matches.filter(m => isMatchOpen(m, now))]
+    .sort((a, b) => new Date(a.match_date) - new Date(b.match_date))
   const betsByMatchId = Object.fromEntries(bets.map(b => [b.match_id, b]))
+
+  function matchLocalDate(dateStr) {
+    return new Date(dateStr).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+  }
+  function formatDateSep(dateStr) {
+    const d = new Date(dateStr)
+    const weekday = d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long' })
+    const date    = d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: 'numeric', month: 'long' })
+    return { weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1), date }
+  }
 
   if (loading) return <Spinner text="Carregando palpites..." />
 
@@ -190,24 +201,42 @@ export default function Bets() {
             </div>
           ) : (
             <div className="bets-list mt-6">
-              {openMatches.map((m, i) => (
-                <div key={m.id} ref={el => { matchRefs.current[m.id] = el }}>
-                  <BettableMatchRow
-                    match={m}
-                    existingBet={betsByMatchId[m.id]}
-                    token={token}
-                    now={now}
-                    index={i}
-                    onBetPlaced={onBetPlaced}
-                    onOpenSimulation={() => navigate(`/partida/${m.id}`)}
-                    nextMatch={openMatches[i + 1] || null}
-                    onGoToNextMatch={goToNextMatch}
-                    autoOpen={pendingOpenId === m.id}
-                    onAutoOpenDone={() => setPendingOpenId(null)}
-                    recentMatches={finished}
-                  />
-                </div>
-              ))}
+              {openMatches.map((m, i) => {
+                const curDate  = matchLocalDate(m.match_date)
+                const prevDate = i > 0 ? matchLocalDate(openMatches[i - 1].match_date) : null
+                const showSep  = curDate !== prevDate
+                const { weekday, date } = formatDateSep(m.match_date)
+                return (
+                  <div key={m.id}>
+                    {showSep && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: i === 0 ? '0 0 10px' : '18px 0 10px' }}>
+                        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)' }}>{weekday}</span>
+                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>{date}</span>
+                        </div>
+                        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                      </div>
+                    )}
+                    <div ref={el => { matchRefs.current[m.id] = el }}>
+                      <BettableMatchRow
+                        match={m}
+                        existingBet={betsByMatchId[m.id]}
+                        token={token}
+                        now={now}
+                        index={i}
+                        onBetPlaced={onBetPlaced}
+                        onOpenSimulation={() => navigate(`/partida/${m.id}`)}
+                        nextMatch={openMatches[i + 1] || null}
+                        onGoToNextMatch={goToNextMatch}
+                        autoOpen={pendingOpenId === m.id}
+                        onAutoOpenDone={() => setPendingOpenId(null)}
+                        recentMatches={finished}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
