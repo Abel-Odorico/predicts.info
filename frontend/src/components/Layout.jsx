@@ -18,15 +18,15 @@ const THEME_META = {
 }
 
 const NAV_DRAWER = [
-  { to: '/resultados', icon: '📋', label: 'Resultados'  },
-  { to: '/torneio',    icon: '🏆', label: 'Torneio'     },
-  { to: '/grupos',     icon: '🗂',  label: 'Classificação'},
-  { to: '/decisivos',  icon: '🔥', label: 'Decisivos'    },
-  { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos' },
-  { to: '/votacao',    icon: '🗳',  label: 'Votação'     },
-  { to: '/regras',     icon: '📜', label: 'Regras'      },
-  { to: '/campeao',    icon: '🏅', label: 'Campeão'     },
-  { to: '/perfil',     icon: '👤', label: 'Meu Perfil'  },
+  { to: '/resultados', icon: '📋', label: 'Resultados',    featured: true  },
+  { to: '/torneio',    icon: '🏆', label: 'Torneio',       featured: true  },
+  { to: '/decisivos',  icon: '🔥', label: 'Decisivos',     featured: true  },
+  { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos',   featured: true  },
+  { to: '/grupos',     icon: '🗂',  label: 'Classificação', featured: false },
+  { to: '/campeao',    icon: '🏅', label: 'Campeão',       featured: false },
+  { to: '/votacao',    icon: '🗳',  label: 'Votação',       featured: false },
+  { to: '/perfil',     icon: '👤', label: 'Meu Perfil',    featured: false },
+  { to: '/regras',     icon: '📜', label: 'Regras',        featured: false },
 ]
 
 const ADMIN_NAV = [
@@ -270,8 +270,21 @@ export default function Layout() {
       <div className={`mobile-drawer${drawerOpen ? ' mobile-drawer--open' : ''}`}>
         <div className="mobile-drawer__handle" onClick={closeDrawer} />
 
+        <div className="mobile-drawer__section-label" style={{ marginTop: 0 }}>Navegar</div>
+        <div className="mobile-drawer__grid mobile-drawer__grid--featured">
+          {NAV_DRAWER.filter(n => n.featured).map(n => (
+            <NavLink
+              key={n.to} to={n.to}
+              onClick={closeDrawer}
+              className={({ isActive }) => `mobile-drawer__item mobile-drawer__item--featured${isActive ? ' active' : ''}`}
+            >
+              <span className="mobile-drawer__item-icon">{n.icon}</span>
+              <span className="mobile-drawer__item-label">{n.label}</span>
+            </NavLink>
+          ))}
+        </div>
         <div className="mobile-drawer__grid">
-          {NAV_DRAWER.map(n => (
+          {NAV_DRAWER.filter(n => !n.featured).map(n => (
             <NavLink
               key={n.to} to={n.to}
               onClick={closeDrawer}
