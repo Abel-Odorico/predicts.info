@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
+import { CompetitionPopup } from './AppPopups'
 
 const TYPE_META = {
   bet_exact:      { icon: '🎯', color: '#0f7a78', label: 'Aposta' },
@@ -55,6 +56,8 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState('unread')
   const [filter, setFilter] = useState('all')
+  const [competition, setCompetition] = useState(null)
+  const [showCompPopup, setShowCompPopup] = useState(false)
 
   const fetchCount = useCallback(async () => {
     if (!token) return
@@ -81,6 +84,10 @@ export default function NotificationBell() {
     const interval = setInterval(fetchCount, 60000)
     return () => clearInterval(interval)
   }, [user, fetchCount])
+
+  useEffect(() => {
+    api.get('/competition/active').then(c => setCompetition(c || null)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -167,6 +174,31 @@ export default function NotificationBell() {
         </div>
 
         <div className="notif-list">
+          {/* Card da competição ativa */}
+          {competition && (
+            <button
+              onClick={() => { setShowCompPopup(true) }}
+              style={{
+                width: '100%', margin: '0 0 4px', padding: '12px 14px',
+                background: 'linear-gradient(135deg,rgba(232,196,74,0.13) 0%,rgba(232,196,74,0.04) 100%)',
+                border: '1.5px solid rgba(232,196,74,0.3)', borderRadius: 10,
+                display: 'flex', alignItems: 'center', gap: 10,
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <span style={{ fontSize: 22, flexShrink: 0 }}>⚡</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: '#e8c44a', lineHeight: 1.2 }}>
+                  {competition.name}
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>
+                  Toque para convidar amigos · compartilhar
+                </div>
+              </div>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: '#e8c44a', flexShrink: 0 }}>→</span>
+            </button>
+          )}
+
           {loading && (
             <div className="notif-empty">
               <div className="notif-empty__icon">⏳</div>
@@ -230,6 +262,13 @@ export default function NotificationBell() {
       </button>
 
       {portal}
+      {showCompPopup && competition && (
+        <CompetitionPopup
+          competition={competition}
+          onClose={() => setShowCompPopup(false)}
+          showRankingLink
+        />
+      )}
     </>
   )
 }
