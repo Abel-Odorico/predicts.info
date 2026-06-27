@@ -862,6 +862,7 @@ export default function AppPopups() {
       try {
         const v = await api.get('/version/latest')
         if (mounted && v?.version && localStorage.getItem(SEEN_VERSION_KEY) !== v.version) {
+          localStorage.setItem(SEEN_VERSION_KEY, v.version)  // marca como visto imediatamente
           setVersionData(v); setActive('version'); return
         }
       } catch {}
