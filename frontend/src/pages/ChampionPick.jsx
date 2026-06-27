@@ -166,7 +166,7 @@ export default function ChampionPick() {
   }, [token])
 
   async function pickTeam(team, type) {
-    if (!token || !countdown) return
+    if (!token || !canChange) return
     setSaving(true)
     setMsg('')
     try {
@@ -283,16 +283,16 @@ export default function ChampionPick() {
 
       {/* Countdown */}
       <div style={{
-        background: countdown ? 'rgba(15,122,120,0.08)' : 'rgba(232,82,82,0.08)',
-        border: `1px solid ${countdown ? 'rgba(15,122,120,0.25)' : 'rgba(232,82,82,0.25)'}`,
+        background: canChange ? 'rgba(15,122,120,0.08)' : 'rgba(232,82,82,0.08)',
+        border: `1px solid ${canChange ? 'rgba(15,122,120,0.25)' : 'rgba(232,82,82,0.25)'}`,
         borderRadius: 10, padding: '12px 16px', marginBottom: 'var(--s4)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
       }}>
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)' }}>
-          {countdown ? '⏳ Prazo para palpitar' : '🔒 Prazo encerrado'}
+          {canChange ? '⏳ Prazo para palpitar' : '🔒 Prazo encerrado'}
         </span>
-        {countdown
-          ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{countdown}</span>
+        {canChange
+          ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{countdown || '...'}</span>
           : <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>Palpites encerrados</span>
         }
       </div>
@@ -309,7 +309,7 @@ export default function ChampionPick() {
         </p>
       )}
 
-      {(!countdown && !myPick) ? (
+      {(!canChange && !myPick) ? (
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6) 0' }}>
           Prazo encerrado. Aguarde os resultados do mata-mata.
         </p>
