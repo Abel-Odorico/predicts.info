@@ -133,7 +133,7 @@ function ConversionPopup({ top3, onClose }) {
 
           {/* Top 3 favoritos */}
           {top3.length > 0 && (
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 10 }}>
                 FAVORITOS AO TÍTULO
               </div>
@@ -493,8 +493,8 @@ export default function Dashboard() {
           style={{
             width: '100%', margin: '12px 0', padding: '13px 16px',
             display: 'flex', alignItems: 'center', gap: 12,
-            background: 'linear-gradient(135deg, rgba(15,122,120,0.12) 0%, rgba(15,122,120,0.06) 100%)',
-            border: '1.5px solid rgba(15,122,120,0.3)', borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(15,122,120,0.18) 0%, rgba(15,122,120,0.10) 100%)',
+            border: '1.5px solid rgba(15,122,120,0.55)', borderRadius: 12,
             cursor: 'pointer', textAlign: 'left',
           }}
         >
@@ -774,15 +774,15 @@ export default function Dashboard() {
 
           {/* ── Bracket CTA ── */}
           <div className="card fade-in-2" style={{
-            border: '1.5px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-            background: 'color-mix(in srgb, var(--accent) 4%, var(--bg-card))',
+            border: '1.5px solid var(--accent)',
+            background: 'var(--accent-dim)',
           }}>
             <div className="card__body" style={{ padding: 'var(--s4)' }}>
               <div style={{ display:'flex', alignItems:'center', gap: 'var(--s3)', marginBottom: 'var(--s3)' }}>
                 <span style={{ fontSize: 28 }}>⚔️</span>
                 <div>
                   <div style={{ fontFamily:'var(--font-display)', fontSize:16, letterSpacing:'0.05em', color:'var(--text-1)' }}>CHAVEAMENTO</div>
-                  <div style={{ fontFamily:'var(--font-cond)', fontSize:12, color:'var(--text-3)' }}>Mata-mata · Lado A vs Lado B</div>
+                  <div style={{ fontFamily:'var(--font-cond)', fontSize:12, color:'var(--text-2)' }}>Mata-mata · Lado A vs Lado B</div>
                 </div>
               </div>
               <Link to="/torneio" className="btn btn-primary w-full" style={{ fontSize:13 }}>
@@ -793,15 +793,15 @@ export default function Dashboard() {
 
           {/* ── Consultar Resultados CTA ── */}
           <div className="card fade-in-2" style={{
-            border: '1.5px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-            background: 'color-mix(in srgb, var(--accent) 4%, var(--bg-card))',
+            border: '1.5px solid var(--accent)',
+            background: 'var(--accent-dim)',
           }}>
             <div className="card__body" style={{ padding: 'var(--s4)' }}>
               <div style={{ display:'flex', alignItems:'center', gap: 'var(--s3)', marginBottom: 'var(--s3)' }}>
                 <span style={{ fontSize: 28 }}>📋</span>
                 <div>
                   <div style={{ fontFamily:'var(--font-display)', fontSize:16, letterSpacing:'0.05em', color:'var(--text-1)' }}>RESULTADOS</div>
-                  <div style={{ fontFamily:'var(--font-cond)', fontSize:12, color:'var(--text-3)' }}>Busque por seleção, grupo ou data</div>
+                  <div style={{ fontFamily:'var(--font-cond)', fontSize:12, color:'var(--text-2)' }}>Busque por seleção, grupo ou data</div>
                 </div>
               </div>
               <Link to="/resultados" className="btn btn-primary w-full" style={{ fontSize:13 }}>
