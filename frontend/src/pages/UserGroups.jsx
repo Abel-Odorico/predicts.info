@@ -250,6 +250,11 @@ export default function UserGroups() {
   )
 }
 
+function aproveitamento(m) {
+  if (!m.total_bets) return null
+  return Math.round(m.total_points / (m.total_bets * 25) * 100)
+}
+
 function getBadges(r, position, effectiveTotal) {
   const badges = []
   if (position === 0) badges.push({ icon: '🏆', label: 'Líder', color: '#e8a030' })
@@ -257,6 +262,9 @@ function getBadges(r, position, effectiveTotal) {
     badges.push({ icon: '🎯', label: 'Sniper', color: '#e85252' })
   if (effectiveTotal > 0 && r.total_bets >= effectiveTotal * 0.85)
     badges.push({ icon: '⚡', label: 'Maratonista', color: '#9b5de8' })
+  const aprv = aproveitamento(r)
+  if (r.total_bets >= 10 && aprv !== null && aprv >= 60)
+    badges.push({ icon: '🔮', label: 'Preciso', color: '#4a90e8' })
   return badges
 }
 
@@ -282,6 +290,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   const [savingName, setSavingName] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
   const [showAllMembers, setShowAllMembers] = useState(false)
+  const [expandedMemberId, setExpandedMemberId] = useState(null)
   const [inviteLink, setInviteLink] = useState(
     group.invite_token ? `${window.location.origin}/bolao/${group.invite_token}` : ''
   )
@@ -644,59 +653,95 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
               const effectiveTotal = Math.max(matchStats.finished, ...sortedMembers.map(m => m.total_bets || 0), 1)
               const coveragePct = effectiveTotal > 0 ? Math.min(100, Math.round((member.total_bets || 0) / effectiveTotal * 100)) : 0
               const badges = getBadges(member, i, effectiveTotal)
+              const aprv = aproveitamento(member)
+              const isExpanded = expandedMemberId === member.user_id
+              const leaderPts = sortedMembers[0]?.total_points ?? 0
+              const leaderDiff = i > 0 ? leaderPts - (member.total_points ?? 0) : 0
+              const erros = Math.max(0, (member.total_bets || 0) - (member.exact_scores || 0) - (member.correct_results || 0))
               return (
-                <div key={member.user_id} className={`group-member-row${member.user_id === currentUser?.id ? ' group-member-row--me' : ''}`}>
-                  <div className="group-member-row__avatar">{getInitials(member.name)}</div>
-                  <div className="group-member-row__identity" style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                      <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {member.name}{member.user_id === currentUser?.id ? ' (você)' : ''}
-                      </strong>
-                      {member.is_owner && <span className="badge badge-group" style={{ fontSize: 9 }}>Dono</span>}
-                    </div>
-                    {/* Badges */}
-                    {badges.length > 0 && (
-                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
-                        {badges.map(b => (
-                          <span key={b.label} style={{
-                            fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700,
-                            padding: '1px 5px', borderRadius: 20,
-                            background: `${b.color}20`, color: b.color,
-                            border: `1px solid ${b.color}40`,
-                          }}>
-                            {b.icon} {b.label}
+                <div key={member.user_id}>
+                  <div
+                    className={`group-member-row${member.user_id === currentUser?.id ? ' group-member-row--me' : ''}`}
+                    onClick={() => setExpandedMemberId(isExpanded ? null : member.user_id)}
+                    style={{ cursor: 'pointer', userSelect: 'none', background: isExpanded ? 'color-mix(in srgb, var(--accent) 5%, var(--bg-raised))' : undefined }}
+                  >
+                    <div className="group-member-row__avatar">{getInitials(member.name)}</div>
+                    <div className="group-member-row__identity" style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {member.name}{member.user_id === currentUser?.id ? ' (você)' : ''}
+                        </strong>
+                        {member.is_owner && <span className="badge badge-group" style={{ fontSize: 9 }}>Dono</span>}
+                      </div>
+                      {badges.length > 0 && (
+                        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
+                          {badges.map(b => (
+                            <span key={b.label} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 20, background: `${b.color}20`, color: b.color, border: `1px solid ${b.color}40` }}>
+                              {b.icon} {b.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <div style={{ height: 3, width: 60, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)' }} />
+                          </div>
+                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
+                            {member.total_bets || 0}/{effectiveTotal}{aprv !== null ? ` · ${aprv}%` : ''}
                           </span>
+                        </div>
+                        {member.recent_form?.length > 0 && <FormDots form={member.recent_form} />}
+                      </div>
+                    </div>
+                    <div className="group-member-row__pts">
+                      <span className="group-member-row__pts-pos">
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`}
+                      </span>
+                      <span className="group-member-row__pts-val">{member.total_points ?? 0}pts</span>
+                      {member.exact_scores > 0 && (
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>{member.exact_scores} 🎯</span>
+                      )}
+                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)' }}>{isExpanded ? '▲' : '▼'}</span>
+                    </div>
+                  </div>
+
+                  {/* ── Expanded member ── */}
+                  {isExpanded && (
+                    <div className="fade-in-1" style={{ background: 'var(--bg-raised)', borderBottom: '1px solid var(--border)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                        {[
+                          { icon: '🎯', label: 'Exatos', val: member.exact_scores || 0, color: 'var(--win)' },
+                          { icon: '✅', label: 'Certos', val: member.correct_results || 0, color: 'var(--accent)' },
+                          { icon: '❌', label: 'Erros', val: erros, color: 'var(--lose)' },
+                          { icon: '📝', label: 'Total', val: member.total_bets || 0, color: 'var(--text-2)' },
+                          { icon: '📊', label: 'Aprov.', val: aprv !== null ? `${aprv}%` : '–', color: aprv !== null && aprv >= 50 ? 'var(--win)' : 'var(--text-2)' },
+                        ].map(s => (
+                          <div key={s.label} style={{ textAlign: 'center', padding: '6px 4px', borderRadius: 8, background: 'var(--bg-surface)' }}>
+                            <div style={{ fontFamily: 'var(--font-data)', fontSize: 14, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>{s.icon} {s.label}</div>
+                          </div>
                         ))}
                       </div>
-                    )}
-                    {/* Barra de cobertura + forma recente */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ height: 3, width: 60, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{
-                            height: '100%', borderRadius: 2,
-                            width: `${coveragePct}%`,
-                            background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)',
-                          }} />
-                        </div>
-                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
-                          {member.total_bets || 0}/{effectiveTotal}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>
+                          {i === 0
+                            ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>👑 Líder do grupo</span>
+                            : leaderDiff === 0
+                              ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {sortedMembers[0].name}</span>
+                              : <>−<strong style={{ color: 'var(--text-1)' }}>{leaderDiff} pts</strong> para {sortedMembers[0].name}</>
+                          }
                         </span>
+                        <Link
+                          to={`/usuarios/${member.user_id}/historico`}
+                          onClick={e => e.stopPropagation()}
+                          style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: 'var(--bg-overlay)', color: 'var(--accent)', border: '1px solid var(--accent)', textDecoration: 'none' }}
+                        >
+                          📜 Histórico
+                        </Link>
                       </div>
-                      {member.recent_form?.length > 0 && <FormDots form={member.recent_form} />}
                     </div>
-                  </div>
-                  <div className="group-member-row__pts">
-                    <span className="group-member-row__pts-pos">
-                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`}
-                    </span>
-                    <span className="group-member-row__pts-val">{member.total_points ?? 0}pts</span>
-                    {member.exact_scores > 0 && (
-                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>
-                        {member.exact_scores} exatos
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
               )
             })}
