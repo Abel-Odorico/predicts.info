@@ -437,16 +437,16 @@ function SystemIcon() {
 }
 
 function GridIcon() {
+  /* viewBox cortado ao redor da bola (cx=32 cy=30 r=16) com 2px de padding */
   return (
-    <svg width="30" height="30" viewBox="0 0 64 64">
-      {/* Bola — mesmo SVG do favicon, sem o fundo verde */}
+    <svg width="38" height="38" viewBox="14 12 36 36">
       <circle cx="32" cy="30" r="16" fill="white" opacity="0.97"/>
-      <polygon points="32,18 38.5,23 36,30.5 28,30.5 25.5,23" fill="#0a3a38"/>
-      <polygon points="32,18 25.5,23 18,19 20,12" fill="#0a3a38" opacity="0.6"/>
-      <polygon points="32,18 38.5,23 46,19 44,12" fill="#0a3a38" opacity="0.6"/>
-      <polygon points="36,30.5 38.5,23 46,25 46,34" fill="#0a3a38" opacity="0.6"/>
-      <polygon points="28,30.5 25.5,23 18,25 18,34" fill="#0a3a38" opacity="0.6"/>
-      <polygon points="28,30.5 36,30.5 38,38 32,42 26,38" fill="#0a3a38" opacity="0.6"/>
+      <polygon points="32,18 38.5,23 36,30.5 28,30.5 25.5,23" fill="#052e2c"/>
+      <polygon points="32,18 25.5,23 18,19 20,12" fill="#052e2c" opacity="0.65"/>
+      <polygon points="32,18 38.5,23 46,19 44,12" fill="#052e2c" opacity="0.65"/>
+      <polygon points="36,30.5 38.5,23 46,25 46,34" fill="#052e2c" opacity="0.65"/>
+      <polygon points="28,30.5 25.5,23 18,25 18,34" fill="#052e2c" opacity="0.65"/>
+      <polygon points="28,30.5 36,30.5 38,38 32,42 26,38" fill="#052e2c" opacity="0.65"/>
     </svg>
   )
 }
