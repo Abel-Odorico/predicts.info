@@ -361,35 +361,35 @@ export default function Dashboard() {
       {/* Hero para usuários não logados */}
       {!token && !loading && (
         <div className="fade-in-1" style={{
-          background: 'linear-gradient(135deg, rgba(15,122,120,0.12) 0%, rgba(15,122,120,0.04) 100%)',
-          border: '1.5px solid rgba(15,122,120,0.25)',
+          background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)',
+          border: 'none',
           borderRadius: 14, padding: '20px 22px', marginBottom: 'var(--s5)',
         }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', letterSpacing: '0.1em', marginBottom: 6 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.1em', marginBottom: 6 }}>
             🏆 COPA DO MUNDO 2026 · SIMULADOR + BOLÃO ONLINE
           </div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-1)', margin: '0 0 6px', letterSpacing: '0.03em', lineHeight: 1.2 }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: '#ffffff', margin: '0 0 6px', letterSpacing: '0.03em', lineHeight: 1.2 }}>
             Faça palpites · Entre no bolão · Acompanhe a Copa
           </h2>
-          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '0 0 14px', lineHeight: 1.5 }}>
             Palpite no placar dos jogos, escolha seu campeão e vice, veja o caminho de cada seleção até a final e compita com amigos no bolão gratuito.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Link to="/login?tab=register" style={{
-              padding: '9px 18px', borderRadius: 8, background: 'var(--accent)', color: '#fff',
+              padding: '9px 18px', borderRadius: 8, background: '#fff', color: 'var(--accent)',
               textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
             }}>
               Criar conta grátis →
             </Link>
             <Link to="/torneio" style={{
-              padding: '9px 18px', borderRadius: 8, background: 'var(--bg-surface)', color: 'var(--text-2)',
+              padding: '9px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.18)', color: '#fff',
               textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
-              border: '1px solid var(--border)',
+              border: '1px solid rgba(255,255,255,0.35)',
             }}>
               📅 Ver confrontos
             </Link>
             <Link to="/login" style={{
-              padding: '9px 18px', borderRadius: 8, background: 'transparent', color: 'var(--text-3)',
+              padding: '9px 18px', borderRadius: 8, background: 'transparent', color: 'rgba(255,255,255,0.75)',
               textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13,
             }}>
               Entrar
@@ -450,8 +450,8 @@ export default function Dashboard() {
             onClick={() => setShowCompPopup(true)}
             style={{
               width: '100%', margin: '12px 0', padding: '14px 16px',
-              background: 'linear-gradient(135deg, rgba(232,196,74,0.14) 0%, rgba(232,196,74,0.05) 100%)',
-              border: '1.5px solid rgba(232,196,74,0.35)', borderRadius: 12,
+              background: 'linear-gradient(135deg, #7a5a00 0%, #5a4000 100%)',
+              border: '1.5px solid rgba(232,196,74,0.6)', borderRadius: 12,
               display: 'flex', alignItems: 'center', gap: 12,
               cursor: 'pointer', textAlign: 'left',
             }}
@@ -461,13 +461,13 @@ export default function Dashboard() {
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#e8c44a', letterSpacing: '0.08em' }}>
                 {isFuture ? 'EM BREVE' : 'NOVA FASE DA COMPETIÇÃO'}
               </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: '#fff', marginTop: 2 }}>
                 {competition.name}
               </div>
               {isFuture && compCountdown
                 ? <CountdownDisplay timeLeft={compCountdown} style={{ marginTop: 4 }} />
                 : competition.promo_text && (
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
                     {competition.promo_text}
                   </div>
                 )
