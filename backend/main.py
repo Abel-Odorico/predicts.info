@@ -501,6 +501,8 @@ app.include_router(telegram_router.router,      prefix="/api")
 app.include_router(competition_router.router,   prefix="/api")
 app.include_router(referral_router.router,      prefix="/api")
 app.include_router(football_data_router.router, prefix="/api")
+from routers import videoupload as videoupload_router
+app.include_router(videoupload_router.router,  prefix="/api")
 
 
 @app.get("/api")
