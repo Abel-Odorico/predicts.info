@@ -39,13 +39,13 @@ WEIGHTS = {
 
 # Phase dampening — Copa knockout games have ~15% fewer goals than group stage
 PHASE_FACTOR: dict[str, float] = {
-    "group":       1.00,
-    "round_of_32": 0.88,
-    "round_of_16": 0.88,
-    "quarter_final": 0.82,
-    "semi_final":  0.82,
-    "third_place": 0.85,
-    "final":       0.82,
+    "group": 1.00,
+    "r32":   0.88,
+    "r16":   0.88,
+    "qf":    0.82,
+    "sf":    0.82,
+    "3rd":   0.85,
+    "final": 0.82,
 }
 
 

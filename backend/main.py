@@ -33,6 +33,7 @@ from routers import report as report_router
 from routers import telegram as telegram_router
 from routers import competition as competition_router
 from routers import referral as referral_router
+from routers import football_data_sync as football_data_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -149,6 +150,30 @@ async def _oracle_predictor_loop():
         except Exception as e:
             print(f"[oraculo] erro: {e}", flush=True)
         await asyncio.sleep(loop_seconds)
+
+
+async def _football_data_sync_loop():
+    """Sync resultados e bracket mata-mata via football-data.org a cada 6h."""
+    from database import SessionLocal
+    from routers.football_data_sync import sync_results, sync_knockout
+    await asyncio.sleep(60)  # espera startup
+    while True:
+        try:
+            def _job():
+                db = SessionLocal()
+                try:
+                    r = sync_results(db)
+                    k = sync_knockout(db)
+                    return r, k
+                finally:
+                    db.close()
+            loop = asyncio.get_event_loop()
+            r, k = await loop.run_in_executor(None, _job)
+            print(f"[football-data] results: +{r['created']} criados, {r['updated']} atualizados "
+                  f"| knockout: +{k['created']} criados, {k['updated']} atualizados", flush=True)
+        except Exception as e:
+            print(f"[football-data] erro: {e}", flush=True)
+        await asyncio.sleep(6 * 3600)
 
 
 def _alembic_upgrade():
@@ -412,8 +437,9 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_auto_sync_loop())
     report_task = asyncio.create_task(_daily_report_loop())
     oracle_task = asyncio.create_task(_oracle_predictor_loop())
+    fd_task = asyncio.create_task(_football_data_sync_loop())
     yield
-    for t in (task, report_task, oracle_task):
+    for t in (task, report_task, oracle_task, fd_task):
         t.cancel()
         try:
             await t
@@ -473,6 +499,7 @@ app.include_router(report_router.router,        prefix="/api")
 app.include_router(telegram_router.router,      prefix="/api")
 app.include_router(competition_router.router,   prefix="/api")
 app.include_router(referral_router.router,      prefix="/api")
+app.include_router(football_data_router.router, prefix="/api")
 
 
 @app.get("/api")
