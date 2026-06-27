@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from auth_utils import get_current_user
 from database import get_db
-from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchStatus, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
+from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
 from routers.audit import log_action
 
 router = APIRouter(prefix="/user-groups", tags=["user-groups"])
@@ -173,7 +173,7 @@ def list_user_groups(
             for pts in reversed(bets_list):
                 if len(form) >= 5:
                     break
-                form.append("E" if pts == 3 else "C" if pts == 1 else "X")
+                form.append("E" if pts == 25 else "C" if (pts or 0) > 0 else "X")
             recent_form_map[uid] = form
 
     groups = [_group_payload(member.group, ranking_map, recent_form_map) for member in memberships if member.group]
@@ -795,7 +795,7 @@ def group_highlights(
         for pts in reversed(bets_list):
             if len(form) >= 5:
                 break
-            form.append("E" if pts == 3 else "C" if pts == 1 else "X")
+            form.append("E" if pts == 25 else "C" if (pts or 0) > 0 else "X")
         recent_form[uid] = form
 
     # Weekly ranking (last 7 days)
@@ -850,6 +850,76 @@ def group_highlights(
     group_level = max(1, group_xp // 500 + 1)
     next_level_xp = group_level * 500
 
+    # Best approval in group (min 5 bets, V2 max = 25 pts/bet)
+    _bet_cnt_sub = (
+        db.query(Bet.user_id, func.count(Bet.id).label("cnt"))
+        .filter(Bet.user_id.in_(member_ids))
+        .group_by(Bet.user_id)
+        .subquery()
+    )
+    _appr_rows = (
+        db.query(
+            User.id.label("user_id"),
+            User.name.label("name"),
+            func.coalesce(Ranking.total_points, 0).label("total_points"),
+            func.coalesce(_bet_cnt_sub.c.cnt, 0).label("total_bets"),
+        )
+        .outerjoin(Ranking, User.id == Ranking.user_id)
+        .outerjoin(_bet_cnt_sub, User.id == _bet_cnt_sub.c.user_id)
+        .filter(User.id.in_(member_ids), _bet_cnt_sub.c.cnt >= 5)
+        .all()
+    )
+    best_approval = None
+    _best_pct = -1
+    for _ar in _appr_rows:
+        _tb = int(_ar.total_bets or 0)
+        if not _tb:
+            continue
+        _pct = round(int(_ar.total_points or 0) / (_tb * 25) * 100)
+        if _pct > _best_pct:
+            _best_pct = _pct
+            best_approval = {"user_id": _ar.user_id, "name": _ar.name, "pct": _pct}
+
+    # Recent bets with match/result details per member (last 3 each)
+    _rd_rows = (
+        db.query(
+            Bet.user_id,
+            Bet.score_a.label("bet_a"),
+            Bet.score_b.label("bet_b"),
+            Bet.points_earned,
+            Match.team_a_id,
+            Match.team_b_id,
+            MatchResult.score_a.label("result_a"),
+            MatchResult.score_b.label("result_b"),
+        )
+        .join(Match, Bet.match_id == Match.id)
+        .outerjoin(MatchResult, MatchResult.match_id == Match.id)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+        .order_by(Bet.user_id, Match.match_date.desc())
+        .all()
+    )
+    _tid_set = {r.team_a_id for r in _rd_rows} | {r.team_b_id for r in _rd_rows}
+    _tmap = {
+        t.id: {"code": t.code, "flag_url": t.flag_url}
+        for t in db.query(Team).filter(Team.id.in_(_tid_set)).all()
+    } if _tid_set else {}
+    _ud_map: dict[int, list] = {}
+    for _rd in _rd_rows:
+        _ud_map.setdefault(_rd.user_id, []).append(_rd)
+    member_recent_bets = {
+        uid: [
+            {
+                "bet_a": b.bet_a, "bet_b": b.bet_b,
+                "points_earned": b.points_earned or 0,
+                "result_a": b.result_a, "result_b": b.result_b,
+                "team_a": _tmap.get(b.team_a_id, {}),
+                "team_b": _tmap.get(b.team_b_id, {}),
+            }
+            for b in bets_list[:3]
+        ]
+        for uid, bets_list in _ud_map.items()
+    }
+
     return {
         "next_match": next_match_out,
         "members_bet_next": members_bet_next,
@@ -862,6 +932,8 @@ def group_highlights(
         "group_xp": group_xp,
         "group_level": group_level,
         "next_level_xp": next_level_xp,
+        "best_approval": best_approval,
+        "member_recent_bets": member_recent_bets,
     }
 
 

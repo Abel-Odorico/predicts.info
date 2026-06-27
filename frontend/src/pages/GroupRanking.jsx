@@ -18,7 +18,7 @@ function todayStr() {
 }
 function aproveitamento(r) {
   if (!r.total_bets) return null
-  return Math.round(r.total_points / (r.total_bets * 3) * 100)
+  return Math.round(r.total_points / (r.total_bets * 25) * 100)
 }
 function getBadges(r, position, effectiveTotal, isHotToday, topStreak, isMuralHero) {
   const badges = []
@@ -131,6 +131,9 @@ export default function GroupRanking() {
   // ── Evolution chart ─────────────────────────────────────────
   const [evolution, setEvolution] = useState(null)
   const [showEvolution, setShowEvolution] = useState(false)
+
+  // ── Expanded row ────────────────────────────────────────────
+  const [expandedUserId, setExpandedUserId] = useState(null)
 
   // ── Chat ────────────────────────────────────────────────────
   const [messages, setMessages] = useState([])
@@ -328,6 +331,10 @@ export default function GroupRanking() {
   const xpPct = Math.min(100, Math.round((groupXp % 500) / 5))
   const topBets = highlights?.top_bets ?? []
   const weeklyRanking = highlights?.weekly_ranking ?? []
+  const bestApproval = highlights?.best_approval ?? null
+  const weekLeader = weeklyRanking[0] ?? null
+  const memberRecentBets = highlights?.member_recent_bets ?? {}
+  const leaderPtsTotal = ranking[0]?.total_points ?? 0
   const top3 = ranking.slice(0, 3)
   const padTime = n => String(n).padStart(2, '0')
   const myChampionPick = championPicks.find(p => p.is_me)
@@ -409,7 +416,14 @@ export default function GroupRanking() {
         <StatPill icon="⚽" label="Realizados" value={`${finished}/${total}`} />
         <StatPill icon="⏳" label="Pendentes" value={total - finished} />
         <StatPill icon="👥" label="Participantes" value={ranking.length} />
-        {todayTop && <StatPill icon="🔥" label="Em Alta Hoje" value={todayTop.name} sub={`+${todayTop.total_points} pts`} accent />}
+        {todayTop && <StatPill icon="🔥" label="Em Alta Hoje" value={todayTop.name} sub={`+${todayTop.total_points} pts hoje`} accent />}
+        {weekLeader && <StatPill icon="📅" label="Destaque Semana" value={weekLeader.name} sub={`+${weekLeader.pts_week} pts (7 dias)`} />}
+        {bestApproval && <StatPill icon="📊" label="Melhor Aproveito" value={bestApproval.name} sub={`${bestApproval.pct}% eficiência`} />}
+        {myEntry && (
+          <Link to={`/usuarios/${myEntry.user_id}/historico`} style={{ textDecoration: 'none' }}>
+            <StatPill icon="📜" label="Meu Histórico" value="Ver tudo →" sub="palpites detalhados" />
+          </Link>
+        )}
       </div>
 
       {/* ── Próximo jogo + countdown ── */}
@@ -606,9 +620,9 @@ export default function GroupRanking() {
               </div>
             ) : (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 52px', gap: 'var(--s2)', padding: '6px var(--s4)', borderBottom: '1px solid var(--border)' }}>
-                  {['#', 'Participante', 'Pts'].map((h, i) => (
-                    <span key={h} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)', textAlign: i === 0 ? 'center' : i === 2 ? 'right' : 'left' }}>{h}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 60px', gap: 'var(--s2)', padding: '6px var(--s4)', borderBottom: '1px solid var(--border)' }}>
+                  {[['#', 'center'], ['Participante', 'left'], ['Pts', 'right']].map(([h, align]) => (
+                    <span key={h} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)', textAlign: align }}>{h}</span>
                   ))}
                 </div>
                 {displayRanking.map((r, i) => {
@@ -617,8 +631,8 @@ export default function GroupRanking() {
                   const streak = streakMap[r.user_id] || 0
                   const isMuralHero = muralHeroName === r.name
                   const badges = getBadges(r, i + 1, effectiveTotal, isHotToday, streak, isMuralHero)
+                  const leaderDiff = i > 0 ? leaderPtsTotal - r.total_points : 0
                   const prevMember = i > 0 ? displayRanking[i - 1] : null
-                  const ptsDiff = prevMember ? prevMember.total_points - r.total_points : 0
                   const coveragePct = Math.min(100, Math.round(r.total_bets / effectiveTotal * 100))
                   const aprv = aproveitamento(r)
                   const prevPos = prevPositions?.[r.user_id]
@@ -626,77 +640,145 @@ export default function GroupRanking() {
                   const delta = prevPos && prevPos !== curPos ? prevPos - curPos : 0
                   const form = recentForm[r.user_id] ?? []
                   const memberChampion = championPicks.find(p => p.user_id === r.user_id)?.champion
+                  const isExpanded = expandedUserId === r.user_id
+                  const recentBets = memberRecentBets[String(r.user_id)] ?? []
+                  const erros = r.total_bets - r.exact_scores - r.correct_results
 
                   return (
-                    <div key={r.user_id}
-                      className={`ranking-row fade-in ${podiumClass}`}
-                      style={{ display: 'grid', gridTemplateColumns: '36px 1fr 52px', gap: 'var(--s2)', animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : r.is_me ? '3px solid var(--accent)' : '3px solid transparent', background: r.is_me && i >= 3 ? 'rgba(15,122,120,0.04)' : undefined }}>
-                      <div style={{ textAlign: 'center', alignSelf: 'start', paddingTop: 4 }}>
-                        <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
-                          {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                        </span>
-                        {delta !== 0 && (
-                          <div style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: delta > 0 ? 'var(--win)' : 'var(--lose)', lineHeight: 1, marginTop: 2 }}>
-                            {delta > 0 ? `▲${delta}` : `▼${Math.abs(delta)}`}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <button onClick={() => setDuelMember(duelMember?.user_id === r.user_id ? null : r)}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 'clamp(15px, 4vw, 16px)', color: 'var(--text-1)' }}>{r.name}</span>
-                          </button>
-                          {r.is_me && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>VOCÊ</span>}
-                          {memberChampion && (
-                            <span title={`Campeão: ${memberChampion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '0px 5px' }}>
-                              🏆 {memberChampion.code}
-                            </span>
+                    <div key={r.user_id}>
+                      <div
+                        className={`ranking-row fade-in ${podiumClass}`}
+                        onClick={() => setExpandedUserId(isExpanded ? null : r.user_id)}
+                        style={{ display: 'grid', gridTemplateColumns: '36px 1fr 60px', gap: 'var(--s2)', animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : r.is_me ? '3px solid var(--accent)' : '3px solid transparent', background: isExpanded ? 'color-mix(in srgb, var(--accent) 6%, var(--bg-raised))' : r.is_me && i >= 3 ? 'rgba(15,122,120,0.04)' : undefined, cursor: 'pointer', userSelect: 'none' }}>
+                        <div style={{ textAlign: 'center', alignSelf: 'start', paddingTop: 4 }}>
+                          <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
+                            {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                          </span>
+                          {delta !== 0 && (
+                            <div style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: delta > 0 ? 'var(--win)' : 'var(--lose)', lineHeight: 1, marginTop: 2 }}>
+                              {delta > 0 ? `▲${delta}` : `▼${Math.abs(delta)}`}
+                            </div>
                           )}
                         </div>
-                        {badges.length > 0 && (
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                            {badges.map(b => (
-                              <span key={b.label} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: `${b.color}20`, color: b.color, border: `1px solid ${b.color}40` }}>
-                                {b.icon} {b.label}
+                        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 'clamp(15px, 4vw, 16px)', color: 'var(--text-1)' }}>{r.name}</span>
+                            {r.is_me && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>VOCÊ</span>}
+                            {memberChampion && (
+                              <span title={`Campeão: ${memberChampion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '0px 5px' }}>
+                                🏆 {memberChampion.code}
                               </span>
+                            )}
+                          </div>
+                          {badges.length > 0 && (
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {badges.map(b => (
+                                <span key={b.label} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: `${b.color}20`, color: b.color, border: `1px solid ${b.color}40` }}>
+                                  {b.icon} {b.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ height: 4, width: 80, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+                                <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)', transition: 'width 600ms ease' }} />
+                              </div>
+                              <span style={{ fontFamily: 'var(--font-data)', fontSize: 'clamp(11px, 3vw, 11px)', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+                                {r.total_bets}/{effectiveTotal}{aprv !== null && ` · ${aprv}%`}
+                              </span>
+                            </div>
+                            {form.length > 0 && <FormDots form={form} />}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                          <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700 }}>{r.effective_points ?? r.total_points}</span>
+                          {r.champion_bonus > 0 && (
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#e8a030', fontWeight: 700, background: '#e8a03018', border: '1px solid #e8a03040', borderRadius: 10, padding: '1px 5px' }}>🏆+{r.champion_bonus}</span>
+                          )}
+                          <div style={{ width: 36, height: 3, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', borderRadius: 2, width: `${leaderPts > 0 ? ((r.effective_points ?? r.total_points) / leaderPts) * 100 : 0}%`, background: i === 0 ? '#e8a030' : i === 1 ? 'var(--text-3)' : 'var(--accent)', transition: 'width 600ms ease' }} />
+                          </div>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-3)', lineHeight: 1 }}>{isExpanded ? '▲' : '▼'}</span>
+                        </div>
+                      </div>
+
+                      {/* ── Expanded row details ── */}
+                      {isExpanded && (
+                        <div className="fade-in-1" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-raised)', padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+
+                          {/* Stats breakdown */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                            {[
+                              { icon: '🎯', label: 'Exatos', val: r.exact_scores, color: 'var(--win)' },
+                              { icon: '✅', label: 'Certos', val: r.correct_results, color: 'var(--accent)' },
+                              { icon: '❌', label: 'Erros', val: Math.max(0, erros), color: 'var(--lose)' },
+                              { icon: '📝', label: 'Total', val: r.total_bets, color: 'var(--text-2)' },
+                              { icon: '📊', label: 'Aprov.', val: aprv !== null ? `${aprv}%` : '–', color: aprv !== null && aprv >= 50 ? 'var(--win)' : 'var(--text-2)' },
+                            ].map(s => (
+                              <div key={s.label} style={{ textAlign: 'center', padding: '6px 4px', borderRadius: 8, background: 'var(--bg-surface)' }}>
+                                <div style={{ fontFamily: 'var(--font-data)', fontSize: 15, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-3)', marginTop: 2, letterSpacing: '0.05em' }}>{s.icon} {s.label}</div>
+                              </div>
                             ))}
                           </div>
-                        )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{ height: 4, width: 80, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
-                              <div style={{ height: '100%', borderRadius: 2, width: `${coveragePct}%`, background: coveragePct >= 80 ? 'var(--win)' : coveragePct >= 50 ? 'var(--accent)' : 'var(--lose)', transition: 'width 600ms ease' }} />
+
+                          {/* Recent bets */}
+                          {recentBets.length > 0 && (
+                            <div>
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>Últimos Palpites</div>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {recentBets.map((bet, bi) => {
+                                  const exact = bet.bet_a === bet.result_a && bet.bet_b === bet.result_b
+                                  const correct = (bet.points_earned || 0) > 0
+                                  const ptColor = exact ? 'var(--win)' : correct ? 'var(--accent)' : 'var(--lose)'
+                                  return (
+                                    <div key={bi} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, background: 'var(--bg-surface)', border: `1px solid ${ptColor}40` }}>
+                                      {bet.team_a?.flag_url && <img src={bet.team_a.flag_url} alt={bet.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+                                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>{bet.bet_a}–{bet.bet_b}</span>
+                                      {bet.team_b?.flag_url && <img src={bet.team_b.flag_url} alt={bet.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+                                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: ptColor, background: `${ptColor}15`, borderRadius: 10, padding: '1px 6px' }}>
+                                        {exact ? '🎯' : correct ? '✅' : '❌'} {bet.points_earned > 0 ? `+${bet.points_earned}` : '0'}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
                             </div>
-                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 'clamp(11px, 3vw, 11px)', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
-                              {r.total_bets}/{effectiveTotal}{aprv !== null && ` · ${aprv}%`}
-                            </span>
+                          )}
+
+                          {/* Diff pro líder + links */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>
+                              {i === 0
+                                ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>👑 Líder do grupo</span>
+                                : leaderDiff === 0
+                                  ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {displayRanking[0].name}</span>
+                                  : <>−<strong style={{ color: 'var(--text-1)' }}>{leaderDiff} pts</strong> para {displayRanking[0].name}</>
+                              }
+                            </div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <Link to={`/usuarios/${r.user_id}/historico`}
+                                style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: 'var(--bg-overlay)', color: 'var(--accent)', border: '1px solid var(--accent)', textDecoration: 'none' }}
+                                onClick={e => e.stopPropagation()}>
+                                📜 Histórico
+                              </Link>
+                              <button onClick={e => { e.stopPropagation(); setDuelMember(duelMember?.user_id === r.user_id ? null : r) }}
+                                style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: 'var(--bg-overlay)', color: '#9b5de8', border: '1px solid #9b5de840', cursor: 'pointer' }}>
+                                ⚔️ Duelo
+                              </button>
+                              {amOwner && !r.is_me && (
+                                <button type="button"
+                                  style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: 'var(--bg-overlay)', color: 'var(--lose)', border: '1px solid var(--lose)40', cursor: 'pointer' }}
+                                  disabled={removingId === r.user_id}
+                                  onClick={e => { e.stopPropagation(); removeMember(r.user_id) }}>
+                                  {removingId === r.user_id ? '...' : '✕ Remover'}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          {form.length > 0 && <FormDots form={form} />}
                         </div>
-                        {prevMember && ptsDiff > 0 && (
-                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>
-                            ▲ faltam <strong style={{ color: 'var(--text-1)' }}>{ptsDiff} pts</strong> para {prevMember.name}
-                          </div>
-                        )}
-                        {prevMember && ptsDiff === 0 && (
-                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--win)' }}>= empatado com {prevMember.name}</div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700 }}>{r.effective_points ?? r.total_points}</span>
-                        {r.champion_bonus > 0 && (
-                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#e8a030', fontWeight: 700, background: '#e8a03018', border: '1px solid #e8a03040', borderRadius: 10, padding: '1px 5px' }}>🏆+{r.champion_bonus}</span>
-                        )}
-                        <div style={{ width: 36, height: 3, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', borderRadius: 2, width: `${leaderPts > 0 ? ((r.effective_points ?? r.total_points) / leaderPts) * 100 : 0}%`, background: i === 0 ? '#e8a030' : i === 1 ? 'var(--text-3)' : 'var(--accent)', transition: 'width 600ms ease' }} />
-                        </div>
-                        {amOwner && !r.is_me && (
-                          <button type="button" style={{ fontSize: 10, padding: '1px 6px', color: 'var(--lose)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)' }} disabled={removingId === r.user_id} onClick={() => removeMember(r.user_id)}>
-                            {removingId === r.user_id ? '...' : '✕'}
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
                   )
                 })}
