@@ -8,7 +8,7 @@ parameter ρ. With ρ < 0: 0-0 and 1-1 draws become more likely; 1-0 and 0-1 les
 """
 import numpy as np
 
-GLOBAL_AVG_GOALS = 1.35  # international football average goals per team per match
+GLOBAL_AVG_GOALS = 1.50  # calibrated against Copa 2026 group stage (64 matches avg 1.47)
 DC_RHO = -0.13           # Dixon-Coles ρ — calibrated for international football
 
 
