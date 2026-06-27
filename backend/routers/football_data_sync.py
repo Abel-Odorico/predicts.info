@@ -306,6 +306,8 @@ def sync_knockout(db: Session) -> dict:
         # 2. Slot reutilizável → UPDATE teams in-place (preserva bets)
         reuse_id = _find_reusable_slot(db, phase.value, match_date, team_a.id, team_b.id)
         if reuse_id:
+            # Times mudaram → análise antiga inválida
+            db.execute(text("DELETE FROM match_analyses WHERE match_id = :id"), {"id": reuse_id})
             db.execute(text("""
                 UPDATE matches
                 SET team_a_id = :ta, team_b_id = :tb,
