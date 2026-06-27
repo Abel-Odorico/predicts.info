@@ -192,16 +192,69 @@ def sync_results(db: Session) -> dict:
 
 # ── Sync mata-mata ─────────────────────────────────────────────────────────────
 
+def _find_reusable_slot(db: Session, phase_val: str, match_date, team_a_id: int, team_b_id: int) -> int | None:
+    """
+    Localiza entrada existente que pode ser atualizada para (team_a, team_b) preservando bets.
+
+    Prioridade:
+    1. Mesma data + pelo menos um time coincide (slot parcialmente correto)
+    2. Qualquer entrada na fase com um dos times (time estava no lugar errado)
+    """
+    match_date_only = match_date.date() if hasattr(match_date, 'date') else match_date
+
+    # 1. Mesma data + um dos times confirmados
+    row = db.execute(text("""
+        SELECT id FROM matches
+        WHERE phase = :phase
+          AND match_date::date = :dt
+          AND (team_a_id = :ta OR team_b_id = :ta OR team_a_id = :tb OR team_b_id = :tb)
+          AND NOT (team_a_id = :ta AND team_b_id = :tb)
+          AND NOT (team_a_id = :tb AND team_b_id = :ta)
+        ORDER BY id
+        LIMIT 1
+    """), {"phase": phase_val, "dt": match_date_only,
+           "ta": team_a_id, "tb": team_b_id}).fetchone()
+    if row:
+        return row[0]
+
+    # 2. Mesma fase + um dos times em data diferente (time estava em slot errado)
+    row = db.execute(text("""
+        SELECT id FROM matches
+        WHERE phase = :phase
+          AND (team_a_id = :ta OR team_b_id = :ta OR team_a_id = :tb OR team_b_id = :tb)
+          AND NOT (team_a_id = :ta AND team_b_id = :tb)
+          AND NOT (team_a_id = :tb AND team_b_id = :ta)
+        ORDER BY id
+        LIMIT 1
+    """), {"phase": phase_val, "ta": team_a_id, "tb": team_b_id}).fetchone()
+    return row[0] if row else None
+
+
+def _try_delete(db: Session, match_id: int) -> bool:
+    """Deleta partida apenas se não tiver bets. Retorna True se deletou."""
+    bets = db.execute(text("SELECT 1 FROM bets WHERE match_id = :id LIMIT 1"),
+                      {"id": match_id}).fetchone()
+    if bets:
+        return False
+    db.execute(text("DELETE FROM matches WHERE id = :id"), {"id": match_id})
+    return True
+
+
 def sync_knockout(db: Session) -> dict:
     """
     Cria/corrige partidas de mata-mata usando dados da API.
-    Só processa partidas com times já definidos (não-None).
+
+    Estratégia (preserva bets existentes):
+    1. Par exato (ta,tb) já existe → update data/status
+    2. Par não existe → busca slot reutilizável (mesma data+time parcial, ou mesmo time em data errada)
+       → UPDATE teams in-place (preserva ID e apostas vinculadas)
+    3. Sem slot → tenta deletar conflitos sem bets → cria novo
     """
     api_key = _api_key(db)
     knockout_stages = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]
     all_matches = _fetch_matches(api_key)
 
-    created = updated = skipped = 0
+    created = updated = team_fixed = skipped = 0
 
     for m in all_matches:
         if m.get("stage") not in knockout_stages:
@@ -221,48 +274,78 @@ def sync_knockout(db: Session) -> dict:
 
         phase = STAGE_MAP.get(m["stage"], MatchPhase.r32)
         match_date = _parse_date(m["utcDate"])
-        match_number = m.get("id")  # usa ID da API como match_number temporário
+        match_number = m.get("id")
+        status_val = "scheduled" if m["status"] in ("TIMED", "SCHEDULED") else m["status"].lower()
 
-        # Procura partida exata (ambos times)
-        existing = db.execute(text("""
+        # 1. Par exato já existe → só atualiza data/status
+        exact = db.execute(text("""
             SELECT id FROM matches WHERE
               ((team_a_id = :ta AND team_b_id = :tb) OR (team_a_id = :tb AND team_b_id = :ta))
               AND phase = :phase
             LIMIT 1
         """), {"ta": team_a.id, "tb": team_b.id, "phase": phase.value}).fetchone()
 
-        status_val = "scheduled" if m["status"] in ("TIMED", "SCHEDULED") else m["status"].lower()
-
-        if existing:
+        if exact:
             db.execute(text("""
-                UPDATE matches SET match_date = :dt, status = :st WHERE id = :id
-            """), {"dt": match_date, "st": status_val, "id": existing[0]})
+                UPDATE matches SET match_date = :dt, status = :st, match_number = :mn WHERE id = :id
+            """), {"dt": match_date, "st": status_val, "mn": match_number, "id": exact[0]})
             updated += 1
-        else:
-            # Remove entradas conflitantes (mesmo time, mesma fase, oponente diferente)
-            # → duplicatas do Wikipedia sync
+            # Limpa duplicatas do mesmo time na mesma fase (ex.: ALG aparecia 2x)
             for team_id in [team_a.id, team_b.id]:
-                conflicts = db.execute(text("""
+                dupes = db.execute(text("""
                     SELECT id FROM matches
                     WHERE phase = :phase
+                      AND id != :confirmed
                       AND (team_a_id = :t OR team_b_id = :t)
-                      AND NOT (team_a_id = :ta AND team_b_id = :tb)
-                      AND NOT (team_a_id = :tb AND team_b_id = :ta)
-                """), {"phase": phase.value, "t": team_id, "ta": team_a.id, "tb": team_b.id}).fetchall()
-                for (cid,) in conflicts:
-                    db.execute(text("DELETE FROM matches WHERE id = :id"), {"id": cid})
+                """), {"phase": phase.value, "t": team_id, "confirmed": exact[0]}).fetchall()
+                for (dupe_id,) in dupes:
+                    _try_delete(db, dupe_id)
+            db.commit()
+            continue
 
+        # 2. Slot reutilizável → UPDATE teams in-place (preserva bets)
+        reuse_id = _find_reusable_slot(db, phase.value, match_date, team_a.id, team_b.id)
+        if reuse_id:
             db.execute(text("""
-                INSERT INTO matches (team_a_id, team_b_id, phase, match_date, status, is_neutral, match_number)
-                VALUES (:ta, :tb, :phase, :dt, :status, true, :mn)
-            """), {
-                "ta": team_a.id, "tb": team_b.id,
-                "phase": phase.value, "dt": match_date,
-                "status": status_val, "mn": match_number,
-            })
-            created += 1
+                UPDATE matches
+                SET team_a_id = :ta, team_b_id = :tb,
+                    match_date = :dt, status = :st, match_number = :mn
+                WHERE id = :id
+            """), {"ta": team_a.id, "tb": team_b.id,
+                   "dt": match_date, "st": status_val,
+                   "mn": match_number, "id": reuse_id})
+            team_fixed += 1
+            db.commit()
+            continue
 
+        # 3. Sem slot → tenta deletar conflitos sem bets → cria novo
+        for team_id in [team_a.id, team_b.id]:
+            conflicts = db.execute(text("""
+                SELECT id FROM matches
+                WHERE phase = :phase
+                  AND (team_a_id = :t OR team_b_id = :t)
+                  AND NOT (team_a_id = :ta AND team_b_id = :tb)
+                  AND NOT (team_a_id = :tb AND team_b_id = :ta)
+            """), {"phase": phase.value, "t": team_id,
+                   "ta": team_a.id, "tb": team_b.id}).fetchall()
+            for (cid,) in conflicts:
+                _try_delete(db, cid)
+
+        db.execute(text("""
+            INSERT INTO matches (team_a_id, team_b_id, phase, match_date, status, is_neutral, match_number)
+            VALUES (:ta, :tb, :phase, :dt, :status, true, :mn)
+        """), {"ta": team_a.id, "tb": team_b.id,
+               "phase": phase.value, "dt": match_date,
+               "status": status_val, "mn": match_number})
+        created += 1
         db.commit()
+
+    _last_run["knockout"] = {
+        "created": created, "updated": updated,
+        "team_fixed": team_fixed, "skipped": skipped,
+        "at": _utcnow().isoformat(),
+    }
+    return _last_run["knockout"]
 
     _last_run["knockout"] = {"created": created, "updated": updated, "skipped": skipped, "at": _utcnow().isoformat()}
     return _last_run["knockout"]
