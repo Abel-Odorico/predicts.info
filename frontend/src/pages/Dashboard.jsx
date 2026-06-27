@@ -439,36 +439,43 @@ export default function Dashboard() {
       <InstallBanner />
 
       {/* ── Competição de Fase ── */}
-      {competition && (
-        <Link
-          to="/ranking"
-          style={{ textDecoration: 'none', display: 'block', margin: '12px 0' }}
-          onClick={() => {}}
-        >
-          <div style={{
-            padding: '14px 16px',
-            background: 'linear-gradient(135deg, rgba(232,196,74,0.14) 0%, rgba(232,196,74,0.05) 100%)',
-            border: '1.5px solid rgba(232,196,74,0.35)', borderRadius: 12,
-            display: 'flex', alignItems: 'center', gap: 12,
-          }}>
-            <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--amber)', letterSpacing: '0.05em' }}>
-                NOVA FASE DA COMPETIÇÃO
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
-                {competition.name}
-              </div>
-              {competition.promo_text && (
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                  {competition.promo_text}
+      {competition && (() => {
+        const startDate  = competition.start_date
+          ? new Date(competition.start_date + (competition.start_date.endsWith('Z') ? '' : 'Z'))
+          : null
+        const isFuture   = startDate && startDate > new Date()
+        const fmtDate    = startDate
+          ? startDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })
+          : null
+        return (
+          <Link to="/ranking" style={{ textDecoration: 'none', display: 'block', margin: '12px 0' }}>
+            <div style={{
+              padding: '14px 16px',
+              background: 'linear-gradient(135deg, rgba(232,196,74,0.14) 0%, rgba(232,196,74,0.05) 100%)',
+              border: '1.5px solid rgba(232,196,74,0.35)', borderRadius: 12,
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#e8c44a', letterSpacing: '0.08em' }}>
+                  {isFuture ? `EM BREVE · ${fmtDate || ''}` : 'NOVA FASE DA COMPETIÇÃO'}
                 </div>
-              )}
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
+                  {competition.name}
+                </div>
+                {competition.promo_text && (
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                    {competition.promo_text}
+                  </div>
+                )}
+              </div>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', flexShrink: 0 }}>
+                {isFuture ? 'Em breve →' : 'Ver →'}
+              </span>
             </div>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--amber)', flexShrink: 0 }}>Ver →</span>
-          </div>
-        </Link>
-      )}
+          </Link>
+        )
+      })()}
 
       {token && (
         <button

@@ -592,12 +592,162 @@ function PushPromptPopup({ token, onClose }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 5. POPUP: NOVA COMPETIÇÃO / FASE
+// ═════════════════════════════════════════════════════════════════════════════
+export function CompetitionPopup({ competition, onClose }) {
+  const startDate = competition.start_date
+    ? new Date(competition.start_date + (competition.start_date.endsWith('Z') ? '' : 'Z'))
+    : null
+  const isFuture = startDate && startDate > new Date()
+  const fmtDate  = startDate
+    ? startDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long' })
+    : null
+
+  const shareText = `⚡ Nova fase do Predicts.info!\n\n${competition.name} — pontuação zerada, todos partem do mesmo ponto.\n\n🏆 Vem competir: https://predicts.info`
+  const waHref    = `https://wa.me/?text=${encodeURIComponent(shareText)}`
+  const tgHref    = `https://t.me/share/url?url=${encodeURIComponent('https://predicts.info')}&text=${encodeURIComponent(`⚡ ${competition.name} — nova competição no Predicts!`)}`
+
+  function copyLink() {
+    navigator.clipboard?.writeText('https://predicts.info').catch(() => {})
+  }
+
+  return (
+    <ModalShell onClose={onClose} maxWidth={460} zIndex={9600}>
+      <div style={{ padding: '0 0 4px' }}>
+        {/* Hero */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(232,196,74,0.18) 0%, rgba(15,122,120,0.10) 100%)',
+          borderRadius: '14px 14px 0 0', padding: '28px 24px 22px', textAlign: 'center',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>⚡</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#e8c44a', letterSpacing: '0.12em', marginBottom: 6 }}>
+            {isFuture ? 'EM BREVE' : 'COMEÇA AGORA'}
+          </div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--text-1)', margin: '0 0 8px', letterSpacing: '0.03em', lineHeight: 1.1 }}>
+            {competition.name}
+          </h2>
+          {competition.description && (
+            <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.55 }}>
+              {competition.description}
+            </p>
+          )}
+          {fmtDate && (
+            <div style={{ marginTop: 10, fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', fontWeight: 700 }}>
+              📅 {isFuture ? `Começa em ${fmtDate}` : `Iniciou em ${fmtDate}`}
+            </div>
+          )}
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 24px' }}>
+          {/* Destaque zero-a-zero */}
+          <div style={{
+            display: 'flex', gap: 10, marginBottom: 18,
+            background: 'rgba(15,122,120,0.07)', border: '1px solid rgba(15,122,120,0.2)',
+            borderRadius: 12, padding: '14px 16px',
+          }}>
+            <span style={{ fontSize: 22, flexShrink: 0 }}>🆕</span>
+            <div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)', marginBottom: 3 }}>
+                Novo começo, campo igual para todos
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                Pontuação zerada nesta fase. Quem entrar agora compete em igualdade com quem jogou desde o início.
+              </div>
+            </div>
+          </div>
+
+          {/* Promo text */}
+          {competition.promo_text && (
+            <div style={{
+              fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)',
+              fontStyle: 'italic', textAlign: 'center', marginBottom: 18,
+              padding: '10px 14px', background: 'var(--bg-overlay)', borderRadius: 10,
+            }}>
+              "{competition.promo_text}"
+            </div>
+          )}
+
+          {/* Convite */}
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-2)', marginBottom: 10 }}>
+            📣 Chame seus amigos — compartilhe o link:
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+            <a
+              href={waHref} target="_blank" rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                padding: '11px 0', borderRadius: 10, textDecoration: 'none',
+                background: '#25D366', color: '#fff',
+                fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
+              }}
+            >
+              WhatsApp
+            </a>
+            <a
+              href={tgHref} target="_blank" rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                padding: '11px 0', borderRadius: 10, textDecoration: 'none',
+                background: '#0088cc', color: '#fff',
+                fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
+              }}
+            >
+              Telegram
+            </a>
+          </div>
+          <button
+            onClick={copyLink}
+            style={{
+              width: '100%', padding: '10px 0', borderRadius: 10, border: '1px solid var(--border)',
+              background: 'var(--bg-overlay)', color: 'var(--text-2)', cursor: 'pointer',
+              fontFamily: 'var(--font-cond)', fontSize: 13, marginBottom: 14,
+            }}
+          >
+            📋 Copiar link predicts.info
+          </button>
+
+          <button
+            onClick={onClose}
+            style={{
+              width: '100%', padding: '12px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: 'var(--accent)', color: '#fff',
+              fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700,
+            }}
+          >
+            {isFuture ? 'Entendi! Vou me preparar ⚡' : 'Bora competir! ⚡'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // ORQUESTRADOR — controla qual popup aparece e em que ordem
 // ═════════════════════════════════════════════════════════════════════════════
 export default function AppPopups() {
   const { token } = useAuth()
   const [active, setActive] = useState(null)
   const [versionData, setVersionData] = useState(null)
+  const [competitionData, setCompetitionData] = useState(null)
+
+  // ── 0: Competition popup (3s, uma vez por competition.id) ────────────────
+  useEffect(() => {
+    let mounted = true
+    const t = setTimeout(async () => {
+      try {
+        const c = await api.get('/competition/active')
+        if (!mounted || !c?.id) return
+        const key = `predicts_comp_seen_${c.id}`
+        if (localStorage.getItem(key)) return
+        setCompetitionData(c)
+        setActive(prev => prev === null ? 'competition' : prev)
+      } catch {}
+    }, 3000)
+    return () => { mounted = false; clearTimeout(t) }
+  }, [])
 
   // ── 1 & 2: Version → Champion (800ms, logado) ─────────────────────────────
   useEffect(() => {
@@ -661,7 +811,13 @@ export default function AppPopups() {
     setActive(null)
   }
 
+  function closeCompetition() {
+    if (competitionData?.id) localStorage.setItem(`predicts_comp_seen_${competitionData.id}`, '1')
+    setActive(null)
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
+  if (active === 'competition' && competitionData) return <CompetitionPopup competition={competitionData} onClose={closeCompetition} />
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
   if (active === 'champion')               return <ChampionPopup token={token} onClose={closeChampion} />
   if (active === 'push')                   return <PushPromptPopup token={token} onClose={closePush} />
