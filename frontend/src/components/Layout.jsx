@@ -438,16 +438,15 @@ function SystemIcon() {
 
 function GridIcon() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* 4 setas diagonais apontando para fora do centro */}
-      <line x1="12" y1="12" x2="5"  y2="5"  />
-      <polyline points="5,9 5,5 9,5"  />
-      <line x1="12" y1="12" x2="19" y2="5"  />
-      <polyline points="15,5 19,5 19,9" />
-      <line x1="12" y1="12" x2="19" y2="19" />
-      <polyline points="19,15 19,19 15,19" />
-      <line x1="12" y1="12" x2="5"  y2="19" />
-      <polyline points="9,19 5,19 5,15"  />
+    <svg width="30" height="30" viewBox="0 0 64 64">
+      {/* Bola — mesmo SVG do favicon, sem o fundo verde */}
+      <circle cx="32" cy="30" r="16" fill="white" opacity="0.97"/>
+      <polygon points="32,18 38.5,23 36,30.5 28,30.5 25.5,23" fill="#0a3a38"/>
+      <polygon points="32,18 25.5,23 18,19 20,12" fill="#0a3a38" opacity="0.6"/>
+      <polygon points="32,18 38.5,23 46,19 44,12" fill="#0a3a38" opacity="0.6"/>
+      <polygon points="36,30.5 38.5,23 46,25 46,34" fill="#0a3a38" opacity="0.6"/>
+      <polygon points="28,30.5 25.5,23 18,25 18,34" fill="#0a3a38" opacity="0.6"/>
+      <polygon points="28,30.5 36,30.5 38,38 32,42 26,38" fill="#0a3a38" opacity="0.6"/>
     </svg>
   )
 }

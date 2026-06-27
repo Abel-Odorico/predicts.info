@@ -490,9 +490,9 @@ img {
 }
 
 @keyframes fab-pulse {
-  0%   { box-shadow: 0 4px 20px rgba(15,122,120,0.50), 0 2px 8px rgba(0,0,0,0.3), 0 0 0 0   rgba(15,122,120,0.45); }
-  60%  { box-shadow: 0 4px 20px rgba(15,122,120,0.50), 0 2px 8px rgba(0,0,0,0.3), 0 0 0 14px rgba(15,122,120,0); }
-  100% { box-shadow: 0 4px 20px rgba(15,122,120,0.50), 0 2px 8px rgba(0,0,0,0.3), 0 0 0 0   rgba(15,122,120,0); }
+  0%   { box-shadow: 0 6px 24px rgba(10,74,72,0.70), 0 2px 8px rgba(0,0,0,0.4), 0 0 0 0   rgba(15,122,120,0.55); }
+  65%  { box-shadow: 0 6px 24px rgba(10,74,72,0.70), 0 2px 8px rgba(0,0,0,0.4), 0 0 0 18px rgba(15,122,120,0); }
+  100% { box-shadow: 0 6px 24px rgba(10,74,72,0.70), 0 2px 8px rgba(0,0,0,0.4), 0 0 0 0   rgba(15,122,120,0); }
 }
 
 .mobile-fab {
@@ -500,34 +500,34 @@ img {
   bottom: calc(100% - 20px);
   left: 50%;
   transform: translateX(-50%);
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  background: var(--accent);
-  border: 3px solid var(--bg-surface);
+  background: linear-gradient(135deg, #0f7a78 0%, #0a4a48 100%);
+  border: 3.5px solid var(--bg-surface);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 200ms cubic-bezier(0.34,1.56,0.64,1), background 200ms, box-shadow 200ms;
+  transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 200ms;
   z-index: 121;
-  animation: fab-pulse 2.4s ease-out infinite;
+  animation: fab-pulse 2.2s ease-out infinite;
 }
 
 .mobile-fab:hover {
-  transform: translateX(-50%) scale(1.1);
-  box-shadow: 0 6px 28px rgba(15,122,120,0.65), 0 2px 8px rgba(0,0,0,0.3);
+  transform: translateX(-50%) scale(1.12);
+  box-shadow: 0 8px 32px rgba(10,74,72,0.8), 0 2px 8px rgba(0,0,0,0.4);
   animation: none;
 }
 
 .mobile-fab--open {
-  background: #e85252;
-  box-shadow: 0 4px 20px rgba(232,82,82,0.4), 0 2px 8px rgba(0,0,0,0.3);
+  background: linear-gradient(135deg, #e85252 0%, #b83030 100%);
+  box-shadow: 0 6px 24px rgba(232,82,82,0.55), 0 2px 8px rgba(0,0,0,0.4);
   transform: translateX(-50%) rotate(90deg);
   animation: none;
 }
 .mobile-fab--open:hover {
-  transform: translateX(-50%) scale(1.08) rotate(90deg);
+  transform: translateX(-50%) scale(1.1) rotate(90deg);
 }
 
 /* ── Mobile Drawer ───────────────────────────────────── */
