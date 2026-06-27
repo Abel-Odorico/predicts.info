@@ -240,7 +240,8 @@ class BotDecisionLog(Base):
     prob_b     = Column(Numeric(6, 2), nullable=True)
     reason     = Column(Text, nullable=True)          # justificativa da IA
     telegram_sent = Column(Boolean, default=False)
-    slack_sent = Column(Boolean, default=False)
+    slack_sent    = Column(Boolean, default=False)
+    push_sent     = Column(Integer, default=0)
     meta       = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=_utcnow, index=True)
 

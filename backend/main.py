@@ -409,6 +409,7 @@ def _run_migrations():
             "UPDATE users SET name = '🔮 Oráculo Predictor' WHERE email = 'bot@predicts.info'",
             # Slack: canal de notificação do Oráculo
             "ALTER TABLE bot_decision_logs ADD COLUMN IF NOT EXISTS slack_sent BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bot_decision_logs ADD COLUMN IF NOT EXISTS push_sent INTEGER DEFAULT 0",
             # source pode guardar tag de modelo longa (ex: llm/openrouter/anthropic/claude-sonnet-4-5)
             "ALTER TABLE bot_decision_logs ALTER COLUMN source TYPE VARCHAR(80)",
             # phase_competitions — competição paralela por fase do torneio

@@ -637,6 +637,29 @@ def _oracle_telegram(db: Session, match: Match, decision: dict, action: str, old
         return False
 
 
+def _oracle_push(db: Session, match: Match, decision: dict, action: str) -> int:
+    """Envia Web Push para todos os subscribers com análise do Oráculo. Retorna enviados."""
+    try:
+        from routers.push import send_push_to_all
+        ta = match.team_a.code if match.team_a else "?"
+        tb = match.team_b.code if match.team_b else "?"
+        sa, sb = decision["score_a"], decision["score_b"]
+        action_label = {
+            "created": "🔮 Oráculo prevê",
+            "changed": "🔮 Oráculo atualizou",
+            "kept":    "🔮 Oráculo confirma",
+        }.get(action, "🔮 Oráculo")
+        title = f"{action_label}: {ta} {sa}x{sb} {tb}"
+        conf = decision.get("confidence")
+        conf_str = f" (confiança {conf}%)" if conf is not None else ""
+        reason = decision.get("reason", "")
+        body = f"{reason[:100]}{conf_str}" if reason else f"Análise pré-jogo disponível{conf_str}"
+        match_url = f"/partida/{match.id}"
+        return send_push_to_all(db, title, body, match_url)
+    except Exception:
+        return 0
+
+
 # ── Slack (Incoming Webhook) ────────────────────────────────────────────────────
 
 def _slack_config(db: Session) -> str:
@@ -801,6 +824,7 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
         notify = action in ("created", "changed", "kept")
         sent = False
         slack_ok = False
+        push_sent = 0
         if notify and telegram:
             sent = _oracle_telegram(db, match, decision, action, old)
             if sent:
@@ -809,6 +833,10 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
             slack_ok = _oracle_slack(db, match, decision, action, old, webhook=slack_url)
             if slack_ok:
                 summary["slack_sent"] += 1
+        if notify:
+            push_sent = _oracle_push(db, match, decision, action)
+            if push_sent:
+                summary["push_sent"] = summary.get("push_sent", 0) + push_sent
 
         log = BotDecisionLog(
             match_id=match.id,
@@ -818,7 +846,7 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
             new_a=sa, new_b=sb,
             source=decision["source"], confidence=decision.get("confidence"),
             prob_a=probs[0], prob_draw=probs[1], prob_b=probs[2],
-            reason=decision.get("reason"), telegram_sent=sent, slack_sent=slack_ok,
+            reason=decision.get("reason"), telegram_sent=sent, slack_sent=slack_ok, push_sent=push_sent,
             meta={
                 "baseline": list(decision["baseline"]),
                 "model": decision.get("model_tag"),
