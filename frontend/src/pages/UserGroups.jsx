@@ -323,19 +323,25 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     if (!pool.length) return []
     const out = []
     const lead = sortedMembers[0]
-    if (lead && lead.total_points > 0) out.push({ icon: '👑', label: 'Líder', m: lead, val: `${lead.total_points} pts` })
+    if (lead && lead.total_points > 0) out.push({ icon: '👑', label: 'Líder', m: lead, val: `${lead.total_points} pts`, color: '#e8a030' })
     const snipers = pool.filter(m => m.total_bets >= 3 && m.exact_scores > 0)
     if (snipers.length) {
       const s = snipers.reduce((b, m) => (m.exact_scores / m.total_bets > b.exact_scores / b.total_bets ? m : b))
-      out.push({ icon: '🎯', label: 'Sniper', m: s, val: `${Math.round((s.exact_scores / s.total_bets) * 100)}% exatos` })
+      out.push({ icon: '🎯', label: 'Sniper', m: s, val: `${Math.round((s.exact_scores / s.total_bets) * 100)}% exatos`, color: '#e85252' })
     }
     const mara = pool.reduce((b, m) => (m.total_bets > b.total_bets ? m : b))
-    if (mara.total_bets > 0) out.push({ icon: '⚡', label: 'Maratonista', m: mara, val: `${mara.total_bets} palpites` })
+    if (mara.total_bets > 0) out.push({ icon: '⚡', label: 'Maratonista', m: mara, val: `${mara.total_bets} palpites`, color: '#9b5de8' })
+    const effPool = pool.filter(m => (m.total_bets || 0) >= 5)
+    if (effPool.length) {
+      const best = effPool.reduce((b, m) => ((aproveitamento(m) ?? 0) > (aproveitamento(b) ?? 0) ? m : b))
+      const pct = aproveitamento(best)
+      if (pct !== null) out.push({ icon: '📊', label: 'Melhor Aproveito', m: best, val: `${pct}% eficiência`, color: '#23b26d' })
+    }
     const hot = m => (m.recent_form || []).reduce((a, f) => a + (f === 'E' ? 2 : f === 'C' ? 1 : 0), 0)
     const hotPool = pool.filter(m => (m.recent_form || []).length >= 3 && hot(m) > 0)
     if (hotPool.length) {
       const h = hotPool.reduce((b, m) => (hot(m) > hot(b) ? m : b))
-      out.push({ icon: '🔥', label: 'Em alta', m: h, val: 'embalado' })
+      out.push({ icon: '🔥', label: 'Em Alta', m: h, val: 'na melhor forma', color: 'var(--win)' })
     }
     return out
   })()
@@ -591,55 +597,58 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
         </div>
       )}
 
-      <div className="group-manager-card__stats">
-        <GroupStat label="Membros" value={sortedMembers.length} />
-        <GroupStat label="Realizados" value={`${matchStats.finished}/${matchStats.total}`} />
-        <GroupStat label="Pendentes" value={matchStats.total - matchStats.finished} />
-        <GroupStat label="Convites" value={group.pending_invites?.length ?? 0} />
+      {/* ── StatPills ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 'var(--s3)', padding: 'var(--s3) var(--s4)' }}>
+        <StatPill icon="👥" label="Participantes" value={sortedMembers.length} />
+        <StatPill icon="⚽" label="Realizados" value={`${matchStats.finished}/${matchStats.total}`} />
+        <StatPill icon="⏳" label="Pendentes" value={matchStats.total - matchStats.finished} />
+        <StatPill icon="📈" label="Eficiência" value={`${gStats.efficiency}%`} sub={`${gStats.bets} palpites no total`} />
+        <StatPill icon="🎯" label="Exatos" value={gStats.exacts} sub={`${gStats.exactRate}% taxa`} />
+        <StatPill icon="🧮" label="Média/membro" value={`${gStats.avgPoints} pts`} />
       </div>
 
-      {/* Barra XP do grupo */}
-      <div className="group-xp-bar">
+      {/* ── Barra XP ── */}
+      <div className="group-xp-bar" style={{ margin: '0 var(--s4) var(--s3)' }}>
         <div className="group-xp-bar__header">
           <span className="group-xp-bar__label">Nível do grupo</span>
-          <span className="group-xp-bar__level">⚡ Nível {groupLevel}</span>
+          <span className="group-xp-bar__level">⚡ Nível {groupLevel} · {groupXp % 500}/500 XP</span>
         </div>
         <div className="group-xp-bar__track">
           <div className="group-xp-bar__fill" style={{ width: `${xpPct}%` }} />
         </div>
       </div>
 
-      {/* Raio-X do grupo + compartilhar */}
-      <div className="group-xray">
-        <div className="group-xray__head">
-          <span className="group-xray__title">📊 Raio-X do grupo</span>
-          <button type="button" className="btn btn-ghost btn-sm group-xray__share" onClick={shareGroup}>
-            {shared || '🔗 Compartilhar'}
+      {/* ── Highlight cards ── */}
+      {highlights.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 'var(--s3)', padding: '0 var(--s4) var(--s4)' }}>
+          {highlights.map(h => (
+            <Link
+              key={h.label}
+              to={`/usuarios/${h.m.user_id}/historico`}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', background: 'var(--bg-raised)', borderRadius: 12, border: '1px solid var(--border)', borderTop: `3px solid ${h.color ?? 'var(--accent)'}`, textDecoration: 'none' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 15 }}>{h.icon}</span>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: h.color ?? 'var(--accent)' }}>{h.label}</span>
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.m.name}</div>
+              <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)' }}>{h.val}</div>
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={shareGroup}
+            style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', background: 'var(--bg-raised)', borderRadius: 12, border: '1px solid var(--border)', borderTop: '3px solid var(--accent)', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 15 }}>🔗</span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>Compartilhar</span>
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: shared ? 'var(--win)' : 'var(--text-1)' }}>{shared || 'Enviar ranking →'}</div>
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>WhatsApp / nativo</div>
           </button>
         </div>
-        <div className="group-xray__grid">
-          <XrayTile icon="⭐" value={gStats.points}            label="Pontos do grupo" />
-          <XrayTile icon="📊" value={gStats.bets}              label="Palpites" />
-          <XrayTile icon="🎯" value={gStats.exacts}            label="Placares exatos" />
-          <XrayTile icon="✅" value={gStats.correct}           label="Acertos de resultado" />
-          <XrayTile icon="📈" value={`${gStats.exactRate}%`}   label="Taxa de exatos" />
-          <XrayTile icon="🧮" value={gStats.avgPoints}         label="Média / membro" />
-        </div>
-        {highlights.length > 0 && (
-          <div className="group-highlights">
-            {highlights.map(h => (
-              <div key={h.label} className="group-highlight">
-                <span className="group-highlight__icon">{h.icon}</span>
-                <div className="group-highlight__body">
-                  <span className="group-highlight__label">{h.label}</span>
-                  <span className="group-highlight__name" title={h.m.name}>{h.m.name}</span>
-                  <span className="group-highlight__val">{h.val}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="group-manager-card__body">
         {/* Members section */}
@@ -893,6 +902,16 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
         )}
       </div>
     </article>
+  )
+}
+
+function StatPill({ icon, label, value, sub, accent }) {
+  return (
+    <div style={{ background: accent ? 'var(--accent-dim)' : 'var(--bg-raised)', border: `1px solid ${accent ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: accent ? 'var(--accent)' : 'var(--text-3)' }}>{icon} {label}</div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: accent ? 'var(--accent)' : 'var(--text-1)', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
+      {sub && <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-2)' }}>{sub}</div>}
+    </div>
   )
 }
 
