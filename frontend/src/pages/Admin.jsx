@@ -305,6 +305,8 @@ export default function Admin() {
   const [generatingForce, setGeneratingForce] = useState(false)
   const [analysisLogs, setAnalysisLogs]       = useState(null)
   const [logsLoading, setLogsLoading]         = useState(false)
+  const [analysisStats, setAnalysisStats]     = useState(null)
+  const [statsLoading, setStatsLoading]       = useState(false)
   const [genProgress, setGenProgress]         = useState(null)
   const [onlyFuture, setOnlyFuture]           = useState(false)
   const analysisMsgTimerRef  = useRef(null)
@@ -408,6 +410,12 @@ export default function Admin() {
       setAnalysisMsgTimed('✗ Erro: ' + (err?.message || 'falha ao iniciar geração'))
     }
     finally { setGeneratingAll(false); setGeneratingForce(false) }
+  }
+
+  async function loadAnalysisStats() {
+    setStatsLoading(true)
+    try { setAnalysisStats(await api.get('/admin/analysis/stats', token)) } catch {}
+    finally { setStatsLoading(false) }
   }
 
   async function loadAnalysisLogs() {
@@ -666,6 +674,7 @@ export default function Admin() {
     if (tab === 'knockout' && !champAllPicks) loadChampPicks()
     if (tab === 'analyses' && !analysisConfig) loadAnalysisConfig()
     if (tab === 'analyses' && !analysisStatus) loadAnalysisStatus()
+    if (tab === 'analyses' && !analysisStats) loadAnalysisStats()
     if (tab === 'analyses') fetchProgress()
     if (tab === 'bot' && !botStatus && !botLoading) loadBot()
     if (tab === 'report' && !report && !reportLoading) loadReport()
@@ -3091,7 +3100,7 @@ export default function Admin() {
                   <button className="btn btn-primary btn-sm" disabled={analysisSaving} type="submit">
                     {analysisSaving ? 'Salvando…' : '💾 Salvar config'}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus(); setAnalysisMsgTimed('✓ Atualizado!') }}>↻ Atualizar</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus(); loadAnalysisStats(); setAnalysisMsgTimed('✓ Atualizado!') }}>↻ Atualizar</button>
                 </div>
 
                 {/* Ações de geração */}
@@ -3105,7 +3114,7 @@ export default function Admin() {
                       {generatingForce ? '⏳ Iniciando…' : '🔄 Regenerar todas'}
                     </button>
                     <button type="button" className="btn btn-ghost btn-sm" onClick={loadAnalysisLogs} disabled={logsLoading}>
-                      {logsLoading ? '⏳ Carregando…' : '📊 Ver logs'}
+                      {logsLoading ? '⏳ Carregando…' : '📋 Ver logs detalhados'}
                     </button>
                   </div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
@@ -3137,34 +3146,121 @@ export default function Admin() {
             <AnalysisProgressCard progress={genProgress} nowMs={nowMs} onClose={() => setGenProgress(null)} />
           )}
 
-          {/* Logs de geração IA */}
-          {analysisLogs && (
+          {/* ── Painel de Consumo IA ── */}
+          {(analysisStats || statsLoading) && (
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 20px', marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>📊 Logs de Geração IA</div>
-                <button type="button" onClick={() => setAnalysisLogs(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 16 }}>✕</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>📊 Consumo IA</div>
+                <button type="button" onClick={loadAnalysisStats} disabled={statsLoading}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+                  {statsLoading ? '⏳' : '↻ atualizar'}
+                </button>
               </div>
-              {/* Totais */}
-              {analysisLogs.totals && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 14 }}>
+
+              {analysisStats && (<>
+                {/* Cards de totais */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 20 }}>
                   {[
-                    { label: '✓ Geradas', val: analysisLogs.totals.ok },
-                    { label: '✗ Erros', val: analysisLogs.totals.error },
-                    { label: 'Tokens entrada', val: (analysisLogs.totals.tokens_in ?? 0).toLocaleString() },
-                    { label: 'Tokens saída', val: (analysisLogs.totals.tokens_out ?? 0).toLocaleString() },
-                    { label: 'Custo total', val: '$' + (analysisLogs.totals.cost_usd || 0).toFixed(4) },
-                    { label: 'Tempo total', val: analysisLogs.totals.duration_ms >= 60000
-                        ? Math.floor(analysisLogs.totals.duration_ms/60000) + 'm ' + Math.floor((analysisLogs.totals.duration_ms%60000)/1000) + 's'
-                        : (analysisLogs.totals.duration_ms/1000).toFixed(1) + 's' },
-                  ].map(({ label, val }) => (
+                    { label: 'Geradas (ok)', val: analysisStats.totals.ok, color: 'var(--win)' },
+                    { label: 'Erros', val: analysisStats.totals.error, color: analysisStats.totals.error > 0 ? 'var(--lose)' : 'var(--text-3)' },
+                    { label: 'Taxa sucesso', val: analysisStats.totals.ok + analysisStats.totals.error > 0
+                        ? Math.round(100 * analysisStats.totals.ok / (analysisStats.totals.ok + analysisStats.totals.error)) + '%'
+                        : '—', color: 'var(--accent)' },
+                    { label: 'Tokens entrada', val: (analysisStats.totals.tokens_in ?? 0).toLocaleString() },
+                    { label: 'Tokens saída', val: (analysisStats.totals.tokens_out ?? 0).toLocaleString() },
+                    { label: 'Custo total', val: '$' + (analysisStats.totals.cost_usd || 0).toFixed(4) },
+                    { label: 'Tempo médio', val: analysisStats.totals.avg_ms >= 60000
+                        ? Math.floor(analysisStats.totals.avg_ms/60000) + 'm'
+                        : (analysisStats.totals.avg_ms/1000).toFixed(1) + 's' },
+                  ].map(({ label, val, color }) => (
                     <div key={label} style={{ background: 'var(--bg-base)', borderRadius: 8, padding: '8px 10px', border: '1px solid var(--border)' }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)' }}>{val}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: color || 'var(--text-1)' }}>{val}</div>
                     </div>
                   ))}
                 </div>
-              )}
-              {/* Tabela logs */}
+
+                {/* Gráfico diário (últimos 14 dias) */}
+                {analysisStats.by_day?.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 8 }}>Atividade — últimos 14 dias</div>
+                    <ResponsiveContainer width="100%" height={130}>
+                      <ComposedChart data={analysisStats.by_day} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                        <XAxis dataKey="day" tick={{ fontSize: 9, fill: 'var(--text-4)', fontFamily: 'var(--font-mono)' }}
+                          tickFormatter={v => v?.slice(5)} />
+                        <YAxis yAxisId="cnt" tick={{ fontSize: 9, fill: 'var(--text-4)' }} width={22} allowDecimals={false} />
+                        <YAxis yAxisId="cost" orientation="right" tick={{ fontSize: 9, fill: 'var(--text-4)' }} width={38}
+                          tickFormatter={v => v > 0 ? '$' + v.toFixed(3) : '0'} />
+                        <Tooltip
+                          contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
+                          formatter={(v, name) => name === 'Custo' ? ['$' + Number(v).toFixed(4), name] : [v, name]}
+                          labelFormatter={l => 'Dia ' + l}
+                        />
+                        <Bar yAxisId="cnt" dataKey="ok" name="Geradas" fill="var(--accent)" radius={[3,3,0,0]} maxBarSize={28} />
+                        <Bar yAxisId="cnt" dataKey="error" name="Erros" fill="var(--lose)" radius={[3,3,0,0]} maxBarSize={28} />
+                        <Area yAxisId="cost" type="monotone" dataKey="cost_usd" name="Custo" stroke="#f5a623" fill="rgba(245,166,35,0.12)" strokeWidth={2} dot={false} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Tabela por provider/modelo */}
+                {analysisStats.by_provider?.length > 0 && (
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 8 }}>Por provider/modelo</div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                        <thead>
+                          <tr style={{ color: 'var(--text-4)', borderBottom: '1px solid var(--border)' }}>
+                            {['Modelo', 'Provider', '✓ Ok', '✗ Err', '%', 'T.In', 'T.Out', 'Custo', 'T.Médio'].map(h => (
+                              <th key={h} style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, fontSize: 10 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analysisStats.by_provider.map((p, i) => {
+                            const total = p.ok + p.error
+                            const rate = total > 0 ? Math.round(100 * p.ok / total) : null
+                            return (
+                              <tr key={i} style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                                <td style={{ padding: '5px 8px', fontWeight: 600 }}>{p.model}</td>
+                                <td style={{ padding: '5px 8px' }}>
+                                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, fontWeight: 700,
+                                    background: p.provider === 'gemini' ? 'rgba(66,133,244,0.15)' : p.provider === 'openai' ? 'rgba(16,163,127,0.15)' : 'rgba(245,166,35,0.15)',
+                                    color: p.provider === 'gemini' ? '#4285f4' : p.provider === 'openai' ? '#10a37f' : '#f5a623',
+                                  }}>{p.provider}</span>
+                                </td>
+                                <td style={{ padding: '5px 8px', color: 'var(--win)' }}>{p.ok}</td>
+                                <td style={{ padding: '5px 8px', color: p.error > 0 ? 'var(--lose)' : 'var(--text-4)' }}>{p.error}</td>
+                                <td style={{ padding: '5px 8px', color: rate >= 80 ? 'var(--win)' : rate >= 50 ? '#f5a623' : 'var(--lose)' }}>
+                                  {rate !== null ? rate + '%' : '—'}
+                                </td>
+                                <td style={{ padding: '5px 8px' }}>{p.tokens_in ? p.tokens_in.toLocaleString() : '—'}</td>
+                                <td style={{ padding: '5px 8px' }}>{p.tokens_out ? p.tokens_out.toLocaleString() : '—'}</td>
+                                <td style={{ padding: '5px 8px', fontWeight: p.cost_usd > 0 ? 600 : 400, color: p.cost_usd > 0 ? 'var(--text-1)' : 'var(--win)' }}>
+                                  {p.cost_usd > 0 ? '$' + p.cost_usd.toFixed(4) : 'free'}
+                                </td>
+                                <td style={{ padding: '5px 8px' }}>{p.avg_ms >= 1000 ? (p.avg_ms/1000).toFixed(1) + 's' : p.avg_ms + 'ms'}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>)}
+            </div>
+          )}
+
+          {/* Logs de geração IA (detalhados, sob demanda) */}
+          {analysisLogs && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 20px', marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>📋 Logs Detalhados (últimas 100 gerações)</div>
+                <button type="button" onClick={() => setAnalysisLogs(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 16 }}>✕</button>
+              </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
                   <thead>
@@ -3190,7 +3286,7 @@ export default function Admin() {
                         <td style={{ padding: '4px 8px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {item.team_a && item.team_b ? `${item.team_a} × ${item.team_b}` : item.match_id ? `#${item.match_id}` : '—'}
                         </td>
-                        <td style={{ padding: '4px 8px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.model_used?.split('/').pop() || '—'}</td>
+                        <td style={{ padding: '4px 8px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.model_used || '—'}</td>
                         <td style={{ padding: '4px 8px' }}>{item.status === 'ok' ? '✓' : '✗ ' + (item.error_msg?.slice(0,30) || 'erro')}</td>
                         <td style={{ padding: '4px 8px' }}>{item.tokens_in ? item.tokens_in.toLocaleString() : '—'}</td>
                         <td style={{ padding: '4px 8px' }}>{item.tokens_out ? item.tokens_out.toLocaleString() : '—'}</td>

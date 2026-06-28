@@ -326,7 +326,7 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
             if provider_state is not None:
                 provider_state[0] = idx
             print(f"[analysis] ✓ provider={p['label']}", flush=True)
-            return result, f"{p['type']}/{p['model']}", meta
+            return result, p["label"], meta
         except Exception as e:
             last_exc = e
             err_str = str(e)
@@ -586,7 +586,7 @@ def _generate_one(
         """),
         {"mid": match_id, "content": json.dumps(content), "model": model_tag, "now": _utcnow()},
     )
-    provider_type = "gemini" if model_tag.startswith("gemini") else "openrouter"
+    provider_type = "gemini" if "gemini" in model_tag.lower() else ("openai" if "openai" in model_tag.lower() else "openrouter")
     db.execute(
         text("""
             INSERT INTO analysis_logs (match_id, model_used, provider, tokens_in, tokens_out,
@@ -696,13 +696,11 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
             try:
                 _generate_one(mid, db, cfg, None, batch_id=batch_id, trigger=trigger)
                 duration_ms = int((time.time() - t0) * 1000)
-                model_label = chain[provider_state[0]]["label"] if chain else "?"
-                print(f"[analysis] ✓ match_id={mid} via {model_label}", flush=True)
                 consecutive_rate_limits = 0
                 progress["done"] += 1
                 progress["items"].append({
                     "match_id": mid, "teams": match_label,
-                    "model": model_label, "duration_ms": duration_ms,
+                    "duration_ms": duration_ms,
                     "status": "ok", "finished_at": _utcnow().isoformat(),
                 })
                 _push_progress(r, progress)
@@ -720,8 +718,7 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                         """),
                         {
                             "mid": mid,
-                            "model": chain[provider_state[0]]["model"] if chain else None,
-                            "prov": chain[provider_state[0]]["type"] if chain else None,
+                            "model": None, "prov": None,
                             "err": err[:500], "bid": batch_id, "now": _utcnow(),
                         },
                     )
@@ -731,7 +728,7 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                 progress["done"] += 1
                 progress["items"].append({
                     "match_id": mid, "teams": match_label,
-                    "model": chain[provider_state[0]]["label"] if chain else "?",
+                    "model": "—",
                     "duration_ms": duration_ms,
                     "status": "error", "error": err[:200],
                     "finished_at": _utcnow().isoformat(),
@@ -915,6 +912,84 @@ def generate_all(
         body.only_pending, body.only_future, "manual",
     )
     return {"ok": True, "message": "Geração iniciada em background"}
+
+
+@router.get("/admin/analysis/stats")
+def analysis_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    totals = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE status='ok')    AS ok,
+            COUNT(*) FILTER (WHERE status='error') AS error,
+            COALESCE(SUM(tokens_in)  FILTER (WHERE status='ok'), 0) AS ti,
+            COALESCE(SUM(tokens_out) FILTER (WHERE status='ok'), 0) AS to_,
+            COALESCE(SUM(cost_usd)   FILTER (WHERE status='ok'), 0) AS cost,
+            COALESCE(AVG(duration_ms) FILTER (WHERE status='ok'), 0) AS avg_ms
+        FROM analysis_logs
+    """)).fetchone()
+
+    by_provider = db.execute(text("""
+        SELECT
+            model_used,
+            provider,
+            COUNT(*) FILTER (WHERE status='ok')    AS ok,
+            COUNT(*) FILTER (WHERE status='error') AS error,
+            COALESCE(SUM(tokens_in)  FILTER (WHERE status='ok'), 0) AS ti,
+            COALESCE(SUM(tokens_out) FILTER (WHERE status='ok'), 0) AS to_,
+            COALESCE(SUM(cost_usd)   FILTER (WHERE status='ok'), 0) AS cost,
+            COALESCE(AVG(duration_ms) FILTER (WHERE status='ok'), 0) AS avg_ms
+        FROM analysis_logs
+        GROUP BY model_used, provider
+        ORDER BY cost DESC, ok DESC
+    """)).fetchall()
+
+    by_day = db.execute(text("""
+        SELECT
+            DATE(created_at AT TIME ZONE 'America/Sao_Paulo') AS day,
+            COUNT(*) FILTER (WHERE status='ok')    AS ok,
+            COUNT(*) FILTER (WHERE status='error') AS error,
+            COALESCE(SUM(tokens_in)  FILTER (WHERE status='ok'), 0) AS ti,
+            COALESCE(SUM(tokens_out) FILTER (WHERE status='ok'), 0) AS to_,
+            COALESCE(SUM(cost_usd)   FILTER (WHERE status='ok'), 0) AS cost
+        FROM analysis_logs
+        WHERE created_at >= NOW() - INTERVAL '14 days'
+        GROUP BY day
+        ORDER BY day ASC
+    """)).fetchall()
+
+    return {
+        "totals": {
+            "ok":       int(totals[0] or 0),
+            "error":    int(totals[1] or 0),
+            "tokens_in":  int(totals[2] or 0),
+            "tokens_out": int(totals[3] or 0),
+            "cost_usd": float(totals[4] or 0),
+            "avg_ms":   int(totals[5] or 0),
+        },
+        "by_provider": [
+            {
+                "model": r[0] or "—",
+                "provider": r[1] or "—",
+                "ok": int(r[2] or 0),
+                "error": int(r[3] or 0),
+                "tokens_in": int(r[4] or 0),
+                "tokens_out": int(r[5] or 0),
+                "cost_usd": float(r[6] or 0),
+                "avg_ms": int(r[7] or 0),
+            }
+            for r in by_provider
+        ],
+        "by_day": [
+            {
+                "day": str(r[0]),
+                "ok": int(r[1] or 0),
+                "error": int(r[2] or 0),
+                "tokens_in": int(r[3] or 0),
+                "tokens_out": int(r[4] or 0),
+                "cost_usd": float(r[5] or 0),
+            }
+            for r in by_day
+        ],
+    }
 
 
 @router.get("/admin/analysis/progress")
