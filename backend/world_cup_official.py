@@ -213,7 +213,7 @@ def _extract_team_code(raw: str) -> str | None:
 
 def _parse_score_from_block(block: str) -> tuple[int, int] | None:
     """Return (score_a, score_b) if {{score|a|b}} present in block."""
-    m = re.search(r"\|score=\{\{score\|(\d+)\|(\d+)\}\}", block)
+    m = re.search(r"\|score=\{\{[Ss]core\|(\d+)\|(\d+)\}\}", block)
     if m:
         return int(m.group(1)), int(m.group(2))
     return None
