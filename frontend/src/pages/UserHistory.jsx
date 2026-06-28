@@ -454,6 +454,93 @@ function PointsChart({ bets }) {
   )
 }
 
+// ── BetGroups ─────────────────────────────────────────────────────────────
+const PHASE_LABELS_UH = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
+
+function _betDk(md) {
+  if (!md) return '?'
+  const s = typeof md === 'string' ? md : md.toISOString()
+  return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+}
+function _betDl(key) {
+  if (key === '?') return '—'
+  const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+  if (key === todayKey) return 'Hoje'
+  const d = new Date(key + 'T12:00:00')
+  const dow = d.toLocaleDateString('pt-BR', { weekday: 'long' })
+  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
+}
+function _groupByDay(arr, desc = false) {
+  const ms = b => b.match_date ? new Date(b.match_date.endsWith('Z') ? b.match_date : b.match_date + 'Z').getTime() : 0
+  const sorted = [...arr].sort((a, b) => desc ? ms(b) - ms(a) : ms(a) - ms(b))
+  const days = []
+  let lastK = null
+  sorted.forEach(b => {
+    const k = _betDk(b.match_date)
+    if (k !== lastK) { days.push({ key: k, bets: [] }); lastK = k }
+    days[days.length - 1].bets.push(b)
+  })
+  return days
+}
+
+function DayDivider({ label, count, first }) {
+  const isToday = label === 'Hoje'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s3)', background: isToday ? 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))' : 'var(--surface-2)', borderTop: first ? 'none' : '2px solid var(--border)', borderBottom: '1px solid var(--border)', marginTop: first ? 0 : 'var(--s3)' }}>
+      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: isToday ? 'var(--accent)' : 'var(--text-1)' }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>{count} {count === 1 ? 'aposta' : 'apostas'}</span>
+    </div>
+  )
+}
+
+function SectionDivider({ label, color }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', margin: 'var(--s4) 0 var(--s2)', padding: 'var(--s1) 0' }}>
+      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: color || 'var(--text-3)' }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+    </div>
+  )
+}
+
+function DayGroup({ days, desc }) {
+  return days.map(({ key, bets: db }, di) => (
+    <div key={key}>
+      <DayDivider label={_betDl(key)} count={db.length} first={di === 0} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
+        {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
+      </div>
+    </div>
+  ))
+}
+
+function BetGroups({ bets, filter }) {
+  if (filter === 'all') {
+    const pend = bets.filter(b => b.result == null)
+    const done = bets.filter(b => b.result != null)
+    return (
+      <div>
+        {pend.length > 0 && (
+          <div>
+            <SectionDivider label={`Pendentes · ${pend.length}`} color="var(--text-3)" />
+            <DayGroup days={_groupByDay(pend, false)} />
+          </div>
+        )}
+        {done.length > 0 && (
+          <div style={{ marginTop: pend.length ? 'var(--s5)' : 0 }}>
+            <SectionDivider label={`Realizados · ${done.length}`} color="var(--text-2)" />
+            <DayGroup days={_groupByDay(done, true)} />
+          </div>
+        )}
+      </div>
+    )
+  }
+  // pending filter: ascending (next game first)
+  // exact/correct/wrong: descending (most recent first)
+  const desc = filter !== 'pending'
+  return <DayGroup days={_groupByDay(bets, desc)} />
+}
+
 // ── BetCard ────────────────────────────────────────────────────────────────
 function BetCard({ bet, idx }) {
   const meta    = RESULT_META[bet.result]
@@ -472,7 +559,9 @@ function BetCard({ bet, idx }) {
   return (
     <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${idx * 20}ms` }}>
       <div className="bet-card__top">
-        <span className="badge badge-group">Grupo {bet.group_name}</span>
+        <span className="badge badge-group">
+          {bet.group_name ? `Grupo ${bet.group_name}` : (PHASE_LABELS_UH[bet.phase] || bet.phase || '—')}
+        </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', flexWrap: 'wrap' }}>
           <span className="bet-card__time">{fmtDate(bet.match_date)}</span>
           <span className={`pts-badge ${ptsVariant}`} style={{ fontSize: 13, padding: '3px 10px' }}>
@@ -582,6 +671,9 @@ export default function UserHistory() {
   const [error,      setError]      = useState('')
   const [filter,     setFilter]     = useState('all')
   const [groupRanks, setGroupRanks] = useState([])
+  const [search,     setSearch]     = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [acFocus,    setAcFocus]    = useState(-1)
 
   useEffect(() => {
     setLoading(true); setError('')
@@ -642,11 +734,30 @@ export default function UserHistory() {
     { id: 'pending', label: 'Pendentes', count: pending.length },
   ]
 
-  const visible = filter === 'all'     ? bets
-                : filter === 'exact'   ? exact
-                : filter === 'correct' ? correct
-                : filter === 'wrong'   ? wrong
-                : pending
+  const filterBase = filter === 'all'     ? bets
+                   : filter === 'exact'   ? exact
+                   : filter === 'correct' ? correct
+                   : filter === 'wrong'   ? wrong
+                   : pending
+
+  const searchQ = search.trim().toLowerCase()
+  const visible = searchQ
+    ? filterBase.filter(b => {
+        const ta = (b.team_a_name || b.team_a_code || '').toLowerCase()
+        const tb = (b.team_b_name || b.team_b_code || '').toLowerCase()
+        return ta.includes(searchQ) || tb.includes(searchQ)
+      })
+    : filterBase
+
+  const acSuggestions = useMemo(() => {
+    if (!searchQ) return []
+    const set = new Set()
+    bets.forEach(b => {
+      if (b.team_a_name) set.add(b.team_a_name)
+      if (b.team_b_name) set.add(b.team_b_name)
+    })
+    return [...set].filter(n => n.toLowerCase().includes(searchQ)).slice(0, 6)
+  }, [searchQ, bets])
 
   const initials = user?.name ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?'
   const GROUP_COLORS = ['var(--win)', '#4a90e8', '#e8a030', '#9b5de8']
@@ -745,8 +856,9 @@ export default function UserHistory() {
         </div>
       )}
 
-      {/* ── Filtros + apostas ───────────────────────── */}
+      {/* ── Filtros + busca + apostas ───────────────── */}
       <div className="fade-in-3" style={{ marginTop: 'var(--s6)' }}>
+        {/* Filtros */}
         <div className="uh-filters">
           {FILTERS.map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)}
@@ -756,96 +868,52 @@ export default function UserHistory() {
           ))}
         </div>
 
-        {visible.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 'var(--s16)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
-            Nenhuma aposta neste filtro.
+        {/* Busca com autocomplete */}
+        <div style={{ position: 'relative', margin: 'var(--s3) 0 var(--s4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', background: 'var(--surface-2)', border: `1.5px solid ${searchQ ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--r3)', padding: 'var(--s2) var(--s3)', transition: 'border-color .15s' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: searchQ ? 'var(--accent)' : 'var(--text-4)', flexShrink: 0 }}>
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setAcFocus(-1) }}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setAcFocus(f => Math.min(f + 1, acSuggestions.length - 1)) }
+                if (e.key === 'ArrowUp')   { e.preventDefault(); setAcFocus(f => Math.max(f - 1, -1)) }
+                if (e.key === 'Enter' && acFocus >= 0) { setSearch(acSuggestions[acFocus]); setSearchOpen(false); setAcFocus(-1) }
+                if (e.key === 'Escape') { setSearch(''); setSearchOpen(false) }
+              }}
+              placeholder="Buscar por seleção..."
+              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-1)', minWidth: 0 }}
+            />
+            {search && (
+              <button onClick={() => { setSearch(''); setAcFocus(-1) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 0, lineHeight: 1, fontSize: 16 }}>×</button>
+            )}
+            {searchQ && (
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>
+                {visible.length} resultado{visible.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
-        ) : (() => {
-          const _dk = md => {
-            if (!md) return '?'
-            const d = new Date(md.endsWith('Z') ? md : md + 'Z')
-            return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
-          }
-          const _dl = key => {
-            if (key === '?') return '—'
-            const d = new Date(key + 'T12:00:00')
-            const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
-            if (key === todayKey) return 'Hoje'
-            const dow = d.toLocaleDateString('pt-BR', { weekday: 'long' })
-            const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-            return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
-          }
-          const groupByDay = arr => {
-            const sorted = [...arr].sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
-            const days = []
-            let lastK = null
-            sorted.forEach(b => {
-              const k = _dk(b.match_date)
-              if (k !== lastK) { days.push({ key: k, bets: [] }); lastK = k }
-              days[days.length - 1].bets.push(b)
-            })
-            return days
-          }
-          const DayDivider = ({ label, count, first }) => (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s3)', background: 'var(--surface-2)', borderTop: first ? 'none' : '2px solid var(--border)', borderBottom: '1px solid var(--border)', marginTop: first ? 0 : 'var(--s3)', borderRadius: first ? '8px 8px 0 0' : 0 }}>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{label}</span>
-              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>{count} {count === 1 ? 'aposta' : 'apostas'}</span>
-            </div>
-          )
-          const SectionLabel = ({ label, color }) => (
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: color || 'var(--text-3)', padding: 'var(--s2) 0 var(--s1)' }}>{label}</div>
-          )
-
-          // show section split only on 'all' filter
-          if (filter === 'all') {
-            const done = visible.filter(b => b.result != null)
-            const pend = visible.filter(b => b.result == null)
-            return (
-              <div>
-                {pend.length > 0 && (
-                  <div style={{ marginBottom: done.length ? 'var(--s5)' : 0 }}>
-                    <SectionLabel label={`Pendentes · ${pend.length}`} color="var(--text-3)" />
-                    {groupByDay(pend).map(({ key, bets: db }, di) => (
-                      <div key={key}>
-                        <DayDivider label={_dl(key)} count={db.length} first={di === 0} />
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
-                          {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {done.length > 0 && (
-                  <div>
-                    <SectionLabel label={`Realizados · ${done.length}`} color="var(--text-2)" />
-                    {groupByDay(done).map(({ key, bets: db }, di) => (
-                      <div key={key}>
-                        <DayDivider label={_dl(key)} count={db.length} first={di === 0} />
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
-                          {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          }
-
-          // filtered views: just group by day
-          return (
-            <div>
-              {groupByDay(visible).map(({ key, bets: db }, di) => (
-                <div key={key}>
-                  <DayDivider label={_dl(key)} count={db.length} first={di === 0} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
-                    {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
-                  </div>
+          {searchOpen && acSuggestions.length > 0 && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 'var(--r2)', boxShadow: '0 4px 16px rgba(0,0,0,.25)', overflow: 'hidden' }}>
+              {acSuggestions.map((s, i) => (
+                <div key={s} onMouseDown={() => { setSearch(s); setSearchOpen(false) }}
+                  style={{ padding: 'var(--s2) var(--s4)', fontFamily: 'var(--font-cond)', fontSize: 14, cursor: 'pointer', background: i === acFocus ? 'var(--accent-dim)' : 'transparent', color: i === acFocus ? 'var(--accent)' : 'var(--text-1)', borderBottom: i < acSuggestions.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  {s}
                 </div>
               ))}
             </div>
-          )
-        })()}
+          )}
+        </div>
+
+        {visible.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 'var(--s16)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
+            {searchQ ? `Nenhum resultado para "${search}".` : 'Nenhuma aposta neste filtro.'}
+          </div>
+        ) : <BetGroups bets={visible} filter={filter} />}
       </div>
     </div>
   )
