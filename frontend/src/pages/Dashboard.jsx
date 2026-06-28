@@ -675,12 +675,51 @@ export default function Dashboard() {
                 Próximas Partidas
               </span>
             </div>
-            {matches.filter(m => m.id !== featured?.id).map(m => <MatchRow key={m.id} match={m} />)}
-            {matches.length === 0 && (
-              <p style={{ padding: 'var(--s6)', color: 'var(--text-3)', textAlign: 'center', fontFamily: 'var(--font-cond)' }}>
-                Sem partidas agendadas
-              </p>
-            )}
+            {(() => {
+              const sorted = [...matches]
+                .filter(m => m.id !== featured?.id)
+                .sort((a, b) => _mdTime(a) - _mdTime(b))
+
+              if (sorted.length === 0) return (
+                <p style={{ padding: 'var(--s6)', color: 'var(--text-3)', textAlign: 'center', fontFamily: 'var(--font-cond)' }}>
+                  Sem partidas agendadas
+                </p>
+              )
+
+              const dayKey = m => {
+                if (!m.match_date) return '?'
+                const d = new Date(m.match_date.endsWith('Z') ? m.match_date : m.match_date + 'Z')
+                return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+              }
+              const dayLabel = key => {
+                if (key === '?') return '—'
+                const d = new Date(key + 'T12:00:00')
+                const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+                const tomorrowKey = new Date(Date.now() + 86400000).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+                if (key === todayKey) return 'Hoje'
+                if (key === tomorrowKey) return 'Amanhã'
+                const dow = d.toLocaleDateString('pt-BR', { weekday: 'long' })
+                const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
+              }
+
+              const byDay = []
+              let lastKey = null
+              sorted.forEach(m => {
+                const k = dayKey(m)
+                if (k !== lastKey) { byDay.push({ key: k, matches: [] }); lastKey = k }
+                byDay[byDay.length - 1].matches.push(m)
+              })
+
+              return byDay.map(({ key, matches: dayMatches }) => (
+                <div key={key}>
+                  <div style={{ padding: 'var(--s3) var(--s4) var(--s1)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, borderTop: '1px solid var(--border)' }}>
+                    {dayLabel(key)} · {dayMatches.length} {dayMatches.length === 1 ? 'partida' : 'partidas'}
+                  </div>
+                  {dayMatches.map(m => <MatchRow key={m.id} match={m} />)}
+                </div>
+              ))
+            })()}
           </div>
 
           {liveGames.length > 0 && (
@@ -958,9 +997,14 @@ function MatchRow({ match, done, bet }) {
     : done && !bet ? { label: '— sem palpite', color: 'var(--text-4)' }
     : null
 
+  const PHASE_LABELS = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
+  const phaseTag = match.group_name
+    ? `G${match.group_name}`
+    : (PHASE_LABELS[match.phase] || match.phase || '—')
+
   return (
     <div className="match-card" onClick={() => navigate(`/partida/${match.id}`)}>
-      <span className="match-card__group">G{match.group_name}</span>
+      <span className="match-card__group">{phaseTag}</span>
       <div className="match-card__teams">
         <div className="match-card__team">
           {match.team_a.flag_url && (
