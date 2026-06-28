@@ -711,14 +711,36 @@ export default function Dashboard() {
                 byDay[byDay.length - 1].matches.push(m)
               })
 
-              return byDay.map(({ key, matches: dayMatches }) => (
-                <div key={key}>
-                  <div style={{ padding: 'var(--s3) var(--s4) var(--s1)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, borderTop: '1px solid var(--border)' }}>
-                    {dayLabel(key)} · {dayMatches.length} {dayMatches.length === 1 ? 'partida' : 'partidas'}
+              return byDay.map(({ key, matches: dayMatches }, di) => {
+                const label = dayLabel(key)
+                const isToday = label === 'Hoje'
+                return (
+                  <div key={key} style={{ marginTop: di > 0 ? 'var(--s3)' : 0 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 'var(--s3)',
+                      padding: 'var(--s2) var(--s4)',
+                      background: isToday ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--surface-2)',
+                      borderTop: di > 0 ? '2px solid var(--border)' : 'none',
+                      borderBottom: '1px solid var(--border)',
+                    }}>
+                      <span style={{
+                        fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
+                        color: isToday ? 'var(--accent)' : 'var(--text-1)',
+                        letterSpacing: 0.3,
+                      }}>
+                        {label}
+                      </span>
+                      <span style={{
+                        fontFamily: 'var(--font-data)', fontSize: 11,
+                        color: 'var(--text-4)', marginLeft: 'auto',
+                      }}>
+                        {dayMatches.length} {dayMatches.length === 1 ? 'partida' : 'partidas'}
+                      </span>
+                    </div>
+                    {dayMatches.map(m => <MatchRow key={m.id} match={m} />)}
                   </div>
-                  {dayMatches.map(m => <MatchRow key={m.id} match={m} />)}
-                </div>
-              ))
+                )
+              })
             })()}
           </div>
 
