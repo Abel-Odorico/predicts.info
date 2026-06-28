@@ -583,7 +583,13 @@ def _push_progress(r, data: dict):
             pass
 
 
+import threading as _threading
+_bg_lock = _threading.Lock()
+
 def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_future: bool = False, trigger: str = "manual"):
+    if not _bg_lock.acquire(blocking=False):
+        print("[analysis] background: já está em execução — pulando", flush=True)
+        return
     import time, uuid
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -635,6 +641,9 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
         _push_progress(r, progress)
         print(f"[analysis] background: {len(pending_ids)} partidas | cadeia: {' → '.join(p['label'] for p in chain)}", flush=True)
 
+        consecutive_rate_limits = 0
+        RATE_LIMIT_CIRCUIT = 3  # stop batch after 3 consecutive rate limits
+
         for i, (mid,) in enumerate(pending_ids):
             match_label = match_map.get(mid, f"#{mid}")
             progress["current"] = match_label
@@ -646,6 +655,7 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                 duration_ms = int((time.time() - t0) * 1000)
                 model_label = chain[provider_state[0]]["label"] if chain else "?"
                 print(f"[analysis] ✓ match_id={mid} via {model_label}", flush=True)
+                consecutive_rate_limits = 0
                 progress["done"] += 1
                 progress["items"].append({
                     "match_id": mid, "teams": match_label,
@@ -685,8 +695,12 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                 })
                 _push_progress(r, progress)
                 if _is_quota_error(err):
-                    print(f"[analysis] rate limit — aguardando 10s", flush=True)
-                    time.sleep(10)
+                    consecutive_rate_limits += 1
+                    if consecutive_rate_limits >= RATE_LIMIT_CIRCUIT:
+                        print(f"[analysis] circuit breaker — {RATE_LIMIT_CIRCUIT} rate limits consecutivos, encerrando batch", flush=True)
+                        break
+                    print(f"[analysis] rate limit — aguardando 30s ({consecutive_rate_limits}/{RATE_LIMIT_CIRCUIT})", flush=True)
+                    time.sleep(30)
 
         progress["status"] = "done"
         progress["current"] = None
@@ -698,6 +712,7 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
         _push_progress(r, progress_err)
     finally:
         db.close()
+        _bg_lock.release()
 
 
 # ─── Public endpoints ─────────────────────────────────────────────────────────
@@ -825,7 +840,14 @@ def generate_one(match_id: int, db: Session = Depends(get_db), _: User = Depends
     cfg = _get_config(db)
     if not _get_provider_chain(cfg):
         raise HTTPException(400, "Nenhum provider configurado (configure Gemini ou OpenRouter)")
-    content = _generate_one(match_id, db, cfg)
+    try:
+        content = _generate_one(match_id, db, cfg)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(503, f"Todos os providers estão com rate limit — tente em alguns minutos. ({exc})")
+    except Exception as exc:
+        raise HTTPException(503, f"Erro ao gerar análise: {exc}")
     return {"ok": True, "match_id": match_id, "content": content}
 
 
