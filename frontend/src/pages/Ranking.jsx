@@ -75,6 +75,7 @@ export default function Ranking() {
   const [compData,    setCompData]    = useState([])
   const [compLoad,    setCompLoad]    = useState(false)
   const [expandedId,  setExpandedId]  = useState(null)
+  const [expandedBets, setExpandedBets] = useState({}) // user_id -> { loading, bets }
   const [shareOpen,   setShareOpen]   = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
 
@@ -153,6 +154,19 @@ export default function Ranking() {
     if (s < 60) return `há ${s}s`
     return `há ${Math.floor(s/60)}min`
   }
+
+  const toggleExpand = useCallback((userId) => {
+    setExpandedId(prev => {
+      if (prev === userId) return null
+      if (!expandedBets[userId]) {
+        setExpandedBets(b => ({ ...b, [userId]: { loading: true, bets: [] } }))
+        api.get(`/bets/users/${userId}`)
+          .then(data => setExpandedBets(b => ({ ...b, [userId]: { loading: false, bets: data.bets || [] } })))
+          .catch(() => setExpandedBets(b => ({ ...b, [userId]: { loading: false, bets: [] } })))
+      }
+      return userId
+    })
+  }, [expandedBets])
 
   function buildRankingShareText() {
     const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
@@ -600,7 +614,7 @@ export default function Ranking() {
                 <div key={r.user_id}>
                   <div
                     className={`ranking-row fade-in ${podiumClass}`}
-                    onClick={() => setExpandedId(isExpanded ? null : r.user_id)}
+                    onClick={() => toggleExpand(r.user_id)}
                     style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent', cursor: 'pointer', userSelect: 'none', background: isExpanded ? 'color-mix(in srgb, var(--accent) 5%, var(--bg-raised))' : undefined }}
                   >
                     <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`} style={{ textAlign: 'center' }}>
@@ -707,6 +721,7 @@ export default function Ranking() {
                   {/* ── Expanded row ── */}
                   {isExpanded && (
                     <div className="fade-in-1" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-raised)', padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+                      {/* Stats resumo */}
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
                         {[
                           { icon: '🎯', label: 'Exatos',  val: r.exact_scores, color: 'var(--win)' },
@@ -721,6 +736,11 @@ export default function Ranking() {
                           </div>
                         ))}
                       </div>
+
+                      {/* Lista de palpites */}
+                      <BetsList entry={expandedBets[r.user_id]} />
+
+                      {/* Footer */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>
                           {i === 0
@@ -735,7 +755,7 @@ export default function Ranking() {
                           onClick={e => e.stopPropagation()}
                           style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: 'var(--bg-overlay)', color: 'var(--accent)', border: '1px solid var(--accent)', textDecoration: 'none' }}
                         >
-                          📜 Histórico
+                          📜 Histórico completo
                         </Link>
                       </div>
                     </div>
@@ -885,6 +905,87 @@ export default function Ranking() {
       </div>
 
       {showLiga && <LigaFlowModal token={token} onClose={() => setShowLiga(false)} />}
+    </div>
+  )
+}
+
+// ── BetsList ──────────────────────────────────────────────────────────────────
+function betStatus(bet) {
+  if (bet.official_score_a === null || bet.official_score_a === undefined) {
+    return { label: 'Pendente', icon: '⏳', color: 'var(--text-4)' }
+  }
+  if (bet.points_earned === 25) {
+    return { label: 'Exato', icon: '🎯', color: 'var(--win)' }
+  }
+  if (bet.points_earned >= 10) {
+    return { label: `Certo +${bet.points_earned}`, icon: '✅', color: 'var(--accent)' }
+  }
+  return { label: 'Errou', icon: '❌', color: 'var(--lose)' }
+}
+
+function BetsList({ entry }) {
+  if (!entry) return null
+  if (entry.loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '10px 0', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+        Carregando palpites…
+      </div>
+    )
+  }
+  if (!entry.bets.length) {
+    return (
+      <div style={{ textAlign: 'center', padding: '8px 0', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+        Sem palpites registrados.
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', marginBottom: 4 }}>
+        Palpites ({entry.bets.length})
+      </div>
+      {entry.bets.map(bet => {
+        const st = betStatus(bet)
+        const hasResult = bet.official_score_a !== null && bet.official_score_a !== undefined
+        return (
+          <div key={bet.id} style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto auto auto',
+            gap: 8,
+            alignItems: 'center',
+            padding: '5px 8px',
+            borderRadius: 6,
+            background: 'var(--bg-overlay)',
+            fontSize: 12,
+          }}>
+            {/* Times */}
+            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 12, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {bet.team_a_code} × {bet.team_b_code}
+              {bet.group_name && <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>Gr.{bet.group_name}</span>}
+            </div>
+
+            {/* Palpite */}
+            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>
+              {bet.score_a}–{bet.score_b}
+            </div>
+
+            {/* Resultado real */}
+            <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: hasResult ? 'var(--text-3)' : 'var(--text-4)', whiteSpace: 'nowrap' }}>
+              {hasResult ? `(${bet.official_score_a}–${bet.official_score_b})` : '—'}
+            </div>
+
+            {/* Status + pts */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+              <span title={st.label} style={{ fontSize: 12 }}>{st.icon}</span>
+              {hasResult && (
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 700, color: st.color }}>
+                  {bet.points_earned > 0 ? `+${bet.points_earned}` : '0'}
+                </span>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
