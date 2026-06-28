@@ -292,10 +292,15 @@ def sync_report(db: Session = Depends(get_db), _: User = Depends(require_admin))
           AND (m.match_date AT TIME ZONE 'America/Sao_Paulo')::date = :today
         ORDER BY m.match_date
     """), {"today": today_brt}).fetchall()
+    def _dt(val):
+        if val is None:
+            return None
+        return val.isoformat() + "+00:00" if val.tzinfo is None else val.isoformat()
+
     today_matches = [
         {
             "id": r[0], "match_number": r[1],
-            "match_date": r[2].isoformat() if r[2] else None,
+            "match_date": _dt(r[2]),
             "phase": r[3], "status": r[4],
             "venue": r[5], "city": r[6],
             "team_a": {"code": r[7], "name": r[8], "flag_url": r[9]},
@@ -380,7 +385,7 @@ def sync_report(db: Session = Depends(get_db), _: User = Depends(require_admin))
     r32_matches = [
         {
             "id": r[0], "match_number": r[1],
-            "match_date": r[2].isoformat() if r[2] else None,
+            "match_date": _dt(r[2]),
             "status": r[3],
             "team_a": {"code": r[4], "name": r[5], "flag_url": r[6]},
             "team_b": {"code": r[7], "name": r[8], "flag_url": r[9]},
