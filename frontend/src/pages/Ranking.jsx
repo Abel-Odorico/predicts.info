@@ -925,67 +925,104 @@ function betStatus(bet) {
 
 function BetsList({ entry }) {
   if (!entry) return null
-  if (entry.loading) {
+  if (entry.loading) return (
+    <div style={{ textAlign: 'center', padding: '10px 0', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>Carregando palpites…</div>
+  )
+  if (!entry.bets.length) return (
+    <div style={{ textAlign: 'center', padding: '8px 0', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>Sem palpites registrados.</div>
+  )
+
+  const _dk = md => {
+    if (!md) return '?'
+    const d = new Date(md.endsWith('Z') ? md : md + 'Z')
+    return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+  }
+  const _dl = key => {
+    if (key === '?') return '—'
+    const d = new Date(key + 'T12:00:00')
+    const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+    if (key === todayKey) return 'Hoje'
+    const dow = d.toLocaleDateString('pt-BR', { weekday: 'short' })
+    const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
+  }
+  const groupByDay = bets => {
+    const sorted = [...bets].sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
+    const days = []
+    let lastK = null
+    sorted.forEach(b => {
+      const k = _dk(b.match_date)
+      if (k !== lastK) { days.push({ key: k, bets: [] }); lastK = k }
+      days[days.length - 1].bets.push(b)
+    })
+    return days
+  }
+
+  const BetRow = ({ bet }) => {
+    const st = betStatus(bet)
+    const hasResult = bet.official_score_a !== null && bet.official_score_a !== undefined
+    const PHASE_SHORT = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º', final: 'Final' }
+    const tag = bet.group_name ? `Gr.${bet.group_name}` : (PHASE_SHORT[bet.phase] || bet.phase || '')
     return (
-      <div style={{ textAlign: 'center', padding: '10px 0', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
-        Carregando palpites…
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8, alignItems: 'center', padding: '5px 8px', borderRadius: 6, background: 'var(--bg-overlay)', fontSize: 12 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 12, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {bet.team_a_code} × {bet.team_b_code}
+          {tag && <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>{tag}</span>}
+        </div>
+        <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{bet.score_a}–{bet.score_b}</div>
+        <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: hasResult ? 'var(--text-3)' : 'var(--text-4)', whiteSpace: 'nowrap' }}>
+          {hasResult ? `(${bet.official_score_a}–${bet.official_score_b})` : '—'}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+          <span title={st.label} style={{ fontSize: 12 }}>{st.icon}</span>
+          {hasResult && <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 700, color: st.color }}>{bet.points_earned > 0 ? `+${bet.points_earned}` : '0'}</span>}
+        </div>
       </div>
     )
   }
-  if (!entry.bets.length) {
-    return (
-      <div style={{ textAlign: 'center', padding: '8px 0', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
-        Sem palpites registrados.
-      </div>
-    )
-  }
+
+  const DayHeader = ({ label, count, first }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--surface-2)', borderTop: first ? 'none' : '1px solid var(--border)', borderBottom: '1px solid var(--border)', marginTop: first ? 0 : 4 }}>
+      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginLeft: 'auto' }}>{count}</span>
+    </div>
+  )
+
+  const realized = entry.bets.filter(b => b.official_score_a !== null && b.official_score_a !== undefined)
+  const pending  = entry.bets.filter(b => b.official_score_a === null || b.official_score_a === undefined)
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', marginBottom: 4 }}>
-        Palpites ({entry.bets.length})
-      </div>
-      {entry.bets.map(bet => {
-        const st = betStatus(bet)
-        const hasResult = bet.official_score_a !== null && bet.official_score_a !== undefined
-        return (
-          <div key={bet.id} style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto auto auto',
-            gap: 8,
-            alignItems: 'center',
-            padding: '5px 8px',
-            borderRadius: 6,
-            background: 'var(--bg-overlay)',
-            fontSize: 12,
-          }}>
-            {/* Times */}
-            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 12, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {bet.team_a_code} × {bet.team_b_code}
-              {bet.group_name && <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>Gr.{bet.group_name}</span>}
-            </div>
-
-            {/* Palpite */}
-            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>
-              {bet.score_a}–{bet.score_b}
-            </div>
-
-            {/* Resultado real */}
-            <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: hasResult ? 'var(--text-3)' : 'var(--text-4)', whiteSpace: 'nowrap' }}>
-              {hasResult ? `(${bet.official_score_a}–${bet.official_score_b})` : '—'}
-            </div>
-
-            {/* Status + pts */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-              <span title={st.label} style={{ fontSize: 12 }}>{st.icon}</span>
-              {hasResult && (
-                <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 700, color: st.color }}>
-                  {bet.points_earned > 0 ? `+${bet.points_earned}` : '0'}
-                </span>
-              )}
-            </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {pending.length > 0 && (
+        <div style={{ marginBottom: realized.length ? 'var(--s3)' : 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', padding: '4px 8px 2px' }}>
+            Pendentes ({pending.length})
           </div>
-        )
-      })}
+          {groupByDay(pending).map(({ key, bets: dayBets }, di) => (
+            <div key={key}>
+              <DayHeader label={_dl(key)} count={dayBets.length} first={di === 0} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2 }}>
+                {dayBets.map(b => <BetRow key={b.id} bet={b} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {realized.length > 0 && (
+        <div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', padding: '4px 8px 2px' }}>
+            Realizados ({realized.length})
+          </div>
+          {groupByDay(realized).map(({ key, bets: dayBets }, di) => (
+            <div key={key}>
+              <DayHeader label={_dl(key)} count={dayBets.length} first={di === 0} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2 }}>
+                {dayBets.map(b => <BetRow key={b.id} bet={b} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

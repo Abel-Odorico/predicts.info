@@ -821,7 +821,29 @@ export default function Dashboard() {
                 </span>
                 <Link to="/palpites" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>Ver palpites →</Link>
               </div>
-              {results.map(m => <MatchRow key={m.id} match={m} done bet={userBetsMap[m.id] || null} />)}
+              {(() => {
+                const sorted = [...results].sort((a, b) => _mdTime(b) - _mdTime(a))
+                const byDay = []
+                let lastKey = null
+                sorted.forEach(m => {
+                  const k = dayKey(m)
+                  if (k !== lastKey) { byDay.push({ key: k, matches: [] }); lastKey = k }
+                  byDay[byDay.length - 1].matches.push(m)
+                })
+                return byDay.map(({ key, matches: dayMatches }, di) => {
+                  const label = dayLabel(key)
+                  const isToday = label === 'Hoje'
+                  return (
+                    <div key={key} style={{ marginTop: di > 0 ? 'var(--s3)' : 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s4)', background: isToday ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--surface-2)', borderTop: di > 0 ? '2px solid var(--border)' : 'none', borderBottom: '1px solid var(--border)' }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: isToday ? 'var(--accent)' : 'var(--text-1)', letterSpacing: 0.3 }}>{label}</span>
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>{dayMatches.length} {dayMatches.length === 1 ? 'resultado' : 'resultados'}</span>
+                      </div>
+                      {dayMatches.map(m => <MatchRow key={m.id} match={m} done bet={userBetsMap[m.id] || null} />)}
+                    </div>
+                  )
+                })
+              })()}
             </div>
           )}
         </div>

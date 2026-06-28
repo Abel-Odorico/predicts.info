@@ -760,11 +760,92 @@ export default function UserHistory() {
           <div style={{ textAlign: 'center', padding: 'var(--s16)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
             Nenhuma aposta neste filtro.
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
-            {visible.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
-          </div>
-        )}
+        ) : (() => {
+          const _dk = md => {
+            if (!md) return '?'
+            const d = new Date(md.endsWith('Z') ? md : md + 'Z')
+            return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+          }
+          const _dl = key => {
+            if (key === '?') return '—'
+            const d = new Date(key + 'T12:00:00')
+            const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+            if (key === todayKey) return 'Hoje'
+            const dow = d.toLocaleDateString('pt-BR', { weekday: 'long' })
+            const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
+          }
+          const groupByDay = arr => {
+            const sorted = [...arr].sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
+            const days = []
+            let lastK = null
+            sorted.forEach(b => {
+              const k = _dk(b.match_date)
+              if (k !== lastK) { days.push({ key: k, bets: [] }); lastK = k }
+              days[days.length - 1].bets.push(b)
+            })
+            return days
+          }
+          const DayDivider = ({ label, count, first }) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s3)', background: 'var(--surface-2)', borderTop: first ? 'none' : '2px solid var(--border)', borderBottom: '1px solid var(--border)', marginTop: first ? 0 : 'var(--s3)', borderRadius: first ? '8px 8px 0 0' : 0 }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{label}</span>
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>{count} {count === 1 ? 'aposta' : 'apostas'}</span>
+            </div>
+          )
+          const SectionLabel = ({ label, color }) => (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: color || 'var(--text-3)', padding: 'var(--s2) 0 var(--s1)' }}>{label}</div>
+          )
+
+          // show section split only on 'all' filter
+          if (filter === 'all') {
+            const done = visible.filter(b => b.result != null)
+            const pend = visible.filter(b => b.result == null)
+            return (
+              <div>
+                {pend.length > 0 && (
+                  <div style={{ marginBottom: done.length ? 'var(--s5)' : 0 }}>
+                    <SectionLabel label={`Pendentes · ${pend.length}`} color="var(--text-3)" />
+                    {groupByDay(pend).map(({ key, bets: db }, di) => (
+                      <div key={key}>
+                        <DayDivider label={_dl(key)} count={db.length} first={di === 0} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
+                          {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {done.length > 0 && (
+                  <div>
+                    <SectionLabel label={`Realizados · ${done.length}`} color="var(--text-2)" />
+                    {groupByDay(done).map(({ key, bets: db }, di) => (
+                      <div key={key}>
+                        <DayDivider label={_dl(key)} count={db.length} first={di === 0} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
+                          {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          // filtered views: just group by day
+          return (
+            <div>
+              {groupByDay(visible).map(({ key, bets: db }, di) => (
+                <div key={key}>
+                  <DayDivider label={_dl(key)} count={db.length} first={di === 0} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
+                    {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
