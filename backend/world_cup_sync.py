@@ -524,7 +524,14 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         # Safe deletes: cache, simulations, results (NOT bets, NOT matches, NOT ranking)
         db.query(SimulationCache).delete()
         db.query(TournamentSimulation).delete()
-        db.query(MatchResult).delete()
+        # Only delete group-stage results; knockout results (R32+) are preserved
+        # so bets on those matches can still be evaluated in this same sync cycle.
+        group_match_ids = [
+            r[0] for r in db.query(Match.id).filter(Match.phase == MatchPhase.group).all()
+        ]
+        db.query(MatchResult).filter(MatchResult.match_id.in_(group_match_ids)).delete(
+            synchronize_session=False
+        )
         db.query(Player).delete()
 
         current_codes = {team["code"] for team in snapshot["teams"]}
@@ -650,6 +657,23 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 finished_count += 1
 
         db.flush()
+
+        # Include finished knockout matches (R32+) in evaluation dict.
+        # apply_world_cup_snapshot only processes group-stage matches above,
+        # so R32 results synced by sync_knockout_matches would otherwise be skipped.
+        for ko_match in (
+            db.query(Match)
+            .filter(Match.status == MatchStatus.finished, Match.phase != MatchPhase.group)
+            .all()
+        ):
+            if ko_match.result and ko_match.id not in result_by_match_id:
+                result_by_match_id[ko_match.id] = (ko_match.result.score_a, ko_match.result.score_b)
+                match_date_by_id[ko_match.id] = ko_match.match_date
+                ta = db.query(Team).filter(Team.id == ko_match.team_a_id).first()
+                tb = db.query(Team).filter(Team.id == ko_match.team_b_id).first()
+                match_label_by_id[ko_match.id] = (
+                    f"{ta.name} × {tb.name}" if ta and tb else f"Jogo #{ko_match.id}"
+                )
 
         # Bets already evaluated before this sync (don't re-notify)
         already_evaluated_bet_ids = {

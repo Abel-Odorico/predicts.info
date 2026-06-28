@@ -212,10 +212,14 @@ def _extract_team_code(raw: str) -> str | None:
 
 
 def _parse_score_from_block(block: str) -> tuple[int, int] | None:
-    """Return (score_a, score_b) if {{score|a|b}} present in block."""
+    """Return (score_a, score_b) if {{score|a|b}} or {{score link|...|a–b}} present in block."""
     m = re.search(r"\|score=\{\{[Ss]core\|(\d+)\|(\d+)\}\}", block)
     if m:
         return int(m.group(1)), int(m.group(2))
+    # Handle {{score link|...|A–B}} format (used when match has a dedicated Wikipedia section)
+    m2 = re.search(r"\|score=\{\{score link\|[^|]+\|(\d+)–(\d+)\}\}", block)
+    if m2:
+        return int(m2.group(1)), int(m2.group(2))
     return None
 
 
@@ -275,18 +279,53 @@ def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
 
         for item in r32:
             mn = item["match_number"]
-            if mn is None:
-                skipped += 1
-                continue
-
             code_a = item["team_a_code"]
             code_b = item["team_b_code"]
             team_a_id = teams.get(code_a) if code_a else None
             team_b_id = teams.get(code_b) if code_b else None
 
             if not team_a_id or not team_b_id:
-                _log(f"  ⚠ Match {mn}: código desconhecido ({code_a}/{code_b})")
+                if mn:
+                    _log(f"  ⚠ Match {mn}: código desconhecido ({code_a}/{code_b})")
                 skipped += 1
+                continue
+
+            # When Wikipedia uses section-link format instead of Match N, match_number is None.
+            # Fall back to team-pair lookup so results still sync.
+            if mn is None:
+                existing = (
+                    db.query(Match)
+                    .filter(
+                        Match.team_a_id == team_a_id,
+                        Match.team_b_id == team_b_id,
+                        Match.phase == MatchPhase.r32,
+                    )
+                    .first()
+                )
+                if existing is None:
+                    skipped += 1
+                    continue
+                score = item["score"]
+                if score is not None:
+                    sa, sb = score
+                    if existing.result is None:
+                        outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
+                        db.add(MatchResult(
+                            match_id=existing.id,
+                            score_a=sa,
+                            score_b=sb,
+                            result=outcome,
+                        ))
+                        existing.status = MatchStatus.finished
+                        updated += 1
+                        _log(f"  ✓ Resultado {code_a} x {code_b}: {sa}–{sb}")
+                    elif existing.result.score_a != sa or existing.result.score_b != sb:
+                        existing.result.score_a = sa
+                        existing.result.score_b = sb
+                        outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
+                        existing.result.result = outcome
+                        existing.status = MatchStatus.finished
+                        updated += 1
                 continue
 
             existing = db.query(Match).filter(Match.match_number == mn).first()
