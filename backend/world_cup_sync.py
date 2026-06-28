@@ -282,7 +282,15 @@ def _parse_group_page(client: httpx.Client, group: str) -> tuple[list[dict], lis
     intro = re.search(r"The group consist(?:s|ed) of (.+?)\.\s", text, flags=re.S)
     if not intro:
         raise ValueError(f"Could not parse intro for Group {group}")
-    team_names = re.findall(r"\[\[(?:[^|\]]+\|)?([^\]]+)\]\]", intro.group(1))
+    # Only extract links pointing to national football team pages to avoid
+    # spurious matches like "[[2022 FIFA World Cup|2022 World Cup]]" in phrases
+    # such as "Argentina, the 2022 World Cup champions, Algeria..."
+    all_links = re.findall(r"\[\[([^|\]]+)(?:\|([^\]]+))?\]\]", intro.group(1))
+    team_names = [
+        (display or target).strip()
+        for target, display in all_links
+        if "national" in target.lower()
+    ]
 
     table_match = re.search(r"==Teams==\n(.*?)\n'''Notes'''", text, flags=re.S)
     if not table_match:
@@ -462,10 +470,13 @@ def fetch_world_cup_snapshot(log: LogFn = None) -> dict:
     matches: list[dict] = []
     with httpx.Client(headers=HEADERS, follow_redirects=True) as client:
         for group in GROUP_LETTERS:
-            group_teams, group_matches = _parse_group_page(client, group)
-            teams.extend(group_teams)
-            matches.extend(group_matches)
-            _log(log, f"✓ Grupo {group}: {len(group_teams)} seleções, {len(group_matches)} jogos")
+            try:
+                group_teams, group_matches = _parse_group_page(client, group)
+                teams.extend(group_teams)
+                matches.extend(group_matches)
+                _log(log, f"✓ Grupo {group}: {len(group_teams)} seleções, {len(group_matches)} jogos")
+            except Exception as exc:
+                _log(log, f"⚠ Grupo {group}: falhou — {exc}")
 
         teams_by_name = {team["name"]: team for team in teams}
         squads = _parse_squads(client, teams_by_name)

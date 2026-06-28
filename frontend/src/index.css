@@ -80,12 +80,13 @@
   --bg-surface: #0c1a2a;
   --bg-raised: #122132;
   --bg-overlay: #192d40;
+  --bg-card: #0c1a2a;
   --bg-hover: rgba(100, 160, 220, 0.06);
 
   --text-1: #edf4fd;
-  --text-2: #9dbdd4;
-  --text-3: #6a96b0;
-  --text-4: #4a7490;
+  --text-2: #b8d4e8;
+  --text-3: #8ab4cc;
+  --text-4: #6a96b0;
 
   --accent: #e8c44a;
   --accent-strong: #f2d77c;
