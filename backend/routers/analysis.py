@@ -112,8 +112,17 @@ def _get_config(db: Session) -> dict:
     }
 
 
+OR_FREE_FALLBACKS = [
+    "openrouter/auto",                              # smart router
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "qwen/qwen3-235b-a22b:free",
+    "mistralai/mistral-small-3.2-24b-instruct:free",
+]
+
 def _get_provider_chain(cfg: dict) -> list[dict]:
-    """Cadeia de fallback: Gemini1 → Gemini2 → OpenAI → OpenRouter."""
+    """Cadeia de fallback: Gemini1 → Gemini2 → OpenAI → OpenRouter (modelo config + free fallbacks)."""
     chain = []
     if cfg.get("gemini_key"):
         chain.append({"type": "gemini", "key": cfg["gemini_key"], "model": cfg["gemini_model"], "label": "Gemini key1"})
@@ -123,8 +132,14 @@ def _get_provider_chain(cfg: dict) -> list[dict]:
         oai_model = cfg.get("openai_model") or "gpt-4o-mini"
         chain.append({"type": "openai", "key": cfg["openai_key"], "model": oai_model, "label": f"OpenAI {oai_model}"})
     if cfg.get("openrouter_key"):
+        or_key = cfg["openrouter_key"]
         or_model = cfg.get("openrouter_model") or BEST_FREE_OR_MODEL
-        chain.append({"type": "openrouter", "key": cfg["openrouter_key"], "model": or_model, "label": f"OpenRouter {or_model.split('/')[-1]}"})
+        # Primary configured model
+        chain.append({"type": "openrouter", "key": or_key, "model": or_model, "label": f"OpenRouter {or_model.split('/')[-1]}"})
+        # Free fallbacks (skip if same as primary)
+        for m in OR_FREE_FALLBACKS:
+            if m != or_model:
+                chain.append({"type": "openrouter", "key": or_key, "model": m, "label": f"OpenRouter {m.split('/')[-1]}"})
     return chain
 
 
@@ -204,12 +219,16 @@ def _call_openrouter(api_key: str, model: str, prompt: str) -> tuple[dict, dict]
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.7,
-            "max_tokens": 3000,
+            "max_tokens": 6000,
         },
-        timeout=60,
+        timeout=90,
     )
     resp.raise_for_status()
     data = resp.json()
+    # Some models return errors inside 200 response body
+    if data.get("error"):
+        err = data["error"]
+        raise ValueError(f"OpenRouter error: {err.get('message', err)}")
     usage = data.get("usage", {})
     result = json.loads(_strip_fences(data["choices"][0]["message"]["content"]))
     meta = {
@@ -222,6 +241,10 @@ def _call_openrouter(api_key: str, model: str, prompt: str) -> tuple[dict, dict]
 
 def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
     meta = {"tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0}
+    sdk_err = None
+    text_out = None
+
+    # Try SDK first
     try:
         from google import genai
         from google.genai import types as genai_types
@@ -241,8 +264,12 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
         if um:
             meta["tokens_in"]  = getattr(um, "prompt_token_count", 0) or 0
             meta["tokens_out"] = getattr(um, "candidates_token_count", 0) or 0
-    except Exception:
-        # Fallback para REST se SDK não disponível ou der erro
+    except Exception as e:
+        sdk_err = e
+        # Re-raise quota errors immediately — don't waste REST quota
+        if _is_quota_error(str(e)):
+            raise
+        # For non-quota SDK errors (import failure, network) fall back to REST
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         resp = http_requests.post(
             url,
@@ -264,6 +291,7 @@ def _call_gemini(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
         um = rj.get("usageMetadata", {})
         meta["tokens_in"]  = int(um.get("promptTokenCount", 0))
         meta["tokens_out"] = int(um.get("candidatesTokenCount", 0))
+
     return json.loads(_strip_fences(text_out)), meta
 
 
@@ -274,9 +302,8 @@ def _is_quota_error(err: str) -> bool:
 
 def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain: list | None = None) -> tuple[dict, str, dict]:
     """
-    Chama LLM com fallback automático: Gemini key1 → Gemini key2 → OpenRouter best free.
-    provider_state: lista de 1 elemento [idx] compartilhada entre chamadas do mesmo lote.
-    chain: cadeia customizada (sobrescreve _get_provider_chain se fornecida).
+    Chama LLM com fallback automático: Gemini key1 → Gemini key2 → OpenRouter.
+    Sempre percorre a cadeia completa a partir de `start`.
     Returns (result, model_tag, usage_meta).
     """
     if chain is None:
@@ -285,6 +312,8 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
         raise ValueError("Nenhum provider configurado (configure Gemini ou OpenRouter)")
 
     start = provider_state[0] if provider_state else 0
+    last_exc: Exception | None = None
+
     for idx in range(start, len(chain)):
         p = chain[idx]
         try:
@@ -296,16 +325,29 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
                 result, meta = _call_openrouter(p["key"], p["model"], prompt)
             if provider_state is not None:
                 provider_state[0] = idx
+            print(f"[analysis] ✓ provider={p['label']}", flush=True)
             return result, f"{p['type']}/{p['model']}", meta
         except Exception as e:
-            if _is_quota_error(str(e)) and idx < len(chain) - 1:
-                print(f"[analysis] {p['label']} exausto → {chain[idx+1]['label']}", flush=True)
-                if provider_state is not None:
-                    provider_state[0] = idx + 1
+            last_exc = e
+            err_str = str(e)
+            is_quota = _is_quota_error(err_str)
+            next_label = chain[idx + 1]["label"] if idx + 1 < len(chain) else None
+            if is_quota and next_label:
+                print(f"[analysis] {p['label']} rate-limited → tentando {next_label}", flush=True)
                 continue
-            raise
+            elif is_quota:
+                print(f"[analysis] {p['label']} rate-limited — todos os providers esgotados", flush=True)
+                break
+            elif isinstance(e, (ValueError, KeyError)) and next_label:
+                # JSON parse / truncation errors — try next provider
+                print(f"[analysis] {p['label']} output inválido → tentando {next_label}: {err_str[:80]}", flush=True)
+                continue
+            else:
+                # Auth / network errors: raise immediately
+                print(f"[analysis] {p['label']} erro: {err_str[:120]}", flush=True)
+                raise
 
-    raise ValueError("Todos os providers da cadeia exaustos")
+    raise ValueError(f"Todos os providers esgotados. Último erro: {last_exc}")
 
 
 DEFAULT_PROMPT_TEMPLATE = (
@@ -624,7 +666,8 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
         pending_ids = [(row[0],) for row in pending]
 
         chain = _get_provider_chain(cfg)
-        provider_state = [0]
+        # provider_state NOT shared: each match tries the full chain independently
+        # so Gemini is retried on each match (recovers from per-minute limits)
 
         progress = {
             "batch_id": batch_id,
@@ -651,7 +694,7 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
 
             t0 = time.time()
             try:
-                _generate_one(mid, db, cfg, provider_state, batch_id=batch_id, trigger=trigger)
+                _generate_one(mid, db, cfg, None, batch_id=batch_id, trigger=trigger)
                 duration_ms = int((time.time() - t0) * 1000)
                 model_label = chain[provider_state[0]]["label"] if chain else "?"
                 print(f"[analysis] ✓ match_id={mid} via {model_label}", flush=True)
