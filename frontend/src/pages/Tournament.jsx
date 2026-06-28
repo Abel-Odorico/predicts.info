@@ -134,7 +134,7 @@ export default function Tournament() {
       {/* ── CHAVEAMENTO TAB ── */}
       {pageTab === 'bracket' && bracket && (
         <>
-          <CompetitionSection bracket={bracket} groups={groups} className="mt-6 fade-in-1" />
+          <CompetitionSection bracket={bracket} groups={groups} phases={phases} className="mt-6 fade-in-1" />
           <KnockoutBracket bracket={bracket} className="mt-6 fade-in-2" />
         </>
       )}
@@ -475,32 +475,65 @@ const PHASE_META = {
   '3rd':  { label: '3º Lugar',     icon: '🥉' },
 }
 
-function CompetitionSection({ bracket, groups, className }) {
+function CompetitionSection({ bracket, groups, phases: phasesData, className }) {
   const schedule = bracket?.schedule || []
-  const phases = ['groups', ...PHASE_ORDER.filter(p => p !== 'groups' && schedule.some(m => m.phase === p))]
+
+  // Build lookup: team code → enriched team (elo, group_name, position) from qualified_picture
+  const qpByCode = useMemo(() => {
+    const map = {}
+    const qp = bracket?.qualified_picture || {}
+    for (const t of [...(qp.winners || []), ...(qp.runners_up || []), ...(qp.best_thirds || [])]) {
+      map[t.code] = t
+    }
+    return map
+  }, [bracket])
+
+  // Adapt DB r32 matches to KoMatchCard format
+  const r32FromDB = useMemo(() => (phasesData?.r32 || []).map(m => {
+    const enrich = t => t ? { ...t, ...(qpByCode[t.code] || {}) } : null
+    return {
+      ...m,
+      phase: 'r32',
+      section: `R32-${m.match_number}`,
+      resolved_team_a: enrich(m.team_a),
+      resolved_team_b: enrich(m.team_b),
+      team_a_label: m.team_a?.code || '?',
+      team_b_label: m.team_b?.code || '?',
+      candidate_thirds_a: [],
+      candidate_thirds_b: [],
+    }
+  }).sort((a, b) => (a.match_date || '') < (b.match_date || '') ? -1 : 1), [phasesData, qpByCode])
+
+  const phaseTabs = useMemo(() => [
+    'groups',
+    ...(r32FromDB.length ? ['r32'] : []),
+    ...PHASE_ORDER.filter(p => p !== 'groups' && p !== 'r32' && schedule.some(m => m.phase === p)),
+  ], [r32FromDB, schedule])
+
   const [active, setActive] = useState('groups')
 
   // match_number → match for label resolution
   const matchLookup = useMemo(() => {
     const m = {}
     for (const s of schedule) m[s.match_number] = s
+    for (const s of r32FromDB) m[s.match_number] = s
     return m
-  }, [schedule])
+  }, [schedule, r32FromDB])
 
   const byPhase = useMemo(() => {
-    const m = {}
+    const m = { r32: r32FromDB }
     for (const s of schedule) {
       if (!m[s.phase]) m[s.phase] = []
       m[s.phase].push(s)
     }
     return m
-  }, [schedule])
+  }, [schedule, r32FromDB])
 
   return (
     <div className={`card ${className || ''}`}>
       {/* Phase tabs */}
       <div className="phase-nav">
-        {phases.map(p => (
+        {phaseTabs.map(p => (
           <button
             key={p}
             className={`phase-nav__tab ${active === p ? 'active' : ''}`}
@@ -508,7 +541,7 @@ function CompetitionSection({ bracket, groups, className }) {
           >
             <span className="phase-nav__icon">{PHASE_META[p]?.icon}</span>
             {PHASE_META[p]?.label || p}
-            {p !== 'groups' && byPhase[p] && (
+            {p !== 'groups' && byPhase[p]?.length > 0 && (
               <span className="phase-nav__count">{byPhase[p].length}</span>
             )}
           </button>
@@ -519,10 +552,10 @@ function CompetitionSection({ bracket, groups, className }) {
         {active === 'groups' && groups && (
           <GroupsView groups={groups} bracket={bracket} />
         )}
-        {active !== 'groups' && byPhase[active] && (
+        {active !== 'groups' && byPhase[active]?.length > 0 && (
           <PhaseView matches={byPhase[active]} phase={active} matchLookup={matchLookup} />
         )}
-        {active !== 'groups' && !byPhase[active] && (
+        {active !== 'groups' && !byPhase[active]?.length && (
           <p style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
             Sem dados para esta fase ainda.
           </p>
@@ -1217,6 +1250,19 @@ function fmtTimeBRT(val) {
   if (!d || isNaN(d)) return '—'
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) + ' BRT'
 }
+function fmtDayKeyBRT(val) {
+  const d = toUTC(val)
+  if (!d || isNaN(d)) return '?'
+  // e.g. "2026-06-28" in BRT
+  return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+}
+function fmtDayLabelBRT(val) {
+  const d = toUTC(val)
+  if (!d || isNaN(d)) return '—'
+  const dow = d.toLocaleDateString('pt-BR', { weekday: 'long', timeZone: 'America/Sao_Paulo' })
+  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+  return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
+}
 function parseFeedMatchNum(label) {
   const m = (label || '').match(/Match (\d+)/)
   return m ? parseInt(m[1]) : null
@@ -1244,7 +1290,30 @@ function PhasesSection({ phases, simData, navigate }) {
     return map
   }, [simData])
 
-  const matches = phases[activePhase] || []
+  const matches = useMemo(() => {
+    const raw = phases[activePhase] || []
+    return [...raw].sort((a, b) => {
+      const da = a.match_date || ''
+      const db = b.match_date || ''
+      if (da !== db) return da < db ? -1 : 1
+      return (a.match_number || 0) - (b.match_number || 0)
+    })
+  }, [phases, activePhase])
+
+  // Group by BRT day
+  const matchesByDay = useMemo(() => {
+    const days = []
+    const seen = {}
+    for (const m of matches) {
+      const key = fmtDayKeyBRT(m.match_date)
+      if (!seen[key]) {
+        seen[key] = true
+        days.push({ key, label: fmtDayLabelBRT(m.match_date), items: [] })
+      }
+      days[days.length - 1].items.push(m)
+    }
+    return days
+  }, [matches])
 
   return (
     <div className="fade-in-1 mt-6">
@@ -1278,19 +1347,44 @@ function PhasesSection({ phases, simData, navigate }) {
         })}
       </div>
 
-      {/* Match cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
-        {matches.map(m => (
-          <PhaseMatchCard
-            key={m.match_number}
-            match={m}
-            phaseKey={activePhase}
-            expanded={expandedMatch === m.match_number}
-            onToggle={() => setExpandedMatch(prev => prev === m.match_number ? null : m.match_number)}
-            allByNum={allByNum}
-            simByCode={simByCode}
-            navigate={navigate}
-          />
+      {/* Match cards grouped by day */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+        {matchesByDay.map(day => (
+          <div key={day.key}>
+            {/* Day header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--s3)',
+            }}>
+              <div style={{
+                fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
+                color: 'var(--accent)', whiteSpace: 'nowrap',
+              }}>
+                📅 {day.label}
+              </div>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)',
+                background: 'var(--bg-overlay)', borderRadius: 10, padding: '2px 8px',
+                whiteSpace: 'nowrap',
+              }}>
+                {day.items.length} jogo{day.items.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+              {day.items.map(m => (
+                <PhaseMatchCard
+                  key={m.match_number}
+                  match={m}
+                  phaseKey={activePhase}
+                  expanded={expandedMatch === m.match_number}
+                  onToggle={() => setExpandedMatch(prev => prev === m.match_number ? null : m.match_number)}
+                  allByNum={allByNum}
+                  simByCode={simByCode}
+                  navigate={navigate}
+                />
+              ))}
+            </div>
+          </div>
         ))}
         {matches.length === 0 && (
           <div style={{ textAlign: 'center', padding: 'var(--s8)', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 14 }}>
@@ -1398,8 +1492,8 @@ function PhaseMatchCard({ match, phaseKey, expanded, onToggle, allByNum, simByCo
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-              {fmtDateBRT(match.match_date)}
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+              {fmtDayLabelBRT(match.match_date)}
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>
               {fmtTimeBRT(match.match_date)}
