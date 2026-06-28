@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Callable
 
 import httpx
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-from models import Match, MatchPhase, Team
+from models import Match, MatchPhase, MatchResult, MatchStatus, Team
 from world_cup_sync import _clean_links, _parse_local_datetime, HEADERS
 
 KNOCKOUT_TITLE = "2026_FIFA_World_Cup_knockout_stage"
 FINAL_TITLE = "2026_FIFA_World_Cup_final"
+R32_TITLE = "2026_FIFA_World_Cup_round_of_32"
 RAW_URL = "https://en.wikipedia.org/w/index.php?title={title}&action=raw"
+
+LogFn = Callable[[str], None] | None
 
 
 def _fetch_raw(title: str) -> str:
@@ -198,3 +203,149 @@ def candidate_thirds(slot: str, table: dict) -> list[dict]:
         return []
     allowed = set(match.group(1).split("/"))
     return [team for team in table["thirds"] if team["group_name"] in allowed][:8]
+
+
+def _extract_team_code(raw: str) -> str | None:
+    """Extract ISO team code from {{#invoke:flag|fb[-rt]|CODE}} template."""
+    m = re.search(r"\{\{#invoke:flag\|fb(?:-rt)?\|([A-Z]{2,4})\}\}", raw)
+    return m.group(1) if m else None
+
+
+def _parse_score_from_block(block: str) -> tuple[int, int] | None:
+    """Return (score_a, score_b) if {{score|a|b}} present in block."""
+    m = re.search(r"\|score=\{\{score\|(\d+)\|(\d+)\}\}", block)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return None
+
+
+def fetch_r32_schedule() -> list[dict]:
+    """Fetch Round of 32 matches from Wikipedia (separate page)."""
+    text = _fetch_raw(R32_TITLE)
+    pattern = re.compile(
+        r'<section begin="([^"]+)" />\{\{#invoke:[Ff]ootball box\|main(.*?)\}\}<section end="[^"]+" />',
+        flags=re.S,
+    )
+    matches = []
+    for section, block in pattern.findall(text):
+        if not section.startswith("R32"):
+            continue
+        t1 = re.search(r"\|team1=(.+)", block)
+        t2 = re.search(r"\|team2=(.+)", block)
+        mn = re.search(r"\|score=\{\{score link\|[^|]+\|Match (\d+)\}\}", block)
+        score = _parse_score_from_block(block)
+        venue, city = _parse_stadium(block)
+        matches.append({
+            "section": section,
+            "phase": "r32",
+            "match_number": int(mn.group(1)) if mn else None,
+            "match_date": _parse_local_datetime(block),
+            "venue": venue,
+            "city": city,
+            "team_a_code": _extract_team_code(t1.group(1)) if t1 else None,
+            "team_b_code": _extract_team_code(t2.group(1)) if t2 else None,
+            "score": score,
+        })
+    matches.sort(key=lambda m: (m["match_date"] or datetime.max, m["match_number"] or 999))
+    return matches
+
+
+def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
+    """Upsert R32 knockout matches from Wikipedia into the DB.
+
+    Creates new matches for R32 (teams resolved from codes) and updates
+    scores/status for matches already in the DB. R16+ matches are skipped
+    until their teams are determined by R32 results.
+    """
+    def _log(msg: str) -> None:
+        if log:
+            log(msg)
+
+    engine = create_engine(db_url)
+    Sess = sessionmaker(bind=engine)
+    db: Session = Sess()
+
+    try:
+        r32 = fetch_r32_schedule()
+        _log(f"Wikipedia R32: {len(r32)} partidas encontradas")
+
+        teams = {t.code: t.id for t in db.query(Team).all()}
+
+        created = updated = skipped = 0
+
+        for item in r32:
+            mn = item["match_number"]
+            if mn is None:
+                skipped += 1
+                continue
+
+            code_a = item["team_a_code"]
+            code_b = item["team_b_code"]
+            team_a_id = teams.get(code_a) if code_a else None
+            team_b_id = teams.get(code_b) if code_b else None
+
+            if not team_a_id or not team_b_id:
+                _log(f"  ⚠ Match {mn}: código desconhecido ({code_a}/{code_b})")
+                skipped += 1
+                continue
+
+            existing = db.query(Match).filter(Match.match_number == mn).first()
+
+            if existing is None:
+                m = Match(
+                    phase=MatchPhase.r32,
+                    team_a_id=team_a_id,
+                    team_b_id=team_b_id,
+                    match_number=mn,
+                    match_date=item["match_date"],
+                    venue=item["venue"],
+                    city=item["city"],
+                    status=MatchStatus.scheduled,
+                )
+                db.add(m)
+                db.flush()
+                existing = m
+                created += 1
+                _log(f"  ✓ Criado Match {mn}: {code_a} x {code_b}")
+            else:
+                changed = False
+                if existing.team_a_id != team_a_id:
+                    existing.team_a_id = team_a_id
+                    changed = True
+                if existing.team_b_id != team_b_id:
+                    existing.team_b_id = team_b_id
+                    changed = True
+                if changed:
+                    updated += 1
+
+            score = item["score"]
+            if score is not None:
+                sa, sb = score
+                if existing.result is None:
+                    outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
+                    db.add(MatchResult(
+                        match_id=existing.id,
+                        score_a=sa,
+                        score_b=sb,
+                        result=outcome,
+                    ))
+                    existing.status = MatchStatus.finished
+                    updated += 1
+                    _log(f"  ✓ Resultado Match {mn}: {sa}–{sb}")
+                elif existing.result.score_a != sa or existing.result.score_b != sb:
+                    existing.result.score_a = sa
+                    existing.result.score_b = sb
+                    outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
+                    existing.result.result = outcome
+                    existing.status = MatchStatus.finished
+                    updated += 1
+
+        db.commit()
+        _log(f"R32 sync: {created} criadas, {updated} atualizadas, {skipped} puladas")
+        return {"created": created, "updated": updated, "skipped": skipped}
+
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()

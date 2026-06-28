@@ -10,6 +10,7 @@ Uso:
 """
 
 from config import settings
+from world_cup_official import sync_knockout_matches
 from world_cup_sync import (
     apply_world_cup_snapshot,
     fetch_world_cup_snapshot,
@@ -34,6 +35,8 @@ def main() -> None:
     log(f"Estatísticas atualizadas: {stats['updated']} seleções")
     if stats["errors"]:
         log(f"Erros no EloRatings: {', '.join(stats['errors'])}")
+    ko = sync_knockout_matches(settings.database_url, log=log)
+    log(f"Eliminatórias R32: {ko['created']} criadas, {ko['updated']} atualizadas, {ko['skipped']} puladas")
     invalidate_simulation_cache(log=log)
     log("Pronto.")
 
