@@ -120,6 +120,9 @@ def _run_sync(db_url: str, trigger: str = "manual"):
         from routers.knockout import run_knockout_sync
         run_knockout_sync(db_url, log=_append_log)
 
+        from world_cup_official import sync_knockout_matches
+        sync_knockout_matches(db_url, log=_append_log)
+
         import threading
         threading.Thread(
             target=_auto_generate_analyses,
@@ -212,4 +215,88 @@ def sync_status(_: User = Depends(require_admin)):
         "auto_sync_interval_hours": settings.auto_sync_interval_hours,
         "history": list(reversed(_sync_history)),
         "scheduler": _scheduler_status,
+    }
+
+
+@router.get("/sync-report")
+def sync_report(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    from sqlalchemy import text
+    from pathlib import Path
+    import re as _re
+
+    # Phase counters
+    rows = db.execute(text("""
+        SELECT
+            phase::text,
+            count(*) AS total,
+            count(mr.id) AS with_result,
+            sum(CASE WHEN m.status = 'finished' THEN 1 ELSE 0 END) AS finished
+        FROM matches m
+        LEFT JOIN match_results mr ON mr.match_id = m.id
+        GROUP BY phase
+        ORDER BY phase
+    """)).fetchall()
+    phase_stats = [
+        {"phase": r[0], "total": int(r[1]), "with_result": int(r[2]), "finished": int(r[3])}
+        for r in rows
+    ]
+
+    # R32 match detail
+    r32_rows = db.execute(text("""
+        SELECT
+            m.id, m.match_number, m.match_date, m.status::text, m.venue, m.city,
+            ta.code AS code_a, ta.name AS name_a, ta.flag_url AS flag_a,
+            tb.code AS code_b, tb.name AS name_b, tb.flag_url AS flag_b,
+            mr.score_a, mr.score_b
+        FROM matches m
+        JOIN teams ta ON ta.id = m.team_a_id
+        JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN match_results mr ON mr.match_id = m.id
+        WHERE m.phase = 'r32'::matchphase
+        ORDER BY m.match_number
+    """)).fetchall()
+    r32_matches = []
+    for r in r32_rows:
+        r32_matches.append({
+            "id": r[0], "match_number": r[1],
+            "match_date": r[2].isoformat() if r[2] else None,
+            "status": r[3], "venue": r[4], "city": r[5],
+            "team_a": {"code": r[6], "name": r[7], "flag_url": r[8]},
+            "team_b": {"code": r[9], "name": r[10], "flag_url": r[11]},
+            "score": {"a": r[12], "b": r[13]} if r[12] is not None else None,
+        })
+
+    # Bets on r32 matches
+    bet_counts = db.execute(text("""
+        SELECT m.match_number, count(b.id) AS bets
+        FROM matches m
+        LEFT JOIN bets b ON b.match_id = m.id
+        WHERE m.phase = 'r32'::matchphase
+        GROUP BY m.match_number
+    """)).fetchall()
+    bets_by_match = {r[0]: int(r[1]) for r in bet_counts}
+    for m in r32_matches:
+        m["bets"] = bets_by_match.get(m["match_number"], 0)
+
+    # Cron log tail
+    cron_log: list[str] = []
+    log_path = Path("/var/log/predicts-cron.log")
+    if log_path.exists():
+        lines = log_path.read_text(errors="replace").splitlines()
+        cron_log = lines[-60:]
+
+    # Last cron run time from log
+    last_run_at = None
+    for line in reversed(cron_log):
+        ts_match = _re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+        if ts_match:
+            last_run_at = ts_match.group(1)
+            break
+
+    return {
+        "generated_at": _now().isoformat(),
+        "phase_stats": phase_stats,
+        "r32_matches": r32_matches,
+        "cron_log": cron_log,
+        "last_cron_run_at": last_run_at,
     }

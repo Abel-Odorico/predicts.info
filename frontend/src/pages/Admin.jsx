@@ -111,6 +111,8 @@ export default function Admin() {
   // Sync
   const [syncStatus, setSyncStatus] = useState(null)
   const [syncPolling, setSyncPolling] = useState(false)
+  const [syncReport, setSyncReport] = useState(null)
+  const [syncReportLoading, setSyncReportLoading] = useState(false)
 
   // Bets
   const [allBets, setAllBets] = useState(null)
@@ -667,6 +669,7 @@ export default function Admin() {
     if (tab === 'analyses') fetchProgress()
     if (tab === 'bot' && !botStatus && !botLoading) loadBot()
     if (tab === 'report' && !report && !reportLoading) loadReport()
+    if (tab === 'sync' && !syncReport && !syncReportLoading) loadSyncReport()
   }, [tab])
 
   useEffect(() => {
@@ -685,6 +688,12 @@ export default function Admin() {
 
   async function loadSyncStatus() {
     try { setSyncStatus(await api.get('/admin/sync-status', token)) } catch {}
+  }
+
+  async function loadSyncReport() {
+    setSyncReportLoading(true)
+    try { setSyncReport(await api.get('/admin/sync-report', token)) } catch {}
+    setSyncReportLoading(false)
   }
 
   async function loadGrowth(period = growthPeriod) {
@@ -1608,6 +1617,109 @@ export default function Admin() {
               </div>
             </div>
           )}
+
+          {/* ── Relatório de sincronização ── */}
+          <div className="adm-card" style={{ marginTop: 'var(--s4)' }}>
+            <div className="adm-card__head">
+              <span className="adm-card__title">📊 Relatório de Sincronização</span>
+              <div style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center' }}>
+                {syncReport && (
+                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>
+                    {new Date(syncReport.generated_at).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                  </span>
+                )}
+                <button className="btn btn-ghost btn-sm" onClick={loadSyncReport} disabled={syncReportLoading}>
+                  {syncReportLoading ? '⏳' : '↻'}
+                </button>
+              </div>
+            </div>
+            <div style={{ padding: 'var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+              {syncReportLoading && <div style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando…</div>}
+              {syncReport && (() => {
+                const group = syncReport.phase_stats?.find(p => p.phase === 'group')
+                const r32   = syncReport.phase_stats?.find(p => p.phase === 'r32')
+                const groupDone = group?.finished === group?.total && group?.total > 0
+                const r32Done   = r32?.with_result === r32?.total && r32?.total > 0
+
+                return (
+                  <>
+                    {/* Fase de Grupos */}
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 'var(--s2)', textTransform: 'uppercase', letterSpacing: 1 }}>Fase de Grupos</div>
+                      <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Total', val: group?.total ?? '—' },
+                          { label: 'Com resultado', val: group?.with_result ?? '—' },
+                          { label: 'Status', val: groupDone ? '✓ Concluída' : `${group?.finished ?? 0}/${group?.total ?? 0} finalizados`, accent: groupDone ? 'var(--win)' : 'var(--accent)' },
+                        ].map((item, i) => (
+                          <div key={i} className="adm-sync-item">
+                            <div className="adm-sync-item__label">{item.label}</div>
+                            <div className="adm-sync-item__val" style={item.accent ? { color: item.accent } : {}}>{item.val}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* R32 */}
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 'var(--s2)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                        Round of 32 (16 avos)
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap', marginBottom: 'var(--s3)' }}>
+                        {[
+                          { label: 'No banco', val: r32?.total ?? 0, accent: (r32?.total ?? 0) === 16 ? 'var(--win)' : 'var(--lose)' },
+                          { label: 'Com resultado', val: r32?.with_result ?? 0 },
+                          { label: 'Pendentes', val: (r32?.total ?? 0) - (r32?.with_result ?? 0) },
+                          { label: 'Status', val: r32Done ? '✓ Todos apurados' : (r32?.total ?? 0) === 0 ? '✗ Não sincronizado' : `${r32?.with_result ?? 0}/${r32?.total ?? 0} com placar`, accent: r32Done ? 'var(--win)' : (r32?.total ?? 0) === 0 ? 'var(--lose)' : 'var(--accent)' },
+                        ].map((item, i) => (
+                          <div key={i} className="adm-sync-item">
+                            <div className="adm-sync-item__label">{item.label}</div>
+                            <div className="adm-sync-item__val" style={item.accent ? { color: item.accent } : {}}>{item.val}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Lista de partidas R32 */}
+                      {syncReport.r32_matches?.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--s2)' }}>
+                          {syncReport.r32_matches.map(m => {
+                            const done = m.score !== null
+                            return (
+                              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', border: `1px solid ${done ? 'var(--win)' : 'var(--border)'}`, fontSize: 12, fontFamily: 'var(--font-cond)' }}>
+                                <span style={{ color: done ? 'var(--win)' : 'var(--text-4)', fontSize: 11, minWidth: 12 }}>{done ? '✓' : '○'}</span>
+                                <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                                <span style={{ color: 'var(--text-2)', flex: 1, minWidth: 0 }}>{m.team_a.code} × {m.team_b.code}</span>
+                                <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                                {done
+                                  ? <span style={{ color: 'var(--win)', fontFamily: 'var(--font-data)', whiteSpace: 'nowrap' }}>{m.score.a}–{m.score.b}</span>
+                                  : <span style={{ color: 'var(--text-4)', whiteSpace: 'nowrap' }}>#{m.match_number}</span>
+                                }
+                                {m.bets > 0 && <span style={{ color: 'var(--text-4)', fontSize: 10 }}>{m.bets}ap</span>}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Log do cron */}
+                    {syncReport.cron_log?.length > 0 && (
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 'var(--s2)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                          Log Cron {syncReport.last_cron_run_at ? `· ${new Date(syncReport.last_cron_run_at + ':00').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}` : ''}
+                        </div>
+                        <div className="admin-log" style={{ maxHeight: 200 }}>
+                          {syncReport.cron_log.map((line, i) => (
+                            <div key={i} style={{ color: line.startsWith('✓') ? 'var(--win)' : line.startsWith('✗') ? 'var(--lose)' : line.startsWith('⚠') ? 'var(--accent)' : 'var(--text-3)' }}>{line}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          </div>
         </div>
       )}
 
