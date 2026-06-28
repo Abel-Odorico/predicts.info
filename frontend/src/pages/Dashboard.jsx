@@ -333,6 +333,39 @@ export default function Dashboard() {
     ? new Date(m.match_date.endsWith('Z') ? m.match_date : m.match_date + 'Z').getTime()
     : Infinity
   const _now = Date.now()
+
+  const dayKey = m => {
+    if (!m.match_date) return '?'
+    const d = new Date(m.match_date.endsWith('Z') ? m.match_date : m.match_date + 'Z')
+    return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+  }
+  const dayLabel = key => {
+    if (key === '?') return '—'
+    const d = new Date(key + 'T12:00:00')
+    const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+    const tomorrowKey = new Date(_now + 86400000).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+    if (key === todayKey) return 'Hoje'
+    if (key === tomorrowKey) return 'Amanhã'
+    const dow = d.toLocaleDateString('pt-BR', { weekday: 'long' })
+    const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
+  }
+  const buildByDay = arr => {
+    const days = []
+    let lastK = null
+    arr.forEach(m => {
+      const k = dayKey(m)
+      if (k !== lastK) { days.push({ key: k, matches: [] }); lastK = k }
+      days[days.length - 1].matches.push(m)
+    })
+    return days
+  }
+  const DayHeader = ({ label, count, suffix, isToday, first }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s4)', background: isToday ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--surface-2)', borderTop: first ? 'none' : '2px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: isToday ? 'var(--accent)' : 'var(--text-1)', letterSpacing: 0.3 }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>{count} {suffix || (count === 1 ? 'partida' : 'partidas')}</span>
+    </div>
+  )
   const featured = [...matches]
     .filter(m => _mdTime(m) >= _now)
     .sort((a, b) => _mdTime(a) - _mdTime(b))[0] || matches[0]
@@ -686,57 +719,11 @@ export default function Dashboard() {
                 </p>
               )
 
-              const dayKey = m => {
-                if (!m.match_date) return '?'
-                const d = new Date(m.match_date.endsWith('Z') ? m.match_date : m.match_date + 'Z')
-                return d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
-              }
-              const dayLabel = key => {
-                if (key === '?') return '—'
-                const d = new Date(key + 'T12:00:00')
-                const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
-                const tomorrowKey = new Date(Date.now() + 86400000).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
-                if (key === todayKey) return 'Hoje'
-                if (key === tomorrowKey) return 'Amanhã'
-                const dow = d.toLocaleDateString('pt-BR', { weekday: 'long' })
-                const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-                return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
-              }
-
-              const byDay = []
-              let lastKey = null
-              sorted.forEach(m => {
-                const k = dayKey(m)
-                if (k !== lastKey) { byDay.push({ key: k, matches: [] }); lastKey = k }
-                byDay[byDay.length - 1].matches.push(m)
-              })
-
-              return byDay.map(({ key, matches: dayMatches }, di) => {
+              return buildByDay(sorted).map(({ key, matches: dayMatches }, di) => {
                 const label = dayLabel(key)
-                const isToday = label === 'Hoje'
                 return (
                   <div key={key} style={{ marginTop: di > 0 ? 'var(--s3)' : 0 }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 'var(--s3)',
-                      padding: 'var(--s2) var(--s4)',
-                      background: isToday ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--surface-2)',
-                      borderTop: di > 0 ? '2px solid var(--border)' : 'none',
-                      borderBottom: '1px solid var(--border)',
-                    }}>
-                      <span style={{
-                        fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
-                        color: isToday ? 'var(--accent)' : 'var(--text-1)',
-                        letterSpacing: 0.3,
-                      }}>
-                        {label}
-                      </span>
-                      <span style={{
-                        fontFamily: 'var(--font-data)', fontSize: 11,
-                        color: 'var(--text-4)', marginLeft: 'auto',
-                      }}>
-                        {dayMatches.length} {dayMatches.length === 1 ? 'partida' : 'partidas'}
-                      </span>
-                    </div>
+                    <DayHeader label={label} count={dayMatches.length} isToday={label === 'Hoje'} first={di === 0} />
                     {dayMatches.map(m => <MatchRow key={m.id} match={m} />)}
                   </div>
                 )
@@ -821,29 +808,15 @@ export default function Dashboard() {
                 </span>
                 <Link to="/palpites" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>Ver palpites →</Link>
               </div>
-              {(() => {
-                const sorted = [...results].sort((a, b) => _mdTime(b) - _mdTime(a))
-                const byDay = []
-                let lastKey = null
-                sorted.forEach(m => {
-                  const k = dayKey(m)
-                  if (k !== lastKey) { byDay.push({ key: k, matches: [] }); lastKey = k }
-                  byDay[byDay.length - 1].matches.push(m)
-                })
-                return byDay.map(({ key, matches: dayMatches }, di) => {
-                  const label = dayLabel(key)
-                  const isToday = label === 'Hoje'
-                  return (
-                    <div key={key} style={{ marginTop: di > 0 ? 'var(--s3)' : 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s4)', background: isToday ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--surface-2)', borderTop: di > 0 ? '2px solid var(--border)' : 'none', borderBottom: '1px solid var(--border)' }}>
-                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: isToday ? 'var(--accent)' : 'var(--text-1)', letterSpacing: 0.3 }}>{label}</span>
-                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>{dayMatches.length} {dayMatches.length === 1 ? 'resultado' : 'resultados'}</span>
-                      </div>
-                      {dayMatches.map(m => <MatchRow key={m.id} match={m} done bet={userBetsMap[m.id] || null} />)}
-                    </div>
-                  )
-                })
-              })()}
+              {buildByDay([...results].sort((a, b) => _mdTime(b) - _mdTime(a))).map(({ key, matches: dayMatches }, di) => {
+                const label = dayLabel(key)
+                return (
+                  <div key={key} style={{ marginTop: di > 0 ? 'var(--s3)' : 0 }}>
+                    <DayHeader label={label} count={dayMatches.length} suffix={dayMatches.length === 1 ? 'resultado' : 'resultados'} isToday={label === 'Hoje'} first={di === 0} />
+                    {dayMatches.map(m => <MatchRow key={m.id} match={m} done bet={userBetsMap[m.id] || null} />)}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
