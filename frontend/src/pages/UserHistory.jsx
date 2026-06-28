@@ -701,6 +701,19 @@ export default function UserHistory() {
     }).catch(() => {})
   }, [isOwn, token, userId])
 
+  // useMemo must be before any early return (Rules of Hooks)
+  const acSuggestions = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return []
+    const allBets = data?.bets ?? []
+    const set = new Set()
+    allBets.forEach(b => {
+      if (b.team_a_name) set.add(b.team_a_name)
+      if (b.team_b_name) set.add(b.team_b_name)
+    })
+    return [...set].filter(n => n.toLowerCase().includes(q)).slice(0, 6)
+  }, [search, data])
+
   if (loading) return <Spinner text="Carregando histórico..." />
   if (error) return (
     <div className="page">
@@ -748,16 +761,6 @@ export default function UserHistory() {
         return ta.includes(searchQ) || tb.includes(searchQ)
       })
     : filterBase
-
-  const acSuggestions = useMemo(() => {
-    if (!searchQ) return []
-    const set = new Set()
-    bets.forEach(b => {
-      if (b.team_a_name) set.add(b.team_a_name)
-      if (b.team_b_name) set.add(b.team_b_name)
-    })
-    return [...set].filter(n => n.toLowerCase().includes(searchQ)).slice(0, 6)
-  }, [searchQ, bets])
 
   const initials = user?.name ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?'
   const GROUP_COLORS = ['var(--win)', '#4a90e8', '#e8a030', '#9b5de8']
