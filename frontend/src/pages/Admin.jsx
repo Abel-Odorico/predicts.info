@@ -1633,68 +1633,89 @@ export default function Admin() {
                 </button>
               </div>
             </div>
-            <div style={{ padding: 'var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+            <div style={{ padding: 'var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s5)' }}>
               {syncReportLoading && <div style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Carregando…</div>}
+
               {syncReport && (() => {
-                const group = syncReport.phase_stats?.find(p => p.phase === 'group')
-                const r32   = syncReport.phase_stats?.find(p => p.phase === 'r32')
-                const groupDone = group?.finished === group?.total && group?.total > 0
-                const r32Done   = r32?.with_result === r32?.total && r32?.total > 0
+                const ch = syncReport.cron_health || {}
+                const cronOk = ch.available && ch.on_schedule && !ch.last_run_errors?.length
+                const cronWarn = ch.available && (!ch.on_schedule || ch.last_run_errors?.length > 0)
+
+                const fmtTs = ts => ts
+                  ? new Date(ts).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+                  : '—'
+
+                const r32 = syncReport.phase_stats?.find(p => p.phase === 'r32')
+                const r32Done = r32?.with_result === r32?.total && r32?.total > 0
 
                 return (
                   <>
-                    {/* Fase de Grupos */}
+                    {/* ── Saúde do Cron ── */}
                     <div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 'var(--s2)', textTransform: 'uppercase', letterSpacing: 1 }}>Fase de Grupos</div>
-                      <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap' }}>
-                        {[
-                          { label: 'Total', val: group?.total ?? '—' },
-                          { label: 'Com resultado', val: group?.with_result ?? '—' },
-                          { label: 'Status', val: groupDone ? '✓ Concluída' : `${group?.finished ?? 0}/${group?.total ?? 0} finalizados`, accent: groupDone ? 'var(--win)' : 'var(--accent)' },
-                        ].map((item, i) => (
-                          <div key={i} className="adm-sync-item">
-                            <div className="adm-sync-item__label">{item.label}</div>
-                            <div className="adm-sync-item__val" style={item.accent ? { color: item.accent } : {}}>{item.val}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 'var(--s2)' }}>Saúde do Cron</div>
+                      {!ch.available ? (
+                        <div style={{ color: 'var(--lose)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>✗ Log indisponível</div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                          <div className="adm-sync-item">
+                            <div className="adm-sync-item__label">Status</div>
+                            <div className="adm-sync-item__val" style={{ color: cronOk ? 'var(--win)' : cronWarn ? 'var(--accent)' : 'var(--lose)' }}>
+                              {cronOk ? '✓ Operacional' : cronWarn ? '⚠ Atenção' : '✗ Falha'}
+                            </div>
                           </div>
-                        ))}
-                      </div>
+                          <div className="adm-sync-item">
+                            <div className="adm-sync-item__label">Último run</div>
+                            <div className="adm-sync-item__val">{ch.last_run_ts ? fmtTs(ch.last_run_ts) : `arquivo: ${ch.last_modified_minutes_ago}min atrás`}</div>
+                          </div>
+                          <div className="adm-sync-item">
+                            <div className="adm-sync-item__label">Atraso</div>
+                            <div className="adm-sync-item__val" style={{ color: ch.on_schedule ? 'var(--win)' : 'var(--lose)' }}>
+                              {ch.last_modified_minutes_ago?.toFixed(1)}min {ch.on_schedule ? '(≤10min ✓)' : '(atrasado ✗)'}
+                            </div>
+                          </div>
+                          {ch.last_run_errors?.length > 0 && (
+                            <div className="adm-sync-item" style={{ flexBasis: '100%' }}>
+                              <div className="adm-sync-item__label">Erros no último run</div>
+                              {ch.last_run_errors.map((e, i) => (
+                                <div key={i} style={{ color: 'var(--lose)', fontFamily: 'var(--font-data)', fontSize: 11 }}>{e}</div>
+                              ))}
+                            </div>
+                          )}
+                          {ch.permission_error_ever && (
+                            <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-cond)', fontSize: 12, flexBasis: '100%' }}>
+                              ⚠ Erro de permissão detectado no início do log (pode ter sido corrigido)
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    {/* R32 */}
+                    {/* ── Partidas de hoje ── */}
                     <div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 'var(--s2)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                        Round of 32 (16 avos)
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 'var(--s2)' }}>
+                        Hoje · {syncReport.today_matches?.length ?? 0} partida(s) eliminatória(s)
                       </div>
-                      <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap', marginBottom: 'var(--s3)' }}>
-                        {[
-                          { label: 'No banco', val: r32?.total ?? 0, accent: (r32?.total ?? 0) === 16 ? 'var(--win)' : 'var(--lose)' },
-                          { label: 'Com resultado', val: r32?.with_result ?? 0 },
-                          { label: 'Pendentes', val: (r32?.total ?? 0) - (r32?.with_result ?? 0) },
-                          { label: 'Status', val: r32Done ? '✓ Todos apurados' : (r32?.total ?? 0) === 0 ? '✗ Não sincronizado' : `${r32?.with_result ?? 0}/${r32?.total ?? 0} com placar`, accent: r32Done ? 'var(--win)' : (r32?.total ?? 0) === 0 ? 'var(--lose)' : 'var(--accent)' },
-                        ].map((item, i) => (
-                          <div key={i} className="adm-sync-item">
-                            <div className="adm-sync-item__label">{item.label}</div>
-                            <div className="adm-sync-item__val" style={item.accent ? { color: item.accent } : {}}>{item.val}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Lista de partidas R32 */}
-                      {syncReport.r32_matches?.length > 0 && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--s2)' }}>
-                          {syncReport.r32_matches.map(m => {
+                      {syncReport.today_matches?.length === 0 ? (
+                        <div style={{ color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>Nenhuma partida eliminatória hoje</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
+                          {syncReport.today_matches.map(m => {
                             const done = m.score !== null
+                            const timeStr = m.match_date
+                              ? new Date(m.match_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                              : '—'
                             return (
-                              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', border: `1px solid ${done ? 'var(--win)' : 'var(--border)'}`, fontSize: 12, fontFamily: 'var(--font-cond)' }}>
-                                <span style={{ color: done ? 'var(--win)' : 'var(--text-4)', fontSize: 11, minWidth: 12 }}>{done ? '✓' : '○'}</span>
-                                <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
-                                <span style={{ color: 'var(--text-2)', flex: 1, minWidth: 0 }}>{m.team_a.code} × {m.team_b.code}</span>
-                                <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', border: `1px solid ${done ? 'var(--win)' : 'var(--border)'}` }}>
+                                <span style={{ color: done ? 'var(--win)' : 'var(--text-4)', fontSize: 14 }}>{done ? '✓' : '○'}</span>
+                                <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', minWidth: 32 }}>{m.team_a.code}</span>
                                 {done
-                                  ? <span style={{ color: 'var(--win)', fontFamily: 'var(--font-data)', whiteSpace: 'nowrap' }}>{m.score.a}–{m.score.b}</span>
-                                  : <span style={{ color: 'var(--text-4)', whiteSpace: 'nowrap' }}>#{m.match_number}</span>
+                                  ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 15, color: 'var(--win)', fontWeight: 700, padding: '0 var(--s2)' }}>{m.score.a}–{m.score.b}</span>
+                                  : <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: 'var(--text-4)', padding: '0 var(--s2)' }}>{timeStr}</span>
                                 }
-                                {m.bets > 0 && <span style={{ color: 'var(--text-4)', fontSize: 10 }}>{m.bets}ap</span>}
+                                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', minWidth: 32, textAlign: 'right' }}>{m.team_b.code}</span>
+                                <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                                <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>#{m.match_number} · {m.phase}</span>
                               </div>
                             )
                           })}
@@ -1702,15 +1723,53 @@ export default function Admin() {
                       )}
                     </div>
 
-                    {/* Log do cron */}
+                    {/* ── Anomalias ── */}
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 'var(--s2)' }}>Anomalias</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
+                        {syncReport.anomalies?.map((a, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', fontFamily: 'var(--font-cond)', fontSize: 13, color: a.level === 'error' ? 'var(--lose)' : a.level === 'warning' ? 'var(--accent)' : 'var(--win)' }}>
+                            <span>{a.level === 'error' ? '✗' : a.level === 'warning' ? '⚠' : '✓'}</span>
+                            <span style={{ color: a.level === 'ok' ? 'var(--text-3)' : undefined }}>{a.msg}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── R32 grid ── */}
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 'var(--s2)' }}>
+                        R32 — {r32?.with_result ?? 0}/{r32?.total ?? 16} com resultado
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 'var(--s2)' }}>
+                        {syncReport.r32_matches?.map(m => {
+                          const done = m.score !== null
+                          return (
+                            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', border: `1px solid ${done ? 'var(--win)' : 'var(--border)'}`, fontSize: 12, fontFamily: 'var(--font-cond)' }}>
+                              <span style={{ color: done ? 'var(--win)' : 'var(--text-4)', fontSize: 11, minWidth: 10 }}>{done ? '✓' : '○'}</span>
+                              <img src={m.team_a.flag_url} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                              <span style={{ color: 'var(--text-2)', flex: 1 }}>{m.team_a.code} × {m.team_b.code}</span>
+                              <img src={m.team_b.flag_url} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                              {done
+                                ? <span style={{ color: 'var(--win)', fontFamily: 'var(--font-data)', whiteSpace: 'nowrap', fontWeight: 700 }}>{m.score.a}–{m.score.b}</span>
+                                : <span style={{ color: 'var(--text-4)', fontSize: 10 }}>#{m.match_number}</span>
+                              }
+                              {m.bets > 0 && <span style={{ color: 'var(--text-4)', fontSize: 10, marginLeft: 'var(--s1)' }}>{m.bets}ap</span>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ── Log cron ── */}
                     {syncReport.cron_log?.length > 0 && (
                       <div>
-                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 'var(--s2)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                          Log Cron {syncReport.last_cron_run_at ? `· ${new Date(syncReport.last_cron_run_at + ':00').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}` : ''}
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 'var(--s2)' }}>
+                          Log Cron {ch.last_run_ts ? `· ${fmtTs(ch.last_run_ts)}` : ''}
                         </div>
-                        <div className="admin-log" style={{ maxHeight: 200 }}>
+                        <div className="admin-log" style={{ maxHeight: 220 }}>
                           {syncReport.cron_log.map((line, i) => (
-                            <div key={i} style={{ color: line.startsWith('✓') ? 'var(--win)' : line.startsWith('✗') ? 'var(--lose)' : line.startsWith('⚠') ? 'var(--accent)' : 'var(--text-3)' }}>{line}</div>
+                            <div key={i} style={{ color: line.startsWith('===') ? 'var(--accent)' : line.startsWith('✓') ? 'var(--win)' : line.startsWith('✗') ? 'var(--lose)' : line.startsWith('⚠') ? 'var(--accent)' : 'var(--text-3)' }}>{line}</div>
                           ))}
                         </div>
                       </div>

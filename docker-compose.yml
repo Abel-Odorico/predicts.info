@@ -18,6 +18,7 @@ services:
     volumes:
       - ./backend:/app
       - ./frontend/dist:/frontend_dist
+      - /var/log/predicts-cron.log:/var/log/predicts-cron.log:ro
     networks:
       - predicts_net
 

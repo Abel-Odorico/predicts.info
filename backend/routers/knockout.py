@@ -106,8 +106,11 @@ def run_knockout_sync(db_url: str, log=None) -> dict:
         created = updated = 0
         pending = []
         for entry in schedule:
+            # R32 is handled by sync_knockout_matches (dedicated Wikipedia page)
+            if entry.get("phase") == "r32":
+                continue
             match_number = entry.get("match_number")
-            phase_str = entry.get("phase", "r32")
+            phase_str = entry.get("phase", "r16")
             try:
                 phase = MatchPhase(phase_str)
             except ValueError:
@@ -202,12 +205,15 @@ def sync_knockout(db: Session = Depends(get_db), _: User = Depends(require_admin
     pending = []  # matches where teams couldn't be resolved
 
     for entry in schedule:
+        # R32 handled by sync_knockout_matches (dedicated Wikipedia page)
+        if entry.get("phase") == "r32":
+            continue
         match_number = entry.get("match_number")
-        phase_str = entry.get("phase", "r32")
+        phase_str = entry.get("phase", "r16")
         try:
             phase = MatchPhase(phase_str)
         except ValueError:
-            phase = MatchPhase.r32
+            phase = MatchPhase.r16
 
         team_a = _resolve_team(entry.get("team_a_label", ""), table, db)
         team_b = _resolve_team(entry.get("team_b_label", ""), table, db)

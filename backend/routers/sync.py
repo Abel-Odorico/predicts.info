@@ -223,28 +223,64 @@ def sync_report(db: Session = Depends(get_db), _: User = Depends(require_admin))
     from sqlalchemy import text
     from pathlib import Path
     import re as _re
+    import os
+    from zoneinfo import ZoneInfo
 
-    # Phase counters
-    rows = db.execute(text("""
-        SELECT
-            phase::text,
-            count(*) AS total,
-            count(mr.id) AS with_result,
-            sum(CASE WHEN m.status = 'finished' THEN 1 ELSE 0 END) AS finished
-        FROM matches m
-        LEFT JOIN match_results mr ON mr.match_id = m.id
-        GROUP BY phase
-        ORDER BY phase
-    """)).fetchall()
-    phase_stats = [
-        {"phase": r[0], "total": int(r[1]), "with_result": int(r[2]), "finished": int(r[3])}
-        for r in rows
-    ]
+    BRT = ZoneInfo("America/Sao_Paulo")
+    now_brt = datetime.now(BRT)
+    today_brt = now_brt.date()
 
-    # R32 match detail
-    r32_rows = db.execute(text("""
+    # ── Cron health ──────────────────────────────────────────────────────────
+    log_path = Path("/var/log/predicts-cron.log")
+    cron_log: list[str] = []
+    cron_health: dict = {"available": False}
+
+    if log_path.exists():
+        raw = log_path.read_text(errors="replace")
+        all_lines = raw.splitlines()
+        cron_log = all_lines[-80:]
+
+        # mtime = last time the file was written (= last cron run)
+        mtime = os.path.getmtime(str(log_path))
+        minutes_ago = (now_brt.timestamp() - mtime) / 60
+
+        # Extract last timestamp line (=== 2026-06-28T09:35:00-0300 ===)
+        last_run_ts: str | None = None
+        for line in reversed(all_lines):
+            m = _re.match(r"=== (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+            if m:
+                last_run_ts = m.group(1)
+                break
+
+        # Errors in the last run block (lines after last === marker)
+        last_block: list[str] = []
+        found_marker = False
+        for line in reversed(all_lines):
+            if _re.match(r"=== \d{4}", line):
+                found_marker = True
+                break
+            last_block.insert(0, line)
+        last_run_errors = [l for l in last_block if l.startswith("✗") or "Permission denied" in l or "Error" in l.lower() or "Traceback" in l]
+
+        # Permission denied ever in first 10 lines
+        perm_error = any("Permission denied" in l for l in all_lines[:10])
+
+        on_schedule = minutes_ago < 10  # expect every 5 min; warn if > 10 min gap
+        cron_health = {
+            "available": True,
+            "last_modified_minutes_ago": round(minutes_ago, 1),
+            "on_schedule": on_schedule,
+            "last_run_ts": last_run_ts,
+            "has_timestamp": last_run_ts is not None,
+            "last_run_errors": last_run_errors,
+            "permission_error_ever": perm_error,
+        }
+
+    # ── Partidas de hoje (BRT) ────────────────────────────────────────────
+    today_rows = db.execute(text("""
         SELECT
-            m.id, m.match_number, m.match_date, m.status::text, m.venue, m.city,
+            m.id, m.match_number, m.match_date, m.phase::text, m.status::text,
+            m.venue, m.city,
             ta.code AS code_a, ta.name AS name_a, ta.flag_url AS flag_a,
             tb.code AS code_b, tb.name AS name_b, tb.flag_url AS flag_b,
             mr.score_a, mr.score_b
@@ -252,51 +288,114 @@ def sync_report(db: Session = Depends(get_db), _: User = Depends(require_admin))
         JOIN teams ta ON ta.id = m.team_a_id
         JOIN teams tb ON tb.id = m.team_b_id
         LEFT JOIN match_results mr ON mr.match_id = m.id
+        WHERE m.phase != 'group'::matchphase
+          AND (m.match_date AT TIME ZONE 'America/Sao_Paulo')::date = :today
+        ORDER BY m.match_date
+    """), {"today": today_brt}).fetchall()
+    today_matches = [
+        {
+            "id": r[0], "match_number": r[1],
+            "match_date": r[2].isoformat() if r[2] else None,
+            "phase": r[3], "status": r[4],
+            "venue": r[5], "city": r[6],
+            "team_a": {"code": r[7], "name": r[8], "flag_url": r[9]},
+            "team_b": {"code": r[10], "name": r[11], "flag_url": r[12]},
+            "score": {"a": r[13], "b": r[14]} if r[13] is not None else None,
+        }
+        for r in today_rows
+    ]
+
+    # ── Anomalias ─────────────────────────────────────────────────────────
+    anomalies: list[dict] = []
+
+    # finished sem resultado
+    n = db.execute(text("""
+        SELECT count(*) FROM matches
+        WHERE status = 'finished' AND id NOT IN (SELECT match_id FROM match_results)
+    """)).scalar() or 0
+    if n > 0:
+        anomalies.append({"level": "error", "msg": f"{n} partida(s) com status 'finished' sem resultado no banco"})
+
+    # resultado sem finished
+    n = db.execute(text("""
+        SELECT count(*) FROM match_results mr
+        JOIN matches m ON m.id = mr.match_id
+        WHERE m.status != 'finished'
+    """)).scalar() or 0
+    if n > 0:
+        anomalies.append({"level": "warning", "msg": f"{n} resultado(s) registrado(s) mas partida não está como 'finished'"})
+
+    # apostas em finalizadas sem pontuação
+    n = db.execute(text("""
+        SELECT count(*) FROM bets b
+        JOIN matches m ON m.id = b.match_id
+        WHERE m.status = 'finished' AND b.points_earned IS NULL
+    """)).scalar() or 0
+    if n > 0:
+        anomalies.append({"level": "error", "msg": f"{n} aposta(s) em partidas finalizadas sem pontuação calculada"})
+
+    # R32 abaixo de 16
+    r32_count = db.execute(text(
+        "SELECT count(*) FROM matches WHERE phase = 'r32'::matchphase"
+    )).scalar() or 0
+    if r32_count < 16:
+        anomalies.append({"level": "error", "msg": f"Apenas {r32_count}/16 partidas R32 no banco — sync incompleto"})
+
+    # Cron atrasado
+    if cron_health.get("available") and not cron_health.get("on_schedule"):
+        mins = cron_health["last_modified_minutes_ago"]
+        anomalies.append({"level": "error", "msg": f"Cron não executa há {mins:.0f} min (esperado ≤ 10 min)"})
+
+    if not anomalies:
+        anomalies.append({"level": "ok", "msg": "Nenhuma anomalia detectada"})
+
+    # ── Phase counters ────────────────────────────────────────────────────
+    rows = db.execute(text("""
+        SELECT phase::text, count(*) AS total,
+               count(mr.id) AS with_result,
+               sum(CASE WHEN m.status = 'finished' THEN 1 ELSE 0 END) AS finished
+        FROM matches m
+        LEFT JOIN match_results mr ON mr.match_id = m.id
+        GROUP BY phase ORDER BY phase
+    """)).fetchall()
+    phase_stats = [
+        {"phase": r[0], "total": int(r[1]), "with_result": int(r[2]), "finished": int(r[3])}
+        for r in rows
+    ]
+
+    # ── R32 detail (for reference grid) ──────────────────────────────────
+    r32_rows = db.execute(text("""
+        SELECT m.id, m.match_number, m.match_date, m.status::text,
+               ta.code, ta.name, ta.flag_url,
+               tb.code, tb.name, tb.flag_url,
+               mr.score_a, mr.score_b,
+               (SELECT count(*) FROM bets WHERE match_id = m.id) AS bets
+        FROM matches m
+        JOIN teams ta ON ta.id = m.team_a_id
+        JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN match_results mr ON mr.match_id = m.id
         WHERE m.phase = 'r32'::matchphase
         ORDER BY m.match_number
     """)).fetchall()
-    r32_matches = []
-    for r in r32_rows:
-        r32_matches.append({
+    r32_matches = [
+        {
             "id": r[0], "match_number": r[1],
             "match_date": r[2].isoformat() if r[2] else None,
-            "status": r[3], "venue": r[4], "city": r[5],
-            "team_a": {"code": r[6], "name": r[7], "flag_url": r[8]},
-            "team_b": {"code": r[9], "name": r[10], "flag_url": r[11]},
-            "score": {"a": r[12], "b": r[13]} if r[12] is not None else None,
-        })
-
-    # Bets on r32 matches
-    bet_counts = db.execute(text("""
-        SELECT m.match_number, count(b.id) AS bets
-        FROM matches m
-        LEFT JOIN bets b ON b.match_id = m.id
-        WHERE m.phase = 'r32'::matchphase
-        GROUP BY m.match_number
-    """)).fetchall()
-    bets_by_match = {r[0]: int(r[1]) for r in bet_counts}
-    for m in r32_matches:
-        m["bets"] = bets_by_match.get(m["match_number"], 0)
-
-    # Cron log tail
-    cron_log: list[str] = []
-    log_path = Path("/var/log/predicts-cron.log")
-    if log_path.exists():
-        lines = log_path.read_text(errors="replace").splitlines()
-        cron_log = lines[-60:]
-
-    # Last cron run time from log
-    last_run_at = None
-    for line in reversed(cron_log):
-        ts_match = _re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
-        if ts_match:
-            last_run_at = ts_match.group(1)
-            break
+            "status": r[3],
+            "team_a": {"code": r[4], "name": r[5], "flag_url": r[6]},
+            "team_b": {"code": r[7], "name": r[8], "flag_url": r[9]},
+            "score": {"a": r[10], "b": r[11]} if r[10] is not None else None,
+            "bets": int(r[12]),
+        }
+        for r in r32_rows
+    ]
 
     return {
-        "generated_at": _now().isoformat(),
+        "generated_at": now_brt.isoformat(),
+        "cron_health": cron_health,
+        "today_matches": today_matches,
+        "anomalies": anomalies,
         "phase_stats": phase_stats,
         "r32_matches": r32_matches,
         "cron_log": cron_log,
-        "last_cron_run_at": last_run_at,
     }
