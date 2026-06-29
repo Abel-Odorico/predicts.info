@@ -17,6 +17,21 @@ from models import Notification, User, Match, Bet, MatchStatus
 
 router = APIRouter(tags=["notifications"])
 
+# (push_enabled, url, tag) per notification type
+_PUSH_CONFIG: dict[str, tuple[bool, str, str]] = {
+    "bet_exact":      (True,  "/apostas",    "predicts-bet"),
+    "bet_correct":    (True,  "/apostas",    "predicts-bet"),
+    "bet_wrong":      (True,  "/apostas",    "predicts-bet"),
+    "ranking_top3":   (True,  "/ranking",    "predicts-ranking"),
+    "bet_reminder":   (True,  "/apostas",    "predicts-reminder"),
+    "poll_reminder":  (True,  "/pesquisa",   "predicts-poll"),
+    "version_update": (True,  "/changelog",  "predicts-version"),
+    "champion_remind":(True,  "/campeao",    "predicts-champion"),
+    "champion_bonus": (True,  "/campeao",    "predicts-champion"),
+    "group_invite":   (True,  "/meus-grupos","predicts-group"),
+}
+_PUSH_DEFAULT = (True, "/", "predicts")
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -39,10 +54,11 @@ def create_notification(
         meta=meta,
     )
     db.add(n)
-    if push:
+    push_enabled, url, tag = _PUSH_CONFIG.get(type_, _PUSH_DEFAULT)
+    if push and push_enabled:
         try:
             from routers.push import send_push_to_users
-            send_push_to_users(db, [user_id], title, body or "", url="/apostas")
+            send_push_to_users(db, [user_id], title, body or "", url=url, tag=tag)
         except Exception:
             pass
     return n

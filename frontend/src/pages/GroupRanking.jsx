@@ -340,11 +340,11 @@ export default function GroupRanking() {
   const weekLeader = weeklyRanking[0] ?? null
   const memberRecentBets = highlights?.member_recent_bets ?? {}
   const leaderPtsTotal = ranking[0]?.total_points ?? 0
-  const top3 = ranking.slice(0, 3)
   const padTime = n => String(n).padStart(2, '0')
   const myChampionPick = championPicks.find(p => p.is_me)
   const availablePhases = ['all', 'group', 'r16', 'qf', 'sf', 'final']
   const displayRanking = (activePhase !== 'all' && phaseRanking) ? phaseRanking : ranking
+  const top3 = displayRanking.slice(0, 3)
   const filteredTeams = teams.filter(t =>
     !championSearch || t.name.toLowerCase().includes(championSearch.toLowerCase()) || t.code.toLowerCase().includes(championSearch.toLowerCase())
   )
@@ -588,7 +588,7 @@ export default function GroupRanking() {
             )}
 
             {/* Pódio top-3 */}
-            {top3.length >= 2 && activePhase === 'all' && (
+            {top3.length >= 1 && (
               <div className="group-podium">
                 {top3.map((r, i) => (
                   <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
@@ -603,7 +603,7 @@ export default function GroupRanking() {
             )}
 
             {/* Minha posição */}
-            {myEntry && activePhase === 'all' && (
+            {myEntry && (
               <div className="group-ranking-hero fade-in-2">
                 <div className="group-ranking-hero__pos">
                   {myEntry.position === 1 ? '🥇' : myEntry.position === 2 ? '🥈' : myEntry.position === 3 ? '🥉' : `${myEntry.position}º`}
@@ -737,29 +737,48 @@ export default function GroupRanking() {
                             ))}
                           </div>
 
-                          {/* Recent bets */}
-                          {recentBets.length > 0 && (
-                            <div>
-                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>Últimos Palpites</div>
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                {recentBets.map((bet, bi) => {
-                                  const exact = bet.bet_a === bet.result_a && bet.bet_b === bet.result_b
-                                  const correct = (bet.points_earned || 0) > 0
-                                  const ptColor = exact ? 'var(--win)' : correct ? 'var(--accent)' : 'var(--lose)'
-                                  return (
-                                    <div key={bi} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, background: 'var(--bg-surface)', border: `1px solid ${ptColor}40` }}>
-                                      {bet.team_a?.flag_url && <img src={bet.team_a.flag_url} alt={bet.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
-                                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>{bet.bet_a}–{bet.bet_b}</span>
-                                      {bet.team_b?.flag_url && <img src={bet.team_b.flag_url} alt={bet.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
-                                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: ptColor, background: `${ptColor}15`, borderRadius: 10, padding: '1px 6px' }}>
-                                        {exact ? '🎯' : correct ? '✅' : '❌'} {bet.points_earned > 0 ? `+${bet.points_earned}` : '0'}
-                                      </span>
+                          {/* Recent bets grouped by date */}
+                          {recentBets.length > 0 && (() => {
+                            const groups = {}
+                            recentBets.forEach(bet => {
+                              const dateKey = bet.match_date
+                                ? new Date(bet.match_date.endsWith('Z') ? bet.match_date : bet.match_date + 'Z')
+                                    .toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', weekday: 'short' })
+                                : 'Sem data'
+                              if (!groups[dateKey]) groups[dateKey] = []
+                              groups[dateKey].push(bet)
+                            })
+                            return (
+                              <div>
+                                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>Resultados por Data</div>
+                                {Object.entries(groups).map(([dateStr, dateBets]) => (
+                                  <div key={dateStr} style={{ marginBottom: 8 }}>
+                                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 0 4px', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>{dateStr}</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {dateBets.map((bet, bi) => {
+                                        const exact = bet.bet_a === bet.result_a && bet.bet_b === bet.result_b
+                                        const correct = (bet.points_earned || 0) > 0
+                                        const ptColor = exact ? 'var(--win)' : correct ? 'var(--accent)' : 'var(--lose)'
+                                        return (
+                                          <div key={bi} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 8, background: 'var(--bg-surface)', border: `1px solid ${ptColor}30` }}>
+                                            {bet.team_a?.flag_url && <img src={bet.team_a.flag_url} alt={bet.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+                                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)', fontWeight: 600, flex: 1 }}>{bet.team_a?.code} × {bet.team_b?.code}</span>
+                                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-1)', fontWeight: 700 }}>{bet.bet_a}–{bet.bet_b}</span>
+                                            {bet.result_a !== null && bet.result_b !== null && (
+                                              <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-3)' }}>({bet.result_a}–{bet.result_b})</span>
+                                            )}
+                                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: ptColor, background: `${ptColor}15`, borderRadius: 10, padding: '1px 6px', flexShrink: 0 }}>
+                                              {exact ? '🎯' : correct ? '✅' : '❌'} {bet.points_earned > 0 ? `+${bet.points_earned}` : '0'}
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
                                     </div>
-                                  )
-                                })}
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                          )}
+                            )
+                          })()}
 
                           {/* Diff pro líder + links */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>

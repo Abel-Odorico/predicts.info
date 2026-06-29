@@ -53,7 +53,7 @@ class SendPushBody(BaseModel):
     user_ids: list[int] | None = None
 
 
-def _send_one(sub: PushSubscription, title: str, body: str, url: str = "/") -> bool:
+def _send_one(sub: PushSubscription, title: str, body: str, url: str = "/", tag: str = "predicts") -> bool:
     """Send a single push notification. Returns True on success."""
     if not _has_vapid():
         return False
@@ -64,7 +64,7 @@ def _send_one(sub: PushSubscription, title: str, body: str, url: str = "/") -> b
                 "endpoint": sub.endpoint,
                 "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
             },
-            data=json.dumps({"title": title, "body": body, "url": url}),
+            data=json.dumps({"title": title, "body": body, "url": url, "tag": tag}),
             vapid_private_key=settings.vapid_private_key,
             vapid_claims={"sub": f"mailto:{settings.vapid_claims_email}"},
         )
@@ -74,20 +74,20 @@ def _send_one(sub: PushSubscription, title: str, body: str, url: str = "/") -> b
         return False
 
 
-def send_push_to_users(db: Session, user_ids: list[int], title: str, body: str, url: str = "/"):
+def send_push_to_users(db: Session, user_ids: list[int], title: str, body: str, url: str = "/", tag: str = "predicts"):
     """Helper called from other routers (notifications, version, poll)."""
     if not _has_vapid():
         return 0
     subs = db.query(PushSubscription).filter(PushSubscription.user_id.in_(user_ids)).all()
-    return sum(1 for s in subs if _send_one(s, title, body, url))
+    return sum(1 for s in subs if _send_one(s, title, body, url, tag))
 
 
-def send_push_to_all(db: Session, title: str, body: str, url: str = "/"):
+def send_push_to_all(db: Session, title: str, body: str, url: str = "/", tag: str = "predicts"):
     """Send to every subscriber."""
     if not _has_vapid():
         return 0
     subs = db.query(PushSubscription).all()
-    return sum(1 for s in subs if _send_one(s, title, body, url))
+    return sum(1 for s in subs if _send_one(s, title, body, url, tag))
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────

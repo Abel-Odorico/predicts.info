@@ -905,7 +905,7 @@ def group_highlights(
             _best_pct = _pct
             best_approval = {"user_id": _ar.user_id, "name": _ar.name, "pct": _pct}
 
-    # Recent bets with match/result details per member (last 3 each)
+    # Recent bets with match/result details per member (last 20 each, ordered by date desc)
     _rd_rows = (
         db.query(
             Bet.user_id,
@@ -914,6 +914,7 @@ def group_highlights(
             Bet.points_earned,
             Match.team_a_id,
             Match.team_b_id,
+            Match.match_date,
             MatchResult.score_a.label("result_a"),
             MatchResult.score_b.label("result_b"),
         )
@@ -939,8 +940,9 @@ def group_highlights(
                 "result_a": b.result_a, "result_b": b.result_b,
                 "team_a": _tmap.get(b.team_a_id, {}),
                 "team_b": _tmap.get(b.team_b_id, {}),
+                "match_date": b.match_date.isoformat() if b.match_date else None,
             }
-            for b in bets_list[:3]
+            for b in bets_list[:20]
         ]
         for uid, bets_list in _ud_map.items()
     }
