@@ -453,7 +453,9 @@ export default function Ranking() {
       {!compView && (
       <div>
       {!loading && data.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s6)' }} className="fade-in-2">
+        <>
+        <RankingPodium data={data} champPicks={champPicks} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s4)' }} className="fade-in-2">
           <HighlightCard
             icon="👑" label="Líder Geral"
             name={leader?.name}
@@ -497,6 +499,7 @@ export default function Ranking() {
             accent="#23b26d"
           />
         </div>
+        </>
       )}
 
       {/* ── Filtros ───────────────────────────────────────────────────── */}
@@ -905,6 +908,46 @@ export default function Ranking() {
       </div>
 
       {showLiga && <LigaFlowModal token={token} onClose={() => setShowLiga(false)} />}
+    </div>
+  )
+}
+
+// ── RankingPodium ─────────────────────────────────────────────────────────────
+function _initials(name = '') {
+  return name.split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+}
+
+function RankingPodium({ data, champPicks }) {
+  const top3 = data.slice(0, 3)
+  if (!top3.length) return null
+  // CSS order: slot--2 (left), slot--1 (center/gold), slot--3 (right)
+  const SLOT = { 0: 'group-podium__slot--1', 1: 'group-podium__slot--2', 2: 'group-podium__slot--3' }
+  const MEDAL = ['🥇', '🥈', '🥉']
+  return (
+    <div className="card fade-in-2" style={{ marginTop: 'var(--s6)', padding: '0 0 var(--s4)', overflow: 'hidden' }}>
+      <div style={{ padding: 'var(--s3) var(--s4) 0', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+        🏆 Pódio
+      </div>
+      <div className="group-podium">
+        {top3.map((r, i) => {
+          const cp = champPicks?.[r.user_id]
+          return (
+            <div key={r.user_id} className={`group-podium__slot ${SLOT[i]}`}>
+              <div className="group-podium__avatar">{_initials(r.name)}</div>
+              <div className="group-podium__medal">{MEDAL[i]}</div>
+              <div className="group-podium__name" title={r.name}>{r.name}</div>
+              <div className="group-podium__pts">{r.total_points} pts</div>
+              {cp?.champion && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                  <img src={cp.champion.flag} alt={cp.champion.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 8, color: '#e8a030' }}>🏆</span>
+                </div>
+              )}
+              <div className="group-podium__platform" />
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

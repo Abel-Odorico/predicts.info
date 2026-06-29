@@ -6587,7 +6587,7 @@ button.admin-options-quick__card {
 /* KPI grid */
 .uh-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
@@ -6833,6 +6833,134 @@ button.admin-options-quick__card {
   letter-spacing: 0.06em;
 }
 
+/* Phase chart */
+.uh-phase-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.uh-phase-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 56px;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.uh-phase-row__label {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uh-phase-row__track {
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--border);
+  display: flex;
+}
+
+.uh-phase-row__seg {
+  height: 100%;
+  transition: width 700ms cubic-bezier(.4,0,.2,1);
+  min-width: 0;
+}
+
+.uh-phase-row__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.uh-phase-row__pct {
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.uh-phase-row__count {
+  font-family: var(--font-data);
+  font-size: 9px;
+  color: var(--text-4);
+}
+
+/* Score heatmap */
+.uh-heatmap__grid {
+  display: grid;
+  grid-template-columns: 18px repeat(6, 1fr);
+  gap: 3px;
+  margin-top: var(--s2);
+}
+
+.uh-heatmap__corner {
+  width: 18px;
+  height: 18px;
+}
+
+.uh-heatmap__head {
+  font-family: var(--font-data);
+  font-size: 9px;
+  color: var(--text-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+}
+
+.uh-heatmap__cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) calc(var(--i, 0) * 72%), var(--bg-overlay));
+  border: 1px solid color-mix(in srgb, var(--accent) calc(var(--i, 0) * 50%), var(--border));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: transform 80ms, border-color 80ms;
+  position: relative;
+}
+
+.uh-heatmap__cell.active {
+  transform: scale(1.18);
+  z-index: 2;
+  border-color: var(--accent);
+}
+
+.uh-heatmap__cell span {
+  font-family: var(--font-data);
+  font-size: 8px;
+  color: var(--text-1);
+  opacity: calc(0.4 + var(--i, 0) * 0.6);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.uh-heatmap__footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--s3);
+  font-family: var(--font-cond);
+  font-size: 9px;
+  color: var(--text-4);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* Two-col chart row */
+.uh-charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+
 /* Filter bar */
 .uh-filters {
   display: flex;
@@ -6864,11 +6992,13 @@ button.admin-options-quick__card {
 
 /* Mobile */
 @media (max-width: 640px) {
-  .uh-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .uh-kpi-card__val { font-size: 22px; }
   .uh-header__content { gap: var(--s3); }
   .uh-header__avatar { width: 52px; height: 52px; }
   .uh-header__avatar-icon { font-size: 18px; }
   .uh-streaks__val { font-size: 26px; }
+  .uh-charts-row { grid-template-columns: 1fr; }
+  .uh-phase-row { grid-template-columns: 60px 1fr 52px; }
 }
 
 /* ── Groups top bar (minimal header) ────────────────────────────────── */
@@ -6914,6 +7044,20 @@ button.admin-options-quick__card {
 }
 
 /* ── Group Podium ────────────────────────────────────────────────────── */
+/* ── Pódio keyframes ─────────────────────────────────────────────────── */
+@keyframes podium-rise {
+  from { opacity: 0; transform: translateY(36px) scale(0.86); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes podium-gold-glow {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(232,160,48,.35), 0 4px 16px rgba(232,160,48,.25); }
+  50%       { box-shadow: 0 0 0 6px rgba(232,160,48,.55), 0 10px 32px rgba(232,160,48,.45); }
+}
+@keyframes podium-platform-rise {
+  from { transform: scaleY(0); transform-origin: bottom; }
+  to   { transform: scaleY(1); transform-origin: bottom; }
+}
+
 .group-podium {
   display: flex;
   align-items: flex-end;
@@ -6928,10 +7072,11 @@ button.admin-options-quick__card {
   gap: var(--s2);
   min-width: 72px;
   max-width: 96px;
+  animation: podium-rise 480ms cubic-bezier(0.22,1,0.36,1) both;
 }
-.group-podium__slot--1 { order: 2; }
-.group-podium__slot--2 { order: 1; }
-.group-podium__slot--3 { order: 3; }
+.group-podium__slot--1 { order: 2; animation-delay: 200ms; }
+.group-podium__slot--2 { order: 1; animation-delay: 0ms; }
+.group-podium__slot--3 { order: 3; animation-delay: 100ms; }
 
 .group-podium__avatar {
   width: 44px;
@@ -6953,6 +7098,7 @@ button.admin-options-quick__card {
   font-size: 18px;
   background: radial-gradient(135deg, #f0c040, #c87a10);
   box-shadow: 0 0 0 3px rgba(232,160,48,.35), 0 4px 16px rgba(232,160,48,.25);
+  animation: podium-gold-glow 2.2s ease-in-out 680ms infinite;
 }
 .group-podium__slot--2 .group-podium__avatar {
   background: radial-gradient(135deg, #c0c0c0, #808080);
@@ -6972,24 +7118,28 @@ button.admin-options-quick__card {
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: podium-platform-rise 400ms cubic-bezier(0.22,1,0.36,1) both;
 }
 .group-podium__slot--1 .group-podium__platform {
   height: 52px;
   background: linear-gradient(180deg, rgba(232,160,48,.25) 0%, rgba(232,160,48,.1) 100%);
   border: 1px solid rgba(232,160,48,.3);
   border-bottom: none;
+  animation-delay: 380ms;
 }
 .group-podium__slot--2 .group-podium__platform {
   height: 38px;
   background: linear-gradient(180deg, rgba(160,160,160,.18) 0%, rgba(160,160,160,.06) 100%);
   border: 1px solid rgba(160,160,160,.25);
   border-bottom: none;
+  animation-delay: 180ms;
 }
 .group-podium__slot--3 .group-podium__platform {
   height: 28px;
   background: linear-gradient(180deg, rgba(182,124,90,.18) 0%, rgba(182,124,90,.06) 100%);
   border: 1px solid rgba(182,124,90,.25);
   border-bottom: none;
+  animation-delay: 280ms;
 }
 .group-podium__name {
   font-family: var(--font-cond);
