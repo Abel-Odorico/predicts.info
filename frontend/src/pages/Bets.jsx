@@ -579,10 +579,12 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
       )}
 
       <div className="bet-card__footer" style={{ marginTop: 'var(--s4)' }}>
-        <span className="bet-card__hint">
-          {stillOpen
-            ? hasBet ? 'Toque em Alterar para atualizar seu palpite' : `Palpite até ${formatKickoffTime(match.match_date)}`
-            : 'Palpites encerrados — partida iniciou'
+        <span className="bet-card__hint" style={confirmed ? { color: 'var(--win)' } : undefined}>
+          {confirmed
+            ? `✓ Palpite salvo: ${Number(sa)}×${Number(sb)}`
+            : stillOpen
+              ? hasBet ? 'Toque em Alterar para atualizar seu palpite' : `Palpite até ${formatKickoffTime(match.match_date)}`
+              : 'Palpites encerrados — partida iniciou'
           }
         </span>
         <div className="bet-card__actions">

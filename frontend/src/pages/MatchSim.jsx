@@ -316,21 +316,9 @@ export default function MatchSim() {
                     <div className="bet-form">
                       <div className="bet-form__team-label">{match.team_a.code}</div>
                       <div className="bet-form__score">
-                        <input
-                          type="number" min="0" max="20"
-                          className="score-input"
-                          value={betScore.a}
-                          onChange={e => setBetScore(s => ({ ...s, a: e.target.value }))}
-                          placeholder="0"
-                        />
+                        <ScoreInput value={betScore.a} onChange={v => setBetScore(s => ({ ...s, a: v }))} autoFocus />
                         <span className="score-sep">×</span>
-                        <input
-                          type="number" min="0" max="20"
-                          className="score-input"
-                          value={betScore.b}
-                          onChange={e => setBetScore(s => ({ ...s, b: e.target.value }))}
-                          placeholder="0"
-                        />
+                        <ScoreInput value={betScore.b} onChange={v => setBetScore(s => ({ ...s, b: v }))} />
                       </div>
                       <div className="bet-form__team-label">{match.team_b.code}</div>
                     </div>
@@ -383,6 +371,23 @@ function isBettingOpen(match) {
 
 function parseUtcMatchDate(value) {
   return new Date(value.endsWith('Z') ? value : `${value}Z`)
+}
+
+function ScoreInput({ value, onChange, autoFocus }) {
+  const v = Number(value) || 0
+  return (
+    <div className="score-stepper">
+      <button type="button" className="score-stepper__btn" onClick={() => onChange(Math.max(0, v - 1))}>−</button>
+      <input
+        type="number" min="0" max="20"
+        className="score-input"
+        value={v}
+        onChange={e => onChange(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+        autoFocus={autoFocus}
+      />
+      <button type="button" className="score-stepper__btn score-stepper__btn--plus" onClick={() => onChange(Math.min(20, v + 1))}>+</button>
+    </div>
+  )
 }
 
 function SimAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
