@@ -339,6 +339,15 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
     }
   }, [autoOpen])
 
+  // Sync form values with the actually-saved bet whenever the bet changes or form closes.
+  // Prevents stale values (cancelled edits / post-confirm state) from leaking into next open.
+  useEffect(() => {
+    if (existingBet && !open) {
+      setSa(existingBet.score_a)
+      setSb(existingBet.score_b)
+    }
+  }, [existingBet?.score_a, existingBet?.score_b, open])
+
   async function fetchOdds() {
     if (odds || oddsLoading) return
     setOddsLoading(true)

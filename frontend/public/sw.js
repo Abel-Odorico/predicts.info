@@ -1,4 +1,4 @@
-const CACHE = 'predicts-v22'
+const CACHE = 'predicts-v24'
 const ICON  = '/icon-192.png'
 const BADGE = '/favicon-32x32.png'
 
@@ -80,8 +80,11 @@ self.addEventListener('fetch', e => {
 async function networkFirst(req) {
   try {
     const res = await fetch(req)
-    const cache = await caches.open(CACHE)
-    cache.put(req, res.clone())
+    // só cacheia respostas ok (2xx) — erros 4xx/5xx não devem ser servidos offline
+    if (res.ok) {
+      const cache = await caches.open(CACHE)
+      cache.put(req, res.clone())
+    }
     return res
   } catch {
     const cached = await caches.match(req)
