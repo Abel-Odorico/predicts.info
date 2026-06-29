@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Line, Legend } from 'recharts'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -188,6 +188,9 @@ export default function Analytics() {
   const [betsOffset, setBetsOffset]             = useState(0)
   const BETS_LIMIT = 100
 
+  const [retention, setRetention]           = useState(null)
+  const [retentionLoading, setRetentionLoading] = useState(false)
+
   useEffect(() => {
     setLoading(true)
     Promise.all([
@@ -216,6 +219,15 @@ export default function Analytics() {
   useEffect(() => {
     if (tab !== 'bets') return
     loadBetsAudit(betsResultFilter, betsUserFilter, 0)
+  }, [tab, token])
+
+  useEffect(() => {
+    if (tab !== 'retencao') return
+    setRetentionLoading(true)
+    api.get('/analytics/retention?weeks=10', token)
+      .then(d => setRetention(d))
+      .catch(console.error)
+      .finally(() => setRetentionLoading(false))
   }, [tab, token])
 
   function loadBetsAudit(res = betsResultFilter, user = betsUserFilter, off = betsOffset) {
@@ -255,6 +267,7 @@ export default function Analytics() {
     { id: 'tech',      label: '💻 Tecnologia' },
     { id: 'recent',    label: '🕐 Recentes' },
     { id: 'bets',      label: '🎯 Apostas' },
+    { id: 'retencao',  label: '🔄 Retenção' },
     { id: 'audit',     label: '🔐 Auditoria' },
   ]
 
@@ -804,6 +817,127 @@ export default function Analytics() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Retenção tab */}
+      {tab === 'retencao' && (
+        <div className="fade-in-1" style={{ marginTop: 'var(--s4)' }}>
+          {retentionLoading && <Spinner text="Calculando retenção..." />}
+          {!retentionLoading && retention && (() => {
+            const s = retention.summary
+            const wkLabel = w => {
+              const d = new Date(w + 'T12:00:00Z')
+              return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            }
+            const chartData = retention.weeks.map(w => ({
+              label:     wkLabel(w.week_start),
+              Novos:     w.new,
+              Retornantes: w.returning,
+              retencao:  w.wow_retention,
+            }))
+            const trendIcon = s.trend === 'up' ? '▲' : s.trend === 'down' ? '▼' : '—'
+            const trendColor = s.trend === 'up' ? 'var(--win)' : s.trend === 'down' ? 'var(--lose)' : 'var(--text-3)'
+            return (
+              <>
+                {/* KPIs */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--s3)' }}>
+                  <KpiCard label="Ativos (semana)" value={s.latest_active} color="var(--accent)" icon="👤" />
+                  <KpiCard label="Novos usuários"  value={s.latest_new}    color="var(--win)"    icon="🆕" />
+                  <KpiCard label="Retornantes"      value={s.latest_returning} color="#a78bfa"    icon="🔁" />
+                  <KpiCard label="Retenção WoW"
+                    value={s.latest_wow != null ? `${s.latest_wow}%` : '—'}
+                    color={trendColor}
+                    icon={trendIcon}
+                    sub={s.prev_wow != null ? `anterior: ${s.prev_wow}%` : 'primeira semana'} />
+                </div>
+
+                {/* Stacked bar + retention line */}
+                <div className="card" style={{ marginTop: 'var(--s4)' }}>
+                  <div className="card__header">
+                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>👥 Novos vs Retornantes por Semana</span>
+                  </div>
+                  <div className="card__body">
+                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', margin: '0 0 var(--s3)' }}>
+                      Barras = usuários com apostas · Linha laranja = % da semana anterior que voltou
+                    </p>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <ComposedChart data={chartData} margin={{ top: 4, right: 20, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-data)' }} />
+                        <YAxis yAxisId="left"  tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-data)' }} allowDecimals={false} />
+                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#f59e0b', fontFamily: 'var(--font-data)' }} unit="%" domain={[0, 100]} />
+                        <Tooltip
+                          contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
+                          formatter={(v, name) => name === 'retencao' ? [`${v}%`, 'Retenção WoW'] : [v, name]}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-cond)' }} />
+                        <Bar yAxisId="left" dataKey="Novos"       stackId="a" fill="#22c55e" radius={[0,0,0,0]} />
+                        <Bar yAxisId="left" dataKey="Retornantes" stackId="a" fill="#3b82f6" radius={[3,3,0,0]} />
+                        <Line yAxisId="right" type="monotone" dataKey="retencao" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: '#f59e0b' }} connectNulls name="Retenção WoW %" />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabela semana a semana */}
+                <div className="card" style={{ marginTop: 'var(--s4)' }}>
+                  <div className="card__header">
+                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📋 Detalhe por Semana</span>
+                  </div>
+                  <div className="card__body" style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'var(--font-data)' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          {['Semana (seg)', 'Ativos', 'Novos', 'Retornantes', '% Novos', 'Retenção WoW'].map(h => (
+                            <th key={h} style={{ padding: 'var(--s2) var(--s3)', textAlign: h === 'Semana (seg)' ? 'left' : 'right', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 10, letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...retention.weeks].reverse().map((w, i) => {
+                          const pctNew = w.active ? Math.round(w.new / w.active * 100) : 0
+                          const isLatest = i === 0
+                          return (
+                            <tr key={w.week_start} style={{ borderBottom: '1px solid var(--border)', background: isLatest ? 'rgba(var(--accent-rgb, 15,122,120),.05)' : 'transparent' }}>
+                              <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+                                {wkLabel(w.week_start)} {isLatest && <span style={{ fontSize: 10, color: 'var(--accent)', marginLeft: 4 }}>← atual</span>}
+                              </td>
+                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', fontWeight: 700, color: 'var(--text-1)' }}>{w.active}</td>
+                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: '#22c55e' }}>{w.new}</td>
+                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: '#3b82f6' }}>{w.returning}</td>
+                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: 'var(--text-3)' }}>{pctNew}%</td>
+                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: w.wow_retention == null ? 'var(--text-4)' : w.wow_retention >= 50 ? 'var(--win)' : w.wow_retention >= 30 ? '#f59e0b' : 'var(--lose)' }}>
+                                {w.wow_retention != null ? `${w.wow_retention}%` : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Legenda explicativa */}
+                <div className="card" style={{ marginTop: 'var(--s4)', background: 'var(--bg-overlay)' }}>
+                  <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {[
+                      ['🆕 Novos', 'Fizeram primeira aposta nesta semana — mede aquisição'],
+                      ['🔁 Retornantes', 'Já tinham apostado antes e voltaram — mede stickiness'],
+                      ['📊 Retenção WoW', '% dos usuários da semana anterior que voltaram esta semana'],
+                      ['✅ Saudável', 'Retenção ≥ 50% = usuários voltam consistentemente'],
+                      ['⚠️ Atenção', 'Retenção < 30% = usuários apostam uma vez e somem'],
+                    ].map(([t, d]) => (
+                      <div key={t} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-2)', whiteSpace: 'nowrap', minWidth: 120 }}>{t}</span>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>{d}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
 

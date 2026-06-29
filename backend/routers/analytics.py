@@ -486,3 +486,75 @@ def bets_audit(
         },
         "items": items,
     }
+
+
+@router.get("/retention")
+def retention(
+    weeks: int = Query(10, ge=2, le=26),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Weekly new vs returning users based on bet activity + WoW retention rate."""
+    from models import Bet
+    from sqlalchemy import text
+
+    # All bets: user_id + week start (Monday)
+    rows = db.execute(text("""
+        SELECT user_id,
+               date_trunc('week', created_at)::date AS week_start
+        FROM bets
+        WHERE created_at IS NOT NULL
+        ORDER BY week_start
+    """)).fetchall()
+
+    if not rows:
+        return {"weeks": [], "summary": {}}
+
+    # first_week per user
+    first_week: dict[int, object] = {}
+    week_users: dict[object, set] = {}
+    for user_id, week_start in rows:
+        if user_id not in first_week:
+            first_week[user_id] = week_start
+        week_users.setdefault(week_start, set()).add(user_id)
+
+    # all weeks sorted
+    all_weeks = sorted(week_users.keys())
+    cutoff = all_weeks[-weeks] if len(all_weeks) >= weeks else all_weeks[0]
+    target_weeks = [w for w in all_weeks if w >= cutoff]
+
+    result = []
+    prev_active: set[int] = set()
+    for i, w in enumerate(target_weeks):
+        active   = week_users[w]
+        new_set  = {u for u in active if first_week[u] == w}
+        ret_set  = active - new_set
+        retained = active & prev_active
+        wow = round(len(retained) / len(prev_active) * 100, 1) if prev_active else None
+        result.append({
+            "week_start": w.isoformat(),
+            "active":     len(active),
+            "new":        len(new_set),
+            "returning":  len(ret_set),
+            "wow_retention": wow,   # % of last week's users who came back
+        })
+        prev_active = active
+
+    # summary: latest complete week vs previous
+    latest = result[-1] if result else {}
+    prev   = result[-2] if len(result) >= 2 else {}
+    return {
+        "weeks": result,
+        "summary": {
+            "latest_active":    latest.get("active", 0),
+            "latest_new":       latest.get("new", 0),
+            "latest_returning": latest.get("returning", 0),
+            "latest_wow":       latest.get("wow_retention"),
+            "prev_wow":         prev.get("wow_retention"),
+            "trend":            (
+                "up"   if latest.get("wow_retention") and prev.get("wow_retention") and latest["wow_retention"] > prev["wow_retention"]
+                else "down" if latest.get("wow_retention") and prev.get("wow_retention") and latest["wow_retention"] < prev["wow_retention"]
+                else "stable"
+            ),
+        },
+    }
