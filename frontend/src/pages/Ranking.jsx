@@ -913,8 +913,8 @@ export default function Ranking() {
 }
 
 // ── RankingPodium ─────────────────────────────────────────────────────────────
-function _initials(name = '') {
-  return name.split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+function _initials(name) {
+  return (name || '').split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?'
 }
 
 function RankingPodium({ data, champPicks }) {
