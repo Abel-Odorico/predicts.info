@@ -567,6 +567,7 @@ def cohort(
 ):
     """Cohort retention matrix: rows=cohort week, cols=relative week offset."""
     from datetime import date as date_type
+    from sqlalchemy import text
     rows = db.execute(text("""
         SELECT user_id, date_trunc('week', created_at)::date AS week_start
         FROM bets
