@@ -558,3 +558,64 @@ def retention(
             ),
         },
     }
+
+
+@router.get("/cohort")
+def cohort(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Cohort retention matrix: rows=cohort week, cols=relative week offset."""
+    from datetime import date as date_type
+    rows = db.execute(text("""
+        SELECT user_id, date_trunc('week', created_at)::date AS week_start
+        FROM bets
+        WHERE created_at IS NOT NULL
+        GROUP BY user_id, date_trunc('week', created_at)::date
+    """)).fetchall()
+
+    if not rows:
+        return {"cohorts": [], "max_offset": 0}
+
+    user_weeks: dict[int, set] = {}
+    first_week: dict[int, date_type] = {}
+    for user_id, week_start in rows:
+        if user_id not in first_week:
+            first_week[user_id] = week_start
+        user_weeks.setdefault(user_id, set()).add(week_start)
+
+    cohorts: dict[date_type, list[int]] = {}
+    for uid, fw in first_week.items():
+        cohorts.setdefault(fw, []).append(uid)
+
+    all_weeks_sorted = sorted(cohorts.keys())
+    latest_week = max(w for ws in user_weeks.values() for w in ws)
+    max_offset = 0
+    result = []
+
+    for cw in all_weeks_sorted:
+        users = cohorts[cw]
+        size = len(users)
+        weeks_data = []
+        offset = 0
+        while True:
+            target = cw + timedelta(weeks=offset)
+            if target > latest_week:
+                break
+            active = sum(1 for u in users if target in user_weeks.get(u, set()))
+            weeks_data.append({
+                "offset": offset,
+                "active": active,
+                "pct":    round(active / size * 100, 1) if size else 0,
+            })
+            if offset > max_offset:
+                max_offset = offset
+            offset += 1
+
+        result.append({
+            "cohort_week": cw.isoformat(),
+            "size":        size,
+            "weeks":       weeks_data,
+        })
+
+    return {"cohorts": result, "max_offset": max_offset}

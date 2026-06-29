@@ -190,6 +190,8 @@ export default function Analytics() {
 
   const [retention, setRetention]           = useState(null)
   const [retentionLoading, setRetentionLoading] = useState(false)
+  const [cohort, setCohort]                 = useState(null)
+  const [cohortLoading, setCohortLoading]   = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -228,6 +230,11 @@ export default function Analytics() {
       .then(d => setRetention(d))
       .catch(console.error)
       .finally(() => setRetentionLoading(false))
+    setCohortLoading(true)
+    api.get('/analytics/cohort', token)
+      .then(d => setCohort(d))
+      .catch(console.error)
+      .finally(() => setCohortLoading(false))
   }, [tab, token])
 
   function loadBetsAudit(res = betsResultFilter, user = betsUserFilter, off = betsOffset) {
@@ -915,6 +922,77 @@ export default function Analytics() {
                         })}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+
+                {/* Cohort heatmap */}
+                <div className="card" style={{ marginTop: 'var(--s4)' }}>
+                  <div className="card__header">
+                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🧱 Mapa de Retenção por Coorte</span>
+                  </div>
+                  <div className="card__body">
+                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', margin: '0 0 var(--s3)' }}>
+                      Cada linha = semana de entrada do coorte · Colunas = semanas após a entrada · Célula = % que voltou
+                    </p>
+                    {cohortLoading && <Spinner text="Calculando coortes..." />}
+                    {!cohortLoading && cohort && cohort.cohorts.length > 0 && (() => {
+                      const cols = Array.from({ length: cohort.max_offset + 1 }, (_, i) => i)
+                      function cellColor(pct) {
+                        if (pct == null) return 'transparent'
+                        if (pct >= 80) return 'rgba(34,197,94,.85)'
+                        if (pct >= 60) return 'rgba(34,197,94,.60)'
+                        if (pct >= 40) return 'rgba(34,197,94,.40)'
+                        if (pct >= 20) return 'rgba(251,191,36,.50)'
+                        if (pct > 0)   return 'rgba(239,68,68,.40)'
+                        return 'rgba(239,68,68,.15)'
+                      }
+                      return (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ borderCollapse: 'separate', borderSpacing: 2, fontSize: 11, fontFamily: 'var(--font-data)', whiteSpace: 'nowrap' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ padding: '4px 8px', textAlign: 'left', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700 }}>Coorte</th>
+                                <th style={{ padding: '4px 6px', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700 }}>Tamanho</th>
+                                {cols.map(c => (
+                                  <th key={c} style={{ padding: '4px 6px', color: c === 0 ? 'var(--accent)' : 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, minWidth: 44 }}>
+                                    {c === 0 ? 'S0' : `+${c}s`}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cohort.cohorts.map(row => {
+                                const byOffset = Object.fromEntries(row.weeks.map(w => [w.offset, w]))
+                                const d = new Date(row.cohort_week + 'T12:00:00Z')
+                                const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                                return (
+                                  <tr key={row.cohort_week}>
+                                    <td style={{ padding: '3px 8px', color: 'var(--text-2)', fontWeight: 600 }}>{label}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'center', color: 'var(--text-3)' }}>{row.size}</td>
+                                    {cols.map(c => {
+                                      const cell = byOffset[c]
+                                      return (
+                                        <td key={c} title={cell ? `${cell.active} usuários (${cell.pct}%)` : 'sem dados'}
+                                          style={{
+                                            padding: '3px 6px',
+                                            textAlign: 'center',
+                                            borderRadius: 4,
+                                            background: cell ? cellColor(cell.pct) : 'var(--bg-overlay)',
+                                            color: cell ? (cell.pct >= 40 ? '#fff' : 'var(--text-1)') : 'var(--text-4)',
+                                            fontWeight: c === 0 ? 700 : 400,
+                                          }}>
+                                          {cell ? `${cell.pct}%` : '·'}
+                                        </td>
+                                      )
+                                    })}
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
 
