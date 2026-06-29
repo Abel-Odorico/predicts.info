@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Line, Legend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Line, Legend, AreaChart, Area, ReferenceLine, Cell } from 'recharts'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -830,187 +830,204 @@ export default function Analytics() {
       {/* Retenção tab */}
       {tab === 'retencao' && (
         <div className="fade-in-1" style={{ marginTop: 'var(--s4)' }}>
-          {retentionLoading && <Spinner text="Calculando retenção..." />}
-          {!retentionLoading && retention && (() => {
+          {(retentionLoading || cohortLoading) && !retention && <Spinner text="Calculando retenção..." />}
+          {retention && (() => {
             const s = retention.summary
-            const wkLabel = w => {
-              const d = new Date(w + 'T12:00:00Z')
-              return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            const wkLabel = w => new Date(w + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+
+            // Health classification
+            const wow = s.latest_wow
+            const health = wow == null ? null : wow >= 50 ? 'great' : wow >= 30 ? 'ok' : 'bad'
+            const healthCfg = {
+              great: { color: '#22c55e', bg: 'rgba(34,197,94,.12)', label: 'SAUDÁVEL',  icon: '✅' },
+              ok:    { color: '#f59e0b', bg: 'rgba(245,158,11,.12)', label: 'ATENÇÃO',   icon: '⚠️' },
+              bad:   { color: '#ef4444', bg: 'rgba(239,68,68,.12)',  label: 'CRÍTICO',   icon: '🚨' },
             }
-            const chartData = retention.weeks.map(w => ({
-              label:     wkLabel(w.week_start),
-              Novos:     w.new,
-              Retornantes: w.returning,
-              retencao:  w.wow_retention,
-            }))
-            const trendIcon = s.trend === 'up' ? '▲' : s.trend === 'down' ? '▼' : '—'
-            const trendColor = s.trend === 'up' ? 'var(--win)' : s.trend === 'down' ? 'var(--lose)' : 'var(--text-3)'
+            const hc = health ? healthCfg[health] : { color: 'var(--text-3)', bg: 'var(--bg-overlay)', label: 'SEM DADOS', icon: '—' }
+
+            // Average WoW across all weeks with data
+            const wowWeeks = retention.weeks.filter(w => w.wow_retention != null)
+            const avgWow = wowWeeks.length ? Math.round(wowWeeks.reduce((a, w) => a + w.wow_retention, 0) / wowWeeks.length) : null
+
+            const delta = s.latest_wow != null && s.prev_wow != null ? (s.latest_wow - s.prev_wow).toFixed(1) : null
+
+            // Chart data
+            const areaData = retention.weeks.map(w => ({ label: wkLabel(w.week_start), Novos: w.new, Retornantes: w.returning }))
+            const barData  = retention.weeks.filter(w => w.wow_retention != null).map(w => ({ label: wkLabel(w.week_start), ret: w.wow_retention }))
+
             return (
               <>
-                {/* KPIs */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--s3)' }}>
-                  <KpiCard label="Ativos (semana)" value={s.latest_active} color="var(--accent)" icon="👤" />
-                  <KpiCard label="Novos usuários"  value={s.latest_new}    color="var(--win)"    icon="🆕" />
-                  <KpiCard label="Retornantes"      value={s.latest_returning} color="#a78bfa"    icon="🔁" />
-                  <KpiCard label="Retenção WoW"
-                    value={s.latest_wow != null ? `${s.latest_wow}%` : '—'}
-                    color={trendColor}
-                    icon={trendIcon}
-                    sub={s.prev_wow != null ? `anterior: ${s.prev_wow}%` : 'primeira semana'} />
+                {/* ── Banner de saúde ─────────────────────────────────── */}
+                <div style={{ borderRadius: 'var(--radius)', background: hc.bg, border: `1px solid ${hc.color}33`, padding: 'var(--s5) var(--s6)', display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 120 }}>
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: hc.color }}>{hc.icon} {hc.label}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 42, fontWeight: 900, lineHeight: 1, color: hc.color }}>{wow != null ? `${wow}%` : '—'}</span>
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>retenção WoW esta semana</span>
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.3 }}>
+                      {wow != null
+                        ? `${Math.round((s.latest_returning / (s.latest_active || 1)) * 10)} em cada 10 usuários ativos já apostaram antes`
+                        : 'Dados insuficientes para calcular retenção'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 'var(--s4)', flexWrap: 'wrap' }}>
+                      {delta != null && (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: parseFloat(delta) >= 0 ? '#22c55e' : '#ef4444' }}>
+                          {parseFloat(delta) >= 0 ? '▲' : '▼'} {Math.abs(delta)}pp vs semana anterior
+                        </span>
+                      )}
+                      {avgWow != null && (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+                          Média histórica: {avgWow}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--s3)', minWidth: 240 }}>
+                    {[
+                      { label: 'Ativos',      value: s.latest_active,    color: 'var(--text-1)' },
+                      { label: 'Novos',        value: s.latest_new,       color: '#22c55e' },
+                      { label: 'Retornantes',  value: s.latest_returning, color: '#3b82f6' },
+                    ].map(k => (
+                      <div key={k.label} style={{ textAlign: 'center' }}>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.value}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{k.label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Stacked bar + retention line */}
+                {/* ── Evolução: Novos vs Retornantes ──────────────────── */}
                 <div className="card" style={{ marginTop: 'var(--s4)' }}>
                   <div className="card__header">
-                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>👥 Novos vs Retornantes por Semana</span>
+                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📈 Crescimento — Novos vs Retornantes</span>
+                    <div style={{ display: 'flex', gap: 'var(--s4)', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: '#3b82f6' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#3b82f6', display: 'inline-block' }} /> Retornantes</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: '#22c55e' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#22c55e', display: 'inline-block' }} /> Novos</span>
+                    </div>
                   </div>
                   <div className="card__body">
-                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', margin: '0 0 var(--s3)' }}>
-                      Barras = usuários com apostas · Linha laranja = % da semana anterior que voltou
-                    </p>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <ComposedChart data={chartData} margin={{ top: 4, right: 20, left: -10, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <AreaChart data={areaData} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="gRet" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.55} />
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} />
+                          </linearGradient>
+                          <linearGradient id="gNew" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.55} />
+                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0.1} />
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                         <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-data)' }} />
-                        <YAxis yAxisId="left"  tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-data)' }} allowDecimals={false} />
-                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#f59e0b', fontFamily: 'var(--font-data)' }} unit="%" domain={[0, 100]} />
-                        <Tooltip
-                          contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
-                          formatter={(v, name) => name === 'retencao' ? [`${v}%`, 'Retenção WoW'] : [v, name]}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-cond)' }} />
-                        <Bar yAxisId="left" dataKey="Novos"       stackId="a" fill="#22c55e" radius={[0,0,0,0]} />
-                        <Bar yAxisId="left" dataKey="Retornantes" stackId="a" fill="#3b82f6" radius={[3,3,0,0]} />
-                        <Line yAxisId="right" type="monotone" dataKey="retencao" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: '#f59e0b' }} connectNulls name="Retenção WoW %" />
-                      </ComposedChart>
+                        <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-data)' }} allowDecimals={false} />
+                        <Tooltip contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                        <Area type="monotone" dataKey="Retornantes" stackId="1" stroke="#3b82f6" strokeWidth={2} fill="url(#gRet)" />
+                        <Area type="monotone" dataKey="Novos"       stackId="1" stroke="#22c55e" strokeWidth={2} fill="url(#gNew)" />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                {/* Tabela semana a semana */}
+                {/* ── Retenção WoW por semana ──────────────────────────── */}
+                {barData.length > 0 && (
                 <div className="card" style={{ marginTop: 'var(--s4)' }}>
                   <div className="card__header">
-                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📋 Detalhe por Semana</span>
-                  </div>
-                  <div className="card__body" style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'var(--font-data)' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                          {['Semana (seg)', 'Ativos', 'Novos', 'Retornantes', '% Novos', 'Retenção WoW'].map(h => (
-                            <th key={h} style={{ padding: 'var(--s2) var(--s3)', textAlign: h === 'Semana (seg)' ? 'left' : 'right', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 10, letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...retention.weeks].reverse().map((w, i) => {
-                          const pctNew = w.active ? Math.round(w.new / w.active * 100) : 0
-                          const isLatest = i === 0
-                          return (
-                            <tr key={w.week_start} style={{ borderBottom: '1px solid var(--border)', background: isLatest ? 'rgba(var(--accent-rgb, 15,122,120),.05)' : 'transparent' }}>
-                              <td style={{ padding: 'var(--s2) var(--s3)', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
-                                {wkLabel(w.week_start)} {isLatest && <span style={{ fontSize: 10, color: 'var(--accent)', marginLeft: 4 }}>← atual</span>}
-                              </td>
-                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', fontWeight: 700, color: 'var(--text-1)' }}>{w.active}</td>
-                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: '#22c55e' }}>{w.new}</td>
-                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: '#3b82f6' }}>{w.returning}</td>
-                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: 'var(--text-3)' }}>{pctNew}%</td>
-                              <td style={{ padding: 'var(--s2) var(--s3)', textAlign: 'right', color: w.wow_retention == null ? 'var(--text-4)' : w.wow_retention >= 50 ? 'var(--win)' : w.wow_retention >= 30 ? '#f59e0b' : 'var(--lose)' }}>
-                                {w.wow_retention != null ? `${w.wow_retention}%` : '—'}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Cohort heatmap */}
-                <div className="card" style={{ marginTop: 'var(--s4)' }}>
-                  <div className="card__header">
-                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🧱 Mapa de Retenção por Coorte</span>
+                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🔁 Taxa de Retenção Semana a Semana</span>
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>% de usuários da semana anterior que voltaram</span>
                   </div>
                   <div className="card__body">
-                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', margin: '0 0 var(--s3)' }}>
-                      Cada linha = semana de entrada do coorte · Colunas = semanas após a entrada · Célula = % que voltou
-                    </p>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={barData} margin={{ top: 16, right: 8, left: -18, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-data)' }} />
+                        <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-data)' }} unit="%" domain={[0, 100]} />
+                        <Tooltip contentStyle={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} formatter={v => [`${v}%`, 'Retenção WoW']} />
+                        <ReferenceLine y={50} stroke="#22c55e" strokeDasharray="4 2" label={{ value: '50% meta', position: 'insideTopRight', fontSize: 9, fill: '#22c55e' }} />
+                        <ReferenceLine y={30} stroke="#f59e0b" strokeDasharray="4 2" label={{ value: '30% limite', position: 'insideTopRight', fontSize: 9, fill: '#f59e0b' }} />
+                        <Bar dataKey="ret" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                          {barData.map((d, i) => (
+                            <Cell key={i} fill={d.ret >= 50 ? '#22c55e' : d.ret >= 30 ? '#f59e0b' : '#ef4444'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                )}
+
+                {/* ── Cohort heatmap ───────────────────────────────────── */}
+                <div className="card" style={{ marginTop: 'var(--s4)' }}>
+                  <div className="card__header">
+                    <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>🧱 Análise de Coorte</span>
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>% do coorte que voltou após N semanas</span>
+                  </div>
+                  <div className="card__body">
                     {cohortLoading && <Spinner text="Calculando coortes..." />}
                     {!cohortLoading && cohort && cohort.cohorts.length > 0 && (() => {
                       const cols = Array.from({ length: cohort.max_offset + 1 }, (_, i) => i)
-                      function cellColor(pct) {
-                        if (pct == null) return 'transparent'
-                        if (pct >= 80) return 'rgba(34,197,94,.85)'
-                        if (pct >= 60) return 'rgba(34,197,94,.60)'
-                        if (pct >= 40) return 'rgba(34,197,94,.40)'
-                        if (pct >= 20) return 'rgba(251,191,36,.50)'
-                        if (pct > 0)   return 'rgba(239,68,68,.40)'
-                        return 'rgba(239,68,68,.15)'
+                      // smooth HSL gradient: 100%=green, 50%=yellow, 0%=red
+                      function cellBg(pct) {
+                        if (pct == null) return { bg: 'var(--bg-overlay)', fg: 'var(--text-4)' }
+                        const h = Math.round(pct * 1.2)   // 0→0 (red), 100→120 (green)
+                        const s = pct > 0 ? 75 : 0
+                        const l = pct > 0 ? 38 : 20
+                        const alpha = pct > 0 ? 0.25 + pct * 0.006 : 0.08
+                        return { bg: `hsla(${h},${s}%,${l}%,${alpha + 0.35})`, fg: pct >= 40 ? '#fff' : 'var(--text-1)' }
                       }
                       return (
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ borderCollapse: 'separate', borderSpacing: 2, fontSize: 11, fontFamily: 'var(--font-data)', whiteSpace: 'nowrap' }}>
-                            <thead>
-                              <tr>
-                                <th style={{ padding: '4px 8px', textAlign: 'left', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700 }}>Coorte</th>
-                                <th style={{ padding: '4px 6px', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700 }}>Tamanho</th>
-                                {cols.map(c => (
-                                  <th key={c} style={{ padding: '4px 6px', color: c === 0 ? 'var(--accent)' : 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, minWidth: 44 }}>
-                                    {c === 0 ? 'S0' : `+${c}s`}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {cohort.cohorts.map(row => {
-                                const byOffset = Object.fromEntries(row.weeks.map(w => [w.offset, w]))
-                                const d = new Date(row.cohort_week + 'T12:00:00Z')
-                                const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-                                return (
-                                  <tr key={row.cohort_week}>
-                                    <td style={{ padding: '3px 8px', color: 'var(--text-2)', fontWeight: 600 }}>{label}</td>
-                                    <td style={{ padding: '3px 6px', textAlign: 'center', color: 'var(--text-3)' }}>{row.size}</td>
-                                    {cols.map(c => {
-                                      const cell = byOffset[c]
-                                      return (
-                                        <td key={c} title={cell ? `${cell.active} usuários (${cell.pct}%)` : 'sem dados'}
-                                          style={{
-                                            padding: '3px 6px',
-                                            textAlign: 'center',
-                                            borderRadius: 4,
-                                            background: cell ? cellColor(cell.pct) : 'var(--bg-overlay)',
-                                            color: cell ? (cell.pct >= 40 ? '#fff' : 'var(--text-1)') : 'var(--text-4)',
-                                            fontWeight: c === 0 ? 700 : 400,
-                                          }}>
-                                          {cell ? `${cell.pct}%` : '·'}
-                                        </td>
-                                      )
-                                    })}
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
+                        <>
+                          <div style={{ overflowX: 'auto', marginBottom: 'var(--s3)' }}>
+                            <table style={{ borderCollapse: 'separate', borderSpacing: 3, fontSize: 11, fontFamily: 'var(--font-data)', whiteSpace: 'nowrap' }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ padding: '4px 10px', textAlign: 'left', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, minWidth: 64 }}>Coorte</th>
+                                  <th style={{ padding: '4px 8px', color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, minWidth: 44 }}>n</th>
+                                  {cols.map(c => (
+                                    <th key={c} style={{ padding: '4px 8px', textAlign: 'center', color: c === 0 ? 'var(--accent)' : 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, minWidth: 52 }}>
+                                      {c === 0 ? 'Sem 0' : `+${c}s`}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {cohort.cohorts.map(row => {
+                                  const byOffset = Object.fromEntries(row.weeks.map(w => [w.offset, w]))
+                                  const label = new Date(row.cohort_week + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                                  return (
+                                    <tr key={row.cohort_week}>
+                                      <td style={{ padding: '5px 10px', color: 'var(--text-2)', fontWeight: 600, fontFamily: 'var(--font-cond)' }}>{label}</td>
+                                      <td style={{ padding: '5px 8px', textAlign: 'center', color: 'var(--text-3)' }}>{row.size}</td>
+                                      {cols.map(c => {
+                                        const cell = byOffset[c]
+                                        const { bg, fg } = cellBg(cell?.pct ?? null)
+                                        return (
+                                          <td key={c}
+                                            title={cell ? `${cell.active} usuários · ${cell.pct}%` : '—'}
+                                            style={{ padding: '5px 8px', textAlign: 'center', borderRadius: 6, background: bg, color: fg, fontWeight: c === 0 ? 700 : 500, minWidth: 52 }}>
+                                            {cell ? `${cell.pct}%` : ''}
+                                          </td>
+                                        )
+                                      })}
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          {/* Gradient legend */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', marginTop: 'var(--s2)' }}>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>0%</span>
+                            <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'linear-gradient(to right, hsla(0,75%,38%,.7), hsla(60,75%,38%,.7), hsla(120,75%,38%,.7))' }} />
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>100%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>
+                            <span>Crítico</span><span>Atenção</span><span>Saudável</span>
+                          </div>
+                        </>
                       )
                     })()}
-                  </div>
-                </div>
-
-                {/* Legenda explicativa */}
-                <div className="card" style={{ marginTop: 'var(--s4)', background: 'var(--bg-overlay)' }}>
-                  <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {[
-                      ['🆕 Novos', 'Fizeram primeira aposta nesta semana — mede aquisição'],
-                      ['🔁 Retornantes', 'Já tinham apostado antes e voltaram — mede stickiness'],
-                      ['📊 Retenção WoW', '% dos usuários da semana anterior que voltaram esta semana'],
-                      ['✅ Saudável', 'Retenção ≥ 50% = usuários voltam consistentemente'],
-                      ['⚠️ Atenção', 'Retenção < 30% = usuários apostam uma vez e somem'],
-                    ].map(([t, d]) => (
-                      <div key={t} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-2)', whiteSpace: 'nowrap', minWidth: 120 }}>{t}</span>
-                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>{d}</span>
-                      </div>
-                    ))}
                   </div>
                 </div>
               </>
