@@ -135,6 +135,20 @@ def subscribe(
                 )
         background.add_task(_notify_admins)
 
+        def _activation_push():
+            from models import Bet
+            has_bet = db.query(Bet.id).filter(Bet.user_id == user.id).first()
+            if not has_bet:
+                first = (user.name or "").split()[0] or "Olá"
+                send_push_to_users(
+                    db, [user.id],
+                    title="⚽ Faça seu primeiro palpite!",
+                    body=f"{first}, a Copa 2026 está rolando. Aposte no placar e dispute o ranking!",
+                    url="/apostas",
+                    tag="activation-bet",
+                )
+        background.add_task(_activation_push)
+
     return {"ok": True}
 
 
