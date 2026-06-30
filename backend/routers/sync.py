@@ -195,6 +195,46 @@ def _run_sync(db_url: str, trigger: str = "manual"):
             },
         ][-10:]  # keep last 10
 
+    import threading
+    threading.Thread(target=_capture_ranking_snapshots, args=(db_url,), daemon=True).start()
+
+
+def _capture_ranking_snapshots(db_url: str) -> None:
+    """Salva snapshot diário da posição de cada usuário no ranking."""
+    try:
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.orm import sessionmaker
+        engine = create_engine(db_url)
+        Sess = sessionmaker(bind=engine)
+        db = Sess()
+        try:
+            today = _now().date()
+            if db.execute(text("SELECT 1 FROM ranking_snapshots WHERE snapshot_at::date = :d LIMIT 1"), {"d": today}).fetchone():
+                return
+            ranked = db.execute(text("""
+                SELECT u.id, COALESCE(r.total_points, 0), COALESCE(r.exact_scores, 0)
+                FROM users u
+                LEFT JOIN rankings r ON r.user_id = u.id
+                WHERE EXISTS (SELECT 1 FROM bets WHERE user_id = u.id)
+                  AND u.email != 'bot@predicts.info'
+                ORDER BY COALESCE(r.total_points, 0) DESC,
+                         COALESCE(r.exact_scores, 0) DESC,
+                         u.name ASC
+            """)).fetchall()
+            total = len(ranked)
+            for pos, row in enumerate(ranked, 1):
+                db.execute(text("""
+                    INSERT INTO ranking_snapshots (user_id, position, total_users, points)
+                    VALUES (:uid, :pos, :total, :pts)
+                """), {"uid": row[0], "pos": pos, "total": total, "pts": row[1]})
+            db.commit()
+            print(f"[ranking-snapshot] {total} snapshots para {today}", flush=True)
+        finally:
+            db.close()
+            engine.dispose()
+    except Exception as exc:
+        print(f"[ranking-snapshot] erro: {exc}", flush=True)
+
 
 @router.post("/sync-elo")
 def sync_elo(

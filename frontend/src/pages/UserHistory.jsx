@@ -454,6 +454,154 @@ function PointsChart({ bets }) {
   )
 }
 
+// ── Phase Chart ────────────────────────────────────────────────────────
+const PHASE_ORDER = ['r32', 'r16', 'qf', 'sf', '3rd', 'final']
+
+function PhaseChart({ bets }) {
+  const evaluated = useMemo(() => bets.filter(b => b.result != null), [bets])
+
+  const phases = useMemo(() => {
+    const map = new Map()
+    for (const b of evaluated) {
+      const lbl = b.group_name
+        ? `Grp. ${b.group_name}`
+        : (PHASE_LABELS_UH[b.match_phase] || b.match_phase || 'Outro')
+      if (!map.has(lbl)) map.set(lbl, { exact: 0, correct: 0, wrong: 0, total: 0, phaseKey: b.match_phase })
+      const s = map.get(lbl)
+      s.total++
+      if (b.result === 'exact')   s.exact++
+      else if (b.result === 'correct') s.correct++
+      else s.wrong++
+    }
+    return [...map.entries()]
+      .map(([label, s]) => ({
+        label, ...s,
+        accuracy: Math.round(((s.exact + s.correct) / s.total) * 100),
+      }))
+      .sort((a, b) => {
+        const ai = PHASE_ORDER.indexOf(a.phaseKey)
+        const bi = PHASE_ORDER.indexOf(b.phaseKey)
+        if (ai !== -1 && bi !== -1) return ai - bi
+        return b.accuracy - a.accuracy
+      })
+  }, [evaluated])
+
+  if (phases.length < 2) return null
+
+  const best = [...phases].sort((a, b) => b.accuracy - a.accuracy)[0]
+
+  return (
+    <div className="uh-chart-card" style={{ margin: 0 }}>
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Acerto por fase</span>
+        <span className="uh-chart-card__total" style={{ color: best.accuracy >= 50 ? 'var(--win)' : 'var(--lose)', fontSize: 20 }}>
+          {best.accuracy}%
+        </span>
+      </div>
+      <div className="uh-phase-list">
+        {phases.map(p => (
+          <div key={p.label} className="uh-phase-row">
+            <div className="uh-phase-row__label">{p.label}</div>
+            <div className="uh-phase-row__track">
+              <div className="uh-phase-row__seg" style={{ width: `${(p.exact   / p.total) * 100}%`, background: '#0f7a78' }} />
+              <div className="uh-phase-row__seg" style={{ width: `${(p.correct / p.total) * 100}%`, background: '#2ec980' }} />
+              <div className="uh-phase-row__seg" style={{ width: `${(p.wrong   / p.total) * 100}%`, background: '#e8525230' }} />
+            </div>
+            <div className="uh-phase-row__right">
+              <span className="uh-phase-row__pct" style={{ color: p.accuracy >= 50 ? 'var(--win)' : 'var(--text-3)' }}>
+                {p.accuracy}%
+              </span>
+              <span className="uh-phase-row__count">{p.total} jogo{p.total !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="uh-chart-legend" style={{ marginTop: 'var(--s4)', justifyContent: 'flex-start' }}>
+        {[['#0f7a78', 'Exato'], ['#2ec980', 'Certo'], ['#e85252', 'Erro']].map(([c, l]) => (
+          <span key={l} className="uh-chart-legend__item">
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: c, display: 'inline-block' }} />
+            {l}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Score Heatmap ──────────────────────────────────────────────────────
+const HM_SIZE = 6
+
+function ScoreHeatmap({ bets }) {
+  const [hovCell, setHovCell] = useState(null)
+
+  const { countMap, maxCount, mostCommon } = useMemo(() => {
+    const cMap = new Map()
+    let max = 0
+    for (const b of bets) {
+      if (b.score_a == null || b.score_b == null) continue
+      const a  = Math.min(b.score_a, HM_SIZE - 1)
+      const bb = Math.min(b.score_b, HM_SIZE - 1)
+      const k  = `${a},${bb}`
+      const c  = (cMap.get(k) || 0) + 1
+      cMap.set(k, c)
+      if (c > max) max = c
+    }
+    const mc = [...cMap.entries()].sort((a, b) => b[1] - a[1])[0]
+    return { countMap: cMap, maxCount: max, mostCommon: mc }
+  }, [bets])
+
+  const validBets = bets.filter(b => b.score_a != null && b.score_b != null)
+  if (validBets.length < 5) return null
+
+  const [fa, fb] = mostCommon ? mostCommon[0].split(',') : ['—', '—']
+  const favScore = mostCommon ? `${fa}–${fb}` : '—'
+
+  return (
+    <div className="uh-chart-card" style={{ margin: 0 }}>
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Mapa de placares</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+          <span className="uh-chart-card__total" style={{ fontSize: 20 }}>{favScore}</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.08em' }}>mais apostado</span>
+        </div>
+      </div>
+      <div className="uh-heatmap__grid">
+        {/* corner + col headers (Time A) */}
+        <div className="uh-heatmap__corner" />
+        {Array.from({ length: HM_SIZE }, (_, i) => (
+          <div key={i} className="uh-heatmap__head">{i === HM_SIZE - 1 ? `${i}+` : i}</div>
+        ))}
+        {/* rows: row header (Time B) + cells */}
+        {Array.from({ length: HM_SIZE }, (_, b) => [
+          <div key={`h${b}`} className="uh-heatmap__head">{b === HM_SIZE - 1 ? `${b}+` : b}</div>,
+          ...Array.from({ length: HM_SIZE }, (_, a) => {
+            const key   = `${a},${b}`
+            const count = countMap.get(key) || 0
+            const intensity = maxCount > 0 ? count / maxCount : 0
+            const active = hovCell === key
+            return (
+              <div
+                key={key}
+                className={`uh-heatmap__cell${active ? ' active' : ''}`}
+                onMouseEnter={() => setHovCell(key)}
+                onMouseLeave={() => setHovCell(null)}
+                title={`${a}–${b}: ${count} vez${count !== 1 ? 'es' : ''}`}
+                style={{ '--i': intensity }}
+              >
+                {count > 0 && <span>{count}</span>}
+              </div>
+            )
+          }),
+        ])}
+      </div>
+      <div className="uh-heatmap__footer">
+        <span>colunas = Time A</span>
+        <span>linhas = Time B</span>
+      </div>
+    </div>
+  )
+}
+
 // ── BetGroups ─────────────────────────────────────────────────────────────
 const PHASE_LABELS_UH = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
 
@@ -560,7 +708,7 @@ function BetCard({ bet, idx }) {
     <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${idx * 20}ms` }}>
       <div className="bet-card__top">
         <span className="badge badge-group">
-          {bet.group_name ? `Grupo ${bet.group_name}` : (PHASE_LABELS_UH[bet.phase] || bet.phase || '—')}
+          {bet.group_name ? `Grupo ${bet.group_name}` : (PHASE_LABELS_UH[bet.match_phase] || bet.match_phase || '—')}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', flexWrap: 'wrap' }}>
           <span className="bet-card__time">{fmtDate(bet.match_date)}</span>
@@ -660,20 +808,491 @@ function PosBadge({ label, pos, total, accent }) {
   )
 }
 
+// ── Feature 1: Melhor / Pior aposta ───────────────────────────────────────
+function BestWorstCard({ type, bet }) {
+  const isBest = type === 'best'
+  const color  = isBest ? 'var(--win)' : 'var(--lose)'
+  const meta   = RESULT_META[bet.result]
+  return (
+    <div className="uh-bw-card" style={{ '--bw-color': color }}>
+      <div className="uh-bw-card__head">
+        <span style={{ fontSize: 15 }}>{isBest ? '⚡' : '💀'}</span>
+        <span className="uh-bw-card__label">{isBest ? 'Melhor aposta' : 'Pior aposta'}</span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color, lineHeight: 1 }}>{bet.points_earned}pts</span>
+      </div>
+      <div className="uh-bw-card__match">
+        {bet.team_a_flag && <img src={bet.team_a_flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover' }} />}
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>{bet.team_a_code}</span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color, lineHeight: 1 }}>{bet.score_a}–{bet.score_b}</span>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>{bet.team_b_code}</span>
+        {bet.team_b_flag && <img src={bet.team_b_flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover' }} />}
+      </div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: meta?.color, letterSpacing: '0.08em', textAlign: 'center', marginTop: 4 }}>
+        {meta?.label}{bet.official_score_a != null ? ` · Oficial ${bet.official_score_a}–${bet.official_score_b}` : ''}
+      </div>
+    </div>
+  )
+}
+
+function BestWorstHighlight({ bets }) {
+  const evaluated = useMemo(() => bets.filter(b => b.result != null && b.points_earned != null), [bets])
+  if (evaluated.length < 3) return null
+  const sorted = [...evaluated].sort((a, b) => (b.points_earned ?? 0) - (a.points_earned ?? 0))
+  const best   = sorted[0]
+  const worst  = sorted[sorted.length - 1]
+  if (best.id === worst.id) return null
+  return (
+    <div className="uh-bw-row fade-in-2">
+      <BestWorstCard type="best"  bet={best}  />
+      <BestWorstCard type="worst" bet={worst} />
+    </div>
+  )
+}
+
+// ── Feature 2: Acerto por seleção ─────────────────────────────────────────
+function TeamAccuracy({ bets }) {
+  const data = useMemo(() => {
+    const evaluated = bets.filter(b => b.result != null)
+    if (evaluated.length < 5) return null
+    const map = new Map()
+    for (const b of evaluated) {
+      for (const [code, name, flag] of [
+        [b.team_a_code, b.team_a_name, b.team_a_flag],
+        [b.team_b_code, b.team_b_name, b.team_b_flag],
+      ]) {
+        if (!code) continue
+        if (!map.has(code)) map.set(code, { code, name: name || code, flag, exact: 0, correct: 0, wrong: 0, total: 0 })
+        const t = map.get(code)
+        t.total++
+        if (b.result === 'exact') t.exact++
+        else if (b.result === 'correct') t.correct++
+        else t.wrong++
+      }
+    }
+    const rows = [...map.values()]
+      .filter(t => t.total >= 2)
+      .map(t => ({ ...t, accuracy: Math.round(((t.exact + t.correct) / t.total) * 100) }))
+      .sort((a, b) => b.accuracy - a.accuracy || b.total - a.total)
+    return rows.length >= 3 ? rows : null
+  }, [bets])
+
+  if (!data) return null
+  return (
+    <div className="uh-chart-card fade-in-3" style={{ margin: 0 }}>
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Acerto por seleção</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {data[0].flag && <img src={data[0].flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover', border: '1px solid var(--win)' }} />}
+          <span className="uh-chart-card__total" style={{ color: 'var(--win)', fontSize: 20 }}>{data[0].accuracy}%</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
+        {data.map(t => (
+          <div key={t.code} className="uh-phase-row">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', minWidth: 100 }}>
+              {t.flag && <img src={t.flag} alt={t.code} style={{ width: 16, height: 11, borderRadius: 1, objectFit: 'cover', flexShrink: 0 }} />}
+              <span className="uh-phase-row__label" style={{ fontSize: 12 }}>{t.name}</span>
+            </div>
+            <div className="uh-phase-row__track">
+              <div className="uh-phase-row__seg" style={{ width: `${(t.exact   / t.total) * 100}%`, background: '#0f7a78' }} />
+              <div className="uh-phase-row__seg" style={{ width: `${(t.correct / t.total) * 100}%`, background: '#2ec980' }} />
+              <div className="uh-phase-row__seg" style={{ width: `${(t.wrong   / t.total) * 100}%`, background: '#e8525230' }} />
+            </div>
+            <div className="uh-phase-row__right">
+              <span className="uh-phase-row__pct" style={{ color: t.accuracy >= 50 ? 'var(--win)' : 'var(--text-3)' }}>{t.accuracy}%</span>
+              <span className="uh-phase-row__count">{t.total}j</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Feature 3: Pontos por fase ────────────────────────────────────────────
+function PointsByPhase({ bets }) {
+  const data = useMemo(() => {
+    const evaluated = bets.filter(b => b.result != null && b.points_earned != null)
+    if (evaluated.length < 3) return null
+    const map = new Map()
+    for (const b of evaluated) {
+      const lbl = b.group_name
+        ? `Grp. ${b.group_name}`
+        : (PHASE_LABELS_UH[b.match_phase] || b.match_phase || 'Outro')
+      const key = b.group_name ? 'group' : (b.match_phase || 'other')
+      if (!map.has(lbl)) map.set(lbl, { label: lbl, phaseKey: key, points: 0, count: 0 })
+      const s = map.get(lbl)
+      s.points += b.points_earned ?? 0
+      s.count++
+    }
+    const rows = [...map.values()].sort((a, b) => {
+      const ai = PHASE_ORDER.indexOf(a.phaseKey), bi = PHASE_ORDER.indexOf(b.phaseKey)
+      if (ai !== -1 && bi !== -1) return ai - bi
+      return b.points - a.points
+    })
+    return rows.length >= 2 ? rows : null
+  }, [bets])
+
+  if (!data) return null
+  const maxPts  = Math.max(...data.map(p => p.points), 1)
+  const total   = data.reduce((s, p) => s + p.points, 0)
+  const bestLbl = [...data].sort((a, b) => b.points - a.points)[0].label
+
+  return (
+    <div className="uh-chart-card fade-in-3" style={{ margin: 0 }}>
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Pontos por fase</span>
+        <span className="uh-chart-card__total" style={{ fontSize: 20 }}>{total}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+        {data.map(p => (
+          <div key={p.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>{p.label}</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>{p.count}j</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: p.label === bestLbl ? 'var(--accent)' : 'var(--text-2)', lineHeight: 1 }}>{p.points}</span>
+              </div>
+            </div>
+            <div style={{ height: 5, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 3,
+                width: `${(p.points / maxPts) * 100}%`,
+                background: p.label === bestLbl ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 50%, var(--border))',
+                transition: 'width 700ms cubic-bezier(.4,0,.2,1)',
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Feature 4: Próximos jogos com countdown ───────────────────────────────
+function _useNow(ms = 30000) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), ms); return () => clearInterval(t) }, [ms])
+  return now
+}
+
+function _fmtCountdown(ms) {
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  return d >= 2 ? `${d}d` : h >= 1 ? `${h}h${String(m).padStart(2,'0')}m` : `${m}m`
+}
+
+function UpcomingBets({ bets }) {
+  const now = _useNow()
+  const upcoming = useMemo(() =>
+    bets
+      .filter(b => b.result == null && b.match_date)
+      .map(b => ({ ...b, _ts: new Date(b.match_date.endsWith('Z') ? b.match_date : `${b.match_date}Z`).getTime() }))
+      .filter(b => b._ts > now)
+      .sort((a, b) => a._ts - b._ts)
+      .slice(0, 6),
+    [bets, now]
+  )
+  if (upcoming.length === 0) return null
+  const msNext = upcoming[0]._ts - now
+  const isHot  = msNext < 3 * 3600000
+  return (
+    <div className={`uh-upcoming fade-in-2${isHot ? ' uh-upcoming--hot' : ''}`}>
+      <div className="uh-upcoming__head">
+        <span className="uh-upcoming__title">{isHot ? '🔥 ' : '⏱ '}Próximos jogos</span>
+        <span className="uh-upcoming__next" style={{ color: isHot ? 'var(--lose)' : 'var(--text-3)' }}>
+          próximo em {_fmtCountdown(msNext)}
+        </span>
+      </div>
+      <div className="uh-upcoming__list">
+        {upcoming.map((b, i) => {
+          const ms  = b._ts - now
+          const hot = ms < 3 * 3600000
+          return (
+            <div key={b.id} className={`uh-upcoming__item${i === 0 ? ' uh-upcoming__item--next' : ''}`}>
+              <div className="uh-upcoming__teams">
+                {b.team_a_flag && <img src={b.team_a_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} />}
+                <span className="uh-upcoming__code">{b.team_a_code}</span>
+                <span className="uh-upcoming__score">{b.score_a}–{b.score_b}</span>
+                <span className="uh-upcoming__code">{b.team_b_code}</span>
+                {b.team_b_flag && <img src={b.team_b_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} />}
+              </div>
+              <span className="uh-upcoming__time" style={{ color: hot ? 'var(--lose)' : 'var(--text-4)' }}>
+                {_fmtCountdown(ms)}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Feature 5: Placares mais apostados ────────────────────────────────────
+function ScorePatternBar({ bets }) {
+  const data = useMemo(() => {
+    const valid = bets.filter(b => b.score_a != null && b.score_b != null)
+    if (valid.length < 8) return null
+    const map = new Map()
+    for (const b of valid) {
+      const k = `${b.score_a}–${b.score_b}`
+      map.set(k, (map.get(k) || 0) + 1)
+    }
+    const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
+    return sorted.length >= 3 ? sorted : null
+  }, [bets])
+
+  if (!data) return null
+  const maxC = data[0][1]
+  return (
+    <div className="uh-chart-card fade-in-3" style={{ margin: 0 }}>
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Placares mais apostados</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+          <span className="uh-chart-card__total" style={{ fontSize: 20 }}>{data[0][0]}</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.08em' }}>{data[0][1]}× apostado</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+        {data.map(([score, count], i) => (
+          <div key={score}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: i === 0 ? 'var(--accent)' : 'var(--text-2)', lineHeight: 1 }}>{score}</span>
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-4)' }}>{count}×</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 2,
+                width: `${(count / maxC) * 100}%`,
+                background: i === 0 ? 'var(--accent)' : `color-mix(in srgb, var(--accent) ${Math.max(30, 70 - i * 12)}%, var(--text-4))`,
+                transition: 'width 700ms cubic-bezier(.4,0,.2,1)',
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Feature 6: Evolução no ranking ────────────────────────────────────────
+function RankingEvolution({ userId }) {
+  const [history, setHistory] = useState([])
+  useEffect(() => {
+    api.get(`/bets/users/${userId}/ranking-history`).then(setHistory).catch(() => {})
+  }, [userId])
+  if (history.length < 2) return null
+
+  const W = 400, H = 90, PADL = 28, PADR = 8, PADT = 6, PADB = 16
+  const pct  = h => h.total_users > 1 ? 1 - (h.position - 1) / (h.total_users - 1) : 1
+  const toX  = i => PADL + (i / (history.length - 1)) * (W - PADL - PADR)
+  const toY  = h => PADT + (1 - pct(h)) * (H - PADT - PADB)
+  const coords = history.map((h, i) => [toX(i), toY(h)])
+  const pathD  = coords.reduce((a, [x, y], i) => a + (i === 0 ? `M${x},${y}` : ` L${x},${y}`), '')
+  const areaD  = `${pathD} L${coords[coords.length-1][0]},${H-PADB} L${coords[0][0]},${H-PADB} Z`
+
+  const latest   = history[history.length - 1]
+  const earliest = history[0]
+  const diff     = earliest.position - latest.position
+  const diffColor = diff > 0 ? 'var(--win)' : diff < 0 ? 'var(--lose)' : 'var(--text-3)'
+  const arrow     = diff > 0 ? '↑' : diff < 0 ? '↓' : '→'
+  const fmtD      = s => new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+
+  const yTicks = [...new Set([earliest.position, latest.position])]
+
+  return (
+    <div className="uh-chart-card fade-in-3">
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Evolução no ranking</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+          <span className="uh-chart-card__total" style={{ color: diffColor, fontSize: 20 }}>{arrow} {latest.position}º</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.08em' }}>
+            {diff !== 0 ? `${Math.abs(diff)} pos. ${diff > 0 ? 'subiu' : 'caiu'}` : 'sem variação'}
+          </span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="rank-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor="var(--accent)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+        {yTicks.map(v => {
+          const hSnap = history.find(h => h.position === v)
+          if (!hSnap) return null
+          const y = toY(hSnap)
+          return <text key={v} x={PADL - 4} y={y + 4} textAnchor="end"
+            style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.4 }}>{v}º</text>
+        })}
+        <text x={PADL} y={H} textAnchor="start"
+          style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.3 }}>{fmtD(earliest.snapshot_at)}</text>
+        <text x={W - PADR} y={H} textAnchor="end"
+          style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.3 }}>{fmtD(latest.snapshot_at)}</text>
+        <path d={areaD} fill="url(#rank-grad)" />
+        <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={coords[coords.length-1][0]} cy={coords[coords.length-1][1]} r={4} fill="var(--accent)" />
+      </svg>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', textAlign: 'right', marginTop: 'var(--s1)' }}>
+        {history.length} medições · {fmtD(earliest.snapshot_at)} → {fmtD(latest.snapshot_at)}
+      </div>
+    </div>
+  )
+}
+
+// ── Features 7+8: Comparar usuários / vs Oráculo ──────────────────────────
+const ORACLE_ID = 34
+const CMP_RESULT_COLOR = { exact: '#0f7a78', correct: '#2ec980', wrong: '#e85252' }
+
+function CompareTable({ data, onBack }) {
+  const { user_a, user_b, matches, summary } = data
+  const evaluated = matches.filter(m => m.bet_a?.result != null || m.bet_b?.result != null)
+
+  return (
+    <div className="uh-cmp">
+      <div className="uh-cmp__header">
+        <button onClick={onBack} className="uh-cmp__back">‹ Voltar</button>
+        <div className="uh-cmp__scoreboard">
+          <div className="uh-cmp__player" style={{ textAlign: 'right' }}>
+            <div className="uh-cmp__player-name">{user_a.name}</div>
+            <div className="uh-cmp__player-pts" style={{ color: summary.user_a_total >= summary.user_b_total ? 'var(--win)' : 'var(--text-3)' }}>{summary.user_a_total}pts</div>
+            <div className="uh-cmp__player-w" style={{ color: summary.user_a_wins >= summary.user_b_wins ? 'var(--win)' : 'var(--text-4)' }}>{summary.user_a_wins} vitórias</div>
+          </div>
+          <div className="uh-cmp__vs">VS</div>
+          <div className="uh-cmp__player" style={{ textAlign: 'left' }}>
+            <div className="uh-cmp__player-name">{user_b.name}</div>
+            <div className="uh-cmp__player-pts" style={{ color: summary.user_b_total >= summary.user_a_total ? 'var(--win)' : 'var(--text-3)' }}>{summary.user_b_total}pts</div>
+            <div className="uh-cmp__player-w" style={{ color: summary.user_b_wins >= summary.user_a_wins ? 'var(--win)' : 'var(--text-4)' }}>{summary.user_b_wins} vitórias</div>
+          </div>
+        </div>
+        {summary.ties > 0 && (
+          <div style={{ textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+            {summary.ties} empate{summary.ties !== 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
+      <div className="uh-cmp__rows">
+        {evaluated.map(m => {
+          const ba  = m.bet_a
+          const bb  = m.bet_b
+          const aWin = ba && bb && (ba.points ?? 0) > (bb.points ?? 0)
+          const bWin = ba && bb && (bb.points ?? 0) > (ba.points ?? 0)
+          return (
+            <div key={m.match_id} className="uh-cmp__row">
+              <div className={`uh-cmp__side uh-cmp__side--a${aWin ? ' uh-cmp__side--win' : ''}`}>
+                {ba ? (
+                  <>
+                    <span className={`pts-badge pts-badge--${ba.result || 'pending'}`} style={{ fontSize: 10, padding: '2px 6px' }}>+{ba.points ?? 0}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: CMP_RESULT_COLOR[ba.result] || 'var(--text-3)', lineHeight: 1 }}>{ba.score_a}–{ba.score_b}</span>
+                  </>
+                ) : <span style={{ color: 'var(--text-4)', fontSize: 11, fontFamily: 'var(--font-cond)' }}>—</span>}
+              </div>
+              <div className="uh-cmp__match">
+                <div className="uh-cmp__flags">
+                  {m.team_a_flag && <img src={m.team_a_flag} alt="" style={{ width: 14, height: 10, borderRadius: 1, objectFit: 'cover' }} />}
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>{m.team_a_code}×{m.team_b_code}</span>
+                  {m.team_b_flag && <img src={m.team_b_flag} alt="" style={{ width: 14, height: 10, borderRadius: 1, objectFit: 'cover' }} />}
+                </div>
+                {m.official_score_a != null && (
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'var(--text-4)', lineHeight: 1 }}>{m.official_score_a}–{m.official_score_b}</span>
+                )}
+              </div>
+              <div className={`uh-cmp__side uh-cmp__side--b${bWin ? ' uh-cmp__side--win' : ''}`}>
+                {bb ? (
+                  <>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: CMP_RESULT_COLOR[bb.result] || 'var(--text-3)', lineHeight: 1 }}>{bb.score_a}–{bb.score_b}</span>
+                    <span className={`pts-badge pts-badge--${bb.result || 'pending'}`} style={{ fontSize: 10, padding: '2px 6px' }}>+{bb.points ?? 0}</span>
+                  </>
+                ) : <span style={{ color: 'var(--text-4)', fontSize: 11, fontFamily: 'var(--font-cond)' }}>—</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function CompareView({ userId, onClose }) {
+  const [users,       setUsers]       = useState([])
+  const [compareData, setCompareData] = useState(null)
+  const [loading,     setLoading]     = useState(false)
+  const [search,      setSearch]      = useState('')
+
+  useEffect(() => {
+    api.get('/ranking')
+      .then(d => setUsers((Array.isArray(d) ? d : (d.ranking || [])).filter(u => u.user_id != userId && u.user_id != ORACLE_ID)))
+      .catch(() => {})
+  }, [userId])
+
+  const doCompare = id => {
+    setLoading(true)
+    setCompareData(null)
+    api.get(`/bets/compare/${userId}/${id}`)
+      .then(setCompareData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  const filtered = search
+    ? users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()))
+    : users
+
+  return (
+    <div className="uh-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="uh-overlay__modal">
+        <div className="uh-overlay__head">
+          <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16 }}>
+            {compareData ? 'Comparação' : 'Comparar com...'}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+        <div className="uh-overlay__body">
+          {!compareData && !loading && (
+            <>
+              <button onClick={() => doCompare(ORACLE_ID)} className="uh-cmp-btn uh-cmp-btn--oracle">
+                🔮 vs Oráculo Predictor
+              </button>
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar usuário..." className="uh-cmp-search" />
+              <div className="uh-cmp-list">
+                {filtered.map(u => (
+                  <button key={u.user_id} onClick={() => doCompare(u.user_id)} className="uh-cmp-btn">
+                    <span>{u.name}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--accent)' }}>{u.total_points}pts</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {loading && (
+            <div style={{ textAlign: 'center', padding: 'var(--s10)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
+              Carregando comparação...
+            </div>
+          )}
+          {compareData && <CompareTable data={compareData} onBack={() => setCompareData(null)} />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal ───────────────────────────────────────────────────────
 export default function UserHistory() {
   const { userId }       = useParams()
   const { user: me, token } = useAuth()
   const isOwn = me && String(me.id) === String(userId)
 
-  const [data,       setData]       = useState(null)
-  const [loading,    setLoading]    = useState(true)
-  const [error,      setError]      = useState('')
-  const [filter,     setFilter]     = useState('all')
-  const [groupRanks, setGroupRanks] = useState([])
-  const [search,     setSearch]     = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [acFocus,    setAcFocus]    = useState(-1)
+  const [data,        setData]        = useState(null)
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState('')
+  const [filter,      setFilter]      = useState('all')
+  const [groupRanks,  setGroupRanks]  = useState([])
+  const [search,      setSearch]      = useState('')
+  const [searchOpen,  setSearchOpen]  = useState(false)
+  const [acFocus,     setAcFocus]     = useState(-1)
+  const [compareOpen, setCompareOpen] = useState(false)
 
   useEffect(() => {
     setLoading(true); setError('')
@@ -685,9 +1304,10 @@ export default function UserHistory() {
 
   useEffect(() => {
     if (!isOwn || !token) return
-    api.get('/user-groups', token).then(groups => {
+    api.get('/user-groups', token).then(response => {
+      const groups = response?.groups
       if (!Array.isArray(groups)) return
-      Promise.all(
+      Promise.allSettled(
         groups.map(g =>
           api.get(`/user-groups/${g.id}/ranking`, token)
             .then(d => {
@@ -695,9 +1315,8 @@ export default function UserHistory() {
               const me = ranking.find(r => String(r.user_id) === String(userId))
               return me ? { id: g.id, name: g.name || d?.group_name || `Bolão ${g.id}`, pos: me.position ?? (ranking.indexOf(me) + 1), total: ranking.length } : null
             })
-            .catch(() => null)
         )
-      ).then(results => setGroupRanks(results.filter(Boolean)))
+      ).then(results => setGroupRanks(results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value)))
     }).catch(() => {})
   }, [isOwn, token, userId])
 
@@ -796,6 +1415,9 @@ export default function UserHistory() {
                   accent={GROUP_COLORS[i % GROUP_COLORS.length]}
                 />
               ))}
+              <button onClick={() => setCompareOpen(true)} className="uh-compare-trigger">
+                ⚔ Comparar
+              </button>
             </div>
           </div>
         </div>
@@ -804,10 +1426,12 @@ export default function UserHistory() {
       {/* ── KPI strip ───────────────────────────────── */}
       <div className="uh-kpi-grid fade-in-2">
         {[
-          { label: 'Pontos',    value: stats.total_points ?? 0, color: 'var(--accent)' },
-          { label: '% Acerto',  value: `${accuracy}%`,          color: 'var(--win)'    },
-          { label: 'Exatos',    value: exact.length,            color: '#e8c44a'        },
-          { label: 'Certos',    value: correct.length,          color: 'var(--win)'    },
+          { label: 'Pontos',       value: stats.total_points ?? 0,                                                          color: 'var(--accent)' },
+          { label: '% Acerto',     value: `${accuracy}%`,                                                                   color: 'var(--win)'    },
+          { label: 'Exatos',       value: exact.length,                                                                     color: '#e8c44a'       },
+          { label: 'Certos',       value: correct.length,                                                                   color: '#2ec980'       },
+          { label: 'Erros',        value: wrong.length,                                                                     color: 'var(--lose)'   },
+          { label: 'Pts / Jogo',   value: evaluated.length > 0 ? ((stats.total_points ?? 0) / evaluated.length).toFixed(1) : '—', color: '#9b5de8' },
         ].map(k => (
           <div key={k.label} className="uh-kpi-card" style={{ '--kpi-color': k.color }}>
             <div className="uh-kpi-card__accent" />
@@ -816,6 +1440,9 @@ export default function UserHistory() {
           </div>
         ))}
       </div>
+
+      {/* ── Próximos jogos ──────────────────────────── */}
+      {pending.length > 0 && <UpcomingBets bets={bets} />}
 
       {/* ── Palpite de campeão (só perfil próprio) ── */}
       {isOwn && <MyChampionCard />}
@@ -836,6 +1463,9 @@ export default function UserHistory() {
           <StreaksSection evaluated={evaluated} />
         </div>
       )}
+
+      {/* ── Melhor / Pior aposta ────────────────────── */}
+      {evaluated.length >= 3 && <BestWorstHighlight bets={bets} />}
 
       {/* ── Anéis de desempenho ─────────────────────── */}
       {evaluated.length > 0 && (
@@ -858,6 +1488,32 @@ export default function UserHistory() {
           <PointsChart bets={bets} />
         </div>
       )}
+
+      {/* ── Fase + Heatmap ──────────────────────────── */}
+      {evaluated.length >= 5 && (
+        <div className="uh-charts-row fade-in-3">
+          <PhaseChart bets={bets} />
+          <ScoreHeatmap bets={bets} />
+        </div>
+      )}
+
+      {/* ── Pontos por fase + Placares frequentes ──────── */}
+      {evaluated.length >= 5 && (
+        <div className="uh-charts-row fade-in-3">
+          <PointsByPhase bets={bets} />
+          <ScorePatternBar bets={bets} />
+        </div>
+      )}
+
+      {/* ── Acerto por seleção ──────────────────────── */}
+      {evaluated.length >= 5 && (
+        <div className="fade-in-3">
+          <TeamAccuracy bets={bets} />
+        </div>
+      )}
+
+      {/* ── Evolução no ranking ─────────────────────── */}
+      <RankingEvolution userId={userId} />
 
       {/* ── Filtros + busca + apostas ───────────────── */}
       <div className="fade-in-3" style={{ marginTop: 'var(--s6)' }}>
@@ -918,6 +1574,8 @@ export default function UserHistory() {
           </div>
         ) : <BetGroups bets={visible} filter={filter} />}
       </div>
+
+      {compareOpen && <CompareView userId={userId} onClose={() => setCompareOpen(false)} />}
     </div>
   )
 }

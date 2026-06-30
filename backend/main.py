@@ -412,6 +412,16 @@ def _run_migrations():
             "ALTER TABLE bot_decision_logs ADD COLUMN IF NOT EXISTS push_sent INTEGER DEFAULT 0",
             # source pode guardar tag de modelo longa (ex: llm/openrouter/anthropic/claude-sonnet-4-5)
             "ALTER TABLE bot_decision_logs ALTER COLUMN source TYPE VARCHAR(80)",
+            # ranking_snapshots — histórico diário de posição no ranking
+            """CREATE TABLE IF NOT EXISTS ranking_snapshots (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                position    INTEGER NOT NULL,
+                total_users INTEGER NOT NULL DEFAULT 0,
+                points      INTEGER NOT NULL DEFAULT 0,
+                snapshot_at TIMESTAMP DEFAULT NOW()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_ranking_snapshots_uid ON ranking_snapshots (user_id, snapshot_at)",
             # phase_competitions — competição paralela por fase do torneio
             """CREATE TABLE IF NOT EXISTS phase_competitions (
                 id SERIAL PRIMARY KEY,

@@ -243,6 +243,96 @@ def user_bets_history(user_id: int, db: Session = Depends(get_db)):
     return _history_payload(user, bets, ranking, ranking_position, total_users)
 
 
+@router.get("/bets/users/{user_id}/ranking-history")
+def get_ranking_history(user_id: int, db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    rows = db.execute(text("""
+        SELECT position, total_users, points, snapshot_at
+        FROM ranking_snapshots
+        WHERE user_id = :uid
+        ORDER BY snapshot_at ASC
+        LIMIT 90
+    """), {"uid": user_id}).fetchall()
+    return [
+        {"position": r[0], "total_users": r[1], "points": r[2],
+         "snapshot_at": r[3].isoformat() if r[3] else None}
+        for r in rows
+    ]
+
+
+@router.get("/bets/compare/{user_a_id}/{user_b_id}")
+def compare_users(user_a_id: int, user_b_id: int, db: Session = Depends(get_db)):
+    user_a = db.query(User).filter(User.id == user_a_id).first()
+    user_b = db.query(User).filter(User.id == user_b_id).first()
+    if not user_a or not user_b:
+        raise HTTPException(404, "Usuário não encontrado")
+
+    def _load(uid: int) -> dict:
+        bets = (
+            db.query(Bet)
+            .options(
+                joinedload(Bet.match).joinedload(Match.team_a),
+                joinedload(Bet.match).joinedload(Match.team_b),
+                joinedload(Bet.match).joinedload(Match.result),
+            )
+            .filter(Bet.user_id == uid)
+            .all()
+        )
+        return {b.match_id: b for b in bets}
+
+    map_a = _load(user_a_id)
+    map_b = _load(user_b_id)
+
+    rows: list[dict] = []
+    a_wins = b_wins = ties = a_total = b_total = 0
+
+    def _info(b: Bet | None) -> dict | None:
+        if not b:
+            return None
+        return {"score_a": b.score_a, "score_b": b.score_b,
+                "points": b.points_earned or 0, "result": _bet_result(b)}
+
+    for mid in set(map_a) | set(map_b):
+        ba, bb = map_a.get(mid), map_b.get(mid)
+        m = (ba or bb).match if (ba or bb) else None
+        if not m:
+            continue
+        res = m.result
+        pa = (ba.points_earned or 0) if ba else 0
+        pb = (bb.points_earned or 0) if bb else 0
+        a_total += pa
+        b_total += pb
+        if ba and bb and ba.evaluated_at and bb.evaluated_at:
+            if pa > pb:   a_wins += 1
+            elif pb > pa: b_wins += 1
+            else:         ties   += 1
+        rows.append({
+            "match_id": mid,
+            "match_date": m.match_date.isoformat() if m.match_date else None,
+            "phase": m.phase.value if m.phase else None,
+            "group_name": m.group_name,
+            "team_a_code": m.team_a.code if m.team_a else None,
+            "team_b_code": m.team_b.code if m.team_b else None,
+            "team_a_name": m.team_a.name if m.team_a else None,
+            "team_b_name": m.team_b.name if m.team_b else None,
+            "team_a_flag": m.team_a.flag_url if m.team_a else None,
+            "team_b_flag": m.team_b.flag_url if m.team_b else None,
+            "official_score_a": res.score_a if res else None,
+            "official_score_b": res.score_b if res else None,
+            "bet_a": _info(ba),
+            "bet_b": _info(bb),
+        })
+
+    rows.sort(key=lambda r: r["match_date"] or "")
+    return {
+        "user_a": {"id": user_a.id, "name": user_a.name},
+        "user_b": {"id": user_b.id, "name": user_b.name},
+        "matches": rows,
+        "summary": {"user_a_wins": a_wins, "user_b_wins": b_wins, "ties": ties,
+                    "user_a_total": a_total, "user_b_total": b_total},
+    }
+
+
 @router.get("/ranking")
 def ranking(
     limit: int = Query(default=50, le=100),
