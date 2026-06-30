@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Callable
 
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_, and_
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Match, MatchPhase, MatchResult, MatchStatus, Team
@@ -329,6 +329,19 @@ def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
                 continue
 
             existing = db.query(Match).filter(Match.match_number == mn).first()
+            if existing is None:
+                # Fallback: match criado por outro sync com match_number diferente
+                existing = (
+                    db.query(Match)
+                    .filter(
+                        or_(
+                            and_(Match.team_a_id == team_a_id, Match.team_b_id == team_b_id),
+                            and_(Match.team_a_id == team_b_id, Match.team_b_id == team_a_id),
+                        ),
+                        Match.phase == MatchPhase.r32,
+                    )
+                    .first()
+                )
 
             if existing is None:
                 m = Match(
