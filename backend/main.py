@@ -152,6 +152,77 @@ async def _oracle_predictor_loop():
         await asyncio.sleep(loop_seconds)
 
 
+async def _match_reminder_loop():
+    """Push 1h antes do jogo para usuários com aposta no match."""
+    from database import SessionLocal
+    from routers.push import send_push_to_users
+    from sqlalchemy import text
+
+    _sent: set[int] = set()   # match_ids já notificados (reset no restart — ok)
+    await asyncio.sleep(60)
+    print("[reminder] loop de lembretes iniciado (checa a cada 5min)", flush=True)
+    while True:
+        try:
+            def _job():
+                db = SessionLocal()
+                try:
+                    now = datetime.now(timezone.utc).replace(tzinfo=None)
+                    window_start = now + timedelta(minutes=50)
+                    window_end   = now + timedelta(minutes=70)
+                    rows = db.execute(text("""
+                        SELECT DISTINCT m.id,
+                               ta.name AS team_a,
+                               tb.name AS team_b,
+                               m.match_date,
+                               b.user_id
+                        FROM matches m
+                        JOIN teams ta ON ta.id = m.team_a_id
+                        JOIN teams tb ON tb.id = m.team_b_id
+                        JOIN bets b   ON b.match_id = m.id
+                        WHERE m.status = 'scheduled'
+                          AND m.match_date BETWEEN :ws AND :we
+                    """), {"ws": window_start, "we": window_end}).fetchall()
+
+                    by_match: dict[int, dict] = {}
+                    for r in rows:
+                        if r.id in _sent:
+                            continue
+                        if r.id not in by_match:
+                            by_match[r.id] = {
+                                "team_a": r.team_a,
+                                "team_b": r.team_b,
+                                "match_date": r.match_date,
+                                "user_ids": [],
+                            }
+                        by_match[r.id]["user_ids"].append(r.user_id)
+
+                    total = 0
+                    for match_id, info in by_match.items():
+                        brt_time = (info["match_date"] - timedelta(hours=3)).strftime("%H:%M")
+                        sent = send_push_to_users(
+                            db,
+                            info["user_ids"],
+                            title=f"⚽ {info['team_a']} vs {info['team_b']} em 1 hora!",
+                            body=f"Você apostou neste jogo — começa às {brt_time} BRT. Boa sorte!",
+                            url="/apostas",
+                            tag=f"reminder-{match_id}",
+                        )
+                        _sent.add(match_id)
+                        total += sent
+                        print(f"[reminder] match {match_id} → {sent} push(es) enviados", flush=True)
+                    return total
+                finally:
+                    db.close()
+
+            loop = asyncio.get_event_loop()
+            total = await loop.run_in_executor(None, _job)
+            if total:
+                print(f"[reminder] {total} push(es) enviados neste ciclo", flush=True)
+        except Exception as e:
+            print(f"[reminder] erro: {e}", flush=True)
+        await asyncio.sleep(5 * 60)
+
+
 async def _football_data_sync_loop():
     """Sync resultados e bracket mata-mata via football-data.org a cada 6h."""
     from database import SessionLocal
@@ -449,8 +520,9 @@ async def lifespan(app: FastAPI):
     report_task = asyncio.create_task(_daily_report_loop())
     oracle_task = asyncio.create_task(_oracle_predictor_loop())
     fd_task = asyncio.create_task(_football_data_sync_loop())
+    reminder_task = asyncio.create_task(_match_reminder_loop())
     yield
-    for t in (task, report_task, oracle_task, fd_task):
+    for t in (task, report_task, oracle_task, fd_task, reminder_task):
         t.cancel()
         try:
             await t
