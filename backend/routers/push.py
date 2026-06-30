@@ -67,6 +67,7 @@ def _send_one(sub: PushSubscription, title: str, body: str, url: str = "/", tag:
             data=json.dumps({"title": title, "body": body, "url": url, "tag": tag}),
             vapid_private_key=settings.vapid_private_key,
             vapid_claims={"sub": f"mailto:{settings.vapid_claims_email}"},
+            content_encoding="aes128gcm",
         )
         return True
     except Exception as exc:
