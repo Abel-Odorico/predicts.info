@@ -149,6 +149,82 @@ def public_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/funnel")
+def funnel(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    from sqlalchemy import text
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    rows = db.execute(text("""
+        SELECT path, COUNT(*) AS views, COUNT(DISTINCT ip) AS uniq
+        FROM page_views
+        WHERE created_at >= :since
+          AND path IN ('/', '/login', '/dashboard', '/apostas', '/ranking', '/torneio')
+        GROUP BY path
+    """), {"since": since}).fetchall()
+
+    by_path = {r.path: {"views": r.views, "uniq": r.uniq} for r in rows}
+
+    def _pct(a, b):
+        return round(a / b * 100, 1) if b else 0
+
+    landing   = by_path.get("/",          {"views": 0, "uniq": 0})
+    login     = by_path.get("/login",     {"views": 0, "uniq": 0})
+    dashboard = by_path.get("/dashboard", {"views": 0, "uniq": 0})
+    apostas   = by_path.get("/apostas",   {"views": 0, "uniq": 0})
+
+    new_users = db.query(func.count(User.id)).filter(
+        User.created_at >= since
+    ).scalar() or 0
+    new_bets_users = db.execute(text("""
+        SELECT COUNT(DISTINCT b.user_id)
+        FROM bets b
+        JOIN users u ON u.id = b.user_id
+        WHERE u.created_at >= :since
+    """), {"since": since}).scalar() or 0
+
+    steps = [
+        {
+            "step": "Landing (/)",
+            "views": landing["views"],
+            "uniq":  landing["uniq"],
+            "pct_prev": 100,
+            "drop": 0,
+        },
+        {
+            "step": "Login / Cadastro",
+            "views": login["views"],
+            "uniq":  login["uniq"],
+            "pct_prev": _pct(login["views"], landing["views"]),
+            "drop": landing["views"] - login["views"],
+        },
+        {
+            "step": "Dashboard (logado)",
+            "views": dashboard["views"],
+            "uniq":  dashboard["uniq"],
+            "pct_prev": _pct(dashboard["views"], login["views"]),
+            "drop": login["views"] - dashboard["views"],
+        },
+        {
+            "step": "Apostas",
+            "views": apostas["views"],
+            "uniq":  apostas["uniq"],
+            "pct_prev": _pct(apostas["views"], dashboard["views"]),
+            "drop": dashboard["views"] - apostas["views"],
+        },
+        {
+            "step": "Apostou (cadastros período)",
+            "views": new_bets_users,
+            "uniq":  new_bets_users,
+            "pct_prev": _pct(new_bets_users, new_users),
+            "drop": new_users - new_bets_users,
+        },
+    ]
+    return {"days": days, "steps": steps}
+
+
 @router.get("/stats")
 def stats(
     days: int = 7,

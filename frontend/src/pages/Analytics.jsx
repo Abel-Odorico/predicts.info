@@ -193,6 +193,9 @@ export default function Analytics() {
   const [cohort, setCohort]                 = useState(null)
   const [cohortLoading, setCohortLoading]   = useState(false)
 
+  const [funnel, setFunnel]                 = useState(null)
+  const [funnelLoading, setFunnelLoading]   = useState(false)
+
   useEffect(() => {
     setLoading(true)
     Promise.all([
@@ -237,6 +240,15 @@ export default function Analytics() {
       .finally(() => setCohortLoading(false))
   }, [tab, token])
 
+  useEffect(() => {
+    if (tab !== 'funil') return
+    setFunnelLoading(true)
+    api.get(`/analytics/funnel?days=${days}`, token)
+      .then(d => setFunnel(d))
+      .catch(console.error)
+      .finally(() => setFunnelLoading(false))
+  }, [tab, days, token])
+
   function loadBetsAudit(res = betsResultFilter, user = betsUserFilter, off = betsOffset) {
     setBetsLoading(true)
     const qs = new URLSearchParams({ limit: BETS_LIMIT, offset: off })
@@ -268,6 +280,7 @@ export default function Analytics() {
 
   const TABS = [
     { id: 'overview',  label: '📊 Visão Geral' },
+    { id: 'funil',     label: '🔽 Funil' },
     { id: 'usuarios',  label: '👥 Usuários' },
     { id: 'pages',     label: '📄 Páginas' },
     { id: 'geo',       label: '🌍 Localidade' },
@@ -427,6 +440,98 @@ export default function Analytics() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Funil tab */}
+      {tab === 'funil' && (
+        <div className="fade-in-1" style={{ marginTop: 'var(--s4)' }}>
+          {funnelLoading || !funnel ? (
+            <Spinner text="Carregando funil..." />
+          ) : (
+            <div className="card">
+              <div className="card__header">
+                <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>
+                  🔽 Funil de Conversão — últimos {funnel.days} dias
+                </span>
+              </div>
+              <div className="card__body">
+                {funnel.steps.map((s, i) => {
+                  const maxV = funnel.steps[0]?.views || 1
+                  const barW = Math.max(4, Math.round(s.views / maxV * 100))
+                  const isBottleneck = s.pct_prev < 30 && i > 0
+                  const color = i === 0 ? 'var(--accent)'
+                    : s.pct_prev >= 60 ? 'var(--win)'
+                    : s.pct_prev >= 30 ? '#f59e0b'
+                    : 'var(--lose)'
+                  return (
+                    <div key={i} style={{ marginBottom: 'var(--s4)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: '50%', background: color,
+                            color: '#fff', display: 'inline-flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0,
+                          }}>{i + 1}</span>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', fontWeight: 700 }}>
+                            {s.step}
+                          </span>
+                          {isBottleneck && (
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, background: 'rgba(239,68,68,0.12)', color: 'var(--lose)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
+                              GARGALO
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          {i > 0 && (
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, fontWeight: 700 }}>
+                              {s.pct_prev}% do anterior
+                            </span>
+                          )}
+                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--text-1)', fontWeight: 900 }}>
+                            {s.views.toLocaleString('pt-BR')}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ background: 'var(--bg-overlay)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${barW}%`, height: '100%', borderRadius: 4,
+                          background: color, transition: 'width 0.6s ease',
+                        }} />
+                      </div>
+                      {i > 0 && s.drop > 0 && (
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+                          ↳ {s.drop.toLocaleString('pt-BR')} saíram nesta etapa
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Resumo */}
+                <div style={{
+                  marginTop: 'var(--s4)', padding: 'var(--s3)', background: 'var(--bg-overlay)',
+                  borderRadius: 8, border: '1px solid var(--border)',
+                }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Resumo
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 'var(--s3)' }}>
+                    {[
+                      { label: 'Landing → Cadastro', value: `${funnel.steps[4] && funnel.steps[0]?.views ? ((funnel.steps[4].views / funnel.steps[0].views) * 100).toFixed(1) : 0}%`, color: 'var(--accent)' },
+                      { label: 'Cadastro → 1ª aposta', value: `${funnel.steps[4]?.pct_prev ?? 0}%`, color: 'var(--win)' },
+                      { label: 'Maior drop', value: funnel.steps.slice(1).sort((a,b) => a.pct_prev - b.pct_prev)[0]?.step || '—', color: 'var(--lose)', small: true },
+                    ].map(m => (
+                      <div key={m.label} style={{ textAlign: 'center' }}>
+                        <div style={{ fontFamily: 'var(--font-data)', fontSize: m.small ? 12 : 20, fontWeight: 900, color: m.color, lineHeight: 1.2 }}>{m.value}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
