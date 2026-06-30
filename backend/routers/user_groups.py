@@ -799,12 +799,12 @@ def group_highlights(
     for b in all_bets_data:
         user_bets_asc.setdefault(b.user_id, []).append(b.points_earned)
 
-    # Streaks (ascending order — counts consecutive 3-pt runs)
+    # Streaks: conta sequências de acertos (pts > 0, V2 scoring)
     streak_list = []
     for uid, bets_list in user_bets_asc.items():
         max_streak = cur = 0
         for pts in bets_list:
-            if pts == 3:
+            if (pts or 0) > 0:
                 cur += 1
                 max_streak = max(max_streak, cur)
             else:
@@ -860,11 +860,11 @@ def group_highlights(
         for r in top_bets_rows
     ]
 
-    # Group XP & level (based on all bets by members)
+    # Group XP & level (V2: exact = 25 pts)
     xp_row = (
         db.query(
             func.count(Bet.id).label("total_bets"),
-            func.sum(case((Bet.points_earned == 3, 1), else_=0)).label("total_exacts"),
+            func.sum(case((Bet.points_earned == 25, 1), else_=0)).label("total_exacts"),
         )
         .filter(Bet.user_id.in_(member_ids))
         .first()

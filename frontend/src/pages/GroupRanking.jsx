@@ -153,33 +153,42 @@ export default function GroupRanking() {
     const saved = loadSavedPositions(groupId)
     if (saved) setPrevPos(saved.positions)
 
-    Promise.all([
+    // allSettled: falha parcial não cancela os outros dados
+    Promise.allSettled([
       api.get(`/user-groups/${groupId}/ranking`, token),
       api.get('/matches'),
       api.get(`/ranking?date_from=${today}&date_to=${today}&limit=100`),
-      api.get(`/user-groups/${groupId}/highlights`, token).catch(() => null),
-    ]).then(([groupData, matches, todayRanking, highlightsData]) => {
+    ]).then(([rankRes, matchRes, todayRes]) => {
+      if (rankRes.status === 'rejected') {
+        setError(rankRes.reason?.message || 'Erro ao carregar ranking')
+        return
+      }
+      const groupData = rankRes.value
       setData(groupData)
-      const finished = matches.filter(m => m.status === 'finished').length
-      setMatchStats({ finished, total: matches.length })
-      // Extract teams from matches for champion picker
-      const teamMap = {}
-      matches.forEach(m => {
-        if (m.team_a) teamMap[m.team_a.id] = m.team_a
-        if (m.team_b) teamMap[m.team_b.id] = m.team_b
-      })
-      setTeams(Object.values(teamMap).sort((a, b) => a.name.localeCompare(b.name)))
-      const memberIds = new Set((groupData.ranking ?? []).map(r => r.user_id))
-      const groupToday = todayRanking
-        .filter(r => memberIds.has(r.user_id))
-        .sort((a, b) => b.total_points - a.total_points)
-      setTodayTop(groupToday[0] || null)
-      setHighlights(highlightsData)
+      if (matchRes.status === 'fulfilled') {
+        const matches = matchRes.value ?? []
+        const finished = matches.filter(m => m.status === 'finished').length
+        setMatchStats({ finished, total: matches.length })
+        const teamMap = {}
+        matches.forEach(m => {
+          if (m.team_a) teamMap[m.team_a.id] = m.team_a
+          if (m.team_b) teamMap[m.team_b.id] = m.team_b
+        })
+        setTeams(Object.values(teamMap).sort((a, b) => a.name.localeCompare(b.name)))
+      }
+      if (todayRes.status === 'fulfilled') {
+        const todayRanking = todayRes.value ?? []
+        const memberIds = new Set((groupData.ranking ?? []).map(r => r.user_id))
+        const groupToday = todayRanking
+          .filter(r => memberIds.has(r.user_id))
+          .sort((a, b) => b.total_points - a.total_points)
+        setTodayTop(groupToday[0] || null)
+      }
       savePositions(groupId, groupData.ranking ?? [])
-    }).catch(err => setError(err.message || 'Erro ao carregar'))
-      .finally(() => setLoading(false))
+    }).finally(() => setLoading(false))
 
-    // Secondary fetches (non-blocking)
+    // Secondary fetches (non-blocking) — highlights independente do load principal
+    api.get(`/user-groups/${groupId}/highlights`, token).catch(() => null).then(setHighlights)
     api.get(`/user-groups/${groupId}/champion`, token).catch(() => []).then(setChampionPicks)
     api.get(`/user-groups/${groupId}/recent-matches`, token).catch(() => []).then(setRecentMatches)
     api.get(`/user-groups/${groupId}/evolution`, token).catch(() => null).then(setEvolution)
