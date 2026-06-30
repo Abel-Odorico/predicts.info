@@ -512,6 +512,85 @@ def _run_migrations():
                 conn.rollback()
 
 
+async def _activation_email_loop():
+    """D+1: envia email de ativação para usuários que registraram há 20-28h sem nenhuma aposta."""
+    from database import SessionLocal
+    from models import Bet
+    from mail import send_email, _base_template
+    from sqlalchemy import text
+
+    await asyncio.sleep(120)
+    print("[activation-email] loop D+1 iniciado (checa a cada hora)", flush=True)
+
+    _sent_ids: set[int] = set()
+
+    while True:
+        try:
+            def _job():
+                db = SessionLocal()
+                try:
+                    now = datetime.now(timezone.utc).replace(tzinfo=None)
+                    window_start = now - timedelta(hours=28)
+                    window_end   = now - timedelta(hours=20)
+                    users_with_bets = db.query(Bet.user_id).distinct().subquery()
+                    from models import User as _User
+                    targets = (
+                        db.query(_User)
+                        .filter(
+                            _User.created_at >= window_start,
+                            _User.created_at <= window_end,
+                            ~_User.id.in_(users_with_bets),
+                            _User.email.isnot(None),
+                            ~_User.id.in_(list(_sent_ids)),
+                        )
+                        .all()
+                    )
+                    sent = 0
+                    for u in targets:
+                        first = (u.name or "").split()[0] or "Olá"
+                        body = f"""
+                        <div class="title">⚽ Você ainda não fez seu palpite!</div>
+                        <p class="text">Olá, <strong>{first}</strong>!</p>
+                        <p class="text">
+                          Você criou sua conta no <strong>Predicts</strong> mas ainda não apostou nenhum placar.
+                          A Copa 2026 está rolando — cada jogo é uma chance de pontuar no ranking!
+                        </p>
+                        <p class="text">
+                          ✅ Resultado certo = <strong>3 pontos</strong><br/>
+                          ✅ Placar exato = <strong>5 pontos</strong><br/>
+                          ✅ Campeão certo = <strong>bônus extra</strong>
+                        </p>
+                        <div class="btn-wrap">
+                          <a href="https://predicts.info/apostas" class="btn">Apostar Agora →</a>
+                        </div>
+                        """
+                        html = _base_template("⚽ Você ainda não apostou — Copa 2026", body)
+                        plain = (
+                            f"Olá, {first}!\n\nVocê se cadastrou no Predicts mas ainda não apostou.\n"
+                            f"Acesse https://predicts.info/apostas e dispute o ranking!\n\n— Predicts"
+                        )
+                        ok = send_email(
+                            to=u.email,
+                            subject="⚽ Você ainda não fez seu palpite — Copa 2026",
+                            html=html,
+                            plain=plain,
+                        )
+                        if ok:
+                            _sent_ids.add(u.id)
+                            sent += 1
+                    return sent, len(targets)
+                finally:
+                    db.close()
+
+            loop = asyncio.get_event_loop()
+            sent, total = await loop.run_in_executor(None, _job)
+            if total:
+                print(f"[activation-email] {sent}/{total} emails D+1 enviados", flush=True)
+        except Exception as e:
+            print(f"[activation-email] erro: {e}", flush=True)
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _alembic_upgrade()        # migrations versionadas (Alembic) — fonte de verdade do schema
@@ -521,8 +600,9 @@ async def lifespan(app: FastAPI):
     oracle_task = asyncio.create_task(_oracle_predictor_loop())
     fd_task = asyncio.create_task(_football_data_sync_loop())
     reminder_task = asyncio.create_task(_match_reminder_loop())
+    activation_task = asyncio.create_task(_activation_email_loop())
     yield
-    for t in (task, report_task, oracle_task, fd_task, reminder_task):
+    for t in (task, report_task, oracle_task, fd_task, reminder_task, activation_task):
         t.cancel()
         try:
             await t

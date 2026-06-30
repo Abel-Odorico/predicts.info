@@ -175,7 +175,7 @@ export default function Login({ initialMode = 'login' }) {
             navigate(`/bolao/${pendingJoin}`)
           }
         } else {
-          navigate('/')
+          navigate('/apostas')
         }
       }
     } catch (e) {

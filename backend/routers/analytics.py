@@ -185,41 +185,52 @@ def funnel(
         WHERE u.created_at >= :since
     """), {"since": since}).scalar() or 0
 
+    landing_v = landing["views"] or 1
     steps = [
         {
             "step": "Landing (/)",
             "views": landing["views"],
             "uniq":  landing["uniq"],
+            "pct_landing": 100,
             "pct_prev": 100,
             "drop": 0,
+            "note": None,
         },
         {
             "step": "Login / Cadastro",
             "views": login["views"],
             "uniq":  login["uniq"],
-            "pct_prev": _pct(login["views"], landing["views"]),
+            "pct_landing": _pct(login["views"], landing_v),
+            "pct_prev": _pct(login["views"], landing_v),
             "drop": landing["views"] - login["views"],
+            "note": None,
         },
         {
             "step": "Dashboard (logado)",
             "views": dashboard["views"],
             "uniq":  dashboard["uniq"],
-            "pct_prev": _pct(dashboard["views"], login["views"]),
-            "drop": login["views"] - dashboard["views"],
+            "pct_landing": _pct(dashboard["views"], landing_v),
+            "pct_prev": _pct(dashboard["views"], landing_v),
+            "drop": None,
+            "note": "inclui retornantes que acessam direto (sem passar por /login)",
         },
         {
-            "step": "Apostas",
+            "step": "Apostas (/apostas)",
             "views": apostas["views"],
             "uniq":  apostas["uniq"],
-            "pct_prev": _pct(apostas["views"], dashboard["views"]),
-            "drop": dashboard["views"] - apostas["views"],
+            "pct_landing": _pct(apostas["views"], landing_v),
+            "pct_prev": _pct(apostas["views"], landing_v),
+            "drop": None,
+            "note": None,
         },
         {
-            "step": "Apostou (cadastros período)",
+            "step": "Apostou (novos cadastros)",
             "views": new_bets_users,
             "uniq":  new_bets_users,
+            "pct_landing": _pct(new_bets_users, landing_v),
             "pct_prev": _pct(new_bets_users, new_users),
             "drop": new_users - new_bets_users,
+            "note": f"% do anterior = % dos {new_users} novos cadastros que apostaram",
         },
     ]
     return {"days": days, "steps": steps}

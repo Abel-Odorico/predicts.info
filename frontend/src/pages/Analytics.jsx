@@ -459,15 +459,21 @@ export default function Analytics() {
                 {funnel.steps.map((s, i) => {
                   const maxV = funnel.steps[0]?.views || 1
                   const barW = Math.max(4, Math.round(s.views / maxV * 100))
-                  const isBottleneck = s.pct_prev < 30 && i > 0
+                  const pct = s.pct_landing ?? s.pct_prev
+                  const isBottleneck = pct < 30 && i > 0 && s.note === null
                   const color = i === 0 ? 'var(--accent)'
-                    : s.pct_prev >= 60 ? 'var(--win)'
-                    : s.pct_prev >= 30 ? '#f59e0b'
+                    : pct >= 60 ? 'var(--win)'
+                    : pct >= 30 ? '#f59e0b'
                     : 'var(--lose)'
+                  const labelPct = i === funnel.steps.length - 1
+                    ? `${s.pct_prev}% dos cadastros`
+                    : i > 0
+                      ? `${pct}% da landing`
+                      : null
                   return (
                     <div key={i} style={{ marginBottom: 'var(--s4)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: '50%', background: color,
                             color: '#fff', display: 'inline-flex', alignItems: 'center',
@@ -483,9 +489,9 @@ export default function Analytics() {
                           )}
                         </div>
                         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                          {i > 0 && (
+                          {labelPct && (
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, fontWeight: 700 }}>
-                              {s.pct_prev}% do anterior
+                              {labelPct}
                             </span>
                           )}
                           <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--text-1)', fontWeight: 900 }}>
@@ -499,7 +505,12 @@ export default function Analytics() {
                           background: color, transition: 'width 0.6s ease',
                         }} />
                       </div>
-                      {i > 0 && s.drop > 0 && (
+                      {s.note && (
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3, fontStyle: 'italic' }}>
+                          ℹ️ {s.note}
+                        </div>
+                      )}
+                      {s.drop > 0 && i > 0 && s.note === null && (
                         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
                           ↳ {s.drop.toLocaleString('pt-BR')} saíram nesta etapa
                         </div>
