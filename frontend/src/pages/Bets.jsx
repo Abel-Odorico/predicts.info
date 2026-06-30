@@ -295,13 +295,13 @@ export default function Bets() {
 
 // ── Inline bettable match card ────────────────────────────────────────────────
 function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation, nextMatch, onGoToNextMatch, autoOpen, onAutoOpenDone, recentMatches }) {
-  const initStillOpen = match.is_open !== undefined
+  const initStillOpen = existingBet ? false : (match.is_open !== undefined
     ? match.is_open
     : (() => {
         if (!match.match_date) return true
         const d = match.match_date.endsWith('Z') ? match.match_date : `${match.match_date}Z`
         return new Date(d).getTime() > Date.now()
-      })()
+      })())
 
   const [open, setOpen]         = useState(initStillOpen)
   // autoFocus só quando o usuário abre a linha (clique/autoOpen). No load

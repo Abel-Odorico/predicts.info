@@ -275,7 +275,8 @@ def sync_knockout(db: Session) -> dict:
         phase = STAGE_MAP.get(m["stage"], MatchPhase.r32)
         match_date = _parse_date(m["utcDate"])
         match_number = m.get("id")
-        status_val = "scheduled" if m["status"] in ("TIMED", "SCHEDULED") else m["status"].lower()
+        _STATUS_MAP = {"TIMED": "scheduled", "SCHEDULED": "scheduled", "IN_PLAY": "live", "PAUSED": "live", "FINISHED": "finished"}
+        status_val = _STATUS_MAP.get(m["status"], "scheduled")
 
         # 1. Par exato já existe → só atualiza data/status
         exact = db.execute(text("""
