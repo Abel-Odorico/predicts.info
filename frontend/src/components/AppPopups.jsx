@@ -339,136 +339,120 @@ function ChampionPopup({ token, onClose }) {
 // ═════════════════════════════════════════════════════════════════════════════
 const INSTALL_STEPS = {
   android: [
-    { icon: '🌐', text: 'Abra predicts.info no Chrome (Android)' },
-    { icon: '⋮',  text: 'Toque no menu ⋮ no canto superior direito' },
-    { icon: '📲', text: 'Selecione "Instalar app" ou "Adicionar à tela inicial"' },
-    { icon: '✅', text: 'Confirme — o ícone aparece na sua tela inicial' },
-    { icon: '🔔', text: 'Abra o app e aceite as notificações para não perder nada' },
+    { n: '1', text: 'Abra predicts.info no', highlight: 'Chrome', sub: 'Navegador padrão Android' },
+    { n: '2', text: 'Toque no menu', highlight: '⋮', sub: 'Três pontinhos no canto superior direito' },
+    { n: '3', text: 'Toque em', highlight: '"Instalar app"', sub: 'Ou "Adicionar à tela inicial"' },
+    { n: '4', text: 'Confirme e', highlight: 'abra o ícone', sub: 'Aparece na sua tela inicial' },
   ],
   ios: [
-    { icon: '🧭', text: 'Abra predicts.info no Safari (não Chrome nem Firefox)' },
-    { icon: '⎙',  text: 'Toque em Compartilhar ⎙ na barra inferior do Safari' },
-    { icon: '📲', text: 'Role para baixo e toque "Adicionar à Tela de Início"' },
-    { icon: '✅', text: 'Toque "Adicionar" — o ícone aparece na sua tela inicial' },
-    { icon: '🔔', text: 'Abra o app instalado e aceite as notificações' },
+    { n: '1', text: 'Abra predicts.info no', highlight: 'Safari', sub: 'Não funciona no Chrome ou Firefox' },
+    { n: '2', text: 'Toque em', highlight: 'Compartilhar ⎙', sub: 'Ícone na barra inferior do Safari' },
+    { n: '3', text: 'Toque em', highlight: '"Adicionar à Tela de Início"', sub: 'Role a lista para encontrar a opção' },
+    { n: '4', text: 'Toque em', highlight: '"Adicionar"', sub: 'O ícone aparece na sua tela inicial' },
   ],
 }
 
 export function InstallAppPopup({ onClose }) {
-  const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent)
-  const isAndroid = /android/i.test(navigator.userAgent)
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
   const [platform, setPlatform] = useState(isIOS ? 'ios' : 'android')
-
   const steps = INSTALL_STEPS[platform]
 
   return (
-    <ModalShell onClose={onClose} maxWidth={480} zIndex={9300}>
-      <div style={{ padding: '28px 24px 22px' }}>
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 44, marginBottom: 8 }}>📲</div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-1)', margin: '0 0 6px', letterSpacing: '0.03em' }}>
-            Instale o app grátis
-          </h2>
-          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            Acesso rápido, notificações de jogos e resultados, funciona offline.
-          </p>
-        </div>
+    <ModalShell onClose={onClose} maxWidth={460} zIndex={9300}>
+      <div style={{ padding: '0 0 6px' }}>
 
-        {/* Platform tabs */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--bg-overlay)', borderRadius: 10, padding: 4 }}>
-          {[
-            { id: 'android', label: '🤖 Android', sub: 'Chrome' },
-            { id: 'ios',     label: '🍎 iPhone / iPad', sub: 'Safari' },
-          ].map(p => (
-            <button
-              key={p.id}
-              onClick={() => setPlatform(p.id)}
-              style={{
-                flex: 1, padding: '8px 6px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: platform === p.id ? 'var(--bg-card)' : 'transparent',
-                boxShadow: platform === p.id ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
-                transition: 'all 150ms',
-              }}
-            >
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: platform === p.id ? 'var(--text-1)' : 'var(--text-4)' }}>
-                {p.label}
-              </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: platform === p.id ? 'var(--accent)' : 'var(--text-4)', marginTop: 1 }}>
-                {p.sub}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Steps */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
-          {steps.map((s, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-              <div style={{
-                flexShrink: 0, width: 34, height: 34, borderRadius: 10,
-                background: i === steps.length - 1 ? 'rgba(15,122,120,0.12)' : 'var(--bg-surface)',
-                border: `1.5px solid ${i === steps.length - 1 ? 'rgba(15,122,120,0.3)' : 'var(--border)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: s.icon === '⋮' || s.icon === '⎙' ? 18 : 16,
-                fontFamily: 'monospace', fontWeight: 700,
-                color: i === steps.length - 1 ? 'var(--accent)' : 'var(--text-2)',
-              }}>
-                {s.icon}
-              </div>
-              <div style={{ paddingTop: 6 }}>
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13.5, color: 'var(--text-1)', lineHeight: 1.4 }}>
-                  {s.text}
-                </div>
-                {i === 1 && platform === 'ios' && (
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 3 }}>
-                    Se não aparecer, role a lista de opções para baixo
-                  </div>
-                )}
-                {i === 1 && platform === 'android' && (
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 3 }}>
-                    Nos três pontinhos no topo — pode aparecer como "Instalar app"
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Notification tip */}
+        {/* Hero banner */}
         <div style={{
-          background: 'rgba(15,122,120,0.07)', border: '1px solid rgba(15,122,120,0.2)',
-          borderRadius: 10, padding: '12px 14px', marginBottom: 18,
+          background: 'linear-gradient(135deg, var(--accent) 0%, #0a5856 100%)',
+          padding: '28px 24px 22px', textAlign: 'center', borderRadius: '12px 12px 0 0',
         }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)', fontWeight: 700, marginBottom: 4 }}>
-            🔔 Por que ativar notificações?
+          <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 10 }}>📲</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', marginBottom: 6 }}>
+            Instale o Predicts no celular
           </div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
-            Resultado das suas apostas em tempo real · Lembrete antes do jogo começar · Sua posição no ranking atualizada
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5 }}>
+            Grátis · Acesso rápido · Notificações de jogos
+          </div>
+          {/* Benefit pills */}
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+            {['⚡ Abre em 1 toque', '🔔 Alertas de jogo', '📵 Funciona offline'].map(b => (
+              <span key={b} style={{
+                background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)',
+                borderRadius: 100, padding: '3px 10px', fontSize: 11, color: '#fff', fontWeight: 600,
+              }}>{b}</span>
+            ))}
           </div>
         </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ padding: '20px 22px 18px' }}>
+          {/* Platform toggle */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            {[
+              { id: 'android', emoji: '🤖', label: 'Android', sub: 'via Chrome' },
+              { id: 'ios',     emoji: '🍎', label: 'iPhone / iPad', sub: 'via Safari' },
+            ].map(p => (
+              <button
+                key={p.id}
+                onClick={() => setPlatform(p.id)}
+                style={{
+                  flex: 1, padding: '10px 8px', borderRadius: 10, cursor: 'pointer', transition: 'all 150ms',
+                  border: platform === p.id ? '2px solid var(--accent)' : '2px solid var(--border)',
+                  background: platform === p.id ? 'rgba(15,122,120,0.08)' : 'var(--bg-overlay)',
+                }}
+              >
+                <div style={{ fontSize: 20, marginBottom: 3 }}>{p.emoji}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: platform === p.id ? 'var(--accent)' : 'var(--text-2)' }}>
+                  {p.label}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 1 }}>{p.sub}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Steps */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+            {steps.map((s, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: 'var(--bg-overlay)', borderRadius: 10, padding: '10px 14px',
+                border: '1px solid var(--border)',
+              }}>
+                <div style={{
+                  flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
+                  background: 'var(--accent)', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, fontWeight: 900,
+                }}>{s.n}</div>
+                <div>
+                  <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.3 }}>
+                    {s.text} <strong style={{ color: 'var(--text-1)' }}>{s.highlight}</strong>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>{s.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions */}
           <button
             onClick={onClose}
             style={{
-              flex: 1, padding: '11px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
-              background: 'var(--accent)', color: '#fff',
-              fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700,
+              width: '100%', padding: '13px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 800,
+              letterSpacing: '-0.01em', marginBottom: 8,
             }}
           >
-            Já instalei! ✓
+            ✓ Já instalei — fechar
           </button>
           <button
             onClick={onClose}
             style={{
-              padding: '11px 18px', borderRadius: 9, border: '1px solid var(--border)',
-              background: 'var(--bg-overlay)', color: 'var(--text-3)', cursor: 'pointer',
-              fontFamily: 'var(--font-cond)', fontSize: 13,
+              width: '100%', padding: '8px 0', borderRadius: 10,
+              border: 'none', background: 'transparent',
+              color: 'var(--text-4)', cursor: 'pointer', fontSize: 12,
             }}
           >
-            Depois
+            Agora não
           </button>
         </div>
       </div>
