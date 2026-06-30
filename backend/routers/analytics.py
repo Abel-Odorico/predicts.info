@@ -133,6 +133,22 @@ async def track(
     db.commit()
 
 
+@router.get("/public-stats")
+def public_stats(db: Session = Depends(get_db)):
+    from models import Match
+    from sqlalchemy import text
+    total_users    = db.query(func.count(User.id)).scalar() or 0
+    total_bets     = db.query(func.count(Bet.id)).scalar() or 0
+    matches_done   = db.execute(text("SELECT COUNT(*) FROM matches WHERE status='finished'")).scalar() or 0
+    matches_total  = db.execute(text("SELECT COUNT(*) FROM matches")).scalar() or 0
+    return {
+        "users": total_users,
+        "bets": total_bets,
+        "matches_finished": matches_done,
+        "matches_total": matches_total,
+    }
+
+
 @router.get("/stats")
 def stats(
     days: int = 7,

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-lang="en">
+<html lang="pt-BR" data-lang="pt">
 <head>
   <!-- Set lang before render to avoid flash -->
   <script>
@@ -15,12 +15,17 @@
   </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Predicts.info — World Cup 2026 Predictions &amp; Simulator</title>
-  <meta name="description" content="World Cup 2026 statistical predictions powered by Poisson + Elo + Monte Carlo (1M simulations). Live scores, group standings, bracket projections, and AI-powered match predictions for FIFA World Cup 2026." />
-  <meta name="keywords" content="world cup 2026 predictions, FIFA 2026 simulator, copa 2026, football predictions, world cup odds, match predictions, group standings 2026, world cup bracket 2026, Argentina 2026, soccer predictions" />
+  <title>Predicts.info — Simulador e Bolão da Copa do Mundo 2026</title>
+  <meta name="description" content="Simulador estatístico da Copa do Mundo 2026 com 1 milhão de simulações Monte Carlo. Faça palpites de placar, dispute bolões e veja previsões em tempo real. 100% gratuito." />
+  <meta name="keywords" content="simulador copa do mundo 2026, bolão copa 2026, palpites copa 2026, previsão copa 2026, copa 2026 probabilidade, simulação copa 2026, copa do mundo 2026 ao vivo, chaveamento copa 2026, world cup 2026 predictions, FIFA 2026 simulator" />
   <meta name="robots" content="index, follow" />
+  <meta name="google-site-verification" content="pUacE3HUgSLFOGvA65EMuXnFaO4spoSJwNUZm7wU48k" />
   <meta name="author" content="Predicts.info" />
   <link rel="canonical" href="https://predicts.info/" />
+  <link rel="alternate" hreflang="pt-BR" href="https://predicts.info/" />
+  <link rel="alternate" hreflang="en" href="https://predicts.info/" />
+  <link rel="alternate" hreflang="x-default" href="https://predicts.info/" />
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 
   <!-- Favicons -->
   <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -32,8 +37,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://predicts.info/" />
-  <meta property="og:title" content="Predicts.info — World Cup 2026 Predictions" />
-  <meta property="og:description" content="Statistical predictions for the FIFA World Cup 2026. Monte Carlo simulations with 1M iterations per match." />
+  <meta property="og:title" content="Predicts.info — Simulador Copa do Mundo 2026" />
+  <meta property="og:description" content="Simulador estatístico da Copa 2026 com 1 milhão de simulações Monte Carlo. Palpites, bolões e previsões em tempo real. 100% gratuito." />
   <meta property="og:image" content="https://predicts.info/og-image.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -41,8 +46,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Predicts.info — World Cup 2026 Predictions" />
-  <meta name="twitter:description" content="Poisson + Elo + Monte Carlo predictions for FIFA World Cup 2026." />
+  <meta name="twitter:title" content="Predicts.info — Simulador Copa do Mundo 2026" />
+  <meta name="twitter:description" content="Palpites, bolões e simulações da Copa 2026. Poisson + Elo + Monte Carlo. 100% grátis." />
   <meta name="twitter:image" content="https://predicts.info/og-image.jpg" />
 
   <meta name="google-adsense-account" content="ca-pub-3734794914488669" />
@@ -66,6 +71,55 @@
       "location": { "@type": "Country", "name": "USA, Canada, Mexico" },
       "organizer": { "@type": "Organization", "name": "FIFA" }
     }
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Qual a precisão das previsões da Copa do Mundo 2026?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "O modelo usa ratings Elo, forma recente, gols esperados (xG) e 1 milhão de simulações Monte Carlo por jogo. Back-testing mostra ~68% de acerto nos resultados."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Quem tem mais chance de ganhar a Copa 2026?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Argentina e Inglaterra são os maiores favoritos pelos ratings Elo. Acesse a página do Torneio em predicts.info/torneio para ver as probabilidades de título de todas as 48 seleções."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Com que frequência os dados são atualizados?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Resultados e ratings Elo sincronizam automaticamente a cada 6 horas com dados reais da Copa 2026. Placar ao vivo atualiza em tempo quase real durante os jogos."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "O simulador da Copa 2026 é gratuito?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Sim, o Predicts.info é totalmente gratuito. Simule partidas ilimitadas, veja projeções do torneio e acompanhe a classificação dos grupos sem criar conta."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "O que é simulação Monte Carlo?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A simulação Monte Carlo executa um jogo ou torneio milhões de vezes com resultados aleatórios baseados em distribuições de probabilidade. A frequência de cada resultado dá uma estimativa confiável de probabilidade."
+        }
+      }
+    ]
   }
   </script>
 
@@ -110,6 +164,10 @@
     h1 em { color: var(--accent2); font-style: normal; }
     .hero-sub { font-size: 1.15rem; color: var(--text2); max-width: 600px; margin: 0 auto 2.5rem; }
     .hero-cta-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .hero-social-proof { display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+    .hero-sp-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text3); }
+    .hero-sp-value { font-weight: 800; color: var(--accent2); font-size: 1rem; }
+    .hero-sp-dot { color: var(--border); }
     .btn-primary { background: var(--accent); color: #f7fffd; padding: 0.8rem 2rem; border-radius: var(--r); font-weight: 700; font-size: 1rem; transition: background 150ms; }
     .btn-primary:hover { background: var(--accent2); text-decoration: none; }
     .btn-ghost { background: transparent; color: var(--text1); padding: 0.8rem 2rem; border-radius: var(--r); font-weight: 600; font-size: 1rem; border: 1px solid var(--border); transition: border-color 150ms; }
@@ -192,6 +250,13 @@
         <span data-en>Tournament Projections</span>
         <span data-pt>Projeções do Torneio</span>
       </a>
+    </div>
+    <div class="hero-social-proof" id="social-proof" style="opacity:0;transition:opacity 0.4s">
+      <span class="hero-sp-item">⚽ <span class="hero-sp-value" id="sp-users">—</span> <span data-en>bettors</span><span data-pt>apostadores</span></span>
+      <span class="hero-sp-dot">·</span>
+      <span class="hero-sp-item">🎯 <span class="hero-sp-value" id="sp-bets">—</span> <span data-en>bets placed</span><span data-pt>apostas feitas</span></span>
+      <span class="hero-sp-dot">·</span>
+      <span class="hero-sp-item">🏟️ <span class="hero-sp-value" id="sp-matches">—</span> <span data-en>matches played</span><span data-pt>jogos disputados</span></span>
     </div>
   </section>
 
@@ -455,6 +520,19 @@
           keepalive: true,
         }).catch(function(){})
       } catch(e) {}
+
+      // Social proof stats
+      fetch('/api/analytics/public-stats')
+        .then(function(r) { return r.json() })
+        .then(function(d) {
+          var el = document.getElementById('social-proof')
+          if (!el) return
+          document.getElementById('sp-users').textContent   = d.users
+          document.getElementById('sp-bets').textContent    = d.bets.toLocaleString('pt-BR')
+          document.getElementById('sp-matches').textContent = d.matches_finished + '/' + d.matches_total
+          el.style.opacity = '1'
+        })
+        .catch(function(){})
 
       // Load AdSense if enabled
       fetch('/api/site-config/public')
