@@ -4,6 +4,7 @@ import Layout        from './components/Layout'
 import VotacaoBanner from './components/VotacaoBanner'
 import Onboarding    from './components/Onboarding'
 import Spinner       from './components/Spinner'
+import AdSlot        from './components/AdSlot'
 import { useAuth }   from './stores/authStore'
 import { api }       from './api'
 
@@ -58,6 +59,7 @@ export default function App() {
           <VotacaoBanner />
           <ProfileCompletionNotice />
           <Onboarding />
+          <AdSlotByRoute slot="header" />
           <Suspense fallback={<Spinner />}>
             <Routes>
               <Route path="/"            element={<Dashboard />} />
@@ -91,10 +93,16 @@ export default function App() {
               <Route path="/campeao"          element={<ChampionPick />} />
             </Routes>
           </Suspense>
+          <AdSlotByRoute slot="content" />
         </main>
       </div>
     </BrowserRouter>
   )
+}
+
+function AdSlotByRoute({ slot }) {
+  const { pathname } = useLocation()
+  return <AdSlot key={`${slot}-${pathname}`} slot={slot} style={{ display: 'block', margin: '16px 0' }} />
 }
 
 

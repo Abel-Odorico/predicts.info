@@ -296,6 +296,8 @@
     </div>
   </div>
 
+  <div id="ad-slot-top" style="max-width:800px;margin:0 auto;text-align:center;"></div>
+
   <section class="section">
     <h2 class="section-title">
       <span data-en>Everything you need to predict the World Cup</span>
@@ -481,6 +483,8 @@
     </a>
   </div>
 
+  <div id="ad-slot-bottom" style="max-width:800px;margin:0 auto;text-align:center;"></div>
+
   <footer>
     <p data-en>© 2026 Predicts.info · Statistical predictions for FIFA World Cup 2026 · Not affiliated with FIFA</p>
     <p data-pt>© 2026 Predicts.info · Previsões estatísticas para a Copa do Mundo 2026 · Não afiliado à FIFA</p>
@@ -600,19 +604,23 @@
           }
           if (cfg.adsense_enabled !== 'true' || !cfg.adsense_publisher_id) return
           var pid = cfg.adsense_publisher_id
-          // Main AdSense script
-          var s = document.createElement('script')
-          s.async = true
-          s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + pid
-          s.crossOrigin = 'anonymous'
-          document.head.appendChild(s)
-          // Auto ads
-          if (cfg.adsense_auto_ads === 'true') {
-            var meta = document.createElement('meta')
-            meta.name = 'google-adsense-account'
-            meta.content = pid
-            document.head.appendChild(meta)
-          }
+          // Script principal + meta auto ads já estão estáticos no <head>
+          // Manual ad units (header / content)
+          ;[['ad-slot-top', cfg.adsense_slot_header], ['ad-slot-bottom', cfg.adsense_slot_content]].forEach(function (pair) {
+            var containerId = pair[0], slotId = pair[1]
+            if (!slotId) return
+            var container = document.getElementById(containerId)
+            if (!container) return
+            var ins = document.createElement('ins')
+            ins.className = 'adsbygoogle'
+            ins.style.display = 'block'
+            ins.setAttribute('data-ad-client', pid)
+            ins.setAttribute('data-ad-slot', slotId)
+            ins.setAttribute('data-ad-format', 'auto')
+            ins.setAttribute('data-full-width-responsive', 'true')
+            container.appendChild(ins)
+            try { (window.adsbygoogle = window.adsbygoogle || []).push({}) } catch (e) {}
+          })
         })
         .catch(function(){})
     })()

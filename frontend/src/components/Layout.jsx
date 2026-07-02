@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../stores/authStore'
 import { useTrack } from '../hooks/useTrack'
-import { useAdSense } from '../hooks/useAdSense'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { api } from '../api'
 import ShareModal from './ShareModal'
@@ -66,7 +65,6 @@ export default function Layout() {
   })
 
   useTrack()
-  useAdSense()
 
   useEffect(() => {
     const on  = () => setOffline(false)
