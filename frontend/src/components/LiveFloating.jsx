@@ -94,15 +94,16 @@ export default function LiveFloating() {
         onClick={() => setOpen(true)}
         role="button"
         title="Ver detalhes do ao vivo"
+        className="live-pill-enter live-pill-breathe"
         style={{
           position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 70px)', left: '50%',
           transform: 'translateX(-50%)',
-          transition: 'opacity .25s ease, transform .25s ease', zIndex: 8000,
+          zIndex: 8000,
           display: 'flex', flexDirection: 'column', gap: 0, cursor: 'pointer',
           padding: '8px 16px', borderRadius: 18,
           background: 'rgba(20,20,24,0.82)', backdropFilter: 'blur(10px)',
           border: '1px solid rgba(232,82,82,0.45)',
-          boxShadow: '0 8px 28px rgba(0,0,0,0.4)', maxWidth: 'min(94vw, 460px)',
+          maxWidth: 'min(94vw, 460px)',
         }}
       >
         {games.map((g, i) => {
@@ -147,6 +148,25 @@ export default function LiveFloating() {
           .live-goal-flash{animation:goalFlashBg 2.6s ease}
           .live-goal-score{display:inline-block;color:#e8c44a !important;animation:goalScorePop 2.6s ease}
           .live-goal-badge{position:absolute;top:-10px;left:50%;padding:2px 10px;border-radius:99px;background:#e8c44a;color:#1a1400;font-family:var(--font-cond);font-weight:800;font-size:10px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-shadow:0 4px 14px rgba(232,196,74,.5);animation:goalBadgeIn 2.6s ease;z-index:1}
+
+          @keyframes pillSlideIn{0%{opacity:0;transform:translateX(-50%) translateY(-16px) scale(.94)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+          .live-pill-enter{animation:pillSlideIn 450ms cubic-bezier(.2,.9,.3,1.1)}
+          @keyframes pillBreathe{0%,100%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 0 rgba(232,82,82,0.25)}50%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 6px rgba(232,82,82,0)}}
+          .live-pill-breathe{animation:pillBreathe 2.8s ease-in-out infinite}
+
+          @keyframes modalKickoff{0%{opacity:0;transform:scale(.9) translateY(10px)}60%{opacity:1;transform:scale(1.015) translateY(0)}100%{transform:scale(1) translateY(0)}}
+          .live-modal-enter{animation:modalKickoff 380ms cubic-bezier(.2,.9,.3,1.1)}
+
+          .live-modal-goal-celebration{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:3}
+          .live-modal-goal-celebration__net{font-size:26px;display:inline-block;animation:goalNetShakeModal 2.6s ease}
+          .live-modal-goal-celebration__ball{position:absolute;font-size:18px;animation:goalBallFlyModal 900ms cubic-bezier(.3,.6,.3,1) forwards}
+          @keyframes goalBallFlyModal{0%{transform:translate(-50px,26px) scale(.6);opacity:0}15%{opacity:1}70%{transform:translate(0,0) scale(1.1);opacity:1}100%{transform:translate(0,0) scale(0);opacity:0}}
+          @keyframes goalNetShakeModal{0%,100%{transform:rotate(0deg) scale(1)}10%{transform:rotate(-9deg) scale(1.05)}20%{transform:rotate(7deg) scale(1.08)}30%{transform:rotate(-4deg) scale(1.03)}40%{transform:rotate(2deg) scale(1)}50%{transform:rotate(0deg) scale(1)}}
+
+          @media (prefers-reduced-motion: reduce){
+            .live-pill-enter,.live-pill-breathe,.live-modal-enter,
+            .live-modal-goal-celebration__net,.live-modal-goal-celebration__ball{animation:none !important}
+          }
         `}</style>
       </div>
 
@@ -158,6 +178,7 @@ export default function LiveFloating() {
         >
           <div
             onClick={e => e.stopPropagation()}
+            className="live-modal-enter"
             style={{ width: 'min(94vw, 460px)', maxHeight: '86vh', overflowY: 'auto', background: 'var(--bg-card, #16161c)', border: '1px solid var(--border, #2a2a33)', borderRadius: 16, padding: 18, boxShadow: '0 20px 60px rgba(0,0,0,0.55)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -168,24 +189,32 @@ export default function LiveFloating() {
               <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3, #888)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
             </div>
 
-            {games.map((g, i) => (
-              <div key={`${g.team_a}-${g.team_b}-${i}`} style={{ padding: '14px 0', borderTop: i > 0 ? '1px solid var(--border, #2a2a33)' : 'none' }}>
+            {games.map((g, i) => {
+              const scored = !!goalFlash[`${g.team_a}-${g.team_b}`]
+              return (
+              <div key={`${g.team_a}-${g.team_b}-${i}`} className={scored ? 'live-goal-flash' : ''} style={{ padding: '14px 0', borderTop: i > 0 ? '1px solid var(--border, #2a2a33)' : 'none', borderRadius: 10 }}>
                 {g.competition && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                     {g.competition_logo && <img src={g.competition_logo} alt="" style={{ height: 14 }} />}
                     <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3, #999)', letterSpacing: '0.04em' }}>{g.competition}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, position: 'relative' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                     {g.team_a_flag && <img src={g.team_a_flag} alt={g.team_a} style={{ height: 24, borderRadius: 3 }} />}
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.team_a}</span>
                   </div>
-                  <span style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 800, fontSize: 22, color: 'var(--text-1, #fff)', flexShrink: 0 }}>{g.score_a ?? '-'} : {g.score_b ?? '-'}</span>
+                  <span className={scored ? 'live-goal-score' : ''} style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 800, fontSize: 22, color: 'var(--text-1, #fff)', flexShrink: 0 }}>{g.score_a ?? '-'} : {g.score_b ?? '-'}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.team_b}</span>
                     {g.team_b_flag && <img src={g.team_b_flag} alt={g.team_b} style={{ height: 24, borderRadius: 3 }} />}
                   </div>
+                  {scored && (
+                    <div className="live-modal-goal-celebration" aria-hidden="true">
+                      <span className="live-modal-goal-celebration__net">🥅</span>
+                      <span className="live-modal-goal-celebration__ball">⚽</span>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
@@ -222,7 +251,8 @@ export default function LiveFloating() {
                   </button>
                 )}
               </div>
-            ))}
+              )
+            })}
 
             {upcoming.length > 0 && (
               <div style={{ marginTop: 16, borderTop: '1px solid var(--border, #2a2a33)', paddingTop: 14 }}>
