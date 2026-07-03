@@ -228,7 +228,12 @@
     .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
     .feature-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 1.75rem; transition: border-color 150ms; }
     .feature-card:hover { border-color: var(--ctaBorder); }
-    .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
+    .feature-icon { margin-bottom: 1rem; color: var(--accent2); }
+    [data-lucide] { stroke: currentColor; vertical-align: -0.2em; }
+    .lw-title [data-lucide] { color: var(--accent2); margin-right: 2px; vertical-align: -3px; }
+    .hero-sp-item [data-lucide] { color: var(--accent2); vertical-align: -2px; }
+    .theme-btn [data-lucide] { vertical-align: -2px; transition: transform 400ms ease; }
+    .theme-btn.spin [data-lucide] { transform: rotate(180deg); }
     .feature-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
     .feature-desc { font-size: 0.9rem; color: var(--text2); line-height: 1.6; }
 
@@ -257,6 +262,146 @@
     /* i18n: hide only the inactive language */
     html[data-lang="en"] [data-pt] { display: none !important; }
     html[data-lang="pt"] [data-en] { display: none !important; }
+
+    /* ── Animação: hero glow respirando ────────────────────────────── */
+    .hero { position: relative; overflow: hidden; }
+    .hero > * { position: relative; z-index: 1; }
+    .hero-glow-orb {
+      position: absolute; top: -25%; left: 50%; width: 700px; height: 700px;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, var(--heroGlow), transparent 65%);
+      pointer-events: none; z-index: 0;
+      animation: hero-breathe 8s ease-in-out infinite;
+    }
+    @keyframes hero-breathe {
+      0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+      50%      { opacity: 1;   transform: translateX(-50%) scale(1.08); }
+    }
+
+    /* ── Animação: contador nos números ────────────────────────────── */
+    .stat-value { font-variant-numeric: tabular-nums; }
+
+    /* ── Animação: fluxo "como funciona" ───────────────────────────── */
+    .how-grid { position: relative; }
+    @media (min-width: 900px) {
+      .how-grid::before {
+        content: ''; position: absolute; top: 20px; left: 12.5%; right: 12.5%;
+        height: 2px; background: var(--border); z-index: 0;
+      }
+      .how-grid.in-view::after {
+        content: ''; position: absolute; top: 17px; left: 12.5%;
+        width: 8px; height: 8px; border-radius: 50%; background: var(--accent2);
+        box-shadow: 0 0 8px var(--accent2); z-index: 1;
+        animation: how-travel 3.6s ease-in-out infinite;
+      }
+      @keyframes how-travel {
+        0%   { left: 12.5%; opacity: 0; }
+        8%   { opacity: 1; }
+        92%  { opacity: 1; }
+        100% { left: 87.5%; opacity: 0; }
+      }
+    }
+    .how-num { position: relative; z-index: 1; transition: box-shadow 300ms, transform 300ms; }
+    .how-step.active .how-num { box-shadow: 0 0 0 4px var(--pill); transform: scale(1.08); }
+
+    /* ── Animação: entrada suave ao rolar ──────────────────────────── */
+    .reveal { opacity: 0; transform: translateY(16px); transition: opacity 500ms ease, transform 500ms ease; }
+    .reveal.in-view { opacity: 1; transform: translateY(0); }
+
+    /* ── Animação: nav ganha sombra ao rolar ───────────────────────── */
+    nav { transition: box-shadow 200ms ease; }
+    nav.scrolled { box-shadow: 0 1px 0 var(--border), 0 6px 24px rgba(15,40,60,0.06); }
+
+    /* ── Animação: badge do hero respirando ────────────────────────── */
+    .hero-badge { animation: badge-glow 2.4s ease-in-out infinite; }
+    @keyframes badge-glow {
+      0%, 100% { box-shadow: 0 0 0 0 var(--pill); }
+      50%      { box-shadow: 0 0 0 5px var(--pill); }
+    }
+
+    /* ── Animação: barras de favoritos preenchendo ─────────────────── */
+    .fav-bar span { transition: width 900ms cubic-bezier(.22,.9,.3,1); }
+
+    /* ── Animação: hover nos pills de seleção ──────────────────────── */
+    .team-pill { transition: transform 150ms ease, border-color 150ms ease, color 150ms ease; }
+    a.team-pill:hover { transform: translateY(-2px); }
+
+    /* ── Animação: glow respirando atrás do CTA final ──────────────── */
+    .cta-section { position: relative; overflow: hidden; }
+    .cta-section > * { position: relative; z-index: 1; }
+    .cta-section::before {
+      content: ''; position: absolute; top: -45%; left: 50%; width: 520px; height: 520px;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, var(--ctaBorder), transparent 65%);
+      animation: hero-breathe 8s ease-in-out infinite; z-index: 0; pointer-events: none;
+    }
+
+    /* ── Teaser animado: página de notícias ────────────────────────── */
+    .news-teaser {
+      display: flex; align-items: center; gap: 1.25rem; max-width: 900px; margin: 0 auto;
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 14px;
+      padding: 1.5rem 1.75rem; color: var(--text1); text-decoration: none;
+      transition: border-color 200ms, transform 200ms;
+    }
+    .news-teaser:hover { border-color: var(--ctaBorder); text-decoration: none; transform: translateY(-2px); }
+    .news-teaser-icon {
+      flex-shrink: 0; width: 52px; height: 52px; border-radius: 12px;
+      background: var(--pill); border: 1px solid var(--ctaBorder); color: var(--accent2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .news-teaser-text { flex: 1; min-width: 0; }
+    .news-teaser-badge {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 700;
+      color: var(--accent2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.3rem;
+    }
+    .news-teaser-badge::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent2);
+      animation: lw-pulse 1.6s infinite;
+    }
+    .news-teaser-title { font-weight: 800; font-size: 1.1rem; margin-bottom: 0.2rem; }
+    .news-teaser-sub { font-size: 0.88rem; color: var(--text2); }
+    .news-teaser-arrow {
+      flex-shrink: 0; font-size: 1.4rem; color: var(--accent2); transition: transform 200ms;
+    }
+    .news-teaser:hover .news-teaser-arrow { transform: translateX(4px); }
+
+    /* ── Metáfora animada: pontuação (dardo no alvo) ────────────────── */
+    .dart-board-wrap { max-width: 420px; margin: 0 auto; }
+    .dart-board-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .dart-zone-miss { fill: var(--bg2); stroke: var(--border); stroke-width: 1.5; }
+    .dart-zone-correct { fill: var(--pill); stroke: var(--ctaBorder); stroke-width: 1; }
+    .dart-zone-exact { fill: var(--accent); }
+    .dart-dart { stroke: var(--text2); stroke-width: 2.5; stroke-linecap: round; }
+    .dart-impact { fill: none; stroke: var(--accent2); stroke-width: 2; opacity: 0; }
+    .dart-label { font-size: 13px; font-weight: 800; text-anchor: middle; opacity: 0; font-family: system-ui, sans-serif; }
+
+    /* ── Metáfora animada: simulação Monte Carlo (Galton board) ────── */
+    .sim-board-wrap { max-width: 640px; margin: 0 auto 3rem; text-align: center; }
+    .sim-board-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .sim-caption { color: var(--text3); font-size: 0.85rem; margin-top: 0.5rem; }
+    .sim-peg { fill: var(--border); }
+    .sim-ball { fill: var(--accent); filter: drop-shadow(0 0 3px var(--heroGlow)); }
+    .sim-bucket-bar { fill: var(--pill); }
+    .sim-bucket-bar.leader { fill: var(--accent); }
+    .sim-baseline { stroke: var(--border); stroke-width: 1; }
+
+    /* ── Animação: sublinhado desenhando nos títulos de seção ──────── */
+    .section-title { position: relative; margin-bottom: 1rem; }
+    .section-title::after {
+      content: ''; position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%);
+      width: 0; height: 3px; border-radius: 2px; background: var(--accent);
+      transition: width 600ms ease;
+    }
+    .section-title.in-view::after { width: 48px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero-glow-orb, .cta-section::before { animation: none; opacity: 0.7; }
+      .how-grid::after { animation: none !important; display: none; }
+      .reveal { opacity: 1; transform: none; transition: none; }
+      .hero-badge { animation: none; }
+      .fav-bar span { transition: none; }
+      .section-title::after { transition: none; }
+    }
   </style>
 </head>
 <body>
@@ -274,6 +419,7 @@
   </nav>
 
   <section class="hero">
+    <div class="hero-glow-orb" aria-hidden="true"></div>
     <div class="hero-badge" id="hero-badge">
       <span data-en>⚽ FIFA World Cup 2026 · Live Now</span>
       <span data-pt>⚽ Copa do Mundo 2026 · Ao Vivo</span>
@@ -297,11 +443,11 @@
       </a>
     </div>
     <div class="hero-social-proof" id="social-proof" style="opacity:0;transition:opacity 0.4s">
-      <span class="hero-sp-item">⚽ <span class="hero-sp-value" id="sp-users">—</span> <span data-en>bettors</span><span data-pt>apostadores</span></span>
+      <span class="hero-sp-item"><i data-lucide="users" width="13" height="13"></i> <span class="hero-sp-value" id="sp-users">—</span> <span data-en>bettors</span><span data-pt>apostadores</span></span>
       <span class="hero-sp-dot">·</span>
-      <span class="hero-sp-item">🎯 <span class="hero-sp-value" id="sp-bets">—</span> <span data-en>bets placed</span><span data-pt>apostas feitas</span></span>
+      <span class="hero-sp-item"><i data-lucide="target" width="13" height="13"></i> <span class="hero-sp-value" id="sp-bets">—</span> <span data-en>bets placed</span><span data-pt>apostas feitas</span></span>
       <span class="hero-sp-dot">·</span>
-      <span class="hero-sp-item">🏟️ <span class="hero-sp-value" id="sp-matches">—</span> <span data-en>matches played</span><span data-pt>jogos disputados</span></span>
+      <span class="hero-sp-item"><i data-lucide="calendar-check" width="13" height="13"></i> <span class="hero-sp-value" id="sp-matches">—</span> <span data-en>matches played</span><span data-pt>jogos disputados</span></span>
     </div>
   </section>
 
@@ -332,8 +478,9 @@
     <div class="lw-card" id="lw-favorites" style="display:none">
       <div class="lw-head">
         <span class="lw-title">
-          <span data-en>🏆 Title favorites</span>
-          <span data-pt>🏆 Favoritos ao título</span>
+          <i data-lucide="trophy" width="15" height="15"></i>
+          <span data-en>Title favorites</span>
+          <span data-pt>Favoritos ao título</span>
         </span>
         <span class="lw-live">
           <span data-en>Live odds</span>
@@ -349,8 +496,9 @@
     <div class="lw-card" id="lw-next" style="display:none">
       <div class="lw-head">
         <span class="lw-title">
-          <span data-en>⚽ Next matches</span>
-          <span data-pt>⚽ Próximos jogos</span>
+          <i data-lucide="calendar-clock" width="15" height="15"></i>
+          <span data-en>Next matches</span>
+          <span data-pt>Próximos jogos</span>
         </span>
         <span class="lw-live">
           <span data-en>Betting open</span>
@@ -377,43 +525,43 @@
       <span data-pt>Dados reais. Modelos estatísticos. Atualizado a cada 6 horas.</span>
     </p>
     <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon">🎯</div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><i data-lucide="target" width="30" height="30"></i></div>
         <div class="feature-title" data-en>Match Predictions</div>
         <div class="feature-title" data-pt>Previsões de Partidas</div>
         <div class="feature-desc" data-en>Simulate any match with 100K–1M Monte Carlo iterations. See win probabilities, 20 most likely scorelines, and expected goals.</div>
         <div class="feature-desc" data-pt>Simule qualquer jogo com 100K–1M iterações Monte Carlo. Veja probabilidades, os 20 placares mais prováveis e gols esperados.</div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🏆</div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><i data-lucide="trophy" width="30" height="30"></i></div>
         <div class="feature-title" data-en>Tournament Simulator</div>
         <div class="feature-title" data-pt>Simulador do Torneio</div>
         <div class="feature-desc" data-en>Full Copa 2026 bracket simulation with R32/R16/QF/SF/Final projections. See which teams are most likely to win the title.</div>
         <div class="feature-desc" data-pt>Simulação completa do chaveamento com projeções R32/R16/QF/SF/Final. Veja quais seleções têm mais chance de ser campeãs.</div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">⚡</div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><i data-lucide="zap" width="30" height="30"></i></div>
         <div class="feature-title" data-en>Live Scores</div>
         <div class="feature-title" data-pt>Placar ao Vivo</div>
         <div class="feature-desc" data-en>Follow Copa 2026 matches in real time. Live standings update automatically during games.</div>
         <div class="feature-desc" data-pt>Acompanhe os jogos da Copa 2026 em tempo real. Placar e classificação atualizados durante as partidas.</div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">📊</div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><i data-lucide="bar-chart-3" width="30" height="30"></i></div>
         <div class="feature-title" data-en>Group Standings</div>
         <div class="feature-title" data-pt>Classificação dos Grupos</div>
         <div class="feature-desc" data-en>Complete group tables with goals, points, goal difference. Track which teams qualify for the knockout rounds.</div>
         <div class="feature-desc" data-pt>Tabela completa com gols, pontos e saldo. Veja quais seleções se classificam para as oitavas de final.</div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">📋</div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><i data-lucide="clipboard-list" width="30" height="30"></i></div>
         <div class="feature-title" data-en>Match Results</div>
         <div class="feature-title" data-pt>Resultados</div>
         <div class="feature-desc" data-en>All finished Copa 2026 match results with scores, venues and progress tracker out of 104 total games.</div>
         <div class="feature-desc" data-pt>Todos os resultados da Copa 2026 com placares, locais e barra de progresso dos 104 jogos.</div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🎯</div>
+      <div class="feature-card reveal">
+        <div class="feature-icon"><i data-lucide="crosshair" width="30" height="30"></i></div>
         <div class="feature-title" data-en>Score Betting</div>
         <div class="feature-title" data-pt>Palpites de Placar</div>
         <div class="feature-desc" data-en>Predict exact scorelines before each match. Earn points for correct results and exact scores. Compete on the leaderboard.</div>
@@ -431,6 +579,13 @@
       <span data-en>Built on proven statistical methods used in professional sports analytics.</span>
       <span data-pt>Baseado em métodos estatísticos utilizados em análise esportiva profissional.</span>
     </p>
+    <div class="sim-board-wrap">
+      <svg id="sim-board" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Simulações estatísticas convergindo para o resultado mais provável"></svg>
+      <p class="sim-caption">
+        <span data-en>Each dot is one simulated match. A million of them, and the tallest bar wins.</span>
+        <span data-pt>Cada ponto é uma partida simulada. Um milhão delas, e a barra mais alta vence.</span>
+      </p>
+    </div>
     <div class="how-grid">
       <div class="how-step">
         <div class="how-num">1</div>
@@ -472,7 +627,7 @@
         <span data-en>6 confederations · 12 groups · 104 matches</span>
         <span data-pt>6 confederações · 12 grupos · 104 jogos</span>
       </p>
-      <div class="teams-grid">
+      <div class="teams-grid reveal">
         <a class="team-pill" href="/copa/argentina">🇦🇷 Argentina</a><a class="team-pill" href="/copa/inglaterra">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</a><a class="team-pill" href="/copa/franca">🇫🇷 France</a><a class="team-pill" href="/copa/brasil">🇧🇷 Brazil</a>
         <a class="team-pill" href="/copa/alemanha">🇩🇪 Germany</a><a class="team-pill" href="/copa/espanha">🇪🇸 Spain</a><a class="team-pill" href="/copa/portugal">🇵🇹 Portugal</a><a class="team-pill" href="/copa/holanda">🇳🇱 Netherlands</a>
         <a class="team-pill" href="/copa/marrocos">🇲🇦 Morocco</a><a class="team-pill" href="/copa/japao">🇯🇵 Japan</a><a class="team-pill" href="/copa/estados-unidos">🇺🇸 USA</a><a class="team-pill" href="/copa/mexico">🇲🇽 Mexico</a>
@@ -484,43 +639,78 @@
     </div>
   </div>
 
+  <div class="section" style="padding-top: 3rem; padding-bottom: 1rem;">
+    <a href="/noticias" class="news-teaser reveal">
+      <div class="news-teaser-icon"><i data-lucide="newspaper" width="26" height="26"></i></div>
+      <div class="news-teaser-text">
+        <div class="news-teaser-badge">
+          <span data-en>Updated live</span>
+          <span data-pt>Atualiza ao vivo</span>
+        </div>
+        <div class="news-teaser-title">
+          <span data-en>World Cup news &amp; trends, curated</span>
+          <span data-pt>Notícias e trends da Copa, curadas pra você</span>
+        </div>
+        <div class="news-teaser-sub">
+          <span data-en>Headlines, transfer buzz and what's trending in Brazil right now.</span>
+          <span data-pt>Manchetes, buzz de mercado e o que está bombando no Brasil agora.</span>
+        </div>
+      </div>
+      <div class="news-teaser-arrow">→</div>
+    </a>
+  </div>
+
+  <div class="section" style="padding-top: 1rem;">
+    <h2 class="section-title">
+      <span data-en>How your points are scored</span>
+      <span data-pt>Como sua pontuação funciona</span>
+    </h2>
+    <p class="section-sub">
+      <span data-en>Nail the exact score for the most points. Get the outcome right for a bit less. Miss, and you get nothing.</span>
+      <span data-pt>Acerte o placar exato pra pontuar mais. Acerte só o resultado e ainda ganha algo. Erre, e fica zerado.</span>
+    </p>
+    <div class="dart-board-wrap">
+      <svg id="dart-board" viewBox="0 0 300 220" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Alvo mostrando os três níveis de pontuação: exato, certo e erro"></svg>
+    </div>
+  </div>
+
   <section class="section">
     <h2 class="section-title">
       <span data-en>Frequently Asked Questions</span>
       <span data-pt>Perguntas Frequentes</span>
     </h2>
     <div class="faq-list">
-      <div class="faq-item">
+      <div class="faq-item reveal">
         <div class="faq-q" data-en>How accurate are the World Cup 2026 predictions?</div>
         <div class="faq-q" data-pt>Qual a precisão das previsões da Copa do Mundo 2026?</div>
         <div class="faq-a" data-en>Our model uses Elo ratings, recent form, expected goals (xG), and 1 million Monte Carlo simulations per match. Back-testing shows ~68% accuracy for match outcomes.</div>
         <div class="faq-a" data-pt>O modelo usa ratings Elo, forma recente, gols esperados (xG) e 1 milhão de simulações Monte Carlo por jogo. Back-testing mostra ~68% de acerto nos resultados.</div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item reveal">
         <div class="faq-q" data-en>Who is predicted to win the 2026 World Cup?</div>
         <div class="faq-q" data-pt>Quem tem mais chance de ganhar a Copa 2026?</div>
         <div class="faq-a" data-en>Argentina and England are currently the top favorites based on Elo ratings. Run the full tournament simulation on our <a href="/torneio">Tournament page</a> to see title probabilities for all 48 teams.</div>
         <div class="faq-a" data-pt>Argentina e Inglaterra são os maiores favoritos pelos ratings Elo. Acesse a <a href="/torneio">página do Torneio</a> para ver as probabilidades de título de todas as 48 seleções.</div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item reveal">
         <div class="faq-q" data-en>How often is the data updated?</div>
         <div class="faq-q" data-pt>Com que frequência os dados são atualizados?</div>
         <div class="faq-a" data-en>Match results and Elo ratings sync automatically every 6 hours from real Copa 2026 data. Live scores update in near real-time during matches.</div>
         <div class="faq-a" data-pt>Resultados e ratings Elo sincronizam automaticamente a cada 6 horas com dados reais da Copa 2026. Placar ao vivo atualiza em tempo quase real durante os jogos.</div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item reveal">
         <div class="faq-q" data-en>What is Monte Carlo simulation?</div>
         <div class="faq-q" data-pt>O que é simulação Monte Carlo?</div>
         <div class="faq-a" data-en>Monte Carlo simulation runs a match or tournament millions of times with random outcomes drawn from probability distributions. The frequency of each outcome gives a reliable probability estimate.</div>
         <div class="faq-a" data-pt>A simulação Monte Carlo executa um jogo ou torneio milhões de vezes com resultados aleatórios baseados em distribuições de probabilidade. A frequência de cada resultado dá uma estimativa confiável de probabilidade.</div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item reveal">
         <div class="faq-q" data-en>How does the World Cup 2026 prediction pool (bolão) work?</div>
         <div class="faq-q" data-pt>Como funciona o bolão da Copa 2026?</div>
         <div class="faq-a" data-en>Create a free account, predict the exact score of each match before kickoff and earn points: exact score is worth more, correct outcome also scores. Compete on the global <a href="/ranking">ranking</a> or create a private group with friends — no money involved.</div>
         <div class="faq-a" data-pt>Crie uma conta grátis, aposte no placar exato de cada jogo antes do início e ganhe pontos: placar exato vale mais, resultado certo também pontua. Dispute o <a href="/ranking">ranking geral</a> ou crie um grupo privado com amigos — sem dinheiro envolvido.</div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item reveal">
         <div class="faq-q" data-en>Is the simulator free?</div>
         <div class="faq-q" data-pt>O simulador é gratuito?</div>
         <div class="faq-a" data-en>Yes, Predicts.info is completely free. Simulate unlimited matches, view tournament projections, and track group standings without any account.</div>
@@ -587,9 +777,11 @@
     </p>
   </footer>
 
+  <script src="/vendor/lucide.js"></script>
   <script>
     // Update button text after DOM ready (lang already set in <head>)
     document.addEventListener('DOMContentLoaded', function() {
+      if (window.lucide) lucide.createIcons()
       var lang = document.documentElement.getAttribute('data-lang')
       var btn = document.getElementById('lang-toggle')
       if (btn) btn.textContent = lang === 'pt' ? '🇺🇸 EN' : '🇧🇷 PT'
@@ -611,7 +803,11 @@
     function syncThemeButton() {
       var theme = document.documentElement.getAttribute('data-theme') || 'light'
       var btn = document.getElementById('theme-toggle')
-      if (btn) btn.textContent = theme === 'light' ? '🌙 Dark' : '☀️ Light'
+      if (!btn) return
+      btn.innerHTML = theme === 'light'
+        ? '<i data-lucide="moon" width="14" height="14"></i> Dark'
+        : '<i data-lucide="sun" width="14" height="14"></i> Light'
+      if (window.lucide) lucide.createIcons()
     }
 
     function toggleTheme() {
@@ -619,7 +815,300 @@
       document.documentElement.setAttribute('data-theme', next)
       localStorage.setItem('predicts_theme', next)
       syncThemeButton()
+      var btn = document.getElementById('theme-toggle')
+      if (btn) {
+        btn.classList.add('spin')
+        setTimeout(function() { btn.classList.remove('spin') }, 400)
+      }
     }
+
+    // Metáfora animada: Monte Carlo como um Galton board (bolinhas convergindo pro placar mais provável)
+    // Roda sempre — se prefers-reduced-motion, mostra a distribuição já "assentada", sem queda animada
+    ;(function() {
+      var svg = document.getElementById('sim-board')
+      if (!svg) return
+      var NS = 'http://www.w3.org/2000/svg'
+      var BUCKETS = 7
+      var X0 = 40, X1 = 560
+      var bucketW = (X1 - X0) / BUCKETS
+      var baseY = 190, maxH = 46, topY = 140
+      var centers = []
+      for (var i = 0; i < BUCKETS; i++) centers.push(X0 + bucketW * i + bucketW / 2)
+
+      function el(tag, attrs) {
+        var e = document.createElementNS(NS, tag)
+        for (var k in attrs) e.setAttribute(k, attrs[k])
+        return e
+      }
+
+      // Pegs decorativos (textura do "motor" de simulação)
+      var pegRows = 5
+      for (var r = 0; r < pegRows; r++) {
+        var n = r + 3
+        var rowY = 24 + r * 20
+        var spacing = 380 / (n - 1)
+        for (var p = 0; p < n; p++) {
+          svg.appendChild(el('circle', { cx: 300 - 190 + p * spacing, cy: rowY, r: 2.2, class: 'sim-peg' }))
+        }
+      }
+
+      svg.appendChild(el('line', { x1: X0, y1: baseY, x2: X1, y2: baseY, class: 'sim-baseline' }))
+
+      var bars = []
+      for (i = 0; i < BUCKETS; i++) {
+        var bar = el('rect', { x: centers[i] - bucketW * 0.32, y: baseY, width: bucketW * 0.64, height: 0, rx: 3, class: 'sim-bucket-bar' })
+        svg.appendChild(bar)
+        bars.push({ el: bar, count: 0 })
+      }
+
+      function renderBars() {
+        var max = Math.max.apply(null, bars.map(function(b) { return b.count })) || 1
+        var leaderIdx = 0
+        bars.forEach(function(b, idx) { if (b.count > bars[leaderIdx].count) leaderIdx = idx })
+        bars.forEach(function(b, idx) {
+          var h = Math.min(maxH, (b.count / max) * maxH)
+          b.el.setAttribute('y', baseY - h)
+          b.el.setAttribute('height', h)
+          b.el.classList.toggle('leader', idx === leaderIdx && b.count > 0)
+        })
+      }
+
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (reduced) {
+        var still = [2, 8, 20, 32, 20, 8, 2]
+        bars.forEach(function(b, idx) { b.count = still[idx] })
+        renderBars()
+        return
+      }
+
+      function dropBall() {
+        var s = 0
+        for (var k = 0; k < 6; k++) if (Math.random() < 0.5) s++
+        var target = Math.min(BUCKETS - 1, s)
+        var ball = el('circle', { cx: 300, cy: 8, r: 3.4, class: 'sim-ball' })
+        svg.appendChild(ball)
+        var startX = 300, endX = centers[target], startY = 8, endY = topY - 4
+        var dur = 1100, t0 = null
+        function frame(ts) {
+          if (!t0) t0 = ts
+          var t = Math.min(1, (ts - t0) / dur)
+          var ease = t * t * (3 - 2 * t)
+          var wobble = Math.sin(t * Math.PI * 4) * (1 - t) * 10
+          ball.setAttribute('cx', startX + (endX - startX) * ease + wobble)
+          ball.setAttribute('cy', startY + (endY - startY) * ease)
+          if (t < 1) requestAnimationFrame(frame)
+          else {
+            svg.removeChild(ball)
+            bars[target].count++
+            renderBars()
+          }
+        }
+        requestAnimationFrame(frame)
+      }
+
+      var dropTimer = null
+      function start() { if (!dropTimer) dropTimer = setInterval(dropBall, 260) }
+      setInterval(function() { bars.forEach(function(b) { b.count = 0 }); renderBars() }, 10000)
+
+      var simIO = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) { if (entry.isIntersecting) start() })
+      }, { threshold: 0.2 })
+      simIO.observe(svg)
+    })()
+
+    // Metáfora animada: pontuação como dardo no alvo (exato = mosca, certo = anel, erro = fora)
+    ;(function() {
+      var svg = document.getElementById('dart-board')
+      if (!svg) return
+      var NS = 'http://www.w3.org/2000/svg'
+      var CX = 150, CY = 110
+      function el(tag, attrs) {
+        var e = document.createElementNS(NS, tag)
+        for (var k in attrs) e.setAttribute(k, attrs[k])
+        return e
+      }
+      svg.appendChild(el('circle', { cx: CX, cy: CY, r: 95, class: 'dart-zone-miss' }))
+      svg.appendChild(el('circle', { cx: CX, cy: CY, r: 62, class: 'dart-zone-correct' }))
+      svg.appendChild(el('circle', { cx: CX, cy: CY, r: 26, class: 'dart-zone-exact' }))
+
+      var LABELS = {
+        exact:   { pt: 'PLACAR EXATO',   en: 'EXACT SCORE',   color: 'var(--accent)'  },
+        correct: { pt: 'RESULTADO CERTO', en: 'RIGHT RESULT',  color: 'var(--accent2)' },
+        miss:    { pt: 'ERROU',          en: 'MISSED',        color: 'var(--text3)'   },
+      }
+      var TARGETS = {
+        exact:   { x: CX, y: CY },
+        correct: { x: CX + 40, y: CY - 15 },
+        miss:    { x: CX + 118, y: CY - 55 },
+      }
+
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      var lang = function() { return document.documentElement.getAttribute('data-lang') === 'en' ? 'en' : 'pt' }
+
+      function markImpact(kind) {
+        var p = TARGETS[kind], meta = LABELS[kind]
+        var ring = el('circle', { cx: p.x, cy: p.y, r: 4, class: 'dart-impact' })
+        ring.style.stroke = meta.color
+        svg.appendChild(ring)
+        var label = el('text', { x: p.x, y: p.y - 16, class: 'dart-label' })
+        label.style.fill = meta.color
+        label.textContent = meta[lang()]
+        svg.appendChild(label)
+        return { ring: ring, label: label }
+      }
+
+      if (reduced) {
+        markImpact('exact')
+        var still = svg.querySelectorAll('.dart-impact, .dart-label')
+        still.forEach(function(n) { n.style.opacity = 1 })
+        svg.querySelector('.dart-impact').setAttribute('r', 8)
+        return
+      }
+
+      var sequence = ['exact', 'correct', 'exact', 'miss', 'correct']
+      var seqIdx = 0
+
+      function throwDart() {
+        var kind = sequence[seqIdx % sequence.length]
+        seqIdx++
+        var target = TARGETS[kind]
+        var startX = 12, startY = 12
+        var dart = el('line', { x1: startX, y1: startY, x2: startX + 10, y2: startY + 10, class: 'dart-dart' })
+        svg.appendChild(dart)
+        var dur = 500, t0 = null
+        function frame(ts) {
+          if (!t0) t0 = ts
+          var t = Math.min(1, (ts - t0) / dur)
+          var ease = t * t
+          var x = startX + (target.x - startX) * ease
+          var y = startY + (target.y - startY) * ease
+          dart.setAttribute('x1', x - 6); dart.setAttribute('y1', y - 6)
+          dart.setAttribute('x2', x + 6); dart.setAttribute('y2', y + 6)
+          if (t < 1) { requestAnimationFrame(frame); return }
+          svg.removeChild(dart)
+          var marks = markImpact(kind)
+          var fadeStart = null, fadeDur = 350
+          function fadeIn(ts2) {
+            if (!fadeStart) fadeStart = ts2
+            var ft = Math.min(1, (ts2 - fadeStart) / fadeDur)
+            marks.ring.style.opacity = ft
+            marks.ring.setAttribute('r', 4 + ft * 8)
+            marks.label.style.opacity = ft
+            if (ft < 1) requestAnimationFrame(fadeIn)
+            else setTimeout(function() {
+              marks.ring.style.transition = 'opacity 400ms'
+              marks.label.style.transition = 'opacity 400ms'
+              marks.ring.style.opacity = 0
+              marks.label.style.opacity = 0
+              setTimeout(function() {
+                if (marks.ring.parentNode) svg.removeChild(marks.ring)
+                if (marks.label.parentNode) svg.removeChild(marks.label)
+              }, 420)
+            }, 900)
+          }
+          requestAnimationFrame(fadeIn)
+        }
+        requestAnimationFrame(frame)
+      }
+
+      var dartTimer = null
+      var dartIO = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting && !dartTimer) {
+            throwDart()
+            dartTimer = setInterval(throwDart, 2200)
+          }
+        })
+      }, { threshold: 0.3 })
+      dartIO.observe(svg)
+    })()
+
+    // Animações leves (contador, fluxo, entrada ao rolar) — desligadas se prefers-reduced-motion
+    ;(function() {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+      // Contador nos números da seção .stats
+      var statEls = document.querySelectorAll('.stat-value')
+      var statsIO = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return
+          var el = entry.target
+          var raw = el.textContent.trim()
+          var m = raw.match(/^([\d.]+)(.*)$/)
+          if (!m) return
+          var target = parseFloat(m[1])
+          var suffix = m[2] || ''
+          var decimals = m[1].indexOf('.') !== -1 ? 1 : 0
+          var start = null
+          var dur = 1400
+          function tick(ts) {
+            if (start === null) start = ts
+            var t = Math.min(1, (ts - start) / dur)
+            var eased = 1 - Math.pow(1 - t, 3)
+            el.textContent = (target * eased).toFixed(decimals) + suffix
+            if (t < 1) requestAnimationFrame(tick)
+            else el.textContent = raw
+          }
+          requestAnimationFrame(tick)
+          statsIO.unobserve(el)
+        })
+      }, { threshold: 0.4 })
+      statEls.forEach(function(el) { statsIO.observe(el) })
+
+      // Fluxo animado em "Como funciona"
+      var howGrid = document.querySelector('.how-grid')
+      if (howGrid) {
+        var howSteps = howGrid.querySelectorAll('.how-step')
+        var howIO = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting) return
+            howGrid.classList.add('in-view')
+            var i = 0
+            function cycle() {
+              howSteps.forEach(function(s) { s.classList.remove('active') })
+              howSteps[i % howSteps.length].classList.add('active')
+              i++
+            }
+            cycle()
+            setInterval(cycle, 900)
+            howIO.unobserve(howGrid)
+          })
+        }, { threshold: 0.3 })
+        howIO.observe(howGrid)
+      }
+
+      // Entrada suave ao rolar (feature cards, FAQ)
+      var revealEls = document.querySelectorAll('.reveal')
+      var revealIO = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return
+          entry.target.classList.add('in-view')
+          revealIO.unobserve(entry.target)
+        })
+      }, { threshold: 0.15 })
+      revealEls.forEach(function(el, i) {
+        el.style.transitionDelay = ((i % 6) * 60) + 'ms'
+        revealIO.observe(el)
+      })
+
+      // Nav ganha sombra ao rolar
+      var navEl = document.querySelector('nav')
+      if (navEl) {
+        window.addEventListener('scroll', function() {
+          navEl.classList.toggle('scrolled', window.scrollY > 10)
+        }, { passive: true })
+      }
+
+      // Sublinhado dos títulos de seção, desenha ao entrar na tela
+      var titleIO = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return
+          entry.target.classList.add('in-view')
+          titleIO.unobserve(entry.target)
+        })
+      }, { threshold: 0.6 })
+      document.querySelectorAll('.section-title').forEach(function(el) { titleIO.observe(el) })
+    })()
 
     // Page view tracking + AdSense injection
     ;(function() {
@@ -688,15 +1177,23 @@
           if (!teams.length) return
           var max = teams[0].prob_title || 1
           document.getElementById('fav-list').innerHTML = teams.map(function(t) {
+            var w = Math.max(4, (t.prob_title / max) * 100)
             return '<div class="fav-row">' +
               '<img src="' + t.flag_url + '" alt="' + t.name + '" loading="lazy" />' +
               '<span class="fav-name">' + t.name + '</span>' +
-              '<span class="fav-bar"><span style="width:' + Math.max(4, (t.prob_title / max) * 100) + '%"></span></span>' +
+              '<span class="fav-bar"><span style="width:0%" data-w="' + w + '"></span></span>' +
               '<span class="fav-pct">' + t.prob_title.toFixed(1) + '%</span>' +
             '</div>'
           }).join('')
           document.getElementById('lw-favorites').style.display = 'flex'
           showWidgets()
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              document.querySelectorAll('#fav-list .fav-bar span').forEach(function(bar) {
+                bar.style.width = bar.getAttribute('data-w') + '%'
+              })
+            })
+          })
         })
         .catch(function(){})
 
