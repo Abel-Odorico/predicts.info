@@ -9,6 +9,8 @@ services:
     env_file: .env
     environment:
       TZ: America/Sao_Paulo
+      PREDICTS_DIST_DIR: /frontend_dist
+      PREDICTS_BACKEND_DIR: /app
     ports:
       - "8130:8000"
     depends_on:
@@ -19,6 +21,7 @@ services:
     volumes:
       - ./backend:/app
       - ./frontend/dist:/frontend_dist
+      - ./scripts:/scripts:ro
       - /var/log/predicts-cron.log:/var/log/predicts-cron.log:ro
     networks:
       - predicts_net

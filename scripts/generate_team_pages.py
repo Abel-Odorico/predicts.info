@@ -9,6 +9,7 @@ Saída: dist/copa/*.html, dist/copa/index.html, dist/sitemap-copa.xml.
 Se a API estiver fora, avisa e sai com código 0 para não quebrar o build.
 """
 import json
+import os
 import sys
 import urllib.request
 from datetime import datetime, timezone
@@ -16,7 +17,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 API = "http://127.0.0.1:8130/api"
-DIST = Path("/opt/predicts/frontend/dist")
+DIST = Path(os.environ.get("PREDICTS_DIST_DIR", "/opt/predicts/frontend/dist"))
 OUT = DIST / "copa"
 BASE_URL = "https://predicts.info"
 TZ_BR = ZoneInfo("America/Sao_Paulo")

@@ -10,6 +10,7 @@ Fontes excluídas ficam em news_admin_config.json (gerenciado pelo painel
 admin — routers/news_admin.py), lido por _load_excluded_sources().
 """
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
@@ -26,15 +27,30 @@ NEWS_QUERIES = ["Copa do Mundo 2026", "futebol brasileiro"]
 TRENDS_URL = "https://trends.google.com/trending/rss?geo=BR"
 UA = "Mozilla/5.0 (compatible; PredictsBot/1.0; +https://predicts.info)"
 NS = {"ht": "https://trends.google.com/trending/rss"}
-CONFIG_PATH = Path(__file__).resolve().parent / "news_admin_config.json"
+CONFIG_PATH = Path(os.environ.get(
+    "PREDICTS_BACKEND_DIR",
+    str(Path(__file__).resolve().parent.parent / "backend"),
+)) / "news_admin_config.json"
+
+
+def _load_config():
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 def _load_excluded_sources():
-    try:
-        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        return {s.strip().lower() for s in cfg.get("excluded_sources", [])}
-    except Exception:
-        return set()
+    return {s.strip().lower() for s in _load_config().get("excluded_sources", [])}
+
+
+def _save_stats(news_count, trends_count, generated_at):
+    cfg = _load_config()
+    cfg["last_generated"] = generated_at.isoformat()
+    cfg["news_count"] = news_count
+    cfg["trends_count"] = trends_count
+    cfg.setdefault("excluded_sources", [])
+    CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _get(url):
@@ -273,6 +289,7 @@ def main():
     generated_at = datetime.now(timezone.utc)
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "index.html").write_text(render(news, trends, generated_at), encoding="utf-8")
+    _save_stats(len(news), len(trends), generated_at)
     print(f"[news] {len(news)} notícias + {len(trends)} trends geradas em {OUT}")
     return 0
 

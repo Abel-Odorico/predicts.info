@@ -34,6 +34,7 @@ from routers import telegram as telegram_router
 from routers import competition as competition_router
 from routers import referral as referral_router
 from routers import football_data_sync as football_data_router
+from routers import news_admin as news_admin_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -663,6 +664,7 @@ app.include_router(telegram_router.router,      prefix="/api")
 app.include_router(competition_router.router,   prefix="/api")
 app.include_router(referral_router.router,      prefix="/api")
 app.include_router(football_data_router.router, prefix="/api")
+app.include_router(news_admin_router.router,    prefix="/api")
 from routers import videoupload as videoupload_router
 app.include_router(videoupload_router.router,  prefix="/api")
 

@@ -72,6 +72,7 @@ const TABS = [
   { id: 'bot',         label: 'Oráculo Predictor', icon: '🔮' },
   { id: 'report',      label: 'Relatório',    icon: <TgIcon size={20} /> },
   { id: 'competition', label: 'Competição',   icon: '⚡' },
+  { id: 'news',        label: 'Notícias',     icon: '📰' },
 ]
 
 const PHASE_LABELS_ADMIN = {
@@ -257,6 +258,58 @@ export default function Admin() {
   const [iconPreview, setIconPreview] = useState(null)
   const [iconEditorSrc, setIconEditorSrc] = useState(null)
   const [iconTimestamp, setIconTimestamp] = useState(Date.now())
+
+  // Notícias
+  const [newsConfig, setNewsConfig] = useState(null)
+  const [newsLoading, setNewsLoading] = useState(false)
+  const [newsRegenLoading, setNewsRegenLoading] = useState(false)
+  const [newsMsg, setNewsMsg] = useState('')
+  const [newSourceInput, setNewSourceInput] = useState('')
+
+  function loadNewsConfig() {
+    setNewsLoading(true)
+    api.get('/admin/news/config', token)
+      .then(setNewsConfig)
+      .catch(() => setNewsMsg('Erro ao carregar configuração.'))
+      .finally(() => setNewsLoading(false))
+  }
+
+  async function saveNewsSources(nextSources) {
+    setNewsMsg('')
+    try {
+      const data = await api.put('/admin/news/config', { excluded_sources: nextSources }, token)
+      setNewsConfig(data)
+    } catch (e) {
+      setNewsMsg(e.message || 'Erro ao salvar.')
+    }
+  }
+
+  function removeExcludedSource(source) {
+    saveNewsSources((newsConfig?.excluded_sources || []).filter(s => s !== source))
+  }
+
+  function addExcludedSource() {
+    const v = newSourceInput.trim()
+    if (!v) return
+    const current = newsConfig?.excluded_sources || []
+    if (current.includes(v)) { setNewSourceInput(''); return }
+    saveNewsSources([...current, v])
+    setNewSourceInput('')
+  }
+
+  async function regenerateNews() {
+    setNewsRegenLoading(true)
+    setNewsMsg('')
+    try {
+      const data = await api.post('/admin/news/regenerate', null, token)
+      setNewsConfig(data)
+      setNewsMsg('✓ Página de notícias regenerada.')
+    } catch (e) {
+      setNewsMsg(e.message || 'Erro ao regenerar.')
+    } finally {
+      setNewsRegenLoading(false)
+    }
+  }
 
   // Knockout
   const [knockoutMatches, setKnockoutMatches] = useState(null)
@@ -679,6 +732,7 @@ export default function Admin() {
     if (tab === 'bot' && !botStatus && !botLoading) loadBot()
     if (tab === 'report' && !report && !reportLoading) loadReport()
     if (tab === 'sync' && !syncReport && !syncReportLoading) loadSyncReport()
+    if (tab === 'news' && !newsConfig && !newsLoading) loadNewsConfig()
   }, [tab])
 
   useEffect(() => {
@@ -2244,6 +2298,97 @@ export default function Admin() {
               <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', margin: 0 }}>
                 Após salvar, remova e adicione o app novamente na tela inicial para o iOS limpar o cache do ícone.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab: Notícias ─────────────────────────────── */}
+      {tab === 'news' && (
+        <div className="adm-pane fade-in-1">
+          <div className="adm-card">
+            <div className="adm-card__head">
+              <span className="adm-card__title">Notícias &amp; Trending — /noticias</span>
+              <a href="/noticias" target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">Ver página →</a>
+            </div>
+            <div style={{ padding: 'var(--s5)', display: 'grid', gap: 'var(--s5)' }}>
+
+              {newsLoading && !newsConfig ? (
+                <Spinner text="Carregando..." />
+              ) : (
+                <>
+                  {/* Status */}
+                  <div style={{ display: 'flex', gap: 'var(--s5)', flexWrap: 'wrap' }}>
+                    <div>
+                      <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.06em', margin: 0 }}>ÚLTIMA GERAÇÃO</p>
+                      <p style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--text-1)', margin: '4px 0 0' }}>
+                        {newsConfig?.last_generated ? new Date(newsConfig.last_generated).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.06em', margin: 0 }}>NOTÍCIAS</p>
+                      <p style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--accent)', margin: '4px 0 0' }}>{newsConfig?.news_count ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.06em', margin: 0 }}>TRENDING TOPICS</p>
+                      <p style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--accent)', margin: '4px 0 0' }}>{newsConfig?.trends_count ?? '—'}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ justifySelf: 'start' }}
+                    onClick={regenerateNews}
+                    disabled={newsRegenLoading}
+                  >
+                    {newsRegenLoading ? 'Regenerando...' : '🔄 Regenerar agora'}
+                  </button>
+
+                  {/* Fontes excluídas */}
+                  <div>
+                    <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', marginBottom: 8 }}>
+                      Fontes excluídas (bloqueadas)
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {(newsConfig?.excluded_sources || []).length === 0 ? (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Nenhuma fonte bloqueada.</span>
+                      ) : newsConfig.excluded_sources.map(s => (
+                        <span key={s} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 999,
+                          padding: '4px 6px 4px 12px', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)',
+                        }}>
+                          {s}
+                          <button
+                            type="button"
+                            onClick={() => removeExcludedSource(s)}
+                            style={{ width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'var(--bg-3, rgba(255,255,255,0.08))', color: 'var(--text-3)', cursor: 'pointer', fontSize: 11, lineHeight: 1 }}
+                            title="Remover bloqueio"
+                          >✕</button>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        value={newSourceInput}
+                        onChange={e => setNewSourceInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') addExcludedSource() }}
+                        placeholder="Nome exato da fonte (ex: UOL, Rádio Itatiaia)"
+                        style={{ flex: 1, maxWidth: 320, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-2)', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}
+                      />
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={addExcludedSource}>+ Bloquear</button>
+                    </div>
+                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+                      O nome deve bater exatamente com o exibido na pílula da notícia (ex: "UOL", "O Globo").
+                      Aplica na próxima geração — use "Regenerar agora" pra ver o efeito na hora.
+                    </p>
+                  </div>
+
+                  {newsMsg && <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: newsMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>{newsMsg}</p>}
+                </>
+              )}
             </div>
           </div>
         </div>
