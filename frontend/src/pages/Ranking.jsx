@@ -989,8 +989,12 @@ function BetsList({ entry }) {
     const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
     return `${dow.charAt(0).toUpperCase() + dow.slice(1)}, ${date}`
   }
-  const groupByDay = bets => {
-    const sorted = [...bets].sort((a, b) => new Date(a.match_date || 0) - new Date(b.match_date || 0))
+  const groupByDay = (bets, desc = false) => {
+    const sorted = [...bets].sort((a, b) => {
+      const ta = new Date(a.match_date || 0)
+      const tb = new Date(b.match_date || 0)
+      return desc ? tb - ta : ta - tb
+    })
     const days = []
     let lastK = null
     sorted.forEach(b => {
@@ -1056,7 +1060,7 @@ function BetsList({ entry }) {
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', padding: '4px 8px 2px' }}>
             Realizados ({realized.length})
           </div>
-          {groupByDay(realized).map(({ key, bets: dayBets }, di) => (
+          {groupByDay(realized, true).map(({ key, bets: dayBets }, di) => (
             <div key={key}>
               <DayHeader label={_dl(key)} count={dayBets.length} first={di === 0} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2 }}>
