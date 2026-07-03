@@ -113,6 +113,14 @@
       },
       {
         "@type": "Question",
+        "name": "Como funciona o bolão da Copa 2026?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Crie uma conta grátis, aposte no placar exato de cada jogo antes do início e ganhe pontos: placar exato vale mais, resultado certo também pontua. Dispute o ranking geral ou crie um grupo privado com amigos — sem dinheiro envolvido."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "O que é simulação Monte Carlo?",
         "acceptedAnswer": {
           "@type": "Answer",
@@ -187,6 +195,29 @@
     .btn-ghost:hover { border-color: var(--accent2); text-decoration: none; }
 
     .stats { display: flex; justify-content: center; gap: 3rem; padding: 2.5rem 2rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+
+    /* Live widgets: favoritos ao título + próximos jogos */
+    .live-widgets { max-width: 1100px; margin: 0 auto; padding: 3rem 1.25rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+    .lw-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; }
+    .lw-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .lw-title { font-weight: 800; font-size: 1.05rem; }
+    .lw-live { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 700; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .lw-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent2); animation: lw-pulse 1.6s infinite; }
+    @keyframes lw-pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.3 } }
+    .fav-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0; }
+    .fav-row img { width: 26px; height: 18px; object-fit: cover; border-radius: 3px; box-shadow: 0 0 0 1px var(--border); }
+    .fav-name { font-weight: 600; font-size: 0.9rem; flex: 0 0 auto; min-width: 90px; }
+    .fav-bar { flex: 1; height: 8px; background: var(--pill); border-radius: 100px; overflow: hidden; }
+    .fav-bar span { display: block; height: 100%; background: var(--accent); border-radius: 100px; }
+    .fav-pct { font-weight: 800; font-size: 0.85rem; color: var(--accent2); min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
+    .nm-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.65rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .nm-row:last-of-type { border-bottom: none; }
+    .nm-teams { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; }
+    .nm-teams img { width: 24px; height: 17px; object-fit: cover; border-radius: 3px; box-shadow: 0 0 0 1px var(--border); }
+    .nm-vs { color: var(--text3); font-weight: 400; font-size: 0.8rem; }
+    .nm-time { color: var(--text2); font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .lw-cta { margin-top: auto; padding-top: 1rem; font-weight: 700; font-size: 0.9rem; }
+    .lw-empty { color: var(--text3); font-size: 0.88rem; padding: 1rem 0; }
     .stat { text-align: center; }
     .stat-value { font-size: 2rem; font-weight: 900; color: var(--accent2); line-height: 1; }
     .stat-label { font-size: 0.8rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.25rem; }
@@ -210,6 +241,7 @@
     .teams-section { background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
     .teams-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; padding: 2rem 0; }
     .team-pill { background: var(--pill); border: 1px solid var(--border); border-radius: 100px; padding: 0.35rem 0.8rem; font-size: 0.8rem; font-weight: 600; color: var(--text2); }
+    a.team-pill:hover { border-color: var(--accent2); color: var(--text1); text-decoration: none; }
 
     .faq-list { max-width: 700px; margin: 0 auto; }
     .faq-item { border-bottom: 1px solid var(--border); padding: 1.5rem 0; }
@@ -295,6 +327,43 @@
       <div class="stat-label" data-pt>Gratuito</div>
     </div>
   </div>
+
+  <section class="live-widgets" id="live-widgets" style="display:none">
+    <div class="lw-card" id="lw-favorites" style="display:none">
+      <div class="lw-head">
+        <span class="lw-title">
+          <span data-en>🏆 Title favorites</span>
+          <span data-pt>🏆 Favoritos ao título</span>
+        </span>
+        <span class="lw-live">
+          <span data-en>Live odds</span>
+          <span data-pt>Ao vivo</span>
+        </span>
+      </div>
+      <div id="fav-list"></div>
+      <a class="lw-cta" href="/torneio">
+        <span data-en>See all 48 teams →</span>
+        <span data-pt>Ver as 48 seleções →</span>
+      </a>
+    </div>
+    <div class="lw-card" id="lw-next" style="display:none">
+      <div class="lw-head">
+        <span class="lw-title">
+          <span data-en>⚽ Next matches</span>
+          <span data-pt>⚽ Próximos jogos</span>
+        </span>
+        <span class="lw-live">
+          <span data-en>Betting open</span>
+          <span data-pt>Apostas abertas</span>
+        </span>
+      </div>
+      <div id="next-list"></div>
+      <a class="lw-cta" href="/login?tab=register">
+        <span data-en>Place your prediction — free →</span>
+        <span data-pt>Dar meu palpite — grátis →</span>
+      </a>
+    </div>
+  </section>
 
   <div id="ad-slot-top" style="max-width:800px;margin:0 auto;text-align:center;"></div>
 
@@ -404,13 +473,13 @@
         <span data-pt>6 confederações · 12 grupos · 104 jogos</span>
       </p>
       <div class="teams-grid">
-        <span class="team-pill">🇦🇷 Argentina</span><span class="team-pill">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</span><span class="team-pill">🇫🇷 France</span><span class="team-pill">🇧🇷 Brazil</span>
-        <span class="team-pill">🇩🇪 Germany</span><span class="team-pill">🇪🇸 Spain</span><span class="team-pill">🇵🇹 Portugal</span><span class="team-pill">🇳🇱 Netherlands</span>
-        <span class="team-pill">🇲🇦 Morocco</span><span class="team-pill">🇯🇵 Japan</span><span class="team-pill">🇺🇸 USA</span><span class="team-pill">🇲🇽 Mexico</span>
-        <span class="team-pill">🇸🇦 Saudi Arabia</span><span class="team-pill">🇦🇺 Australia</span><span class="team-pill">🇨🇦 Canada</span><span class="team-pill">🇰🇷 South Korea</span>
-        <span class="team-pill">🇸🇳 Senegal</span><span class="team-pill">🇧🇪 Belgium</span><span class="team-pill">🇺🇾 Uruguay</span><span class="team-pill">🇳🇴 Norway</span>
-        <span class="team-pill" data-en>+ 28 more teams</span>
-        <span class="team-pill" data-pt>+ 28 seleções</span>
+        <a class="team-pill" href="/copa/argentina">🇦🇷 Argentina</a><a class="team-pill" href="/copa/inglaterra">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</a><a class="team-pill" href="/copa/franca">🇫🇷 France</a><a class="team-pill" href="/copa/brasil">🇧🇷 Brazil</a>
+        <a class="team-pill" href="/copa/alemanha">🇩🇪 Germany</a><a class="team-pill" href="/copa/espanha">🇪🇸 Spain</a><a class="team-pill" href="/copa/portugal">🇵🇹 Portugal</a><a class="team-pill" href="/copa/holanda">🇳🇱 Netherlands</a>
+        <a class="team-pill" href="/copa/marrocos">🇲🇦 Morocco</a><a class="team-pill" href="/copa/japao">🇯🇵 Japan</a><a class="team-pill" href="/copa/estados-unidos">🇺🇸 USA</a><a class="team-pill" href="/copa/mexico">🇲🇽 Mexico</a>
+        <a class="team-pill" href="/copa/arabia-saudita">🇸🇦 Saudi Arabia</a><a class="team-pill" href="/copa/australia">🇦🇺 Australia</a><a class="team-pill" href="/copa/canada">🇨🇦 Canada</a><a class="team-pill" href="/copa/coreia-do-sul">🇰🇷 South Korea</a>
+        <a class="team-pill" href="/copa/senegal">🇸🇳 Senegal</a><a class="team-pill" href="/copa/belgica">🇧🇪 Belgium</a><a class="team-pill" href="/copa/uruguai">🇺🇾 Uruguay</a><a class="team-pill" href="/copa/noruega">🇳🇴 Norway</a>
+        <a class="team-pill" href="/copa/" data-en>+ 28 more teams →</a>
+        <a class="team-pill" href="/copa/" data-pt>+ 28 seleções →</a>
       </div>
     </div>
   </div>
@@ -446,6 +515,12 @@
         <div class="faq-a" data-pt>A simulação Monte Carlo executa um jogo ou torneio milhões de vezes com resultados aleatórios baseados em distribuições de probabilidade. A frequência de cada resultado dá uma estimativa confiável de probabilidade.</div>
       </div>
       <div class="faq-item">
+        <div class="faq-q" data-en>How does the World Cup 2026 prediction pool (bolão) work?</div>
+        <div class="faq-q" data-pt>Como funciona o bolão da Copa 2026?</div>
+        <div class="faq-a" data-en>Create a free account, predict the exact score of each match before kickoff and earn points: exact score is worth more, correct outcome also scores. Compete on the global <a href="/ranking">ranking</a> or create a private group with friends — no money involved.</div>
+        <div class="faq-a" data-pt>Crie uma conta grátis, aposte no placar exato de cada jogo antes do início e ganhe pontos: placar exato vale mais, resultado certo também pontua. Dispute o <a href="/ranking">ranking geral</a> ou crie um grupo privado com amigos — sem dinheiro envolvido.</div>
+      </div>
+      <div class="faq-item">
         <div class="faq-q" data-en>Is the simulator free?</div>
         <div class="faq-q" data-pt>O simulador é gratuito?</div>
         <div class="faq-a" data-en>Yes, Predicts.info is completely free. Simulate unlimited matches, view tournament projections, and track group standings without any account.</div>
@@ -461,13 +536,19 @@
         <span data-pt>Pronto para prever a Copa?</span>
       </div>
       <p class="cta-sub">
-        <span data-en>Join thousands of football fans using statistical models to predict Copa 2026 results.</span>
-        <span data-pt>Junte-se a milhares de torcedores usando modelos estatísticos para prever os resultados da Copa 2026.</span>
+        <span data-en>The knockout stage is on. Create your free account, place score predictions and climb the ranking before the final.</span>
+        <span data-pt>O mata-mata está rolando. Crie sua conta grátis, dê palpites de placar e suba no ranking antes da final.</span>
       </p>
-      <a href="/dashboard" class="btn-primary">
-        <span data-en>Start Simulating — Free →</span>
-        <span data-pt>Começar a Simular — Grátis →</span>
-      </a>
+      <div class="hero-cta-group">
+        <a href="/login?tab=register" class="btn-primary">
+          <span data-en>Create free account →</span>
+          <span data-pt>Criar conta grátis →</span>
+        </a>
+        <a href="/dashboard" class="btn-ghost">
+          <span data-en>Explore simulations</span>
+          <span data-pt>Ver simulações</span>
+        </a>
+      </div>
     </div>
   </div>
 
@@ -490,6 +571,7 @@
     <p data-pt>© 2026 Predicts.info · Previsões estatísticas para a Copa do Mundo 2026 · Não afiliado à FIFA</p>
     <p id="developer-credit" style="margin-top: 0.5rem;">Desenvolvido por: PeepConnect - By Abel Odorico</p>
     <p style="margin-top: 0.5rem;">
+      <a href="/copa/" data-en>Teams</a><a href="/copa/" data-pt>Seleções</a> ·
       <a href="/dashboard" data-en>Simulator</a><a href="/dashboard" data-pt>Simulador</a> ·
       <a href="/torneio" data-en>Tournament</a><a href="/torneio" data-pt>Torneio</a> ·
       <a href="/grupos" data-en>Groups</a><a href="/grupos" data-pt>Grupos</a> ·
@@ -591,6 +673,60 @@
             var label = diff < 3600000 ? '🟢 Match starting now!' : ('⚽ Next match at ' + hrs + ' (BRT)')
             badge.innerHTML = '<span>' + label + '</span>'
           }
+        })
+        .catch(function(){})
+
+      // Live widgets: favoritos ao título + próximos jogos
+      function showWidgets() {
+        document.getElementById('live-widgets').style.display = 'grid'
+      }
+      fetch('/api/tournament/simulate')
+        .then(function(r) { return r.json() })
+        .then(function(d) {
+          var teams = (d.teams || []).slice().sort(function(a, b) { return b.prob_title - a.prob_title }).slice(0, 5)
+          if (!teams.length) return
+          var max = teams[0].prob_title || 1
+          document.getElementById('fav-list').innerHTML = teams.map(function(t) {
+            return '<div class="fav-row">' +
+              '<img src="' + t.flag_url + '" alt="' + t.name + '" loading="lazy" />' +
+              '<span class="fav-name">' + t.name + '</span>' +
+              '<span class="fav-bar"><span style="width:' + Math.max(4, (t.prob_title / max) * 100) + '%"></span></span>' +
+              '<span class="fav-pct">' + t.prob_title.toFixed(1) + '%</span>' +
+            '</div>'
+          }).join('')
+          document.getElementById('lw-favorites').style.display = 'flex'
+          showWidgets()
+        })
+        .catch(function(){})
+
+      fetch('/api/matches/?days_ahead=4&limit=20')
+        .then(function(r) { return r.json() })
+        .then(function(data) {
+          var lang = document.documentElement.getAttribute('data-lang')
+          var matches = Array.isArray(data) ? data : (data.matches || data.items || [])
+          var upcoming = matches.filter(function(m) {
+            return (m.status === 'scheduled' || m.status === 'live') && m.match_date && m.team_a && m.team_b
+          }).sort(function(a, b) {
+            return new Date(a.match_date) - new Date(b.match_date)
+          }).slice(0, 4)
+          if (!upcoming.length) return
+          document.getElementById('next-list').innerHTML = upcoming.map(function(m) {
+            var dt = new Date(m.match_date)
+            var when = m.status === 'live'
+              ? (lang === 'pt' ? '🟢 AO VIVO' : '🟢 LIVE')
+              : dt.toLocaleDateString(lang === 'pt' ? 'pt-BR' : 'en-US', { day: '2-digit', month: '2-digit' }) +
+                ' · ' + dt.toLocaleTimeString(lang === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+            return '<div class="nm-row">' +
+              '<span class="nm-teams">' +
+                '<img src="' + m.team_a.flag_url + '" alt="' + m.team_a.name + '" loading="lazy" />' + m.team_a.code +
+                '<span class="nm-vs">vs</span>' +
+                m.team_b.code + '<img src="' + m.team_b.flag_url + '" alt="' + m.team_b.name + '" loading="lazy" />' +
+              '</span>' +
+              '<span class="nm-time">' + when + '</span>' +
+            '</div>'
+          }).join('')
+          document.getElementById('lw-next').style.display = 'flex'
+          showWidgets()
         })
         .catch(function(){})
 
