@@ -19,14 +19,43 @@ export default function LiveFloating() {
   const [classByMatch, setClassByMatch] = useState({})
   const [upcoming, setUpcoming] = useState([])
   const [open, setOpen] = useState(false)
+  const [goalFlash, setGoalFlash] = useState({})
   const widgetRef = useRef(null)
+  const prevScoresRef = useRef({})
 
-  // Feed ao vivo (poll)
+  // Feed ao vivo (poll) — detecta gols comparando placar do poll anterior
   useEffect(() => {
     let alive = true
     const load = () =>
       api.get('/live/world-cup')
-        .then(d => { if (alive) setGames((d?.games || []).filter(g => g.status === 'live')) })
+        .then(d => {
+          if (!alive) return
+          const liveGames = (d?.games || []).filter(g => g.status === 'live')
+          const flashed = []
+          for (const g of liveGames) {
+            const k = `${g.team_a}-${g.team_b}`
+            const sa = g.score_a ?? 0
+            const sb = g.score_b ?? 0
+            const prev = prevScoresRef.current[k]
+            if (prev && (sa > prev.sa || sb > prev.sb)) flashed.push(k)
+            prevScoresRef.current[k] = { sa, sb }
+          }
+          if (flashed.length) {
+            setGoalFlash(f => {
+              const next = { ...f }
+              flashed.forEach(k => { next[k] = true })
+              return next
+            })
+            setTimeout(() => {
+              setGoalFlash(f => {
+                const next = { ...f }
+                flashed.forEach(k => { delete next[k] })
+                return next
+              })
+            }, 2800)
+          }
+          setGames(liveGames)
+        })
         .catch(() => {})
     load()
     const id = window.setInterval(load, POLL_MS)
@@ -78,15 +107,21 @@ export default function LiveFloating() {
       >
         {games.map((g, i) => {
           const c = g.match_id != null ? classByMatch[g.match_id] : null
+          const scored = !!goalFlash[`${g.team_a}-${g.team_b}`]
           return (
-          <div key={`pill-${g.team_a}-${g.team_b}-${i}`} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.12)' : 'none' }}>
+          <div
+            key={`pill-${g.team_a}-${g.team_b}-${i}`}
+            className={scored ? 'live-goal-flash' : ''}
+            style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 4px', borderRadius: 10, borderTop: i > 0 ? '1px solid rgba(255,255,255,0.12)' : 'none' }}
+          >
+            {scored && <span className="live-goal-badge">⚽ GOL!</span>}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{
                 width: 8, height: 8, borderRadius: '50%', background: 'var(--lose, #e85252)',
                 boxShadow: '0 0 0 0 rgba(232,82,82,0.7)', animation: 'livedot 1.4s infinite', flexShrink: 0,
               }} />
               {g.team_a_flag && <img src={g.team_a_flag} alt={g.team_a} style={{ height: 22, width: 'auto', borderRadius: 2 }} />}
-              <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 17, color: '#fff', whiteSpace: 'nowrap' }}>
+              <span className={scored ? 'live-goal-score' : ''} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 17, color: '#fff', whiteSpace: 'nowrap' }}>
                 {g.score_a ?? '-'} : {g.score_b ?? '-'}
               </span>
               {g.team_b_flag && <img src={g.team_b_flag} alt={g.team_b} style={{ height: 22, width: 'auto', borderRadius: 2 }} />}
@@ -104,7 +139,15 @@ export default function LiveFloating() {
           </div>
           )
         })}
-        <style>{`@keyframes livedot{0%{box-shadow:0 0 0 0 rgba(232,82,82,.7)}70%{box-shadow:0 0 0 7px rgba(232,82,82,0)}100%{box-shadow:0 0 0 0 rgba(232,82,82,0)}}`}</style>
+        <style>{`
+          @keyframes livedot{0%{box-shadow:0 0 0 0 rgba(232,82,82,.7)}70%{box-shadow:0 0 0 7px rgba(232,82,82,0)}100%{box-shadow:0 0 0 0 rgba(232,82,82,0)}}
+          @keyframes goalFlashBg{0%,100%{background:transparent}20%,60%{background:rgba(232,196,74,0.22)}}
+          @keyframes goalScorePop{0%{transform:scale(1)}30%{transform:scale(1.35)}60%{transform:scale(1)}80%{transform:scale(1.15)}100%{transform:scale(1)}}
+          @keyframes goalBadgeIn{0%{opacity:0;transform:translate(-50%,4px) scale(.8)}15%{opacity:1;transform:translate(-50%,-2px) scale(1.05)}25%{transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-6px) scale(.95)}}
+          .live-goal-flash{animation:goalFlashBg 2.6s ease}
+          .live-goal-score{display:inline-block;color:#e8c44a !important;animation:goalScorePop 2.6s ease}
+          .live-goal-badge{position:absolute;top:-10px;left:50%;padding:2px 10px;border-radius:99px;background:#e8c44a;color:#1a1400;font-family:var(--font-cond);font-weight:800;font-size:10px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-shadow:0 4px 14px rgba(232,196,74,.5);animation:goalBadgeIn 2.6s ease;z-index:1}
+        `}</style>
       </div>
 
       {/* Modal de detalhes */}
