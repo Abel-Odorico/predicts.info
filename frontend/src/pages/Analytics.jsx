@@ -121,15 +121,17 @@ function KpiCard({ label, value, sub, color, icon }) {
   )
 }
 
-function DualChart({ viewsData, regsData, showRegs }) {
+function DualChart({ viewsData, regsData, showRegs, newVisitorsData, showNewVisitors }) {
   if (!viewsData || viewsData.length === 0)
     return <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6)' }}>Sem dados</div>
 
   const regMap = Object.fromEntries((regsData || []).map(d => [d.date, d.count]))
+  const newVisMap = Object.fromEntries((newVisitorsData || []).map(d => [d.date, d.new_visitors]))
   const data = viewsData.map(d => ({
     date: d.date.slice(5),
     views: d.views,
     cadastros: regMap[d.date] || 0,
+    novosVisitantes: newVisMap[d.date] || 0,
   }))
 
   return (
@@ -160,6 +162,9 @@ function DualChart({ viewsData, regsData, showRegs }) {
         {showRegs && (
           <Bar dataKey="cadastros" fill="var(--win)" opacity={0.9} radius={[2, 2, 0, 0]} maxBarSize={12} name="Cadastros" />
         )}
+        {showNewVisitors && (
+          <Bar dataKey="novosVisitantes" fill="#f59e0b" opacity={0.9} radius={[2, 2, 0, 0]} maxBarSize={12} name="Novos visitantes" />
+        )}
       </BarChart>
     </ResponsiveContainer>
   )
@@ -173,6 +178,7 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab]       = useState(() => new URLSearchParams(window.location.search).get('tab') || 'overview')
   const [chartOverlay, setChartOverlay] = useState(false)
+  const [chartOverlayNewVis, setChartOverlayNewVis] = useState(false)
   const [heatMetric, setHeatMetric]     = useState('access')
 
   const [auditLogs, setAuditLogs]       = useState(null)
@@ -315,6 +321,7 @@ export default function Analytics() {
         <KpiCard label="Page Views"      value={stats.total_views}  color="var(--accent)"  icon="👁" />
         <KpiCard label="Visitantes únicos" value={stats.unique_ips} color="var(--win)"     icon="🙋" />
         <KpiCard label="Novos visitantes" value={stats.new_visitors ?? stats.unique_ips} color="#f59e0b" icon="🆕" sub={`${stats.returning_visitors ?? 0} retornantes`} />
+        <KpiCard label="Novos hoje"       value={stats.new_visitors_today ?? 0} color="#f59e0b" icon="☀️" sub="visitantes únicos" />
         <KpiCard label="Páginas únicas"   value={stats.unique_pages} color="#a78bfa"      icon="📄" />
       </div>
 
@@ -330,13 +337,25 @@ export default function Analytics() {
       <div className="card fade-in-2" style={{ marginTop: 'var(--s4)' }}>
         <div className="card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📈 Views por Dia</span>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={chartOverlay} onChange={e => setChartOverlay(e.target.checked)} />
-            <span style={{ color: 'var(--win)' }}>+ cadastros</span>
-          </label>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={chartOverlay} onChange={e => setChartOverlay(e.target.checked)} />
+              <span style={{ color: 'var(--win)' }}>+ cadastros</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={chartOverlayNewVis} onChange={e => setChartOverlayNewVis(e.target.checked)} />
+              <span style={{ color: '#f59e0b' }}>+ novos visitantes</span>
+            </label>
+          </div>
         </div>
         <div className="card__body">
-          <DualChart viewsData={stats.views_per_day} regsData={stats.registrations_per_day} showRegs={chartOverlay} />
+          <DualChart
+            viewsData={stats.views_per_day}
+            regsData={stats.registrations_per_day}
+            showRegs={chartOverlay}
+            newVisitorsData={stats.new_visitors_per_day}
+            showNewVisitors={chartOverlayNewVis}
+          />
         </div>
       </div>
 

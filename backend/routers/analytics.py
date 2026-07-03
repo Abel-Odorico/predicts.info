@@ -324,6 +324,27 @@ def stats(
         returning_ips_count = len(older_ips)
     new_visitor_ips = unique_ips - returning_ips_count
 
+    # New unique visitors per day — IP's first-ever pageview (global history) falls on that day
+    first_seen_rows = (
+        db.query(PageView.ip, func.min(PageView.created_at))
+        .filter(PageView.ip.isnot(None))
+        .group_by(PageView.ip)
+        .all()
+    )
+    first_seen = {ip: dt.strftime("%Y-%m-%d") for ip, dt in first_seen_rows if dt}
+    new_visitors_day_ips: dict[str, set] = {}
+    for r in rows:
+        if not r.ip:
+            continue
+        day = r.created_at.strftime("%Y-%m-%d")
+        if first_seen.get(r.ip) == day:
+            new_visitors_day_ips.setdefault(day, set()).add(r.ip)
+    new_visitors_per_day = [
+        {"date": d, "new_visitors": len(ips)} for d, ips in sorted(new_visitors_day_ips.items())
+    ]
+    today_key = now.strftime("%Y-%m-%d")
+    new_visitors_today = len(new_visitors_day_ips.get(today_key, set()))
+
     # New user registrations in period
     new_users_rows = db.query(User).filter(User.created_at >= since).all()
     new_users = len(new_users_rows)
@@ -377,6 +398,8 @@ def stats(
         "avg_pages": avg_pages,
         "returning_visitors": returning_ips_count,
         "new_visitors": new_visitor_ips,
+        "new_visitors_today": new_visitors_today,
+        "new_visitors_per_day": new_visitors_per_day,
         "new_users": new_users,
         "total_users": total_users,
         "conversion_rate": conversion_rate,

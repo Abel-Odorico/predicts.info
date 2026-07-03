@@ -66,6 +66,13 @@ def _build_report(db: Session) -> dict:
     unique_week = db.execute(
         text("SELECT COUNT(DISTINCT ip) FROM page_views WHERE created_at >= :d"), {"d": week_ago}
     ).scalar() or 0
+    # Visitantes novos = IP cuja primeira visita (em toda a história) caiu hoje
+    new_visitors_today = db.execute(text("""
+        SELECT COUNT(*) FROM (
+            SELECT ip FROM page_views WHERE ip IS NOT NULL
+            GROUP BY ip HAVING MIN(created_at) >= :d
+        ) t
+    """), {"d": today}).scalar() or 0
 
     # ── Apostas ─────────────────────────────────────────
     total_bets = db.execute(text("SELECT COUNT(*) FROM bets")).scalar() or 0
@@ -159,6 +166,7 @@ def _build_report(db: Session) -> dict:
         "views": {
             "today": views_today,
             "unique_today": unique_today,
+            "new_visitors_today": new_visitors_today,
             "week": views_week,
             "unique_week": unique_week,
         },
@@ -222,7 +230,7 @@ def _format_text(data: dict) -> str:
         f"• Novos hoje: <b>{u['new_today']}</b> | Semana: <b>{u['new_week']}</b>",
         "",
         "📈 <b>ACESSOS</b>",
-        f"• Hoje: <b>{v['today']}</b> views · <b>{v['unique_today']}</b> únicos",
+        f"• Hoje: <b>{v['today']}</b> views · <b>{v['unique_today']}</b> únicos · <b>{v['new_visitors_today']}</b> novos",
         f"• Semana: <b>{v['week']}</b> views · <b>{v['unique_week']}</b> únicos",
         "",
         "🎯 <b>APOSTAS</b>",
