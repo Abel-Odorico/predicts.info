@@ -33,9 +33,27 @@ export default function MatchSim() {
   const [showAnalysis, setShowAnalysis] = useState(true)
   const [generating, setGenerating]     = useState(false)
   const [genError, setGenError]         = useState('')
+  const [participants, setParticipants] = useState(null)
+  const [participantsLoading, setParticipantsLoading] = useState(false)
   const betRef = useRef(null)
 
   useEffect(() => { fetchAll() }, [id])
+
+  // Palpites dos participantes — só após fechamento das apostas (jogo iniciado/finalizado)
+  useEffect(() => {
+    if (!id || !token || !match) { setParticipants(null); return }
+    if (isBettingOpen(match)) { setParticipants(null); return }
+    let alive = true
+    const load = () =>
+      api.get(`/matches/${id}/live-bets`, token)
+        .then(d => { if (alive) setParticipants(d) })
+        .catch(() => { if (alive) setParticipants(null) })
+    setParticipantsLoading(true)
+    load().finally(() => { if (alive) setParticipantsLoading(false) })
+    if (match.status !== 'live') return () => { alive = false }
+    const pid = window.setInterval(load, 15000)
+    return () => { alive = false; window.clearInterval(pid) }
+  }, [id, token, match?.status, match?.is_open])
 
   useEffect(() => {
     if (!id) return
@@ -285,6 +303,10 @@ export default function MatchSim() {
             </div>
           )}
 
+          {token && !isBettingOpen(match) && (
+            <ParticipantBets data={participants} loading={participantsLoading} myUserId={user?.id} teamA={match.team_a} teamB={match.team_b} />
+          )}
+
           {match.status !== 'finished' && (
             <div className="card fade-in-4" ref={betRef}>
               <div className="card__header">
@@ -371,6 +393,80 @@ function isBettingOpen(match) {
 
 function parseUtcMatchDate(value) {
   return new Date(value.endsWith('Z') ? value : `${value}Z`)
+}
+
+const BET_STATUS_META = {
+  exact:   { icon: '🎯', label: 'Exato',     color: 'var(--win, #3fb950)' },
+  correct: { icon: '✅', label: 'Acertando', color: 'var(--win, #3fb950)' },
+  wrong:   { icon: '❌', label: 'Errando',   color: 'var(--lose, #e85252)' },
+  pending: { icon: '⏳', label: 'Aguardando', color: 'var(--text-4, #777)' },
+}
+
+function ParticipantBets({ data, loading, myUserId, teamA, teamB }) {
+  if (loading && !data) {
+    return (
+      <div className="card fade-in-3">
+        <div className="card__header">
+          <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🎲 Palpites dos Participantes</span>
+        </div>
+        <div className="card__body"><Spinner /></div>
+      </div>
+    )
+  }
+  if (!data || data.bets.length === 0) return null
+
+  const exactCount   = data.bets.filter(b => b.status === 'exact').length
+  const correctCount = data.bets.filter(b => b.status === 'correct').length
+
+  return (
+    <div className="card fade-in-3">
+      <div className="card__header">
+        <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🎲 Palpites dos Participantes</span>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>{data.total_bets}</span>
+      </div>
+      <div className="card__body">
+        {data.reference_score?.score_a != null && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+            <span>Placar de referência:</span>
+            <span style={{ fontFamily: 'var(--font-data)', fontWeight: 800, color: 'var(--text-1)' }}>
+              {teamA?.code} {data.reference_score.score_a} × {data.reference_score.score_b} {teamB?.code}
+            </span>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 12, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+          <span>🎯 {exactCount} exato{exactCount === 1 ? '' : 's'}</span>
+          <span>✅ {correctCount} acertando</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
+          {data.bets.map(b => {
+            const meta = BET_STATUS_META[b.status] || BET_STATUS_META.pending
+            const mine = b.user_id === myUserId
+            return (
+              <div
+                key={b.user_id}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  padding: '7px 10px', borderRadius: 8,
+                  background: mine ? 'rgba(15,122,120,0.1)' : 'var(--bg-overlay, rgba(255,255,255,0.03))',
+                  border: mine ? '1px solid var(--accent)' : '1px solid transparent',
+                }}
+              >
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                  {b.user_name}{mine ? ' (você)' : ''}
+                </span>
+                <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', flexShrink: 0 }}>
+                  {b.score_a} × {b.score_b}
+                </span>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
+                  {meta.icon} {meta.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function ScoreInput({ value, onChange, autoFocus }) {

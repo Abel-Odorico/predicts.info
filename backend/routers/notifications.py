@@ -30,6 +30,7 @@ _PUSH_CONFIG: dict[str, tuple[bool, str, str]] = {
     "champion_bonus": (True,  "/campeao",    "predicts-champion"),
     "group_invite":   (True,  "/meus-grupos","predicts-group"),
     "goal":           (True,  "/apostas",    "predicts-goal"),
+    "match_live":     (True,  "/",           "predicts-live"),
 }
 _PUSH_DEFAULT = (True, "/", "predicts")
 
@@ -46,6 +47,7 @@ def create_notification(
     body: str | None = None,
     meta: dict | None = None,
     push: bool = True,
+    push_url: str | None = None,
 ) -> Notification:
     n = Notification(
         user_id=user_id,
@@ -55,11 +57,11 @@ def create_notification(
         meta=meta,
     )
     db.add(n)
-    push_enabled, url, tag = _PUSH_CONFIG.get(type_, _PUSH_DEFAULT)
+    push_enabled, cfg_url, tag = _PUSH_CONFIG.get(type_, _PUSH_DEFAULT)
     if push and push_enabled:
         try:
             from routers.push import send_push_to_users
-            send_push_to_users(db, [user_id], title, body or "", url=url, tag=tag)
+            send_push_to_users(db, [user_id], title, body or "", url=push_url or cfg_url, tag=tag)
         except Exception:
             pass
     return n

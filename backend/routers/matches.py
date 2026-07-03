@@ -336,13 +336,23 @@ def simulate_match_endpoint(
     return response
 
 
+def _bet_status(score_a: int, score_b: int, ref_a: int, ref_b: int) -> str:
+    if score_a == ref_a and score_b == ref_b:
+        return "exact"
+    bet_winner = "a" if score_a > score_b else ("b" if score_b > score_a else "draw")
+    ref_winner = "a" if ref_a > ref_b else ("b" if ref_b > ref_a else "draw")
+    return "correct" if bet_winner == ref_winner else "wrong"
+
+
 @router.get("/{match_id}/live-bets")
 def match_live_bets(
     match_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    match = db.query(Match).filter(Match.id == match_id).first()
+    match = db.query(Match).options(
+        joinedload(Match.result), joinedload(Match.team_a), joinedload(Match.team_b)
+    ).filter(Match.id == match_id).first()
     if not match:
         raise HTTPException(404, "Partida não encontrada")
 
@@ -350,6 +360,18 @@ def match_live_bets(
     # picks de jogos ainda abertos (integridade do bolão).
     if _is_bet_open(match):
         raise HTTPException(403, "Palpites liberados só após o fechamento das apostas")
+
+    _, live_lookup = _build_live_lookup()
+    live = live_lookup.get(_live_match_key(match.team_a.name, match.team_b.name))
+
+    ref_a = ref_b = None
+    if match.result:
+        ref_a, ref_b = match.result.score_a, match.result.score_b
+    elif live and live.get("score_a") is not None and live.get("score_b") is not None:
+        try:
+            ref_a, ref_b = int(live["score_a"]), int(live["score_b"])
+        except (TypeError, ValueError):
+            ref_a = ref_b = None
 
     bets = (
         db.query(Bet, User.name.label("user_name"))
@@ -359,9 +381,21 @@ def match_live_bets(
     )
 
     rows = [
-        {"user_name": user_name, "score_a": bet.score_a, "score_b": bet.score_b}
+        {
+            "user_id": bet.user_id,
+            "user_name": user_name,
+            "score_a": bet.score_a,
+            "score_b": bet.score_b,
+            "points_earned": bet.points_earned if bet.evaluated_at else None,
+            "status": _bet_status(bet.score_a, bet.score_b, ref_a, ref_b) if ref_a is not None else "pending",
+        }
         for bet, user_name in bets
     ]
-    rows.sort(key=lambda r: r["user_name"])
+    rows.sort(key=lambda r: (r["status"] != "exact", r["status"] != "correct", r["user_name"]))
 
-    return {"match_id": match_id, "total_bets": len(rows), "bets": rows}
+    return {
+        "match_id": match_id,
+        "total_bets": len(rows),
+        "reference_score": {"score_a": ref_a, "score_b": ref_b} if ref_a is not None else None,
+        "bets": rows,
+    }
