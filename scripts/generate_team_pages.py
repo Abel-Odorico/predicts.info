@@ -117,6 +117,16 @@ def fmt_match_date(iso):
     return f"{WEEKDAYS_PT[dt.weekday()]}, {dt.strftime('%d/%m')} às {dt.strftime('%H:%M')} (Brasília)"
 
 
+def match_slug(m):
+    """Slug estável por partida: {time-a}-x-{time-b}-{AAAAMMDD}. Fallback pro id se sem data."""
+    a_slug = TEAMS_PT.get(m["team_a"]["code"], (m["team_a"]["name"], m["team_a"]["code"].lower(), ""))[1]
+    b_slug = TEAMS_PT.get(m["team_b"]["code"], (m["team_b"]["name"], m["team_b"]["code"].lower(), ""))[1]
+    if m.get("match_date"):
+        day = br_datetime(m["match_date"]).strftime("%Y%m%d")
+        return f"{a_slug}-x-{b_slug}-{day}"
+    return f"{a_slug}-x-{b_slug}-{m['id']}"
+
+
 def build_team_data(sim_teams, matches):
     """Monta dict por code: infos, jogos, grupo, status real derivado das partidas."""
     teams = {}
@@ -226,6 +236,8 @@ h2{font-size:1.2rem;font-weight:800;margin:2.25rem 0 .9rem}
 .prob-val{min-width:52px;text-align:right;font-weight:800;color:var(--accent2);font-variant-numeric:tabular-nums}
 .m-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--border);font-size:.9rem;flex-wrap:wrap}
 .m-row:last-child{border-bottom:none}
+.m-row--link{color:inherit;border-radius:8px;padding-left:.5rem;padding-right:.5rem;margin:0 -.5rem}
+.m-row--link:hover{background:var(--pill);text-decoration:none}
 .m-teams{display:flex;align-items:center;gap:.45rem;font-weight:700}
 .m-teams img{width:23px;height:16px;object-fit:cover;border-radius:3px;box-shadow:0 0 0 1px var(--border)}
 .m-score{font-weight:900;font-variant-numeric:tabular-nums}
@@ -319,12 +331,12 @@ def render_match_row(m, code):
         mid = f'<span class="m-info">{esc(fmt_match_date(m["match_date"])) if m.get("match_date") else "a definir"}</span>'
     place = f' · {esc(m["city"])}' if m.get("city") else ""
     return (
-        '<div class="m-row">'
+        f'<a class="m-row m-row--link" href="/jogos/{match_slug(m)}">'
         f'<span class="m-teams"><img src="{a["flag_url"]}" alt="{esc(a["name"])}" loading="lazy" />{a["code"]}'
         f' {mid} '
         f'{b["code"]}<img src="{b["flag_url"]}" alt="{esc(b["name"])}" loading="lazy" /></span>'
         f'<span class="m-info">{PHASE_PT.get(m["phase"], m["phase"])}{place}</span>'
-        "</div>"
+        "</a>"
     )
 
 

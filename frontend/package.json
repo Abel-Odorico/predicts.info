@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && cp dist/index-landing.html dist/landing.html && node scripts/gen-seo-pages.mjs && python3 ../scripts/generate_team_pages.py",
+    "build": "vite build && cp dist/index-landing.html dist/landing.html && node scripts/gen-seo-pages.mjs && python3 ../scripts/generate_team_pages.py && python3 ../scripts/generate_match_pages.py",
     "preview": "vite preview"
   },
   "dependencies": {

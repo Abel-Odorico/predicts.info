@@ -3,3 +3,4 @@ Allow: /
 
 Sitemap: https://predicts.info/sitemap.xml
 Sitemap: https://predicts.info/sitemap-copa.xml
+Sitemap: https://predicts.info/sitemap-jogos.xml
