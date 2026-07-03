@@ -225,6 +225,8 @@ export default function Dashboard() {
   const [showConvPopup,  setShowConvPopup]  = useState(false)
   const [showLigaModal,  setShowLigaModal]  = useState(false)
   const [showCompPopup,  setShowCompPopup]  = useState(false)
+  const [goalFlash, setGoalFlash] = useState({})
+  const prevScoresRef = useRef({})
   const navigate = useNavigate()
   const compCountdown = useCountdown(competition?.start_date)
 
@@ -248,6 +250,34 @@ export default function Dashboard() {
   useEffect(() => {
     let mounted = true
 
+    // Detecta gol comparando placar do poll anterior — mesma lógica do LiveFloating
+    function detectGoals(games) {
+      const flashed = []
+      for (const g of games) {
+        if (g.status !== 'live') continue
+        const k = `${g.team_a}-${g.team_b}`
+        const sa = g.score_a ?? 0
+        const sb = g.score_b ?? 0
+        const prev = prevScoresRef.current[k]
+        if (prev && (sa > prev.sa || sb > prev.sb)) flashed.push(k)
+        prevScoresRef.current[k] = { sa, sb }
+      }
+      if (flashed.length) {
+        setGoalFlash(f => {
+          const next = { ...f }
+          flashed.forEach(k => { next[k] = true })
+          return next
+        })
+        setTimeout(() => {
+          setGoalFlash(f => {
+            const next = { ...f }
+            flashed.forEach(k => { delete next[k] })
+            return next
+          })
+        }, 2800)
+      }
+    }
+
     async function loadAll() {
       try {
         const [sched, done, tour, live, fullCalendar] = await Promise.all([
@@ -262,6 +292,7 @@ export default function Dashboard() {
         setResults(done)
         setTourney(tour)
         const games = live?.games || []
+        detectGoals(games)
         setLiveGames(games)
         setCalendar(fullCalendar?.days || [])
         api.get('/ranking?limit=8').then(bettors => {
@@ -302,6 +333,7 @@ export default function Dashboard() {
         ])
         if (!mounted) return
         const games = live?.games || []
+        detectGoals(games)
         setLiveGames(games)
         setCalendar(fullCalendar?.days || [])
         const liveMatchIds = games.filter(g => g.status === 'live' && g.match_id).map(g => g.match_id)
@@ -608,7 +640,9 @@ export default function Dashboard() {
                 <span className="badge badge-live">Ao vivo</span>
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
-                {liveNow.map((game, index) => (
+                {liveNow.map((game, index) => {
+                  const scored = !!goalFlash[`${game.team_a}-${game.team_b}`]
+                  return (
                   <div key={`live-${game.team_a}-${game.team_b}-${index}`}
                     onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)}
                     style={{
@@ -616,16 +650,23 @@ export default function Dashboard() {
                       ...(game.match_id ? { cursor: 'pointer' } : {})
                     }}
                   >
-                    <div className="now-playing-card">
+                    <div className="now-playing-card now-playing-card--live">
                       <div className="now-playing-card__team">
                         {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
                         <span>{game.team_a}</span>
                       </div>
-                      <div className="now-playing-card__center">
-                        <div className="now-playing-card__score">
+                      <div className="now-playing-card__center" style={{ position: 'relative' }}>
+                        <div className={`now-playing-card__score${scored ? ' now-playing-card__score--goal' : ''}`}>
                           {game.score_a ?? '-'}:{game.score_b ?? '-'}
                         </div>
                         <div className="now-playing-card__status">{game.status_raw || 'Ao vivo'}</div>
+                        {scored && (
+                          <div className="goal-celebration" aria-hidden="true">
+                            <span className="goal-celebration__net">🥅</span>
+                            <span className="goal-celebration__ball">⚽</span>
+                            <span className="goal-celebration__text">GOL!</span>
+                          </div>
+                        )}
                       </div>
                       <div className="now-playing-card__team now-playing-card__team--right">
                         <span>{game.team_b}</span>
@@ -650,7 +691,8 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -664,8 +706,10 @@ export default function Dashboard() {
                 <span className="badge badge-group">{todaysGames.length} jogos</span>
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
-                {todaysGames.map((game, index) => (
-                  <div key={`${game.team_a}-${game.team_b}-today-${index}`} className="live-score-row" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
+                {todaysGames.map((game, index) => {
+                  const scored = !!goalFlash[`${game.team_a}-${game.team_b}`]
+                  return (
+                  <div key={`${game.team_a}-${game.team_b}-today-${index}`} className={`live-score-row${scored ? ' live-score-row--goal' : ''}`} onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
                       {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
                       <div>
@@ -674,7 +718,8 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div className="live-score-row__score">
+                      <div className={`live-score-row__score${scored ? ' live-score-row__score--goal' : ''}`}>
+                        {scored && <span className="live-score-row__goal-badge">⚽ GOL!</span>}
                         {game.score_a ?? '-'}:{game.score_b ?? '-'}
                       </div>
                       <div className="live-score-row__status">
@@ -697,7 +742,8 @@ export default function Dashboard() {
                       {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -739,8 +785,10 @@ export default function Dashboard() {
                 </span>
               </div>
               <div className="card__body" style={{ paddingTop: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
-                {liveGames.map((game, index) => (
-                  <div key={`${game.team_a}-${game.team_b}-${index}`} className="live-score-row" onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
+                {liveGames.map((game, index) => {
+                  const scored = !!goalFlash[`${game.team_a}-${game.team_b}`]
+                  return (
+                  <div key={`${game.team_a}-${game.team_b}-${index}`} className={`live-score-row${scored ? ' live-score-row--goal' : ''}`} onClick={() => game.match_id && navigate(`/partida/${game.match_id}`)} style={game.match_id ? { cursor: 'pointer' } : {}}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
                       {game.team_a_flag && <img src={game.team_a_flag} alt={game.team_a} className="match-card__flag" />}
                       <div>
@@ -749,7 +797,8 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div className="live-score-row__score">
+                      <div className={`live-score-row__score${scored ? ' live-score-row__score--goal' : ''}`}>
+                        {scored && <span className="live-score-row__goal-badge">⚽ GOL!</span>}
                         {game.score_a ?? '-'}:{game.score_b ?? '-'}
                       </div>
                       <div className="live-score-row__status">
@@ -772,7 +821,8 @@ export default function Dashboard() {
                       {game.team_b_flag && <img src={game.team_b_flag} alt={game.team_b} className="match-card__flag" />}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}

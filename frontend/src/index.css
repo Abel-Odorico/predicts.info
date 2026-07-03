@@ -1303,6 +1303,67 @@ img {
   font-size: 24px;
   color: var(--accent);
   line-height: 1;
+  position: relative;
+}
+
+/* ── Metáfora animada: gol ao vivo ────────────────────────────────────── */
+@keyframes goalRowFlash { 0%, 100% { background: transparent; } 20%, 55% { background: rgba(232, 196, 74, 0.16); } }
+@keyframes goalScorePop { 0% { transform: scale(1); } 30% { transform: scale(1.3); } 60% { transform: scale(1); } 80% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes goalBadgeIn {
+  0% { opacity: 0; transform: translate(-50%, 4px) scale(.8); }
+  15% { opacity: 1; transform: translate(-50%, -2px) scale(1.05); }
+  25% { transform: translate(-50%, 0) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -6px) scale(.95); }
+}
+.live-score-row--goal { animation: goalRowFlash 2.6s ease; border-radius: var(--r2); }
+.live-score-row__score--goal { display: inline-block; color: #e8c44a !important; animation: goalScorePop 2.6s ease; }
+.live-score-row__goal-badge {
+  position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+  padding: 2px 8px; border-radius: 99px; background: #e8c44a; color: #1a1400;
+  font-family: var(--font-cond); font-weight: 800; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
+  white-space: nowrap; box-shadow: 0 4px 14px rgba(232, 196, 74, 0.5);
+  animation: goalBadgeIn 2.6s ease; z-index: 2;
+}
+
+/* Card principal: bola voando pro gol, rede balançando */
+.now-playing-card__score--goal { color: #e8c44a; animation: goalScorePop 2.6s ease; }
+.goal-celebration {
+  position: absolute; inset: -20px 0 auto 0; height: 60px;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 5;
+}
+.goal-celebration__net { font-size: 30px; display: inline-block; animation: goalNetShake 2.6s ease; }
+.goal-celebration__ball {
+  position: absolute; font-size: 20px;
+  animation: goalBallFly 900ms cubic-bezier(.3, .6, .3, 1) forwards;
+}
+.goal-celebration__text {
+  position: absolute; top: -14px; font-family: var(--font-cond); font-weight: 800; font-size: 12px;
+  color: #e8c44a; letter-spacing: 0.08em; text-transform: uppercase;
+  text-shadow: 0 2px 8px rgba(232, 196, 74, 0.5);
+  animation: goalBadgeIn 2.6s ease;
+}
+@keyframes goalBallFly {
+  0%   { transform: translate(-60px, 30px) scale(.6); opacity: 0; }
+  15%  { opacity: 1; }
+  70%  { transform: translate(0, 0) scale(1.15); opacity: 1; }
+  100% { transform: translate(0, 0) scale(0); opacity: 0; }
+}
+@keyframes goalNetShake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  10% { transform: rotate(-10deg) scale(1.06); }
+  20% { transform: rotate(8deg) scale(1.1); }
+  30% { transform: rotate(-5deg) scale(1.05); }
+  40% { transform: rotate(3deg) scale(1); }
+  50% { transform: rotate(0deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-score-row--goal, .live-score-row__score--goal, .live-score-row__goal-badge,
+  .now-playing-card__score--goal, .goal-celebration__net, .goal-celebration__ball, .goal-celebration__text,
+  .now-playing-card--live {
+    animation: none !important;
+  }
 }
 
 .live-score-row__status {
