@@ -152,13 +152,15 @@ export default function LiveFloating() {
           @keyframes pillSlideIn{0%{opacity:0;transform:translateX(-50%) translateY(-16px) scale(.94)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
           .live-pill-enter{animation:pillSlideIn 450ms cubic-bezier(.2,.9,.3,1.1)}
           @keyframes pillBreathe{
-            0%,100%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 0 rgba(232,82,82,0.55);border-color:rgba(232,82,82,0.45);transform:translateX(-50%) scale(1)}
-            50%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 9px rgba(232,82,82,0);border-color:rgba(232,82,82,0.95);transform:translateX(-50%) scale(1.025)}
+            0%,100%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 0 rgba(232,82,82,0.65);border-color:rgba(232,82,82,0.5);transform:translateX(-50%) scale(1)}
+            50%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 13px rgba(232,82,82,0);border-color:rgba(255,110,110,1);transform:translateX(-50%) scale(1.05)}
           }
-          .live-pill-breathe{animation:pillBreathe 1.8s ease-in-out infinite}
+          .live-pill-breathe{animation:pillBreathe 1.5s ease-in-out infinite}
 
-          @keyframes modalKickoff{0%{opacity:0;transform:scale(.9) translateY(10px)}60%{opacity:1;transform:scale(1.015) translateY(0)}100%{transform:scale(1) translateY(0)}}
-          .live-modal-enter{animation:modalKickoff 380ms cubic-bezier(.2,.9,.3,1.1)}
+          @keyframes modalKickoff{0%{opacity:0;transform:scale(.85) translateY(16px)}55%{opacity:1;transform:scale(1.03) translateY(0)}100%{transform:scale(1) translateY(0)}}
+          .live-modal-enter{animation:modalKickoff 420ms cubic-bezier(.2,.9,.3,1.15)}
+          @keyframes stadiumFlash{0%{opacity:.9}100%{opacity:0}}
+          .live-modal-flash{position:absolute;inset:0;background:radial-gradient(circle at 50% 30%, rgba(255,255,255,0.35), transparent 60%);pointer-events:none;animation:stadiumFlash 600ms ease-out forwards;z-index:5;border-radius:16px}
 
           .live-modal-goal-celebration{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:3}
           .live-modal-goal-celebration__net{font-size:26px;display:inline-block;animation:goalNetShakeModal 2.6s ease}
@@ -166,9 +168,19 @@ export default function LiveFloating() {
           @keyframes goalBallFlyModal{0%{transform:translate(-50px,26px) scale(.6);opacity:0}15%{opacity:1}70%{transform:translate(0,0) scale(1.1);opacity:1}100%{transform:translate(0,0) scale(0);opacity:0}}
           @keyframes goalNetShakeModal{0%,100%{transform:rotate(0deg) scale(1)}10%{transform:rotate(-9deg) scale(1.05)}20%{transform:rotate(7deg) scale(1.08)}30%{transform:rotate(-4deg) scale(1.03)}40%{transform:rotate(2deg) scale(1)}50%{transform:rotate(0deg) scale(1)}}
 
+          .live-mini-pitch{position:relative;height:14px;border-radius:7px;margin:10px 0 2px;overflow:hidden;
+            background:repeating-linear-gradient(90deg, rgba(46,201,128,0.16) 0 16px, rgba(46,201,128,0.08) 16px 32px);
+            border:1px solid rgba(46,201,128,0.25)}
+          .live-mini-pitch__ball{position:absolute;top:50%;font-size:12px;transform:translateY(-50%);animation:pitchRun 3.2s ease-in-out infinite}
+          @keyframes pitchRun{0%{left:4%}50%{left:92%}100%{left:4%}}
+
+          .live-score-live{display:inline-block;animation:scoreLiveGlow 2.2s ease-in-out infinite}
+          @keyframes scoreLiveGlow{0%,100%{text-shadow:0 0 0 rgba(232,82,82,0)}50%{text-shadow:0 0 14px rgba(232,82,82,0.65)}}
+
           @media (prefers-reduced-motion: reduce){
-            .live-pill-enter,.live-pill-breathe,.live-modal-enter,
-            .live-modal-goal-celebration__net,.live-modal-goal-celebration__ball{animation:none !important}
+            .live-pill-enter,.live-pill-breathe,.live-modal-enter,.live-modal-flash,
+            .live-modal-goal-celebration__net,.live-modal-goal-celebration__ball,
+            .live-mini-pitch__ball,.live-score-live{animation:none !important}
           }
         `}</style>
       </div>
@@ -182,8 +194,9 @@ export default function LiveFloating() {
           <div
             onClick={e => e.stopPropagation()}
             className="live-modal-enter"
-            style={{ width: 'min(94vw, 460px)', maxHeight: '86vh', overflowY: 'auto', background: 'var(--bg-card, #16161c)', border: '1px solid var(--border, #2a2a33)', borderRadius: 16, padding: 18, boxShadow: '0 20px 60px rgba(0,0,0,0.55)' }}
+            style={{ position: 'relative', width: 'min(94vw, 460px)', maxHeight: '86vh', overflowY: 'auto', background: 'var(--bg-card, #16161c)', border: '1px solid var(--border, #2a2a33)', borderRadius: 16, padding: 18, boxShadow: '0 20px 60px rgba(0,0,0,0.55)' }}
           >
+            <div className="live-modal-flash" aria-hidden="true" />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontWeight: 800, fontSize: 15, color: 'var(--text-1, #fff)' }}>
                 <span className="badge badge-live">Ao vivo</span>
@@ -207,7 +220,7 @@ export default function LiveFloating() {
                     {g.team_a_flag && <img src={g.team_a_flag} alt={g.team_a} style={{ height: 24, borderRadius: 3 }} />}
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.team_a}</span>
                   </div>
-                  <span className={scored ? 'live-goal-score' : ''} style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 800, fontSize: 22, color: 'var(--text-1, #fff)', flexShrink: 0 }}>{g.score_a ?? '-'} : {g.score_b ?? '-'}</span>
+                  <span className={`live-score-live${scored ? ' live-goal-score' : ''}`} style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 800, fontSize: 22, color: 'var(--text-1, #fff)', flexShrink: 0 }}>{g.score_a ?? '-'} : {g.score_b ?? '-'}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.team_b}</span>
                     {g.team_b_flag && <img src={g.team_b_flag} alt={g.team_b} style={{ height: 24, borderRadius: 3 }} />}
@@ -218,6 +231,10 @@ export default function LiveFloating() {
                       <span className="live-modal-goal-celebration__ball">⚽</span>
                     </div>
                   )}
+                </div>
+
+                <div className="live-mini-pitch" aria-hidden="true">
+                  <span className="live-mini-pitch__ball">⚽</span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
