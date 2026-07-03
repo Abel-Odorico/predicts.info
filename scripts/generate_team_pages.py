@@ -217,6 +217,8 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:1rem 2
 .nav-brand{font-size:1.1rem;font-weight:800;color:var(--text1)}.nav-brand span{color:var(--accent2)}
 .nav-cta{background:var(--accent);color:#f7fffd;padding:.5rem 1.1rem;border-radius:var(--r);font-weight:600;font-size:.85rem}
 .nav-cta:hover{background:var(--accent2);text-decoration:none}
+.theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:1rem;cursor:pointer;transition:border-color .15s,transform .15s}
+.theme-toggle-btn:hover{border-color:var(--accent2);transform:scale(1.06)}
 main{max-width:860px;margin:0 auto;padding:1.5rem 1.25rem 3rem}
 .crumb{font-size:.8rem;color:var(--text3);margin-bottom:1.25rem}
 .hero{display:flex;align-items:center;gap:1.25rem;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.5rem;flex-wrap:wrap}
@@ -267,6 +269,26 @@ HEAD_SCRIPT = """<script>(function(){var t=localStorage.getItem('predicts_theme'
 if(t==='system'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
 document.documentElement.setAttribute('data-theme',t)})()</script>"""
 
+THEME_TOGGLE_SCRIPT = """<script>(function(){
+var KEY='predicts_theme';
+var ICONS={light:'☀️',dark:'🌙',system:'🖥️'};
+var order=['light','dark','system'];
+function effective(t){return t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t}
+function apply(t){document.documentElement.setAttribute('data-theme',effective(t))}
+document.addEventListener('DOMContentLoaded',function(){
+  var btn=document.getElementById('theme-toggle');
+  if(!btn)return;
+  var cur=localStorage.getItem(KEY)||'light';
+  btn.textContent=ICONS[cur]||ICONS.light;
+  btn.addEventListener('click',function(){
+    cur=order[(order.indexOf(cur)+1)%order.length];
+    localStorage.setItem(KEY,cur);
+    apply(cur);
+    btn.textContent=ICONS[cur];
+  });
+});
+})()</script>"""
+
 TRACK = """<script>try{fetch('/api/analytics/track',{method:'POST',headers:{'Content-Type':'application/json'},
 body:JSON.stringify({path:location.pathname,referrer:document.referrer||''}),keepalive:true}).catch(function(){})}catch(e){}</script>"""
 
@@ -305,16 +327,20 @@ def page_shell(title, description, canonical, body, jsonld_blocks):
 <body>
 <nav>
   <a class="nav-brand" href="/">Predicts<span>.</span>info</a>
-  <a href="/dashboard" class="nav-cta">Abrir Simulador →</a>
+  <span style="display:flex;align-items:center;gap:.6rem">
+    <button id="theme-toggle" class="theme-toggle-btn" type="button" title="Alternar tema" aria-label="Alternar tema">☀️</button>
+    <a href="/dashboard" class="nav-cta">Abrir Simulador →</a>
+  </span>
 </nav>
 <main>
 {body}
 </main>
 <footer>
   <p>© 2026 Predicts.info · Previsões estatísticas para a Copa do Mundo 2026 · Não afiliado à FIFA</p>
-  <p style="margin-top:.4rem"><a href="/">Início</a> · <a href="/copa/">Seleções</a> · <a href="/torneio">Torneio</a> · <a href="/grupos">Grupos</a> · <a href="/resultados">Resultados</a> · <a href="/ranking">Ranking</a></p>
+  <p style="margin-top:.4rem"><a href="/">Início</a> · <a href="/copa/">Seleções</a> · <a href="/jogos/">Jogos</a> · <a href="/noticias">Notícias</a> · <a href="/torneio">Torneio</a> · <a href="/grupos">Grupos</a> · <a href="/resultados">Resultados</a> · <a href="/ranking">Ranking</a></p>
 </footer>
 {TRACK}
+{THEME_TOGGLE_SCRIPT}
 </body>
 </html>"""
 

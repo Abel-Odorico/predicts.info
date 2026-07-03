@@ -176,6 +176,11 @@ export default function Layout() {
               )}
             </NavLink>
           ))}
+          {/* Página estática (fora do SPA) — <a> normal, recarrega a página */}
+          <a href="/noticias" className="nav-item">
+            <span className="nav-item__icon">📰</span>
+            <span style={{ flex: 1 }}>Notícias</span>
+          </a>
           {user?.role === 'admin' && (
             <>
               <div style={{
@@ -317,6 +322,11 @@ export default function Layout() {
               <span className="mobile-drawer__item-label">{n.label}</span>
             </NavLink>
           ))}
+          {/* Página estática (fora do SPA) — <a> normal, recarrega a página */}
+          <a href="/noticias" className="mobile-drawer__item" onClick={closeDrawer}>
+            <span className="mobile-drawer__item-icon">📰</span>
+            <span className="mobile-drawer__item-label">Notícias</span>
+          </a>
         </div>
 
         {user?.role === 'admin' && (
