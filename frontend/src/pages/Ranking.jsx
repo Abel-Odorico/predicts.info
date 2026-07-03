@@ -233,30 +233,29 @@ export default function Ranking() {
 
       {/* ── Switcher Geral / Fase ─────────────────────────────────────── */}
       {competition && (
-        <div style={{ display: 'flex', gap: 6, margin: '14px 0 4px', background: 'var(--bg-overlay)', borderRadius: 10, padding: 4 }}>
+        <div className="rank-segctrl" role="tablist" aria-label="Navegação de ranking" style={{ '--active-index': compView ? 1 : 0 }}>
+          <div className="rank-segctrl__thumb" aria-hidden="true" />
           <button
+            type="button"
+            role="tab"
+            aria-selected={!compView}
+            className={`rank-segctrl__item${!compView ? ' rank-segctrl__item--active' : ''}`}
             onClick={() => setCompView(false)}
-            style={{
-              flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
-              background: !compView ? 'var(--bg-surface)' : 'transparent',
-              boxShadow: !compView ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
-              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-              color: !compView ? 'var(--text-1)' : 'var(--text-4)', transition: 'all 150ms',
-            }}
           >
-            🏆 Ranking Geral
+            <span className="rank-segctrl__icon" aria-hidden="true">🏆</span>
+            <span className="rank-segctrl__label">Ranking Geral</span>
+            {data.length > 0 && <span className="rank-segctrl__badge">{data.length}</span>}
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={compView}
+            className={`rank-segctrl__item${compView ? ' rank-segctrl__item--active' : ''}`}
             onClick={() => setCompView(true)}
-            style={{
-              flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
-              background: compView ? 'var(--bg-surface)' : 'transparent',
-              boxShadow: compView ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
-              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700,
-              color: compView ? 'var(--accent)' : 'var(--text-4)', transition: 'all 150ms',
-            }}
           >
-            ⚡ {competition.name}
+            <span className="rank-segctrl__icon" aria-hidden="true">⚡</span>
+            <span className="rank-segctrl__label">{competition.name}</span>
+            {compData.length > 0 && <span className="rank-segctrl__badge">{compData.length}</span>}
           </button>
         </div>
       )}
