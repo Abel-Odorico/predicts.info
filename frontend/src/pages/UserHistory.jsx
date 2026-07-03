@@ -248,11 +248,18 @@ const RESULT_COLOR = { exact: '#0f7a78', correct: '#2ec980', wrong: '#e85252' }
 function PointsChart({ bets }) {
   const [mode, setMode] = useState('jogo')
   const [tooltip, setTooltip] = useState(null)
+  const [hidden, setHidden] = useState(() => new Set())
+
+  const toggleHidden = key => setHidden(prev => {
+    const next = new Set(prev)
+    next.has(key) ? next.delete(key) : next.add(key)
+    return next
+  })
 
   const evaluated = useMemo(() =>
-    [...bets].filter(b => b.result != null)
+    [...bets].filter(b => b.result != null && !hidden.has(b.result))
       .sort((a, b) => new Date(a.match_date || a.created_at) - new Date(b.match_date || b.created_at)),
-    [bets]
+    [bets, hidden]
   )
 
   const points = useMemo(() => {
@@ -277,14 +284,15 @@ function PointsChart({ bets }) {
     })
   }, [evaluated, mode])
 
-  if (points.length < 1) return null
+  const hasAnyEvaluated = useMemo(() => bets.some(b => b.result != null), [bets])
+  if (!hasAnyEvaluated) return null
 
   const W = 400, H = 200, BAR_H = 52, PADL = 32, PADR = 8, PADT = 10, PADB = 16
   const SEP = 6
   const chartH = H - BAR_H - PADB - SEP
   const maxCum = Math.max(...points.map(p => p.cum), 1)
   const maxPts = Math.max(...points.map(p => p.pts), 1)
-  const totalPts = points[points.length - 1].cum
+  const totalPts = points.length ? points[points.length - 1].cum : 0
 
   const toX    = i => PADL + (points.length === 1 ? (W - PADL - PADR) / 2 : (i / (points.length - 1)) * (W - PADL - PADR))
   const toY    = v => PADT + ((1 - v / maxCum) * (chartH - PADT))
@@ -293,7 +301,7 @@ function PointsChart({ bets }) {
 
   const coords = points.map((p, i) => [toX(i), toY(p.cum)])
   const pathD  = coords.reduce((acc, [x, y], i) => acc + (i === 0 ? `M${x},${y}` : ` L${x},${y}`), '')
-  const areaD  = `${pathD} L${coords[coords.length - 1][0]},${chartH} L${coords[0][0]},${chartH} Z`
+  const areaD  = points.length ? `${pathD} L${coords[coords.length - 1][0]},${chartH} L${coords[0][0]},${chartH} Z` : ''
   const yTicks = [0, Math.round(maxCum / 2), maxCum]
 
   const barW = points.length > 1
@@ -318,6 +326,11 @@ function PointsChart({ bets }) {
       </div>
 
       <div style={{ position: 'relative' }}>
+        {points.length < 1 ? (
+          <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>
+            Todos os tipos de resultado estão ocultos — clique na legenda abaixo para reexibir.
+          </div>
+        ) : (
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}
           onMouseLeave={() => setTooltip(null)}>
           <defs>
@@ -403,6 +416,7 @@ function PointsChart({ bets }) {
             </>
           )}
         </svg>
+        )}
 
         {/* Tooltip */}
         {tooltip && (() => {
@@ -441,14 +455,32 @@ function PointsChart({ bets }) {
         })()}
       </div>
 
-      {/* Bar legend */}
+      {/* Bar legend — clique para ocultar/exibir */}
       <div className="uh-chart-legend">
-        {Object.entries(RESULT_COLOR).map(([key, color]) => (
-          <span key={key} className="uh-chart-legend__item">
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: 'inline-block' }} />
-            {RESULT_META[key]?.label}
-          </span>
-        ))}
+        {Object.entries(RESULT_COLOR).map(([key, color]) => {
+          const isHidden = hidden.has(key)
+          return (
+            <button
+              key={key}
+              onClick={() => toggleHidden(key)}
+              className="uh-chart-legend__item"
+              title={isHidden ? `Mostrar ${RESULT_META[key]?.label}` : `Ocultar ${RESULT_META[key]?.label}`}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px',
+                opacity: isHidden ? 0.35 : 1, transition: 'opacity .15s',
+              }}
+            >
+              <span style={{
+                width: 8, height: 8, borderRadius: 2, display: 'inline-block',
+                background: isHidden ? 'transparent' : color,
+                border: `1.5px solid ${color}`,
+              }} />
+              <span style={{ textDecoration: isHidden ? 'line-through' : 'none' }}>
+                {RESULT_META[key]?.label}
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -804,6 +836,143 @@ function PosBadge({ label, pos, total, accent }) {
         {posLabel(pos)}
       </span>
       {total && <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>de {total}</span>}
+    </div>
+  )
+}
+
+// ── Feature: Estratégia & Recomendações ────────────────────────────────────
+function analyzeStrategy(bets) {
+  const rows = bets.filter(b => b.result != null && b.official_score_a != null && b.official_score_b != null)
+  if (rows.length < 8) return null
+  const sorted = [...rows].sort((a, b) => new Date(a.match_date || a.created_at) - new Date(b.match_date || b.created_at))
+  const n = sorted.length
+  const hit = b => b.result === 'exact' || b.result === 'correct'
+  const acc = arr => arr.length ? arr.filter(hit).length / arr.length : null
+
+  const recentN = Math.min(10, n)
+  const recent  = sorted.slice(-recentN)
+  const prior   = sorted.slice(0, n - recentN)
+
+  const overallAcc = acc(sorted)
+  const recentAcc  = acc(recent)
+  const priorAcc   = prior.length >= 3 ? acc(prior) : null
+  const trendDelta = priorAcc != null ? recentAcc - priorAcc : null
+
+  const avgBetGoals = sorted.reduce((s, b) => s + b.score_a + b.score_b, 0) / n
+  const avgOffGoals = sorted.reduce((s, b) => s + b.official_score_a + b.official_score_b, 0) / n
+
+  const officialDraws = sorted.filter(b => b.official_score_a === b.official_score_b)
+  const betDraws      = sorted.filter(b => b.score_a === b.score_b)
+  const drawHits      = officialDraws.filter(b => b.score_a === b.score_b).length
+  const drawAcc       = officialDraws.length ? drawHits / officialDraws.length : null
+
+  const outcome = (a, b) => a > b ? 'A' : a < b ? 'B' : 'D'
+  const wrongs = sorted.filter(b => b.result === 'wrong')
+  let missedDraw = 0, falseDraw = 0, wrongTeam = 0
+  wrongs.forEach(b => {
+    const betO = outcome(b.score_a, b.score_b)
+    const offO = outcome(b.official_score_a, b.official_score_b)
+    if (offO === 'D' && betO !== 'D') missedDraw++
+    else if (betO === 'D' && offO !== 'D') falseDraw++
+    else wrongTeam++
+  })
+
+  const scoreMap = new Map()
+  sorted.forEach(b => { const k = `${b.score_a}–${b.score_b}`; scoreMap.set(k, (scoreMap.get(k) || 0) + 1) })
+  const topScore = [...scoreMap.entries()].sort((a, b) => b[1] - a[1])[0]
+
+  const profile = avgBetGoals >= 3.2 ? 'Ousado' : avgBetGoals <= 2.15 ? 'Cauteloso' : 'Equilibrado'
+
+  return {
+    n, overallAcc, recentAcc, recentN, priorAcc, trendDelta,
+    avgBetGoals, avgOffGoals, goalDiff: avgBetGoals - avgOffGoals,
+    officialDraws, betDraws, drawHits, drawAcc,
+    wrongs, missedDraw, falseDraw, wrongTeam,
+    topScore, profile,
+  }
+}
+
+const PROFILE_CFG = {
+  Ousado:      { icon: '🔥',  color: '#e8a030' },
+  Cauteloso:   { icon: '🛡️', color: '#4a90e8' },
+  Equilibrado: { icon: '⚖️', color: 'var(--accent)' },
+}
+
+function StrategyInsights({ bets }) {
+  const s = useMemo(() => analyzeStrategy(bets), [bets])
+  if (!s) return null
+
+  const pct = v => v == null ? '—' : Math.round(v * 100)
+  const insights = []
+
+  if (s.trendDelta != null) {
+    if (s.trendDelta >= 0.12) {
+      insights.push({ icon: '📈', color: 'var(--win)', text: `Em ascensão: ${pct(s.recentAcc)}% de acerto nos últimos ${s.recentN} jogos, contra ${pct(s.priorAcc)}% antes disso.` })
+    } else if (s.trendDelta <= -0.12) {
+      insights.push({ icon: '📉', color: 'var(--lose)', text: `Queda de forma: ${pct(s.recentAcc)}% de acerto nos últimos ${s.recentN} jogos, contra ${pct(s.priorAcc)}% antes — vale rever os critérios recentes.` })
+    }
+  }
+
+  if (s.officialDraws.length >= 3 && s.drawAcc != null && s.drawAcc < 0.3) {
+    insights.push({ icon: '🟰', color: '#f59e0b', text: `Ponto cego em empates: acertou só ${s.drawHits}/${s.officialDraws.length} jogos que terminaram empatados, apostando empate em apenas ${pct(s.betDraws.length / s.n)}% das apostas.` })
+  }
+
+  if (s.wrongs.length >= 3) {
+    const max = Math.max(s.missedDraw, s.falseDraw, s.wrongTeam)
+    if (max === s.wrongTeam && s.wrongTeam / s.wrongs.length >= 0.5) {
+      insights.push({ icon: '🎯', color: 'var(--lose)', text: `Principal erro: ${pct(s.wrongTeam / s.wrongs.length)}% das apostas erradas foram por cravar o time errado como vencedor — reveja o favoritismo antes de apostar.` })
+    } else if (max === s.missedDraw && s.missedDraw / s.wrongs.length >= 0.4) {
+      insights.push({ icon: '🟰', color: '#f59e0b', text: `Principal erro: ${pct(s.missedDraw / s.wrongs.length)}% das apostas erradas foram jogos que terminaram empatados e você apostou um vencedor.` })
+    } else if (max === s.falseDraw && s.falseDraw / s.wrongs.length >= 0.4) {
+      insights.push({ icon: '🎲', color: '#f59e0b', text: `Você chuta empate demais: ${pct(s.falseDraw / s.wrongs.length)}% das apostas erradas eram jogos com vencedor claro.` })
+    }
+  }
+
+  if (Math.abs(s.goalDiff) >= 0.5) {
+    insights.push(s.goalDiff > 0
+      ? { icon: '⚽', color: '#9b5de8', text: `Superestima gols: média de ${s.avgBetGoals.toFixed(1)} apostados contra ${s.avgOffGoals.toFixed(1)} reais por jogo — considere placares mais fechados.` }
+      : { icon: '⚽', color: '#9b5de8', text: `Subestima gols: média de ${s.avgBetGoals.toFixed(1)} apostados contra ${s.avgOffGoals.toFixed(1)} reais por jogo — placares mais elásticos podem valer a pena.` })
+  }
+
+  if (s.topScore && s.n >= 10 && s.topScore[1] / s.n >= 0.22) {
+    insights.push({ icon: '🔁', color: 'var(--text-3)', text: `Repetição de placar: você apostou ${s.topScore[0]} em ${pct(s.topScore[1] / s.n)}% das partidas — variar conforme o confronto pode render mais placares exatos.` })
+  }
+
+  const cfg = PROFILE_CFG[s.profile]
+
+  return (
+    <div className="uh-section fade-in-2">
+      <div className="uh-section__head">
+        <span className="uh-section__icon">🧠</span>
+        <span className="uh-section__title">Estratégia & Recomendações</span>
+      </div>
+
+      <div style={{ borderRadius: 'var(--radius)', background: `${cfg.color}1a`, border: `1px solid ${cfg.color}44`, padding: 'var(--s5) var(--s6)', display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap', marginBottom: insights.length ? 'var(--s4)' : 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 120 }}>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: cfg.color }}>{cfg.icon} PERFIL {s.profile.toUpperCase()}</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 42, fontWeight: 900, lineHeight: 1, color: cfg.color }}>{pct(s.overallAcc)}%</span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>acerto em {s.n} jogos avaliados</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 200, fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>
+          Média de <strong>{s.avgBetGoals.toFixed(1)} gols</strong> por palpite (real: {s.avgOffGoals.toFixed(1)}) ·
+          empate apostado em <strong>{pct(s.betDraws.length / s.n)}%</strong> dos jogos, real em {pct(s.officialDraws.length / s.n)}%.
+        </div>
+      </div>
+
+      {insights.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
+          {insights.map((ins, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--s3)', padding: 'var(--s3) var(--s4)', background: 'var(--surface-2)', borderLeft: `3px solid ${ins.color}`, borderRadius: 'var(--r2)' }}>
+              <span style={{ fontSize: 16, lineHeight: 1.3, flexShrink: 0 }}>{ins.icon}</span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5 }}>{ins.text}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', textAlign: 'center', padding: 'var(--s3)' }}>
+          Sem padrões claros de erro ou acerto até agora — continue apostando para refinar a análise.
+        </div>
+      )}
     </div>
   )
 }
@@ -1466,6 +1635,9 @@ export default function UserHistory() {
 
       {/* ── Melhor / Pior aposta ────────────────────── */}
       {evaluated.length >= 3 && <BestWorstHighlight bets={bets} />}
+
+      {/* ── Estratégia & Recomendações ──────────────── */}
+      <StrategyInsights bets={bets} />
 
       {/* ── Anéis de desempenho ─────────────────────── */}
       {evaluated.length > 0 && (
