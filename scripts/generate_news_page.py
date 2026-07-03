@@ -177,6 +177,24 @@ NEWS_CSS = """
   border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border))}
 .news-cta-inline strong{font-size:1.05rem}
 .news-seo-block{font-size:.85rem;color:var(--text3);line-height:1.7;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border)}
+
+/* Metáfora animada: trends como ticker de assuntos passando (bombando agora) */
+.trend-marquee{overflow:hidden;margin-bottom:.5rem;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
+.trend-track{display:flex;gap:.6rem;width:max-content;animation:trend-scroll 34s linear infinite;padding:.3rem .1rem 1rem}
+.trend-marquee:hover .trend-track,.trend-marquee:focus-within .trend-track{animation-play-state:paused}
+@keyframes trend-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* Entrada suave dos cards de notícia ao rolar */
+.news-reveal{opacity:0;transform:translateY(14px);transition:opacity 500ms ease,transform 500ms ease}
+.news-reveal.in-view{opacity:1;transform:translateY(0)}
+
+@media (prefers-reduced-motion: reduce){
+  .trend-track{animation:none}
+  .trend-marquee{overflow-x:auto}
+  .news-reveal{opacity:1;transform:none;transition:none}
+}
 """
 
 
@@ -195,7 +213,8 @@ def render(news, trends, generated_at):
         src_class = f"src-{hash(n['source'] or 'x') % 6}"
         src = f'<span class="src-pill {src_class}">{esc(n["source"])}</span>' if n["source"] else ""
         return (
-            f'<a class="news-card" href="{esc(n["link"])}" target="_blank" rel="noopener noreferrer nofollow">'
+            f'<a class="news-card news-reveal" style="transition-delay:{(i % 6) * 60}ms" '
+            f'href="{esc(n["link"])}" target="_blank" rel="noopener noreferrer nofollow">'
             f'<div class="news-card__meta">{src}<span class="news-card__time">{esc(when)}</span></div>'
             f'<div class="news-card__title">{esc(n["title"])}</div>'
             "</a>"
@@ -230,7 +249,7 @@ def render(news, trends, generated_at):
   <span class="news-hero__badge">Atualizado em {esc(updated_label)} (Brasília) · a cada 4h</span>
 </div>
 <h2>🔥 Em alta no Brasil agora</h2>
-<div class="trend-strip">{trends_html}</div>
+<div class="trend-marquee"><div class="trend-track">{trends_html}<span aria-hidden="true" style="display:contents">{trends_html}</span></div></div>
 <h2>Notícias de futebol</h2>
 <div class="card" style="padding:0">{news_items_html}</div>
 <div class="news-seo-block">
@@ -245,7 +264,21 @@ def render(news, trends, generated_at):
   <div style="font-size:1.3rem;font-weight:800">Pronto para prever a Copa 2026?</div>
   <p>Crie sua conta grátis, dê seu palpite de placar e dispute o ranking do bolão.</p>
   <a class="btn" href="/login?tab=register">Criar conta grátis →</a>
-</div>"""
+</div>
+<script>
+(function(){{
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  var els = document.querySelectorAll('.news-reveal')
+  var io = new IntersectionObserver(function(entries){{
+    entries.forEach(function(e){{
+      if (!e.isIntersecting) return
+      e.target.classList.add('in-view')
+      io.unobserve(e.target)
+    }})
+  }}, {{ threshold: 0.15 }})
+  els.forEach(function(el){{ io.observe(el) }})
+}})()
+</script>"""
 
     jsonld = [
         {
