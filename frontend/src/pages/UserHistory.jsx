@@ -655,7 +655,7 @@ function DayGroup({ days, desc }) {
   return days.map(({ key, bets: db }, di) => (
     <div key={key}>
       <DayDivider label={_betDl(key)} count={db.length} first={di === 0} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
+      <div className="uh-day-bets">
         {db.map((bet, i) => <BetCard key={bet.id} bet={bet} idx={i} />)}
       </div>
     </div>

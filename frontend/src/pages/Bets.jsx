@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -34,6 +35,133 @@ function TeamLabel({ code, name, flagUrl, compact = false }) {
       {flagUrl && <img src={flagUrl} alt={code} className="match-card__flag" />}
       <span className="team-label__text">{label}</span>
     </span>
+  )
+}
+
+// ── Segmented tab control ─────────────────────────────────────────────────────
+const TAB_ITEMS = [
+  { id: 'open', label: 'Abertas', icon: '⚡' },
+  { id: 'mine', label: 'Meus Palpites', icon: '🎯' },
+  { id: 'past', label: 'Anteriores', icon: '🏁' },
+]
+
+function BetTabs({ tab, setTab, counts }) {
+  const activeIndex = Math.max(0, TAB_ITEMS.findIndex(t => t.id === tab))
+  return (
+    <div className="bet-segctrl mt-6" role="tablist" aria-label="Navegação de palpites" style={{ '--active-index': activeIndex }}>
+      <div className="bet-segctrl__thumb" aria-hidden="true" />
+      {TAB_ITEMS.map(t => {
+        const count = counts[t.id] || 0
+        const active = tab === t.id
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={`bet-segctrl__item${active ? ' bet-segctrl__item--active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            <span className="bet-segctrl__icon" aria-hidden="true">{t.icon}</span>
+            <span className="bet-segctrl__label">{t.label}</span>
+            {count > 0 && <span className="bet-segctrl__badge">{count}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Fullscreen icon (expand action) ───────────────────────────────────────────
+function ExpandIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+      <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  )
+}
+
+// ── Match detail modal (fullscreen desktop / bottom sheet mobile) ────────────
+function MatchDetailModal({ onClose, teamA, teamB, phase, groupName, matchDate, msBefore, score, official, statusLabel, statusColor, pointsEarned, canEdit, onEdit, onSimulate }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [onClose])
+
+  const showBetScore = score != null
+  const showOfficial = official != null && official.a != null
+
+  return createPortal(
+    <div className="match-modal-backdrop" onClick={onClose}>
+      <div className="match-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Detalhes da partida">
+        <div className="match-modal__grabber" />
+        <div className="match-modal__head">
+          <span className="match-modal__title">Detalhes da Partida</span>
+          <button type="button" className="match-modal__close" onClick={onClose} aria-label="Fechar">✕</button>
+        </div>
+        <div className="match-modal__body">
+          <div className="match-modal__meta">
+            <PhaseBadge phase={phase} groupName={groupName} />
+            <span className="bet-card__time">{formatMatchDate(matchDate)}</span>
+          </div>
+
+          {msBefore != null && msBefore > 0 && (
+            <div className="match-modal__countdown"><Countdown ms={msBefore} /></div>
+          )}
+
+          <div className="match-modal__hero">
+            <div className="match-modal__team">
+              {teamA?.flag_url && <img src={teamA.flag_url} alt={teamA.code} />}
+              <span className="match-modal__team-name">{PT_NAMES[teamA?.code] || teamA?.name || teamA?.code}</span>
+            </div>
+            <div className="match-modal__score-wrap">
+              {showBetScore ? (
+                <div className="match-modal__score">{score.a} – {score.b}</div>
+              ) : showOfficial ? (
+                <div className="match-modal__score">{official.a} – {official.b}</div>
+              ) : (
+                <div className="match-modal__vs">vs</div>
+              )}
+              {showBetScore && showOfficial && (
+                <div className="match-modal__official">oficial: {official.a}–{official.b}</div>
+              )}
+            </div>
+            <div className="match-modal__team">
+              {teamB?.flag_url && <img src={teamB.flag_url} alt={teamB.code} />}
+              <span className="match-modal__team-name">{PT_NAMES[teamB?.code] || teamB?.name || teamB?.code}</span>
+            </div>
+          </div>
+
+          <div className="match-modal__status">
+            <span className="match-modal__status-label" style={{ color: statusColor }}>{statusLabel}</span>
+            {pointsEarned != null && (
+              <span className="pts-badge" style={{ color: statusColor, borderColor: statusColor }}>
+                {pointsEarned >= 0 ? `+${pointsEarned}` : pointsEarned}
+              </span>
+            )}
+          </div>
+
+          <div className="match-modal__actions">
+            <button type="button" className="btn btn-ghost" onClick={onSimulate}>Simulação</button>
+            {canEdit && <button type="button" className="btn btn-primary" onClick={onEdit}>Alterar</button>}
+          </div>
+
+          <div className="match-modal__rules">
+            <strong>Sistema Precisão:</strong> 🎯 Placar exato <strong>+25 pts</strong> · ✅ Vencedor exato <strong>+18</strong> · Saldo <strong>+15</strong> · Gols perdedor <strong>+12</strong> · Resultado <strong>+10</strong>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -102,6 +230,7 @@ export default function Bets() {
   }
 
   function goToNextMatch(nextId) {
+    setTab('open')
     setPendingOpenId(nextId)
     setTimeout(() => {
       matchRefs.current[nextId]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -181,17 +310,11 @@ export default function Bets() {
 
       <GuideBanner onShare={handleShare} shareMsg={shareMsg} />
 
-      <div className="tabs mt-6">
-        {[
-          { id: 'open',  label: `Partidas Abertas${openMatches.length ? ` (${openMatches.length})` : ''}` },
-          { id: 'mine',  label: `Meus Palpites${bets.length ? ` (${bets.length})` : ''}` },
-          { id: 'past',  label: `Anteriores${finished.length ? ` (${finished.length})` : ''}` },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={tab === t.id ? 'active' : ''}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <BetTabs
+        tab={tab}
+        setTab={setTab}
+        counts={{ open: openMatches.length, mine: bets.length, past: finished.length }}
+      />
 
       {tab === 'open' && (
         <div className="fade-in-1">
@@ -207,9 +330,9 @@ export default function Bets() {
                 const showSep  = curDate !== prevDate
                 const { weekday, date } = formatDateSep(m.match_date)
                 return (
-                  <div key={m.id}>
+                  <Fragment key={m.id}>
                     {showSep && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: i === 0 ? '0 0 10px' : '18px 0 10px' }}>
+                      <div className="bets-list__sep" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: i === 0 ? '0 0 10px' : '18px 0 10px' }}>
                         <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)' }}>{weekday}</span>
@@ -234,7 +357,7 @@ export default function Bets() {
                         recentMatches={finished}
                       />
                     </div>
-                  </div>
+                  </Fragment>
                 )
               })}
             </div>
@@ -262,6 +385,7 @@ export default function Bets() {
                   bet={b}
                   index={i}
                   onOpenSimulation={() => navigate(`/partida/${b.match_id}`)}
+                  onEditBet={goToNextMatch}
                 />
               ))}
             </div>
@@ -282,7 +406,7 @@ export default function Bets() {
                 .map((m, i) => {
                   const bet = betsByMatchId[m.id]
                   return bet
-                    ? <BetRow key={m.id} bet={bet} index={i} onOpenSimulation={() => navigate(`/partida/${m.id}`)} />
+                    ? <BetRow key={m.id} bet={bet} index={i} onOpenSimulation={() => navigate(`/partida/${m.id}`)} onEditBet={goToNextMatch} />
                     : <FinishedNoBetRow key={m.id} match={m} index={i} onOpenSimulation={() => navigate(`/partida/${m.id}`)} />
                 })}
             </div>
@@ -315,6 +439,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
   const [confirmed, setConfirmed]       = useState(false)
   const [showNextCard, setShowNextCard] = useState(false)
 
+  const [showDetail, setShowDetail]     = useState(false)
   const [showOdds, setShowOdds]         = useState(false)
   const [odds, setOdds]                 = useState(null)
   const [oddsLoading, setOddsLoading]   = useState(false)
@@ -440,6 +565,9 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           {stillOpen && <Countdown ms={msBefore} />}
           <span className="bet-card__time">{formatMatchDate(match.match_date)}</span>
+          <button type="button" className="bet-card__expand" onClick={() => setShowDetail(true)} aria-label="Expandir detalhes da partida" title="Expandir">
+            <ExpandIcon />
+          </button>
         </div>
       </div>
 
@@ -651,6 +779,26 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
           onNo={() => setShowNextCard(false)}
         />
       )}
+
+      {showDetail && (
+        <MatchDetailModal
+          onClose={() => setShowDetail(false)}
+          teamA={match.team_a}
+          teamB={match.team_b}
+          phase={match.phase}
+          groupName={match.group_name}
+          matchDate={match.match_date}
+          msBefore={stillOpen ? msBefore : null}
+          score={hasBet ? { a: existingBet.score_a, b: existingBet.score_b } : null}
+          official={null}
+          statusLabel={hasBet ? 'Palpite registrado' : stillOpen ? 'Sem palpite ainda' : 'Encerrado sem palpite'}
+          statusColor={hasBet ? 'var(--win)' : 'var(--text-3)'}
+          pointsEarned={null}
+          canEdit={stillOpen}
+          onEdit={() => { setShowDetail(false); setOpen(true); setFocusScore(true) }}
+          onSimulate={() => { setShowDetail(false); onOpenSimulation() }}
+        />
+      )}
     </div>
   )
 }
@@ -822,8 +970,9 @@ function BetShareModal({ bet, onClose }) {
 }
 
 // ── Placed bet row (Mine tab) ─────────────────────────────────────────────────
-function BetRow({ bet, index, onOpenSimulation }) {
+function BetRow({ bet, index, onOpenSimulation, onEditBet }) {
   const [showShare, setShowShare] = useState(false)
+  const [showDetail, setShowDetail] = useState(false)
 
   const resultClass = bet.result === 'exact'   ? 'bet-card--result-exact'
                     : bet.result === 'correct'  ? 'bet-card--result-correct'
@@ -857,6 +1006,9 @@ function BetRow({ bet, index, onOpenSimulation }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <span className="bet-card__time">{formatMatchDate(bet.match_date)}</span>
           <span className={`pts-badge ${ptsVariant}`}>{ptsValue}</span>
+          <button type="button" className="bet-card__expand" onClick={() => setShowDetail(true)} aria-label="Expandir detalhes da partida" title="Expandir">
+            <ExpandIcon />
+          </button>
         </div>
       </div>
 
@@ -919,6 +1071,25 @@ function BetRow({ bet, index, onOpenSimulation }) {
       </div>
     </div>
     {showShare && <BetShareModal bet={bet} onClose={() => setShowShare(false)} />}
+    {showDetail && (
+      <MatchDetailModal
+        onClose={() => setShowDetail(false)}
+        teamA={{ code: bet.team_a_code, flag_url: bet.team_a_flag }}
+        teamB={{ code: bet.team_b_code, flag_url: bet.team_b_flag }}
+        phase={bet.match_phase}
+        groupName={bet.group_name}
+        matchDate={bet.match_date}
+        msBefore={null}
+        score={{ a: bet.score_a, b: bet.score_b }}
+        official={hasOfficial ? { a: bet.official_score_a, b: bet.official_score_b } : null}
+        statusLabel={statusLabel}
+        statusColor={statusColor}
+        pointsEarned={bet.result !== null ? (bet.points_earned ?? 0) : null}
+        canEdit={!!bet.is_open}
+        onEdit={() => { setShowDetail(false); onEditBet?.(bet.match_id) }}
+        onSimulate={() => { setShowDetail(false); onOpenSimulation() }}
+      />
+    )}
     </>
   )
 }
@@ -1117,6 +1288,7 @@ function TeamFormSection({ teamA, teamB, recentMatches }) {
 
 // ── Finished match card (no bet placed) ──────────────────────────────────────
 function FinishedNoBetRow({ match, index, onOpenSimulation }) {
+  const [showDetail, setShowDetail] = useState(false)
   const sa = match.result?.score_a ?? match.score_a ?? '?'
   const sb = match.result?.score_b ?? match.score_b ?? '?'
   return (
@@ -1126,6 +1298,9 @@ function FinishedNoBetRow({ match, index, onOpenSimulation }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <span className="bet-card__time">{formatMatchDate(match.match_date)}</span>
           <span className="pts-badge pts-badge--wrong">sem palpite</span>
+          <button type="button" className="bet-card__expand" onClick={() => setShowDetail(true)} aria-label="Expandir detalhes da partida" title="Expandir">
+            <ExpandIcon />
+          </button>
         </div>
       </div>
       <div className="bet-card__match" style={{ marginTop: 'var(--s4)' }}>
@@ -1146,6 +1321,25 @@ function FinishedNoBetRow({ match, index, onOpenSimulation }) {
         <span className="bet-card__status" style={{ color: 'var(--text-4)' }}>Partida encerrada · palpite não registrado</span>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenSimulation}>Ver Simulação</button>
       </div>
+
+      {showDetail && (
+        <MatchDetailModal
+          onClose={() => setShowDetail(false)}
+          teamA={match.team_a}
+          teamB={match.team_b}
+          phase={match.phase}
+          groupName={match.group_name}
+          matchDate={match.match_date}
+          msBefore={null}
+          score={null}
+          official={{ a: sa, b: sb }}
+          statusLabel="Encerrada · sem palpite"
+          statusColor="var(--text-4)"
+          pointsEarned={null}
+          canEdit={false}
+          onSimulate={() => { setShowDetail(false); onOpenSimulation() }}
+        />
+      )}
     </div>
   )
 }
