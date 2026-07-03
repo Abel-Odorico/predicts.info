@@ -151,8 +151,11 @@ export default function LiveFloating() {
 
           @keyframes pillSlideIn{0%{opacity:0;transform:translateX(-50%) translateY(-16px) scale(.94)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
           .live-pill-enter{animation:pillSlideIn 450ms cubic-bezier(.2,.9,.3,1.1)}
-          @keyframes pillBreathe{0%,100%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 0 rgba(232,82,82,0.25)}50%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 6px rgba(232,82,82,0)}}
-          .live-pill-breathe{animation:pillBreathe 2.8s ease-in-out infinite}
+          @keyframes pillBreathe{
+            0%,100%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 0 rgba(232,82,82,0.55);border-color:rgba(232,82,82,0.45);transform:translateX(-50%) scale(1)}
+            50%{box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 9px rgba(232,82,82,0);border-color:rgba(232,82,82,0.95);transform:translateX(-50%) scale(1.025)}
+          }
+          .live-pill-breathe{animation:pillBreathe 1.8s ease-in-out infinite}
 
           @keyframes modalKickoff{0%{opacity:0;transform:scale(.9) translateY(10px)}60%{opacity:1;transform:scale(1.015) translateY(0)}100%{transform:scale(1) translateY(0)}}
           .live-modal-enter{animation:modalKickoff 380ms cubic-bezier(.2,.9,.3,1.1)}
