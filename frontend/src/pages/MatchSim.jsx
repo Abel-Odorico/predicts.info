@@ -213,10 +213,10 @@ export default function MatchSim() {
           <div className="card__body">
             {sim ? (
               <>
-                {/* Placar recomendado — top_scores[0] */}
-                {sim.top_scores?.[0] && (
+                {/* Placar recomendado — condicionado ao resultado mais provável */}
+                {sim.recommended_score && (
                   <div
-                    onClick={() => (token && bettingOpen) ? handleScoreSelect(sim.top_scores[0].score) : undefined}
+                    onClick={() => (token && bettingOpen) ? handleScoreSelect(sim.recommended_score.score) : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       background: 'linear-gradient(135deg, rgba(15,122,120,0.18) 0%, rgba(15,122,120,0.06) 100%)',
@@ -230,12 +230,12 @@ export default function MatchSim() {
                         ⭐ Placar Recomendado
                       </span>
                       <span style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '0.04em' }}>
-                        {sim.top_scores[0].score.replace('x', ' × ')}
+                        {sim.recommended_score.score.replace('x', ' × ')}
                       </span>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <span style={{ fontFamily: 'var(--font-data)', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>
-                        {sim.top_scores[0].prob.toFixed(1)}%
+                        {sim.recommended_score.prob.toFixed(1)}%
                       </span>
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
                         de probabilidade
@@ -252,7 +252,7 @@ export default function MatchSim() {
                   scores={sim.top_scores}
                   onSelect={token && bettingOpen ? handleScoreSelect : undefined}
                   selectedScore={token && bettingOpen ? selectedScore : undefined}
-                  highlightFirst
+                  highlightScore={sim.recommended_score?.score}
                 />
               </>
             ) : <Spinner />}

@@ -299,6 +299,7 @@ def simulate_match_endpoint(
         "xg_a": lambda_a,
         "xg_b": lambda_b,
         "top_scores": sim["top_scores"],
+        "recommended_score": sim["recommended_score"],
         "model_weights": weights_used,
         "simulations": simulations,
         "elapsed_ms": round(elapsed * 1000),

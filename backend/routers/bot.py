@@ -23,6 +23,7 @@ from models import (
     Bet, BotDecisionLog, Match, MatchPhase, MatchResult, MatchStatus,
     Ranking, SimulationCache, Team, TournamentSimulation, User, UserRole
 )
+from engine.poisson import pick_recommended_score
 from routers.champion import ChampionPick
 from world_cup_sync import _score_points_v2
 
@@ -59,10 +60,13 @@ def _poisson_mode(lam: float) -> int:
 def _predict_score(sim: SimulationCache | None, match: Match) -> tuple[int, int]:
     """
     Retorna (score_a, score_b) previsto pelo modelo.
-    Prioridade: top_scores[0] do Monte Carlo > modo Poisson > Elo raw.
+    Prioridade: placar recomendado (condicionado ao resultado mais provável
+    do Monte Carlo) > modo Poisson > Elo raw.
     """
     if sim and sim.top_scores:
-        top = sim.top_scores[0]  # {"score": "1x0", "prob": 12.5}
+        top = pick_recommended_score(
+            sim.top_scores, float(sim.prob_a or 0), float(sim.prob_draw or 0), float(sim.prob_b or 0)
+        )
         try:
             parts = str(top.get("score", "1x0")).split("x")
             return int(parts[0]), int(parts[1])

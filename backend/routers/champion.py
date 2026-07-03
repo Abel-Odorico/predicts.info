@@ -25,9 +25,9 @@ def _utcnow() -> datetime:
 
 
 def _deadline(db: Session) -> datetime:
-    """Retorna o horário do 1º jogo r32 no banco (deadline dinâmico)."""
+    """Retorna o horário do 1º jogo r32 no banco (trava no início da fase eliminatória)."""
     row = db.execute(
-        text("SELECT MIN(match_date) FROM matches WHERE phase = 'r32' AND status != 'finished'")
+        text("SELECT MIN(match_date) FROM matches WHERE phase = 'r32'")
     ).fetchone()
     if row and row[0]:
         return row[0]

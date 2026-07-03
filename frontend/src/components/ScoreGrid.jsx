@@ -1,4 +1,4 @@
-export default function ScoreGrid({ scores, onSelect, selectedScore, highlightFirst }) {
+export default function ScoreGrid({ scores, onSelect, selectedScore, highlightFirst, highlightScore }) {
   if (!scores?.length) return null
 
   const max = scores[0]?.prob || 1
@@ -7,7 +7,7 @@ export default function ScoreGrid({ scores, onSelect, selectedScore, highlightFi
     <div className="score-grid">
       {scores.map((s, i) => {
         const isSelected = selectedScore === s.score
-        const isTop = highlightFirst && i === 0
+        const isTop = highlightScore ? s.score === highlightScore : (highlightFirst && i === 0)
         return (
           <div
             key={s.score}

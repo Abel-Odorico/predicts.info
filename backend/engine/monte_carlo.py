@@ -7,7 +7,7 @@ Monte Carlo match and tournament simulation — fully vectorized with NumPy.
 import numpy as np
 from itertools import combinations
 
-from engine.poisson import dc_score_weights
+from engine.poisson import dc_score_weights, pick_recommended_score
 
 GLOBAL_AVG = 1.35
 
@@ -39,6 +39,10 @@ def simulate_match(
                 scores[f"{ga}x{gb}"] = round(p * 100, 3)
 
     top_scores = sorted(scores.items(), key=lambda x: -x[1])[:20]
+    top_scores_list = [{"score": s, "prob": p} for s, p in top_scores]
+    recommended_score = pick_recommended_score(
+        top_scores_list, prob_a * 100, prob_draw * 100, prob_b * 100
+    )
 
     return {
         "prob_a": round(prob_a * 100, 2),
@@ -46,7 +50,8 @@ def simulate_match(
         "prob_b": round(prob_b * 100, 2),
         "lambda_a": round(lambda_a, 4),
         "lambda_b": round(lambda_b, 4),
-        "top_scores": [{"score": s, "prob": p} for s, p in top_scores],
+        "top_scores": top_scores_list,
+        "recommended_score": recommended_score,
         "simulations": n,
     }
 

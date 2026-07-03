@@ -35,6 +35,35 @@ def compute_lambdas(
     return max(0.30, round(lambda_a, 4)), max(0.30, round(lambda_b, 4))
 
 
+def pick_recommended_score(top_scores: list[dict], prob_a: float, prob_draw: float, prob_b: float) -> dict:
+    """
+    Placar em destaque para exibição/aposta do bot.
+
+    O argmax puro sobre todos os placares quase sempre cai em 1x1/0x0 (baixo
+    escore em Copa faz a moda do Poisson concentrar aí), mesmo quando um dos
+    times é favorito claro — o que parece "preso" para quem simula partida a
+    partida. Por isso o recomendado é o placar mais provável DENTRO do
+    resultado (vitória A / empate / vitória B) que já é o mais provável.
+    """
+    if not top_scores:
+        return {"score": "0x0", "prob": 0.0}
+
+    if prob_a >= prob_draw and prob_a >= prob_b:
+        cond = lambda a, b: a > b
+    elif prob_b >= prob_draw and prob_b >= prob_a:
+        cond = lambda a, b: a < b
+    else:
+        cond = lambda a, b: a == b
+
+    candidates = []
+    for item in top_scores:
+        ga, gb = item["score"].split("x")
+        if cond(int(ga), int(gb)):
+            candidates.append(item)
+
+    return max(candidates, key=lambda x: x["prob"]) if candidates else top_scores[0]
+
+
 def poisson_score_prob(lambda_a: float, lambda_b: float, ga: int, gb: int) -> float:
     """Exact Poisson probability for a specific scoreline (no DC correction)."""
     from math import exp, factorial

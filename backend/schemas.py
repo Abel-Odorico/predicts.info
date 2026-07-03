@@ -71,6 +71,7 @@ class MatchSimulationResponse(BaseModel):
     xg_a: float
     xg_b: float
     top_scores: list[ScoreProb]
+    recommended_score: ScoreProb
     model_weights: dict[str, float]
     simulations: int
     cached: bool
