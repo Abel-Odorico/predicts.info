@@ -7,7 +7,9 @@ GET /matches) com o último placar visto por partida, guardado no Redis.
 Na primeira vez que vê uma partida ao vivo só grava o placar atual (baseline) —
 não dispara notificação de "gol" pro placar que a partida já tinha ao ser detectada.
 """
+import json
 import sys
+from datetime import datetime, timezone
 
 import redis as redis_lib
 from sqlalchemy.orm import joinedload
@@ -20,6 +22,10 @@ from routers.notifications import create_notification
 
 GOAL_KEY_PREFIX = "goal:last:"
 GOAL_TTL = 6 * 3600
+
+# Linha do tempo dos gols (ordem + minuto), consumida pelo popup ao vivo
+GOAL_EVENTS_PREFIX = "goal:events:"
+GOAL_EVENTS_MAX = 30
 
 
 def _redis():
@@ -47,8 +53,12 @@ def main() -> int:
             live = live_lookup.get(_live_match_key(m.team_a.name, m.team_b.name))
             if not live or live.get("status") != "live":
                 continue
-            sa, sb = live.get("score_a"), live.get("score_b")
-            if sa is None or sb is None:
+            raw_sa, raw_sb = live.get("score_a"), live.get("score_b")
+            if raw_sa is None or raw_sb is None or raw_sa == "" or raw_sb == "":
+                continue
+            try:
+                sa, sb = int(raw_sa), int(raw_sb)
+            except (TypeError, ValueError):
                 continue
 
             key = f"{GOAL_KEY_PREFIX}{m.id}"
@@ -62,6 +72,27 @@ def main() -> int:
             delta_a, delta_b = sa - prev_sa, sb - prev_sb
             if delta_a <= 0 and delta_b <= 0:
                 continue
+
+            minute_label = str(live.get("status_raw") or live.get("time_label") or "").strip()
+            events_key = f"{GOAL_EVENTS_PREFIX}{m.id}"
+            running_a, running_b = prev_sa, prev_sb
+            # Registra um evento por gol (cobre o raro caso de 2+ gols entre polls)
+            for side, delta in (("a", delta_a), ("b", delta_b)):
+                for _ in range(max(delta, 0)):
+                    if side == "a":
+                        running_a += 1
+                    else:
+                        running_b += 1
+                    r.rpush(events_key, json.dumps({
+                        "side": side,
+                        "team": m.team_a.code if side == "a" else m.team_b.code,
+                        "score_a": running_a,
+                        "score_b": running_b,
+                        "minute_label": minute_label,
+                        "at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                    }))
+            r.ltrim(events_key, -GOAL_EVENTS_MAX, -1)
+            r.expire(events_key, GOAL_TTL)
 
             scorer = m.team_a.name if delta_a > 0 else m.team_b.name
             title = f"⚽ GOL! {scorer}"

@@ -40,6 +40,15 @@ export default function LiveFloating() {
   const [betsDetails, setBetsDetails] = useState({})
   const loadedRef = useRef({})
 
+  // Linha do tempo de gols por match_id
+  const [goalsByMatch, setGoalsByMatch] = useState({})
+
+  function loadGoals(matchId) {
+    api.get(`/live/goals/${matchId}`)
+      .then(d => setGoalsByMatch(g => ({ ...g, [matchId]: d?.events || [] })))
+      .catch(() => {})
+  }
+
   function loadDetails(matchId) {
     if (loadedRef.current[matchId]) return
     loadedRef.current[matchId] = true
@@ -57,6 +66,12 @@ export default function LiveFloating() {
   useEffect(() => {
     if (!open) return
     games.forEach(g => { if (g.match_id != null) loadDetails(g.match_id) })
+  }, [open, games])
+
+  // Gols: recarrega a cada refresh do feed enquanto o popup tá aberto (pega gol novo)
+  useEffect(() => {
+    if (!open) return
+    games.forEach(g => { if (g.match_id != null) loadGoals(g.match_id) })
   }, [open, games])
 
   // Feed ao vivo (poll) — detecta gols comparando placar do poll anterior
@@ -213,6 +228,19 @@ export default function LiveFloating() {
           .live-score-live{display:inline-block;animation:scoreLiveGlow 2.2s ease-in-out infinite}
           @keyframes scoreLiveGlow{0%,100%{text-shadow:0 0 0 rgba(232,82,82,0)}50%{text-shadow:0 0 14px rgba(232,82,82,0.65)}}
 
+          .live-clock{
+            display:inline-flex; align-items:center; gap:6px;
+            font-family:var(--font-data, monospace); font-weight:800; font-size:16px; letter-spacing:0.03em;
+            color:#fff; padding:5px 14px; border-radius:99px;
+            background:linear-gradient(135deg, rgba(232,82,82,0.9), rgba(180,40,40,0.9));
+            box-shadow:0 4px 16px rgba(232,82,82,0.35);
+            animation:clockPulse 1.8s ease-in-out infinite;
+          }
+          .live-clock__dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:clockDotBlink 1s steps(2) infinite}
+          @keyframes clockPulse{0%,100%{box-shadow:0 4px 16px rgba(232,82,82,0.35)}50%{box-shadow:0 4px 22px rgba(232,82,82,0.65)}}
+          @keyframes clockDotBlink{0%,100%{opacity:1}50%{opacity:0.25}}
+          @media (prefers-reduced-motion: reduce){ .live-clock,.live-clock__dot{animation:none !important} }
+
           @media (prefers-reduced-motion: reduce){
             .live-pill-enter,.live-pill-breathe,.live-modal-enter,.live-modal-flash,
             .live-modal-goal-celebration__net,.live-modal-goal-celebration__ball,
@@ -273,10 +301,21 @@ export default function LiveFloating() {
                   <span className="live-mini-pitch__ball">⚽</span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
-                  <span className="badge badge-live">{g.status_raw || 'Ao vivo'}</span>
-                  {g.time_label && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3, #999)' }}>{g.time_label}</span>}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, marginTop: 10 }}>
+                  <span className="live-clock">
+                    <span className="live-clock__dot" />
+                    {g.status_raw || 'AO VIVO'}
+                  </span>
+                  {g.time_label && (
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4, #777)' }}>
+                      início {g.time_label}
+                    </span>
+                  )}
                 </div>
+
+                {g.match_id != null && goalsByMatch[g.match_id]?.length > 0 && (
+                  <GoalTimeline events={goalsByMatch[g.match_id]} teamA={g.team_a} teamB={g.team_b} />
+                )}
 
                 {g.match_id != null && classByMatch[g.match_id] && (
                   <ProjBlock c={classByMatch[g.match_id]} />
@@ -452,6 +491,32 @@ function MiniParticipantBets({ data, hasToken }) {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// Linha do tempo dos gols — ordem + minuto, alimentada por goal:events (check_goals.py)
+function GoalTimeline({ events, teamA, teamB }) {
+  return (
+    <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-overlay, rgba(255,255,255,0.04))', border: '1px solid var(--border, #2a2a33)' }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4, #777)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+        ⚽ Gols — ordem e minuto
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {events.map((e, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+            <span style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 11, fontWeight: 700, color: 'var(--accent, #4f6ef7)', width: 44, flexShrink: 0 }}>
+              {e.minute_label || '—'}
+            </span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-1, #fff)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              ⚽ {e.side === 'a' ? teamA : teamB}
+            </span>
+            <span style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 12, fontWeight: 800, color: 'var(--text-2, #bbb)', flexShrink: 0 }}>
+              {e.score_a}×{e.score_b}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   )

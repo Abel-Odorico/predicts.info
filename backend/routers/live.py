@@ -308,6 +308,29 @@ def world_cup_live_feed(db: Session = Depends(get_db)):
     return data
 
 
+# ── Linha do tempo de gols (ordem + minuto) ─────────────────────────────────
+# Alimentada pelo check_goals.py (cron 1min), que compara o placar ao vivo a
+# cada rodada e empilha um evento por gol em goal:events:{match_id}.
+
+GOAL_EVENTS_PREFIX = "goal:events:"
+
+
+@router.get("/goals/{match_id}")
+def match_goal_events(match_id: int):
+    try:
+        r = _get_redis()
+        raw = r.lrange(f"{GOAL_EVENTS_PREFIX}{match_id}", 0, -1)
+    except Exception:
+        raw = []
+    events = []
+    for item in raw:
+        try:
+            events.append(json.loads(item))
+        except Exception:
+            continue
+    return {"match_id": match_id, "events": events}
+
+
 # ── Classificação projetada ao vivo ─────────────────────────────────────────
 # Sobrepõe placares de jogos de grupo em andamento à tabela (só resultados
 # encerrados) e recalcula posições + classificados (top 2 + 8 melhores 3ºs).
