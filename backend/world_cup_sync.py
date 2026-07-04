@@ -731,8 +731,23 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                             title="❌ Resultado errado",
                             body=f"{label} · seu palpite: {bet.score_a}–{bet.score_b}", meta=meta))
                     notif_count += 1
+            elif bet.id in already_evaluated_bet_ids and bet.evaluated_at:
+                # Já tinha resultado avaliado antes, mas sumiu de result_by_match_id
+                # nesta rodada (jogo "pisca" status finished/live por instabilidade
+                # de sync). Mantém a avaliação — não limpa nem manda notificação
+                # duplicada — e ainda soma no ranking desta rodada.
+                points = bet.points_earned or 0
+                stats = ranking_totals.setdefault(
+                    bet.user_id,
+                    {"total_points": 0, "exact_scores": 0, "correct_results": 0},
+                )
+                stats["total_points"] += points
+                if points == 25:
+                    stats["exact_scores"] += 1
+                elif points > 0:
+                    stats["correct_results"] += 1
             else:
-                # Match not yet played — keep bet but clear stale evaluation
+                # Match não avaliado ainda de fato — limpa (fica pendente)
                 bet.points_earned = 0
                 bet.evaluated_at = None
 

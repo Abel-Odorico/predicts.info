@@ -76,6 +76,8 @@ def notify_version(
     v = db.query(AppVersion).filter(AppVersion.id == version_id).first()
     if not v:
         raise HTTPException(404, "Versão não encontrada")
+    if v.notified_at:
+        raise HTTPException(409, "Essa versão já foi notificada — não envia de novo")
 
     users = db.query(User).all()
     for user in users:
