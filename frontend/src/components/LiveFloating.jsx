@@ -49,16 +49,17 @@ export default function LiveFloating() {
       .catch(() => {})
   }
 
+  // Partida + simulação: dados estáveis, carrega uma vez por match_id.
+  // NÃO inclui live-bets aqui — bets dependem do token (login/logout) e mudam
+  // ao vivo; ficar preso no loadedRef fazia os palpites sumirem após relogar.
   function loadDetails(matchId) {
     if (loadedRef.current[matchId]) return
     loadedRef.current[matchId] = true
     setDetailLoading(d => ({ ...d, [matchId]: true }))
-    const reqs = [api.get(`/matches/${matchId}`), api.post(`/matches/${matchId}/simulate`)]
-    if (token) reqs.push(api.get(`/matches/${matchId}/live-bets`, token))
-    Promise.allSettled(reqs).then(([m, s, b]) => {
+    const reqs = [api.get(`/matches/${matchId}`), api.post(`/matches/${matchId}/simulate`, null, token)]
+    Promise.allSettled(reqs).then(([m, s]) => {
       if (m.status === 'fulfilled') setMatchDetails(d => ({ ...d, [matchId]: m.value }))
       if (s.status === 'fulfilled') setSimDetails(d => ({ ...d, [matchId]: s.value }))
-      if (b?.status === 'fulfilled') setBetsDetails(d => ({ ...d, [matchId]: b.value }))
     }).finally(() => setDetailLoading(d => ({ ...d, [matchId]: false })))
   }
 
@@ -67,6 +68,21 @@ export default function LiveFloating() {
     if (!open) return
     games.forEach(g => { if (g.match_id != null) loadDetails(g.match_id) })
   }, [open, games])
+
+  // Palpites: effect próprio, sem loadedRef. Refaz quando o token muda
+  // (login/logout) e a cada refresh do feed (games muda de ref), pra o
+  // "acertando/errando" acompanhar o placar ao vivo.
+  useEffect(() => {
+    if (!open || !token) return
+    let alive = true
+    games.forEach(g => {
+      if (g.match_id == null) return
+      api.get(`/matches/${g.match_id}/live-bets`, token)
+        .then(d => { if (alive) setBetsDetails(prev => ({ ...prev, [g.match_id]: d })) })
+        .catch(() => {})
+    })
+    return () => { alive = false }
+  }, [open, games, token])
 
   // Gols: recarrega a cada refresh do feed enquanto o popup tá aberto (pega gol novo)
   useEffect(() => {
