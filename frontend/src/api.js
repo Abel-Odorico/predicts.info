@@ -1,3 +1,5 @@
+import { useAuth } from './stores/authStore';
+
 const BASE = '/api';
 
 async function req(method, path, body, token) {
@@ -10,6 +12,13 @@ async function req(method, path, body, token) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  // Token vencido/inválido (TTL 7d): o cliente segue mandando o JWT morto e a UI
+  // continua "logada", quebrando silenciosamente live-bets, /bets/mine etc.
+  // Ao 1º 401 com token presente, desloga para a UI refletir a realidade.
+  if (res.status === 401 && token) {
+    try { useAuth.getState().logout(); } catch { /* fora do React */ }
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));

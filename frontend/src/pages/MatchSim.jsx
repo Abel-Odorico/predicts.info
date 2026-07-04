@@ -80,10 +80,14 @@ export default function MatchSim() {
   async function fetchAll() {
     setLoading(true)
     try {
+      // allSettled: uma req opcional (bets/mine com token vencido → 401) NÃO pode
+      // derrubar o carregamento da partida e disparar "Partida não encontrada".
       const reqs = [api.get(`/matches/${id}`), runSim(n, false)]
       if (token) reqs.push(api.get('/bets/mine', token))
-      const [m, , betsData] = await Promise.all(reqs)
-      setMatch(m)
+      const [mRes, , betsRes] = await Promise.allSettled(reqs)
+      if (mRes.status === 'fulfilled') setMatch(mRes.value)
+      else console.error(mRes.reason)
+      const betsData = betsRes?.status === 'fulfilled' ? betsRes.value : null
       if (betsData) {
         const found = betsData.find(b => b.match_id === Number(id))
         if (found) {
@@ -102,7 +106,7 @@ export default function MatchSim() {
     setSimRunning(true)
     try {
       const qs = force ? `?n=${simN}&force=true` : `?n=${simN}`
-      const s = await api.post(`/matches/${id}/simulate${qs}`)
+      const s = await api.post(`/matches/${id}/simulate${qs}`, null, token)
       setSim(s)
     } catch (e) {
       console.error(e)
