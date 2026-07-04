@@ -17,6 +17,15 @@ const PHASE_MARKS = [
 
 const norm = s => (s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
+const PHASE_LABELS = {
+  r32:   'R32',
+  r16:   'Oitavas',
+  qf:    'Quartas',
+  sf:    'Semifinal',
+  '3rd': '3º Lugar',
+  final: 'Final',
+}
+
 export default function Results() {
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
@@ -245,11 +254,13 @@ function ResultCard({ match }) {
     : r?.score_a > r?.score_b ? 'a' : r?.score_b > r?.score_a ? 'b' : 'draw'
   const ta = match.team_a
   const tb = match.team_b
+  const isKnockout = match.phase && match.phase !== 'group'
+  const phaseLabel = isKnockout ? (PHASE_LABELS[match.phase] || match.phase) : `G${match.group_name || '?'}`
 
   return (
     <Link to={`/partida/${match.id}`} className="result-card">
       <div className="result-card__meta">
-        <span className="badge badge-group">G{match.group_name}</span>
+        <span className={`badge ${isKnockout ? 'badge-knockout' : 'badge-group'}`}>{phaseLabel}</span>
         <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>
           #{match.match_number} · {match.city}
         </span>

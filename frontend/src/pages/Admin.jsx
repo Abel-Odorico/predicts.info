@@ -103,6 +103,7 @@ export default function Admin() {
 
   // Results
   const [matches, setMatches] = useState([])
+  const [finishedMatches, setFinishedMatches] = useState([])
   const [matchesLoading, setMatchesLoading] = useState(false)
   const [selected, setSelected] = useState(null)
   const [score, setScore] = useState({ a: '', b: '', xg_a: '', xg_b: '' })
@@ -780,8 +781,18 @@ export default function Admin() {
 
   async function loadMatches() {
     setMatchesLoading(true)
-    try { setMatches(await api.get('/matches?status=scheduled&limit=100')) }
-    catch { setMatches([]) }
+    try {
+      // scheduled + live — não só scheduled: um jogo que já iniciou (status
+      // live, por sync manual do football-data ou outra fonte) ainda precisa
+      // aparecer aqui pro admin lançar o resultado quando acabar.
+      const all = await api.get('/matches?limit=300')
+      setMatches(all.filter(m => m.status !== 'finished'))
+      setFinishedMatches(
+        all.filter(m => m.status === 'finished' && m.result)
+           .sort((a, b) => new Date(b.match_date) - new Date(a.match_date))
+      )
+    }
+    catch { setMatches([]); setFinishedMatches([]) }
     finally { setMatchesLoading(false) }
   }
 
@@ -826,9 +837,11 @@ export default function Admin() {
         .map(([code, e]) => `${code} ${e.before.toFixed(0)}→${e.after.toFixed(0)} (${e.delta > 0 ? '+' : ''}${e.delta})`)
         .join(' · ')
       setResultMsg(`✓ ${res.result} — ${res.outcome.toUpperCase()} · Elo: ${eloLines}`)
+      const finishedMatch = selected
       setSelected(null)
       setScore({ a: '', b: '', xg_a: '', xg_b: '' })
-      setMatches(m => m.filter(x => x.id !== selected.id))
+      setMatches(m => m.filter(x => x.id !== finishedMatch.id))
+      setFinishedMatches(f => [{ ...finishedMatch, status: 'finished', result: { score_a: sa, score_b: sb, xg_a: score.xg_a ? parseFloat(score.xg_a) : null, xg_b: score.xg_b ? parseFloat(score.xg_b) : null } }, ...f])
     } catch (e) { setResultMsg(`✗ ${e.message}`) }
   }
 
@@ -1500,7 +1513,8 @@ export default function Admin() {
       {/* ── Tab: Resultados ───────────────────────────── */}
       {tab === 'results' && (
         <div className="adm-pane adm-pane--two-col fade-in-1">
-          {/* Match list */}
+          {/* Match list + finalizadas — juntas na coluna 1 */}
+          <div className="stack">
           <div className="adm-card">
             <div className="adm-card__head">
               <span className="adm-card__title">Partidas Abertas</span>
@@ -1525,9 +1539,10 @@ export default function Admin() {
                   className={`admin-match-row${selected?.id === m.id ? ' admin-match-row--active' : ''}`}
                 >
                   <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', minWidth: 28 }}>
-                    G{m.group_name}
+                    {m.phase && m.phase !== 'group' ? (PHASE_LABELS_ADMIN[m.phase] || m.phase) : `G${m.group_name || '?'}`}
                   </span>
                   <span className="admin-match-row__teams">{m.team_a.code} vs {m.team_b.code}</span>
+                  {m.status === 'live' && <span className="badge badge-live" style={{ fontSize: 9 }}>AO VIVO</span>}
                   <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>#{m.id}</span>
                 </div>
               ))}
@@ -1573,6 +1588,34 @@ export default function Admin() {
             )}
           </div>
 
+          {/* Partidas já finalizadas */}
+          <div className="adm-card">
+            <div className="adm-card__head">
+              <span className="adm-card__title">Partidas Finalizadas</span>
+              <span className="adm-card__meta">{finishedMatches.length} jogos</span>
+            </div>
+            <div className="admin-list" style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {!matchesLoading && finishedMatches.length === 0 && (
+                <p style={{ padding: 'var(--s6)', color: 'var(--text-3)', textAlign: 'center', fontFamily: 'var(--font-cond)' }}>
+                  Nenhuma partida finalizada ainda
+                </p>
+              )}
+              {finishedMatches.map(m => (
+                <div key={m.id} className="admin-match-row" style={{ cursor: 'default' }}>
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', minWidth: 46 }}>
+                    {m.phase && m.phase !== 'group' ? (PHASE_LABELS_ADMIN[m.phase] || m.phase) : `G${m.group_name || '?'}`}
+                  </span>
+                  <span className="admin-match-row__teams">{m.team_a.code} vs {m.team_b.code}</span>
+                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>
+                    {m.result?.score_a} × {m.result?.score_b}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>#{m.id}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          </div>
+
           {/* Cache */}
           <div className="adm-card">
             <div className="adm-card__head">
@@ -1591,7 +1634,7 @@ export default function Admin() {
               <span className="adm-card__title">Pontuação</span>
             </div>
             <div style={{ padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
-              {['Elo atualizado (K=32) automaticamente', 'Exato = 3 pts · Resultado certo = 1 pt', 'Cache invalidado após resultado', 'xG refina simulações futuras'].map((l, i) => (
+              {['Elo atualizado (K=32) automaticamente', 'Sistema Precisão: exato = 25 pts · resultado certo = 10 a 18 pts', 'Cache invalidado após resultado', 'xG refina simulações futuras'].map((l, i) => (
                 <div key={i} style={{ display: 'flex', gap: 'var(--s2)', fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', alignItems: 'flex-start' }}>
                   <span style={{ color: 'var(--win)', lineHeight: 1.5 }}>✓</span>{l}
                 </div>
