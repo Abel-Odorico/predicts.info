@@ -8,11 +8,12 @@ _BRT = ZoneInfo("America/Sao_Paulo")
 import httpx
 import redis as redis_lib
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from config import settings
 from database import get_db
-from models import Match, MatchPhase, Team
+from models import Match, MatchPhase, MatchResult, Team
 
 router = APIRouter(prefix="/live", tags=["live"])
 
@@ -142,7 +143,14 @@ def _game_status_from_raw(raw_status: str, time_label: str, has_score: bool = Fa
     if has_score and _infer_status_from_time(time_label) in ("live", "finished"):
         return "live"
     if not raw:
-        return _infer_status_from_time(time_label)
+        inferred = _infer_status_from_time(time_label)
+        # Sem status textual E sem placar = nenhum sinal real da fonte (ex.: API
+        # externa fora do ar / feed congelado). Não afirmar "ao vivo" só pelo
+        # relógio — senão um jogo já encerrado aparece falsamente ao vivo até o
+        # fim da janela. Precisa de placar ou status textual pra confirmar.
+        if inferred == "live" and not has_score:
+            return "scheduled"
+        return inferred
     return "scheduled"
 
 
@@ -306,6 +314,89 @@ def world_cup_live_feed(db: Session = Depends(get_db)):
         game["match_id"] = match_lookup.get(key)
 
     return data
+
+
+# ── Fallback de resultado via feed tropatech ────────────────────────────────
+# A ingestão de resultado do mata-mata no cron depende da Wikipedia
+# (sync_knockout_matches), que às vezes atrasa horas. Este fallback grava o
+# placar final a partir do feed ao vivo (tropatech), que marca "FIM DE JOGO"
+# quase em tempo real, pra o loop de pontuação não esperar a Wikipedia.
+#
+# Regras de segurança (não estragar nada):
+#   • SÓ INSERE — nunca atualiza nem apaga MatchResult existente (Wikipedia /
+#     football-data continuam autoritativos; se já há resultado, ignora).
+#   • SÓ mata-mata (phase != group) — evita colidir com o delete/rewrite de
+#     resultados de grupo do apply_world_cup_snapshot.
+#   • SÓ jogo com status textual explícito de fim ("FIM DE JOGO" etc.) E placar
+#     numérico presente — nunca por inferência de relógio.
+#   • Só age quando o par de times resolve para UMA partida no banco (mesmo
+#     lookup do world_cup_live_feed); orientação do placar segue a ordem do DB.
+#   • Idempotente: rodar de novo não faz nada depois do 1º insert.
+def sync_finished_from_live_feed(db_url: str, log=None) -> dict:
+    def _log(msg):
+        if log:
+            log(msg)
+
+    inserted = 0
+    skipped = 0
+    engine = create_engine(db_url)
+    SessionLocal = sessionmaker(bind=engine)
+    try:
+        data = fetch_world_cup_live_games()
+    except Exception as exc:  # feed fora do ar não pode quebrar o cron
+        _log(f"[live-fallback] feed indisponível: {exc}")
+        return {"inserted": 0, "skipped": 0, "error": str(exc)}
+
+    with SessionLocal() as db:
+        db_matches = (
+            db.query(Match)
+            .options(joinedload(Match.team_a), joinedload(Match.team_b))
+            .filter(Match.phase != MatchPhase.group)
+            .all()
+        )
+        match_lookup = {
+            (_normalize_team_name(m.team_a.name), _normalize_team_name(m.team_b.name)): m
+            for m in db_matches
+            if m.team_a and m.team_b
+        }
+
+        for game in data.get("games", []):
+            # 1. Fim explícito pela fonte (não por relógio)
+            if game.get("status") != "finished":
+                continue
+            raw = str(game.get("status_raw") or "").upper()
+            if not ("FIM" in raw or "ENCERR" in raw or "FINALIZ" in raw
+                    or raw in {"FT", "AET", "PEN"}):
+                continue
+            # 2. Placar numérico presente
+            try:
+                sa = int(game.get("score_a"))
+                sb = int(game.get("score_b"))
+            except (TypeError, ValueError):
+                continue
+            # 3. Resolve par → uma partida (ordem do DB)
+            key = (game.get("team_a_key") or "", game.get("team_b_key") or "")
+            match = match_lookup.get(key)
+            if match is None:
+                continue
+            # 4. Nunca sobrescrever resultado já existente
+            exists = db.query(MatchResult).filter(MatchResult.match_id == match.id).first()
+            if exists:
+                skipped += 1
+                continue
+            result_str = "a" if sa > sb else ("b" if sb > sa else "draw")
+            db.add(MatchResult(
+                match_id=match.id, score_a=sa, score_b=sb,
+                result=result_str, recorded_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            ))
+            match.status = "finished"
+            inserted += 1
+            _log(f"[live-fallback] resultado gravado: match {match.id} {sa}x{sb} ({match.team_a.name} x {match.team_b.name})")
+
+        if inserted:
+            db.commit()
+
+    return {"inserted": inserted, "skipped": skipped}
 
 
 # ── Linha do tempo de gols (ordem + minuto) ─────────────────────────────────

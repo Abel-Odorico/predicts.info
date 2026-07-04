@@ -10,6 +10,7 @@ Uso:
 """
 
 from config import settings
+from routers.live import sync_finished_from_live_feed
 from world_cup_official import sync_knockout_matches
 from world_cup_sync import (
     apply_world_cup_snapshot,
@@ -25,6 +26,17 @@ def log(message: str) -> None:
 
 def main() -> None:
     log("=== COPA 2026 — Sync completo ===")
+
+    # Fallback tropatech ANTES do snapshot: grava resultado de jogo do mata-mata
+    # já encerrado no feed ao vivo mas ainda ausente na Wikipedia, pra o loop de
+    # pontuação do apply_world_cup_snapshot avaliar as apostas no MESMO ciclo.
+    # Isolado: qualquer falha aqui não pode derrubar o sync principal.
+    try:
+        fb = sync_finished_from_live_feed(settings.database_url, log=log)
+        log(f"Fallback ao vivo: {fb.get('inserted', 0)} resultado(s) gravado(s), {fb.get('skipped', 0)} já existiam")
+    except Exception as exc:
+        log(f"Fallback ao vivo falhou (ignorado): {exc}")
+
     snapshot = fetch_world_cup_snapshot(log=log)
     summary = apply_world_cup_snapshot(settings.database_url, snapshot, log=log)
     log(
