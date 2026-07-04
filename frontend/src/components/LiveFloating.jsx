@@ -496,27 +496,42 @@ function MiniParticipantBets({ data, hasToken }) {
   )
 }
 
-// Linha do tempo dos gols — ordem + minuto, alimentada por goal:events (check_goals.py)
+// Linha do tempo dos gols — cada time do seu lado, minuto do gol no meio
 function GoalTimeline({ events, teamA, teamB }) {
   return (
     <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-overlay, rgba(255,255,255,0.04))', border: '1px solid var(--border, #2a2a33)' }}>
-      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4, #777)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-        ⚽ Gols — ordem e minuto
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4, #777)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6, textAlign: 'center' }}>
+        ⚽ Gols
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {events.map((e, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
-            <span style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 11, fontWeight: 700, color: 'var(--accent, #4f6ef7)', width: 44, flexShrink: 0 }}>
-              {e.minute_label || '—'}
-            </span>
-            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-1, #fff)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              ⚽ {e.side === 'a' ? teamA : teamB}
-            </span>
-            <span style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 12, fontWeight: 800, color: 'var(--text-2, #bbb)', flexShrink: 0 }}>
-              {e.score_a}×{e.score_b}
-            </span>
-          </div>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {events.map((e, i) => {
+          const isA = e.side === 'a'
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                flex: 1, minWidth: 0, textAlign: 'right', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                color: isA ? 'var(--text-1, #fff)' : 'var(--text-4, #555)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {isA ? `${teamA} ⚽` : ''}
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-data, monospace)', fontSize: 11, fontWeight: 800, flexShrink: 0,
+                width: 40, textAlign: 'center', color: 'var(--accent, #4f6ef7)',
+                background: 'rgba(79,110,247,0.12)', borderRadius: 6, padding: '2px 0',
+              }}>
+                {e.minute_label || '—'}
+              </span>
+              <span style={{
+                flex: 1, minWidth: 0, textAlign: 'left', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                color: !isA ? 'var(--text-1, #fff)' : 'var(--text-4, #555)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {!isA ? `⚽ ${teamB}` : ''}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
