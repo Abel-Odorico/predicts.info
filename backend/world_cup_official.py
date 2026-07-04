@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Callable
 
 import httpx
@@ -9,21 +9,7 @@ from sqlalchemy import create_engine, or_, and_
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Match, MatchPhase, MatchResult, MatchStatus, Team
-from world_cup_sync import _clean_links, _parse_local_datetime, HEADERS
-
-# Wikipedia atualiza o placar {{score|a|b}} da infobox EM TEMPO REAL durante o
-# jogo — não é um sinal de "partida encerrada". Só confiamos nesse placar como
-# resultado final depois de uma janela que cobre 90'+intervalo+prorrogação+
-# pênaltis (mesma folga usada em routers/live.py), senão um gol ao vivo vira
-# "resultado final" prematuro e fecha o jogo/avalia apostas antes da hora.
-_MATCH_MAX_DURATION = timedelta(hours=3, minutes=30)
-
-
-def _match_likely_over(match_date: datetime | None) -> bool:
-    if match_date is None:
-        return True  # sem data pra comparar — mantém comportamento anterior
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    return now >= match_date + _MATCH_MAX_DURATION
+from world_cup_sync import _clean_links, _match_likely_over, _parse_local_datetime, HEADERS
 
 KNOCKOUT_TITLE = "2026_FIFA_World_Cup_knockout_stage"
 FINAL_TITLE = "2026_FIFA_World_Cup_final"

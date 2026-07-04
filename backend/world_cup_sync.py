@@ -180,6 +180,23 @@ def _score_points(score_a: int, score_b: int, result_a: int, result_b: int, matc
     return _score_points_v2(score_a, score_b, result_a, result_b)
 
 
+# Wikipedia atualiza o placar {{score|a|b}} da infobox EM TEMPO REAL durante o
+# jogo — não é um sinal de "partida encerrada". Só confiamos nesse placar como
+# resultado final depois de uma janela que cobre 90'+intervalo+prorrogação+
+# pênaltis (mesma folga usada em routers/live.py), senão um gol ao vivo vira
+# "resultado final" prematuro e fecha o jogo/avalia apostas antes da hora.
+# Fonte única — usada tanto no sync de grupos (abaixo) quanto no de mata-mata
+# (world_cup_official.py).
+_MATCH_MAX_DURATION = timedelta(hours=3, minutes=30)
+
+
+def _match_likely_over(match_date: datetime | None) -> bool:
+    if match_date is None:
+        return True  # sem data pra comparar — mantém comportamento anterior
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return now >= match_date + _MATCH_MAX_DURATION
+
+
 def _clean_links(text: str) -> str:
     text = re.sub(r"<ref[^>]*>.*?</ref>", "", text, flags=re.S)
     text = re.sub(r"<ref[^/]*/>", "", text)
@@ -607,7 +624,11 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 item["team_a_code"],
                 item["team_b_code"],
             )
-            new_status = MatchStatus.finished if item["score_a"] is not None else MatchStatus.scheduled
+            # Placar presente não basta — Wikipedia atualiza ao vivo durante o
+            # jogo. Só marca finished depois da janela de _match_likely_over,
+            # senão um gol no meio da partida vira "resultado final" cedo demais.
+            score_ready = item["score_a"] is not None and _match_likely_over(item["match_date"])
+            new_status = MatchStatus.finished if score_ready else MatchStatus.scheduled
             existing = existing_matches_by_key.get(key)
 
             if existing:
@@ -640,7 +661,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
             match_label_by_id[match.id] = f"{team_a_name} × {team_b_name}"
             match_date_by_id[match.id] = match.match_date
 
-            if item["score_a"] is not None and item["score_b"] is not None:
+            if score_ready and item["score_b"] is not None:
                 result_by_match_id[match.id] = (item["score_a"], item["score_b"])
                 db.add(
                     MatchResult(
@@ -658,12 +679,18 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
 
         db.flush()
 
-        # Include finished knockout matches (R32+) in evaluation dict.
+        # Include knockout matches (R32+) that already have a recorded result.
         # apply_world_cup_snapshot only processes group-stage matches above,
-        # so R32 results synced by sync_knockout_matches would otherwise be skipped.
+        # so R32 results synced by sync_knockout_matches would otherwise be
+        # skipped. Filtra pela EXISTÊNCIA do resultado, não por Match.status —
+        # status pode "piscar" finished/live entre syncs (fonte externa
+        # instável) mesmo com o MatchResult já gravado e definitivo; usar
+        # status aqui reabre bets avaliadas e reenvia notificação duplicada.
         for ko_match in (
             db.query(Match)
-            .filter(Match.status == MatchStatus.finished, Match.phase != MatchPhase.group)
+            .join(MatchResult, MatchResult.match_id == Match.id)
+            .options(joinedload(Match.result))
+            .filter(Match.phase != MatchPhase.group)
             .all()
         ):
             if ko_match.result and ko_match.id not in result_by_match_id:
@@ -731,23 +758,12 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                             title="❌ Resultado errado",
                             body=f"{label} · seu palpite: {bet.score_a}–{bet.score_b}", meta=meta))
                     notif_count += 1
-            elif bet.id in already_evaluated_bet_ids and bet.evaluated_at:
-                # Já tinha resultado avaliado antes, mas sumiu de result_by_match_id
-                # nesta rodada (jogo "pisca" status finished/live por instabilidade
-                # de sync). Mantém a avaliação — não limpa nem manda notificação
-                # duplicada — e ainda soma no ranking desta rodada.
-                points = bet.points_earned or 0
-                stats = ranking_totals.setdefault(
-                    bet.user_id,
-                    {"total_points": 0, "exact_scores": 0, "correct_results": 0},
-                )
-                stats["total_points"] += points
-                if points == 25:
-                    stats["exact_scores"] += 1
-                elif points > 0:
-                    stats["correct_results"] += 1
             else:
-                # Match não avaliado ainda de fato — limpa (fica pendente)
+                # Sem MatchResult pra esse jogo agora (nunca teve, ou foi
+                # corrigido/apagado) — limpa e fica pendente. A causa raiz do
+                # "sumiço transitório" (status flapping) foi corrigida acima:
+                # ko_match agora inclui pela existência do MatchResult, não
+                # por Match.status, então chegar aqui significa ausência real.
                 bet.points_earned = 0
                 bet.evaluated_at = None
 
