@@ -488,6 +488,11 @@ function MiniParticipantBets({ data, hasToken }) {
               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0 }}>
                 {meta.icon}
               </span>
+              {b.points_earned != null && (
+                <span style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 10, fontWeight: 800, color: 'var(--accent, #4f6ef7)', flexShrink: 0, minWidth: 30, textAlign: 'right' }}>
+                  +{b.points_earned}
+                </span>
+              )}
             </div>
           )
         })}

@@ -460,6 +460,11 @@ function ParticipantBets({ data, loading, myUserId, teamA, teamB }) {
                 <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
                   {meta.icon} {meta.label}
                 </span>
+                {b.points_earned != null && (
+                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 800, color: 'var(--accent)', flexShrink: 0, minWidth: 34, textAlign: 'right' }}>
+                    +{b.points_earned}pts
+                  </span>
+                )}
               </div>
             )
           })}
