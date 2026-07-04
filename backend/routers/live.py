@@ -155,9 +155,12 @@ def _infer_status_from_time(time_label: str) -> str:
         return "scheduled"
     now_brt = datetime.now(_BRT).replace(tzinfo=None)
     kickoff_at = now_brt.replace(hour=kickoff.hour, minute=kickoff.minute, second=0, microsecond=0)
-    if kickoff_at <= now_brt <= kickoff_at + timedelta(hours=2, minutes=45):
+    # Janela generosa: 90' + intervalo + prorrogação (30') + intervalo + pênaltis,
+    # mais folga pra acréscimos e atraso de transmissão. Sem isso, jogo que vai
+    # pra prorrogação/pênaltis some do "ao vivo" antes de acabar de verdade.
+    if kickoff_at <= now_brt <= kickoff_at + timedelta(hours=3, minutes=30):
         return "live"
-    if now_brt > kickoff_at + timedelta(hours=2, minutes=45):
+    if now_brt > kickoff_at + timedelta(hours=3, minutes=30):
         return "finished"
     return "scheduled"
 

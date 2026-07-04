@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import httpx
@@ -10,6 +10,20 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from models import Match, MatchPhase, MatchResult, MatchStatus, Team
 from world_cup_sync import _clean_links, _parse_local_datetime, HEADERS
+
+# Wikipedia atualiza o placar {{score|a|b}} da infobox EM TEMPO REAL durante o
+# jogo — não é um sinal de "partida encerrada". Só confiamos nesse placar como
+# resultado final depois de uma janela que cobre 90'+intervalo+prorrogação+
+# pênaltis (mesma folga usada em routers/live.py), senão um gol ao vivo vira
+# "resultado final" prematuro e fecha o jogo/avalia apostas antes da hora.
+_MATCH_MAX_DURATION = timedelta(hours=3, minutes=30)
+
+
+def _match_likely_over(match_date: datetime | None) -> bool:
+    if match_date is None:
+        return True  # sem data pra comparar — mantém comportamento anterior
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return now >= match_date + _MATCH_MAX_DURATION
 
 KNOCKOUT_TITLE = "2026_FIFA_World_Cup_knockout_stage"
 FINAL_TITLE = "2026_FIFA_World_Cup_final"
@@ -306,7 +320,7 @@ def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
                     skipped += 1
                     continue
                 score = item["score"]
-                if score is not None:
+                if score is not None and _match_likely_over(existing.match_date):
                     sa, sb = score
                     if existing.result is None:
                         outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
@@ -371,7 +385,7 @@ def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
                     updated += 1
 
             score = item["score"]
-            if score is not None:
+            if score is not None and _match_likely_over(existing.match_date):
                 sa, sb = score
                 if existing.result is None:
                     outcome = "a" if sa > sb else ("b" if sb > sa else "draw")

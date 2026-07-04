@@ -2,8 +2,17 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import ProbBar from './ProbBar'
+import { useAuth } from '../stores/authStore'
 
 const POLL_MS = 10000   // refresh feed
+
+const BET_STATUS_META = {
+  exact:   { icon: '🎯', label: 'Exato',      color: 'var(--win, #3fb950)' },
+  correct: { icon: '✅', label: 'Acertando',  color: 'var(--win, #3fb950)' },
+  wrong:   { icon: '❌', label: 'Errando',    color: 'var(--lose, #e85252)' },
+  pending: { icon: '⏳', label: 'Aguardando', color: 'var(--text-4, #777)' },
+}
 
 function _brTime(iso) {
   if (!iso) return ''
@@ -15,6 +24,7 @@ function _brTime(iso) {
 
 export default function LiveFloating() {
   const navigate = useNavigate()
+  const { token } = useAuth()
   const [games, setGames] = useState([])
   const [classByMatch, setClassByMatch] = useState({})
   const [upcoming, setUpcoming] = useState([])
@@ -22,6 +32,32 @@ export default function LiveFloating() {
   const [goalFlash, setGoalFlash] = useState({})
   const widgetRef = useRef(null)
   const prevScoresRef = useRef({})
+
+  // Detalhes (simulador + palpites) por match_id — carrega sozinho, sem clique extra
+  const [detailLoading, setDetailLoading] = useState({})
+  const [matchDetails, setMatchDetails] = useState({})
+  const [simDetails, setSimDetails] = useState({})
+  const [betsDetails, setBetsDetails] = useState({})
+  const loadedRef = useRef({})
+
+  function loadDetails(matchId) {
+    if (loadedRef.current[matchId]) return
+    loadedRef.current[matchId] = true
+    setDetailLoading(d => ({ ...d, [matchId]: true }))
+    const reqs = [api.get(`/matches/${matchId}`), api.post(`/matches/${matchId}/simulate`)]
+    if (token) reqs.push(api.get(`/matches/${matchId}/live-bets`, token))
+    Promise.allSettled(reqs).then(([m, s, b]) => {
+      if (m.status === 'fulfilled') setMatchDetails(d => ({ ...d, [matchId]: m.value }))
+      if (s.status === 'fulfilled') setSimDetails(d => ({ ...d, [matchId]: s.value }))
+      if (b?.status === 'fulfilled') setBetsDetails(d => ({ ...d, [matchId]: b.value }))
+    }).finally(() => setDetailLoading(d => ({ ...d, [matchId]: false })))
+  }
+
+  // Assim que a pílula é aberta, carrega detalhes de todos os jogos ao vivo
+  useEffect(() => {
+    if (!open) return
+    games.forEach(g => { if (g.match_id != null) loadDetails(g.match_id) })
+  }, [open, games])
 
   // Feed ao vivo (poll) — detecta gols comparando placar do poll anterior
   useEffect(() => {
@@ -246,6 +282,23 @@ export default function LiveFloating() {
                   <ProjBlock c={classByMatch[g.match_id]} />
                 )}
 
+                {g.match_id != null && (
+                  <div className="fade-in-1" style={{ marginTop: 10 }}>
+                    {detailLoading[g.match_id] && !matchDetails[g.match_id] ? (
+                      <div style={{ textAlign: 'center', padding: '10px 0', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4, #777)' }}>
+                        ⏳ Carregando simulador…
+                      </div>
+                    ) : (
+                      <>
+                        {simDetails[g.match_id] && matchDetails[g.match_id] && (
+                          <ProbBar sim={simDetails[g.match_id]} matchData={matchDetails[g.match_id]} />
+                        )}
+                        <MiniParticipantBets data={betsDetails[g.match_id]} hasToken={!!token} />
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {(g.city || g.venue) && (
                   <div style={{ textAlign: 'center', marginTop: 8, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4, #777)', letterSpacing: '0.04em' }}>
                     📍 {[g.city, g.venue].filter(Boolean).join(' · ')}
@@ -355,6 +408,52 @@ function PillTeam({ t }) {
       }} />
       {t.delta === 'in' ? '🟢' : t.delta === 'out' ? '🔴' : ''}
     </span>
+  )
+}
+
+// Palpites dos participantes (versão compacta pro popup ao vivo)
+function MiniParticipantBets({ data, hasToken }) {
+  if (!hasToken) {
+    return (
+      <div style={{ marginTop: 8, textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4, #777)' }}>
+        Faça login para ver quem está acertando o placar
+      </div>
+    )
+  }
+  if (!data || data.bets.length === 0) return null
+
+  const exactCount = data.bets.filter(b => b.status === 'exact').length
+  const correctCount = data.bets.filter(b => b.status === 'correct').length
+
+  return (
+    <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-overlay, rgba(255,255,255,0.04))', border: '1px solid var(--border, #2a2a33)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4, #777)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          🎲 Palpites · {data.total_bets}
+        </span>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4, #777)' }}>
+          🎯 {exactCount} · ✅ {correctCount}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+        {data.bets.map(b => {
+          const meta = BET_STATUS_META[b.status] || BET_STATUS_META.pending
+          return (
+            <div key={b.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 6px', borderRadius: 6 }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                {b.user_name}
+              </span>
+              <span style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 700, fontSize: 12, color: 'var(--text-1, #fff)', flexShrink: 0 }}>
+                {b.score_a} × {b.score_b}
+              </span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0 }}>
+                {meta.icon}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
