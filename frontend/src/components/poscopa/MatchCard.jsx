@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const STATUS_META = {
   aberto: { label: 'Palpite aberto', tone: 'open' },
   encerrando: { label: 'Encerrando em breve', tone: 'warn' },
@@ -14,8 +16,16 @@ function fmtKickoff(iso) {
 // Seleção -> bandeira real (flagUrl). Clube -> badge nas cores do time
 // (crest real ainda não integrado — ver comentário em posCopaMocks.js).
 function TeamBadge({ team }) {
-  if (team.flagUrl) {
-    return <img src={team.flagUrl} alt={team.code} className="pc-match-card__flag-img" />
+  const [imgError, setImgError] = useState(false)
+  if (team.flagUrl && !imgError) {
+    return (
+      <img
+        src={team.flagUrl}
+        alt={team.code}
+        className="pc-match-card__flag-img"
+        onError={() => setImgError(true)}
+      />
+    )
   }
   const [c1, c2] = team.colors || ['#516f8a', '#516f8a']
   return (
@@ -27,8 +37,10 @@ function TeamBadge({ team }) {
 
 // dado mockado — em produção viria de GET /competitions/:slug/matches
 export default function MatchCard({ match, compColor }) {
-  const meta = STATUS_META[match.status] || STATUS_META.aberto
-  const disabled = match.status === 'fechado' || match.status === 'finalizado'
+  // status desconhecido cai em "fechado" (fail-safe); só 'aberto'/'encerrando'
+  // (tone open/warn) deixam o botão de palpite ativo — cobre 'ao-vivo' também.
+  const meta = STATUS_META[match.status] || STATUS_META.fechado
+  const disabled = meta.tone !== 'open' && meta.tone !== 'warn'
   return (
     <article className="pc-match-card" style={{ '--comp-color': compColor }}>
       <div className="pc-match-card__head">

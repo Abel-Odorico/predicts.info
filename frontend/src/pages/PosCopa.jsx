@@ -27,6 +27,14 @@ const EVOLUTION_ICON = { up: '▲', down: '▼', flat: '·' }
 // cards de jogo, pra cada competição manter identidade visual própria
 const compColorMap = Object.fromEntries(competitions.map((c) => [c.slug, c.color]))
 
+function getCompColor(slug) {
+  const color = compColorMap[slug]
+  if (!color && import.meta.env.DEV) {
+    console.warn(`[pos-copa] sem cor pra competitionSlug "${slug}" — checa se bate com competitions[].slug`)
+  }
+  return color
+}
+
 export default function PosCopa() {
   const [leaderboardFilter, setLeaderboardFilter] = useState('geral')
 
@@ -48,6 +56,13 @@ export default function PosCopa() {
       document.getElementById(id)?.scrollIntoView({ block: 'start' })
     })
   }, [])
+
+  // CTA dos cards de competição: ativa manda pra jogos abertos, em-breve
+  // manda pro CTA de beta lá embaixo (ainda sem captura real de e-mail/lead)
+  function handleCompetitionCta(competition) {
+    const targetId = competition.status === 'ativa' ? 'jogos' : 'beta'
+    document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <div className="pc-page">
@@ -79,7 +94,6 @@ export default function PosCopa() {
           <span className="pc-floater pc-floater--2">🏆 #1</span>
           <span className="pc-floater pc-floater--3">📊 +25 pts</span>
           <span className="pc-floater pc-floater--4">🛡️ Brasileirão</span>
-          <span className="pc-floater pc-floater--5">📅 Rodada 14</span>
         </div>
         <p className="pc-hero__eyebrow">Predicts.info · próxima fase</p>
         <h1 className="pc-hero__title">Predicts.info continua depois da Copa</h1>
@@ -99,7 +113,7 @@ export default function PosCopa() {
         <h2 className="pc-section__title">Competições</h2>
         <p className="pc-section__subtitle">Copa do Mundo ativa hoje. Brasileirão, Libertadores e Copa do Brasil chegando.</p>
         <div className="pc-grid pc-grid--4">
-          {competitions.map((c) => <CompetitionCard key={c.id} competition={c} />)}
+          {competitions.map((c) => <CompetitionCard key={c.id} competition={c} onCta={handleCompetitionCta} />)}
         </div>
       </section>
 
@@ -108,7 +122,7 @@ export default function PosCopa() {
         <h2 className="pc-section__title">Jogos abertos para palpites</h2>
         <p className="pc-section__subtitle">Estrutura pronta para dados reais — hoje exibindo exemplos mockados.</p>
         <div className="pc-grid pc-grid--3">
-          {openMatches.map((m) => <MatchCard key={m.id} match={m} compColor={compColorMap[m.competitionSlug]} />)}
+          {openMatches.map((m) => <MatchCard key={m.id} match={m} compColor={getCompColor(m.competitionSlug)} />)}
         </div>
       </section>
 
@@ -148,17 +162,18 @@ export default function PosCopa() {
             ))}
           </div>
           <ol className="pc-lb__list">
-            {leaderboardTop.map((u) => (
-              <li key={u.rank} className="pc-lb__row">
-                <span className="pc-lb__row-rank">{u.rank}</span>
-                <span className="pc-lb__row-name">{u.name}</span>
-                <span className="pc-lb__row-hits">{u.exactHits} exatos</span>
-                <span className={`pc-lb__row-evo pc-lb__row-evo--${u.evolution > 0 ? 'up' : u.evolution < 0 ? 'down' : 'flat'}`}>
-                  {EVOLUTION_ICON[u.evolution > 0 ? 'up' : u.evolution < 0 ? 'down' : 'flat']}
-                </span>
-                <span className="pc-lb__row-pts">{u.points} pts</span>
-              </li>
-            ))}
+            {leaderboardTop.map((u) => {
+              const tone = u.evolution > 0 ? 'up' : u.evolution < 0 ? 'down' : 'flat'
+              return (
+                <li key={u.rank} className="pc-lb__row">
+                  <span className="pc-lb__row-rank">{u.rank}</span>
+                  <span className="pc-lb__row-name">{u.name}</span>
+                  <span className="pc-lb__row-hits">{u.exactHits} exatos</span>
+                  <span className={`pc-lb__row-evo pc-lb__row-evo--${tone}`}>{EVOLUTION_ICON[tone]}</span>
+                  <span className="pc-lb__row-pts">{u.points} pts</span>
+                </li>
+              )
+            })}
           </ol>
           <p className="pc-lb__caption">Exibindo: {filteredLabel} (mock)</p>
         </div>
@@ -198,7 +213,7 @@ export default function PosCopa() {
       </section>
 
       {/* ---------- 9. enquete + beta ---------- */}
-      <section className="pc-section">
+      <section id="beta" className="pc-section">
         <PollCard options={pollOptions} />
       </section>
 

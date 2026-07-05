@@ -110,7 +110,7 @@ export const myPredictions = [
   {
     id: 'p1', competition: 'Copa do Mundo 2026', round: 'Grupo A · Rodada 1',
     home: 'Brasil', away: 'Japão', predHome: 2, predAway: 1,
-    resultHome: 3, resultAway: 2, status: 'finalizado', pointsType: 'resultado', points: 10,
+    resultHome: 3, resultAway: 2, status: 'finalizado', pointsType: 'saldo', points: 15,
   },
   {
     id: 'p2', competition: 'Copa do Mundo 2026', round: 'Grupo A · Rodada 2',
