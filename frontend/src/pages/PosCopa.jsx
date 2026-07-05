@@ -23,6 +23,10 @@ import {
 
 const EVOLUTION_ICON = { up: '▲', down: '▼', flat: '·' }
 
+// cor de cada competição (definida em posCopaMocks.js) reaproveitada nos
+// cards de jogo, pra cada competição manter identidade visual própria
+const compColorMap = Object.fromEntries(competitions.map((c) => [c.slug, c.color]))
+
 export default function PosCopa() {
   const [leaderboardFilter, setLeaderboardFilter] = useState('geral')
 
@@ -90,7 +94,7 @@ export default function PosCopa() {
         <h2 className="pc-section__title">Jogos abertos para palpites</h2>
         <p className="pc-section__subtitle">Estrutura pronta para dados reais — hoje exibindo exemplos mockados.</p>
         <div className="pc-grid pc-grid--3">
-          {openMatches.map((m) => <MatchCard key={m.id} match={m} />)}
+          {openMatches.map((m) => <MatchCard key={m.id} match={m} compColor={compColorMap[m.competitionSlug]} />)}
         </div>
       </section>
 

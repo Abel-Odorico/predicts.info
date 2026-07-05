@@ -210,6 +210,7 @@
 /* ---------- match card ---------- */
 .pc-match-card {
   border: 1px solid var(--border);
+  border-top: 3px solid var(--comp-color, var(--accent));
   background: var(--bg-raised);
   border-radius: var(--r3);
   padding: var(--s4);
@@ -229,6 +230,18 @@
 .pc-match-card__team { display: flex; align-items: center; gap: var(--s2); }
 .pc-match-card__team--away { flex-direction: row-reverse; }
 .pc-match-card__vs { color: var(--text-4); }
+.pc-match-card__flag-img { width: 28px; height: 20px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
+.pc-team-badge {
+  width: 28px; height: 20px;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-data);
+  font-size: 0.6rem; font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
 .pc-match-card__meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-4); }
 .pc-match-card__probs-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-3); margin-top: var(--s2); }
 .pc-prob-bar { height: 6px; border-radius: 999px; background: var(--lose-dim); overflow: hidden; display: flex; }

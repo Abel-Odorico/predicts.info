@@ -71,29 +71,37 @@ export const competitions = [
   },
 ]
 
+// Seleções (Copa do Mundo) usam bandeira real via flagcdn.com (mesma fonte do
+// backend em seed_data.py). Clubes (Brasileirão/Libertadores/Copa do Brasil)
+// ainda não têm crest real no mock, então usam um badge com as cores oficiais
+// do clube — troque por `flagUrl` (crest) quando integrar com a tabela `team`.
 export const openMatches = [
   {
     id: 'm1', competitionSlug: 'copa-do-mundo-2026', round: 'Grupo A · Rodada 2',
-    home: 'Brasil', away: 'Japão', homeFlag: '🇧🇷', awayFlag: '🇯🇵',
+    home: { name: 'Brasil', code: 'BRA', flagUrl: 'https://flagcdn.com/w80/br.png' },
+    away: { name: 'Japão', code: 'JPN', flagUrl: 'https://flagcdn.com/w80/jp.png' },
     kickoff: '2026-06-15T16:00:00-03:00', deadline: '2026-06-15T15:45:00-03:00',
     status: 'aberto', // aberto | encerrando | fechado | ao-vivo | finalizado
     probHome: 54, probDraw: 26, probAway: 20,
   },
   {
     id: 'm2', competitionSlug: 'brasileirao', round: 'Rodada 14',
-    home: 'Flamengo', away: 'Palmeiras', homeFlag: '🔴⚫', awayFlag: '🟢⚪',
+    home: { name: 'Flamengo', code: 'FLA', colors: ['#C8102E', '#000000'] },
+    away: { name: 'Palmeiras', code: 'PAL', colors: ['#006437', '#0d1d2e'] },
     kickoff: '2026-07-12T18:30:00-03:00', deadline: '2026-07-12T18:15:00-03:00',
     status: 'encerrando', probHome: 41, probDraw: 27, probAway: 32,
   },
   {
     id: 'm3', competitionSlug: 'libertadores', round: 'Oitavas · Ida',
-    home: 'River Plate', away: 'Grêmio', homeFlag: '🇦🇷', awayFlag: '🇧🇷',
+    home: { name: 'River Plate', code: 'RIV', colors: ['#E2001A', '#FFFFFF'] },
+    away: { name: 'Grêmio', code: 'GRE', colors: ['#0F1131', '#6DBFEF'] },
     kickoff: '2026-07-20T21:30:00-03:00', deadline: '2026-07-20T21:15:00-03:00',
     status: 'aberto', probHome: 46, probDraw: 28, probAway: 26,
   },
   {
     id: 'm4', competitionSlug: 'copa-do-brasil', round: 'Quartas · Jogo único',
-    home: 'Athletico-PR', away: 'Fortaleza', homeFlag: '🔴⚫', awayFlag: '🔵⚪',
+    home: { name: 'Athletico-PR', code: 'CAP', colors: ['#E31E24', '#000000'] },
+    away: { name: 'Fortaleza', code: 'FOR', colors: ['#003399', '#E31E24'] },
     kickoff: '2026-08-02T20:00:00-03:00', deadline: '2026-08-02T19:45:00-03:00',
     status: 'fechado', probHome: 38, probDraw: 30, probAway: 32,
   },
