@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './PosCopa.css'
 import CompetitionCard from '../components/poscopa/CompetitionCard'
@@ -37,6 +37,17 @@ export default function PosCopa() {
     () => leaderboardTypes.find((t) => t.id === leaderboardFilter)?.label ?? 'Ranking geral',
     [leaderboardFilter],
   )
+
+  // Página carrega via React.lazy — o scroll nativo do navegador pro #hash
+  // dispara antes do chunk montar e cai em posição errada. Refaz o scroll
+  // depois que o conteúdo já está no DOM.
+  useEffect(() => {
+    if (!window.location.hash) return
+    const id = window.location.hash.slice(1)
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: 'start' })
+    })
+  }, [])
 
   return (
     <div className="pc-page">
