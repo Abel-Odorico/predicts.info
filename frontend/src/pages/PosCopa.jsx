@@ -35,6 +35,12 @@ function getCompColor(slug) {
   return color
 }
 
+// usado tanto no scroll de deep-link (#hash) quanto no clique dos CTAs, pra
+// as duas formas de navegar dentro da página irem sempre pro mesmo lugar
+function scrollToSection(id, opts) {
+  document.getElementById(id)?.scrollIntoView({ block: 'start', ...opts })
+}
+
 export default function PosCopa() {
   const [leaderboardFilter, setLeaderboardFilter] = useState('geral')
 
@@ -52,16 +58,13 @@ export default function PosCopa() {
   useEffect(() => {
     if (!window.location.hash) return
     const id = window.location.hash.slice(1)
-    requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ block: 'start' })
-    })
+    requestAnimationFrame(() => scrollToSection(id))
   }, [])
 
   // CTA dos cards de competição: ativa manda pra jogos abertos, em-breve
   // manda pro CTA de beta lá embaixo (ainda sem captura real de e-mail/lead)
   function handleCompetitionCta(competition) {
-    const targetId = competition.status === 'ativa' ? 'jogos' : 'beta'
-    document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollToSection(competition.status === 'ativa' ? 'jogos' : 'beta', { behavior: 'smooth' })
   }
 
   return (

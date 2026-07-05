@@ -1,11 +1,14 @@
 import { useState } from 'react'
 
+// `tone` só decide a cor/classe CSS do badge de status; `bettable` é quem
+// decide se o botão de palpite fica ativo — os dois são independentes de
+// propósito, pra renomear/adicionar um tone não mexer sem querer na regra.
 const STATUS_META = {
-  aberto: { label: 'Palpite aberto', tone: 'open' },
-  encerrando: { label: 'Encerrando em breve', tone: 'warn' },
-  fechado: { label: 'Palpite fechado', tone: 'closed' },
-  'ao-vivo': { label: 'Ao vivo', tone: 'live' },
-  finalizado: { label: 'Finalizado', tone: 'done' },
+  aberto: { label: 'Palpite aberto', tone: 'open', bettable: true },
+  encerrando: { label: 'Encerrando em breve', tone: 'warn', bettable: true },
+  fechado: { label: 'Palpite fechado', tone: 'closed', bettable: false },
+  'ao-vivo': { label: 'Ao vivo', tone: 'live', bettable: false },
+  finalizado: { label: 'Finalizado', tone: 'done', bettable: false },
 }
 
 function fmtKickoff(iso) {
@@ -23,7 +26,10 @@ function TeamBadge({ team }) {
         src={team.flagUrl}
         alt={team.code}
         className="pc-match-card__flag-img"
-        onError={() => setImgError(true)}
+        onError={() => {
+          if (import.meta.env.DEV) console.warn(`[pos-copa] crest/bandeira falhou ao carregar: ${team.flagUrl}`)
+          setImgError(true)
+        }}
       />
     )
   }
@@ -37,10 +43,9 @@ function TeamBadge({ team }) {
 
 // dado mockado — em produção viria de GET /competitions/:slug/matches
 export default function MatchCard({ match, compColor }) {
-  // status desconhecido cai em "fechado" (fail-safe); só 'aberto'/'encerrando'
-  // (tone open/warn) deixam o botão de palpite ativo — cobre 'ao-vivo' também.
+  // status desconhecido cai em "fechado" (fail-safe)
   const meta = STATUS_META[match.status] || STATUS_META.fechado
-  const disabled = meta.tone !== 'open' && meta.tone !== 'warn'
+  const disabled = !meta.bettable
   return (
     <article className="pc-match-card" style={{ '--comp-color': compColor }}>
       <div className="pc-match-card__head">
