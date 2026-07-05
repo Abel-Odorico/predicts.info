@@ -8,7 +8,7 @@ import ScoringExample from '../components/poscopa/ScoringExample'
 import NewsImpactCard from '../components/poscopa/NewsImpactCard'
 import PollCard from '../components/poscopa/PollCard'
 import {
-  competitions, openMatches, myPredictions, leaderboardTypes, leaderboardTop,
+  competitions, openMatches, myPredictions, leaderboardTypes, leaderboardsByFilter,
   scoringRules, simulators, newsImpact, pollOptions, futureNav,
 } from '../mocks/posCopaMocks'
 
@@ -29,6 +29,9 @@ const compColorMap = Object.fromEntries(competitions.map((c) => [c.slug, c.color
 
 export default function PosCopa() {
   const [leaderboardFilter, setLeaderboardFilter] = useState('geral')
+
+  // troca por fetch real quando integrar: GET /leaderboards?competition=${leaderboardFilter}
+  const leaderboardTop = leaderboardsByFilter[leaderboardFilter] || leaderboardsByFilter.geral
 
   const filteredLabel = useMemo(
     () => leaderboardTypes.find((t) => t.id === leaderboardFilter)?.label ?? 'Ranking geral',

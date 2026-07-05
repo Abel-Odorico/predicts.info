@@ -134,13 +134,61 @@ export const leaderboardTypes = [
   { id: 'boloes', label: 'Bolões privados' },
 ]
 
-export const leaderboardTop = [
-  { rank: 1, name: 'Marcos T.', points: 1420, exactHits: 18, evolution: 3 },
-  { rank: 2, name: 'Ana Beatriz', points: 1385, exactHits: 15, evolution: -1 },
-  { rank: 3, name: 'Diego R.', points: 1340, exactHits: 14, evolution: 1 },
-  { rank: 4, name: 'Carla M.', points: 1290, exactHits: 12, evolution: 0 },
-  { rank: 5, name: 'Pedro L.', points: 1255, exactHits: 11, evolution: 2 },
-]
+// Mock por filtro — quando integrar, troca por
+// useEffect(() => api.get(`/leaderboards?competition=${filter}`), [filter])
+// mantendo o mesmo shape (rank/name/points/exactHits/evolution) pra não
+// mexer no componente, só na origem do dado.
+export const leaderboardsByFilter = {
+  geral: [
+    { rank: 1, name: 'Marcos T.', points: 1420, exactHits: 18, evolution: 3 },
+    { rank: 2, name: 'Ana Beatriz', points: 1385, exactHits: 15, evolution: -1 },
+    { rank: 3, name: 'Diego R.', points: 1340, exactHits: 14, evolution: 1 },
+    { rank: 4, name: 'Carla M.', points: 1290, exactHits: 12, evolution: 0 },
+    { rank: 5, name: 'Pedro L.', points: 1255, exactHits: 11, evolution: 2 },
+  ],
+  'copa-do-mundo-2026': [
+    { rank: 1, name: 'Diego R.', points: 610, exactHits: 9, evolution: 2 },
+    { rank: 2, name: 'Marcos T.', points: 590, exactHits: 8, evolution: 0 },
+    { rank: 3, name: 'Pedro L.', points: 545, exactHits: 7, evolution: 1 },
+    { rank: 4, name: 'Ana Beatriz', points: 520, exactHits: 6, evolution: -2 },
+    { rank: 5, name: 'Carla M.', points: 505, exactHits: 6, evolution: 0 },
+  ],
+  brasileirao: [
+    { rank: 1, name: 'Ana Beatriz', points: 380, exactHits: 5, evolution: 1 },
+    { rank: 2, name: 'Carla M.', points: 365, exactHits: 5, evolution: 2 },
+    { rank: 3, name: 'Marcos T.', points: 340, exactHits: 4, evolution: -1 },
+    { rank: 4, name: 'Pedro L.', points: 310, exactHits: 3, evolution: 0 },
+    { rank: 5, name: 'Diego R.', points: 295, exactHits: 3, evolution: -1 },
+  ],
+  libertadores: [
+    { rank: 1, name: 'Pedro L.', points: 210, exactHits: 3, evolution: 1 },
+    { rank: 2, name: 'Diego R.', points: 195, exactHits: 2, evolution: 0 },
+    { rank: 3, name: 'Ana Beatriz', points: 180, exactHits: 2, evolution: 1 },
+    { rank: 4, name: 'Marcos T.', points: 165, exactHits: 2, evolution: -1 },
+    { rank: 5, name: 'Carla M.', points: 150, exactHits: 1, evolution: 0 },
+  ],
+  'copa-do-brasil': [
+    { rank: 1, name: 'Carla M.', points: 175, exactHits: 2, evolution: 2 },
+    { rank: 2, name: 'Marcos T.', points: 160, exactHits: 2, evolution: 0 },
+    { rank: 3, name: 'Ana Beatriz', points: 150, exactHits: 1, evolution: 1 },
+    { rank: 4, name: 'Diego R.', points: 140, exactHits: 1, evolution: -1 },
+    { rank: 5, name: 'Pedro L.', points: 130, exactHits: 1, evolution: 0 },
+  ],
+  semanal: [
+    { rank: 1, name: 'Pedro L.', points: 85, exactHits: 2, evolution: 4 },
+    { rank: 2, name: 'Carla M.', points: 80, exactHits: 1, evolution: 1 },
+    { rank: 3, name: 'Marcos T.', points: 75, exactHits: 1, evolution: -2 },
+    { rank: 4, name: 'Diego R.', points: 70, exactHits: 1, evolution: 0 },
+    { rank: 5, name: 'Ana Beatriz', points: 65, exactHits: 0, evolution: 1 },
+  ],
+  boloes: [
+    { rank: 1, name: 'Marcos T.', points: 340, exactHits: 6, evolution: 0 },
+    { rank: 2, name: 'Diego R.', points: 320, exactHits: 5, evolution: 1 },
+    { rank: 3, name: 'Carla M.', points: 300, exactHits: 4, evolution: 2 },
+    { rank: 4, name: 'Ana Beatriz', points: 285, exactHits: 4, evolution: -1 },
+    { rank: 5, name: 'Pedro L.', points: 270, exactHits: 3, evolution: 0 },
+  ],
+}
 
 // Regra de pontuação — copiada 1:1 do sistema atual, sem alterar valores.
 // "labelSuggestions" é só cosmético (texto de exibição); a regra em si não muda.
