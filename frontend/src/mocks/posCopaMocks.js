@@ -72,9 +72,8 @@ export const competitions = [
 ]
 
 // Seleções (Copa do Mundo) usam bandeira real via flagcdn.com (mesma fonte do
-// backend em seed_data.py). Clubes (Brasileirão/Libertadores/Copa do Brasil)
-// ainda não têm crest real no mock, então usam um badge com as cores oficiais
-// do clube — troque por `flagUrl` (crest) quando integrar com a tabela `team`.
+// backend em seed_data.py). Clubes usam o escudo real via TheSportsDB (CDN
+// pública, sem key) — troque por `flagUrl` da tabela `team` quando integrar.
 export const openMatches = [
   {
     id: 'm1', competitionSlug: 'copa-do-mundo-2026', round: 'Grupo A · Rodada 2',
@@ -86,22 +85,22 @@ export const openMatches = [
   },
   {
     id: 'm2', competitionSlug: 'brasileirao', round: 'Rodada 14',
-    home: { name: 'Flamengo', code: 'FLA', colors: ['#C8102E', '#000000'] },
-    away: { name: 'Palmeiras', code: 'PAL', colors: ['#006437', '#0d1d2e'] },
+    home: { name: 'Flamengo', code: 'FLA', flagUrl: 'https://r2.thesportsdb.com/images/media/team/badge/syptwx1473538074.png' },
+    away: { name: 'Palmeiras', code: 'PAL', flagUrl: 'https://r2.thesportsdb.com/images/media/team/badge/vsqwqp1473538105.png' },
     kickoff: '2026-07-12T18:30:00-03:00', deadline: '2026-07-12T18:15:00-03:00',
     status: 'encerrando', probHome: 41, probDraw: 27, probAway: 32,
   },
   {
     id: 'm3', competitionSlug: 'libertadores', round: 'Oitavas · Ida',
-    home: { name: 'River Plate', code: 'RIV', colors: ['#E2001A', '#FFFFFF'] },
-    away: { name: 'Grêmio', code: 'GRE', colors: ['#0F1131', '#6DBFEF'] },
+    home: { name: 'River Plate', code: 'RIV', flagUrl: 'https://r2.thesportsdb.com/images/media/team/badge/03dmi31645539717.png' },
+    away: { name: 'Grêmio', code: 'GRE', flagUrl: 'https://r2.thesportsdb.com/images/media/team/badge/uvpwyt1473538089.png' },
     kickoff: '2026-07-20T21:30:00-03:00', deadline: '2026-07-20T21:15:00-03:00',
     status: 'aberto', probHome: 46, probDraw: 28, probAway: 26,
   },
   {
     id: 'm4', competitionSlug: 'copa-do-brasil', round: 'Quartas · Jogo único',
-    home: { name: 'Athletico-PR', code: 'CAP', colors: ['#E31E24', '#000000'] },
-    away: { name: 'Fortaleza', code: 'FOR', colors: ['#003399', '#E31E24'] },
+    home: { name: 'Athletico-PR', code: 'CAP', flagUrl: 'https://r2.thesportsdb.com/images/media/team/badge/irzu1u1554237406.png' },
+    away: { name: 'Fortaleza', code: 'FOR', flagUrl: 'https://r2.thesportsdb.com/images/media/team/badge/tosmdr1532853458.png' },
     kickoff: '2026-08-02T20:00:00-03:00', deadline: '2026-08-02T19:45:00-03:00',
     status: 'fechado', probHome: 38, probDraw: 30, probAway: 32,
   },

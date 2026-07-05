@@ -230,7 +230,14 @@
 .pc-match-card__team { display: flex; align-items: center; gap: var(--s2); }
 .pc-match-card__team--away { flex-direction: row-reverse; }
 .pc-match-card__vs { color: var(--text-4); }
-.pc-match-card__flag-img { width: 28px; height: 20px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
+.pc-match-card__flag-img {
+  width: 28px; height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.85);
+  padding: 2px;
+  flex-shrink: 0;
+}
 .pc-team-badge {
   width: 28px; height: 20px;
   border-radius: 4px;
