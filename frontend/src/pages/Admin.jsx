@@ -100,6 +100,9 @@ export default function Admin() {
   const [userQuery, setUserQuery] = useState('')
   const [userMsg, setUserMsg] = useState('')
   const [savingUserId, setSavingUserId] = useState(null)
+  const [editingUserId, setEditingUserId] = useState(null)
+  const [editUserForm, setEditUserForm] = useState({ name: '', email: '', phone: '', username: '' })
+  const [resendingUserId, setResendingUserId] = useState(null)
 
   // Results
   const [matches, setMatches] = useState([])
@@ -856,6 +859,40 @@ export default function Admin() {
     finally { setSavingUserId(null) }
   }
 
+  function startEditUser(u) {
+    setUserMsg('')
+    setEditingUserId(u.id)
+    setEditUserForm({ name: u.name || '', email: u.email || '', phone: u.phone || '', username: u.username || '' })
+  }
+
+  function cancelEditUser() {
+    setEditingUserId(null)
+  }
+
+  async function saveEditUser(userId) {
+    setUserMsg('')
+    setSavingUserId(userId)
+    try {
+      const res = await api.patch(`/admin/users/${userId}`, editUserForm, token)
+      setUsers(list => list.map(item => item.id === userId
+        ? { ...item, name: res.name, email: res.email, phone: res.phone, username: res.username }
+        : item))
+      setUserMsg(`✓ Dados de ${res.email} atualizados`)
+      setEditingUserId(null)
+    } catch (e) { setUserMsg(`✗ ${e.message}`) }
+    finally { setSavingUserId(null) }
+  }
+
+  async function resendPassword(userId, email) {
+    setUserMsg('')
+    setResendingUserId(userId)
+    try {
+      const res = await api.post(`/admin/users/${userId}/resend-password`, {}, token)
+      setUserMsg(`✓ ${res.message || `Link enviado para ${email}`}`)
+    } catch (e) { setUserMsg(`✗ ${e.message}`) }
+    finally { setResendingUserId(null) }
+  }
+
   async function startSync() {
     setSyncStatus({ running: true, log: [], updated: 0, errors: [] })
     setSyncPolling(true)
@@ -1199,68 +1236,144 @@ export default function Admin() {
                 {!usersLoading && users.length === 0 && (
                   <tr><td colSpan={9} className="adm-table__empty">Nenhum usuário encontrado.</td></tr>
                 )}
-                {!usersLoading && users.map(u => (
-                  <tr key={u.id} className={u.role === 'admin' ? 'adm-table__row--admin' : ''}>
-                    <td>
-                      <div className="adm-table__name">{u.name}</div>
-                      <div className="adm-table__id">ID {u.id}</div>
-                    </td>
-                    <td>
-                      {u.username
-                        ? <span className="adm-table__username">@{u.username}</span>
-                        : <span className="adm-table__nil">—</span>}
-                    </td>
-                    <td>
-                      {u.phone
-                        ? (
-                          <a
-                            href={`https://wa.me/${u.phone.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="adm-table__wa"
+                {!usersLoading && users.map(u => {
+                  const isEditing = editingUserId === u.id
+                  return isEditing ? (
+                    <tr key={u.id} className={u.role === 'admin' ? 'adm-table__row--admin' : ''}>
+                      <td>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={editUserForm.name}
+                          onChange={e => setEditUserForm(f => ({ ...f, name: e.target.value }))}
+                        />
+                        <div className="adm-table__id">ID {u.id}</div>
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="username"
+                          value={editUserForm.username}
+                          onChange={e => setEditUserForm(f => ({ ...f, username: e.target.value }))}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="(11) 99999-9999"
+                          value={editUserForm.phone}
+                          onChange={e => setEditUserForm(f => ({ ...f, phone: e.target.value }))}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="email"
+                          className="form-input"
+                          value={editUserForm.email}
+                          onChange={e => setEditUserForm(f => ({ ...f, email: e.target.value }))}
+                        />
+                      </td>
+                      <td className="adm-table__num">{u.bets_count}</td>
+                      <td className="adm-table__num adm-table__pts">{u.bets_points}</td>
+                      <td>
+                        <span className={`badge ${u.role === 'admin' ? 'badge-live' : 'badge-group'}`}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="adm-table__date">
+                        <div>{fmtShort(u.created_at)}</div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            disabled={savingUserId === u.id}
+                            onClick={() => saveEditUser(u.id)}
                           >
-                            <span className="adm-table__wa-icon">📱</span>
-                            {u.phone}
-                          </a>
-                        )
-                        : <span className="adm-table__nil">—</span>}
-                    </td>
-                    <td className="adm-table__email">{u.email}</td>
-                    <td className="adm-table__num">{u.bets_count}</td>
-                    <td className="adm-table__num adm-table__pts">{u.bets_points}</td>
-                    <td>
-                      <span className={`badge ${u.role === 'admin' ? 'badge-live' : 'badge-group'}`}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="adm-table__date">
-                      <div>{fmtShort(u.created_at)}</div>
-                      {u.updated_at && u.updated_at !== u.created_at && (
-                        <div style={{ color: 'var(--accent)', fontSize: 10, marginTop: 2 }}>
-                          ↻ {fmtShort(u.updated_at)}
+                            {savingUserId === u.id ? '...' : '💾 Salvar'}
+                          </button>
+                          <button className="btn btn-ghost btn-sm" onClick={cancelEditUser}>
+                            ✕ Cancelar
+                          </button>
                         </div>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <a
-                          href={`/usuarios/${u.id}/historico`}
-                          className="btn btn-ghost btn-sm"
-                          title="Ver apostas deste usuário"
-                        >
-                          📜 Histórico
-                        </a>
-                        <button
-                          className={`btn btn-sm ${u.role === 'admin' ? 'btn-ghost' : 'btn-primary'}`}
-                          disabled={savingUserId === u.id || (u.id === user.id && u.role === 'admin')}
-                          onClick={() => updateUserRole(u.id, u.role === 'admin' ? 'user' : 'admin')}
-                        >
-                          {savingUserId === u.id ? '...' : u.role === 'admin' ? '− Admin' : '+ Admin'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={u.id} className={u.role === 'admin' ? 'adm-table__row--admin' : ''}>
+                      <td>
+                        <div className="adm-table__name">{u.name}</div>
+                        <div className="adm-table__id">ID {u.id}</div>
+                      </td>
+                      <td>
+                        {u.username
+                          ? <span className="adm-table__username">@{u.username}</span>
+                          : <span className="adm-table__nil">—</span>}
+                      </td>
+                      <td>
+                        {u.phone
+                          ? (
+                            <a
+                              href={`https://wa.me/${u.phone.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="adm-table__wa"
+                            >
+                              <span className="adm-table__wa-icon">📱</span>
+                              {u.phone}
+                            </a>
+                          )
+                          : <span className="adm-table__nil">—</span>}
+                      </td>
+                      <td className="adm-table__email">{u.email}</td>
+                      <td className="adm-table__num">{u.bets_count}</td>
+                      <td className="adm-table__num adm-table__pts">{u.bets_points}</td>
+                      <td>
+                        <span className={`badge ${u.role === 'admin' ? 'badge-live' : 'badge-group'}`}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="adm-table__date">
+                        <div>{fmtShort(u.created_at)}</div>
+                        {u.updated_at && u.updated_at !== u.created_at && (
+                          <div style={{ color: 'var(--accent)', fontSize: 10, marginTop: 2 }}>
+                            ↻ {fmtShort(u.updated_at)}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <a
+                            href={`/usuarios/${u.id}/historico`}
+                            className="btn btn-ghost btn-sm"
+                            title="Ver apostas deste usuário"
+                          >
+                            📜 Histórico
+                          </a>
+                          <button className="btn btn-ghost btn-sm" onClick={() => startEditUser(u)}>
+                            ✎ Editar
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled={resendingUserId === u.id}
+                            title="Enviar e-mail de redefinição de senha"
+                            onClick={() => resendPassword(u.id, u.email)}
+                          >
+                            {resendingUserId === u.id ? '...' : '🔑 Reenviar senha'}
+                          </button>
+                          <button
+                            className={`btn btn-sm ${u.role === 'admin' ? 'btn-ghost' : 'btn-primary'}`}
+                            disabled={savingUserId === u.id || (u.id === user.id && u.role === 'admin')}
+                            onClick={() => updateUserRole(u.id, u.role === 'admin' ? 'user' : 'admin')}
+                          >
+                            {savingUserId === u.id ? '...' : u.role === 'admin' ? '− Admin' : '+ Admin'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -7,6 +7,8 @@ GET  /admin/users          list users with admin metrics
 PATCH /admin/users/{id}    update user role
 """
 
+import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session, joinedload
@@ -20,11 +22,13 @@ from auth_utils import require_admin
 from models import (
     Match, MatchResult, MatchStatus, Team, Player,
     Bet, Ranking, TournamentSimulation, User, UserRole, Notification, PageView,
-    UserGroup, UserGroupMember, UserGroupInvite, GroupInviteStatus, AuditLog
+    UserGroup, UserGroupMember, UserGroupInvite, GroupInviteStatus, AuditLog,
+    PasswordResetToken,
 )
 from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate
 from engine.elo import update_ratings
 from routers.notifications import create_notification
+from routers.auth import _send_reset_email_bg
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -326,26 +330,90 @@ def list_users(
 
 
 @router.patch("/users/{user_id}")
-def update_user_role(
+def update_user(
     user_id: int,
     payload: AdminUserUpdate,
     db: Session = Depends(get_db),
     admin_user: User = Depends(require_admin),
 ):
-    try:
-        new_role = UserRole(payload.role)
-    except ValueError:
-        raise HTTPException(400, "Invalid role")
-
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-    if user.id == admin_user.id and new_role != UserRole.admin:
-        raise HTTPException(400, "You cannot remove your own admin role")
 
-    user.role = new_role
+    if payload.role is not None:
+        try:
+            new_role = UserRole(payload.role)
+        except ValueError:
+            raise HTTPException(400, "Invalid role")
+        if user.id == admin_user.id and new_role != UserRole.admin:
+            raise HTTPException(400, "You cannot remove your own admin role")
+        user.role = new_role
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, "Nome não pode ficar vazio")
+        user.name = name
+
+    if payload.email is not None:
+        email = payload.email.strip().lower()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            raise HTTPException(400, "E-mail inválido")
+        dupe = db.query(User).filter(func.lower(User.email) == email, User.id != user.id).first()
+        if dupe:
+            raise HTTPException(400, "E-mail já em uso por outro usuário")
+        user.email = email
+
+    if payload.phone is not None:
+        user.phone = payload.phone.strip() or None
+
+    if payload.username is not None:
+        username = payload.username.strip().lstrip("@") or None
+        if username:
+            dupe = db.query(User).filter(func.lower(User.username) == username.lower(), User.id != user.id).first()
+            if dupe:
+                raise HTTPException(400, "@username já em uso por outro usuário")
+        user.username = username
+
     db.commit()
-    return {"user_id": user.id, "email": user.email, "role": user.role.value}
+    db.refresh(user)
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "phone": user.phone,
+        "username": user.username,
+        "role": user.role.value,
+    }
+
+
+@router.post("/users/{user_id}/resend-password", status_code=202)
+def resend_password_email(
+    user_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).delete()
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    token = secrets.token_urlsafe(48)
+    db.add(PasswordResetToken(
+        user_id=user.id,
+        token=token,
+        expires_at=now + timedelta(minutes=60),
+    ))
+    db.commit()
+
+    background_tasks.add_task(_send_reset_email_bg, user.name, user.email, token)
+    return {"status": "ok", "message": f"Link de redefinição enviado para {user.email}"}
 
 
 @router.get("/bets/all")

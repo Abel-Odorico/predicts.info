@@ -161,7 +161,11 @@ class PasswordChange(BaseModel):
 
 
 class AdminUserUpdate(BaseModel):
-    role: str
+    role: str | None = None
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    username: str | None = None
 
 
 class Token(BaseModel):
