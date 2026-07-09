@@ -4333,7 +4333,8 @@ img {
 /* ── Login Shell — Stadium Broadcast ── */
 .login-shell {
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - var(--mobile-topbar) - env(safe-area-inset-top) - var(--mobile-nav) - var(--s10));
