@@ -79,6 +79,7 @@ export default function AdminWhatsapp() {
   const [waBets, setWaBets] = useState(null)
   const [waBetsLoading, setWaBetsLoading] = useState(false)
   const [waBetsTotal, setWaBetsTotal] = useState(null)
+  const [waBetsOpen, setWaBetsOpen] = useState({})
   const [waChats, setWaChats] = useState(null)
   const [waChatsLoading, setWaChatsLoading] = useState(false)
   const [waChatsQuery, setWaChatsQuery] = useState('')
@@ -278,12 +279,12 @@ export default function AdminWhatsapp() {
     finally { setWaContactsLoading(false) }
   }
 
-  async function loadWaBets(append = false) {
+  async function loadWaBets() {
     setWaBetsLoading(true)
     try {
-      const offset = append ? (waBets?.length || 0) : 0
-      const r = await api.get(`/admin/whatsapp/bets?offset=${offset}`, token)
-      setWaBets(append ? [...(waBets || []), ...r.items] : r.items)
+      // limit=200 (teto do backend) — agrupado por partida na UI, paginação só se passar disso
+      const r = await api.get('/admin/whatsapp/bets?limit=200&offset=0', token)
+      setWaBets(r.items)
       setWaBetsTotal(r.total)
     } catch (e) { setWaMsg(`✗ ${e?.message || 'erro'}`) }
     finally { setWaBetsLoading(false) }
@@ -978,44 +979,85 @@ export default function AdminWhatsapp() {
           </div>
         )}
 
-        {waSubTab === 'apostas' && (
-          <div className="adm-card">
-            <div className="adm-card__header">
-              <span className="adm-card__title">🎯 Apostas via chat WhatsApp{waBetsTotal != null ? ` (${waBetsTotal})` : ''}</span>
-              <button className="btn btn-sm" onClick={() => loadWaBets()} disabled={waBetsLoading}>
-                {waBetsLoading ? '…' : '↻'}
-              </button>
+        {waSubTab === 'apostas' && (() => {
+          // agrupa por partida preservando ordem (endpoint já vem mais recente primeiro)
+          const groups = []
+          const byMatch = {}
+          for (const b of (waBets || [])) {
+            if (!byMatch[b.match]) { byMatch[b.match] = { match: b.match, bets: [] }; groups.push(byMatch[b.match]) }
+            byMatch[b.match].bets.push(b)
+          }
+          return (
+            <div className="adm-card">
+              <div className="adm-card__header">
+                <span className="adm-card__title">
+                  🎯 Apostas via chat WhatsApp{waBetsTotal != null ? ` — ${waBetsTotal} palpite(s) em ${groups.length} partida(s)` : ''}
+                </span>
+                <button className="btn btn-sm" onClick={() => loadWaBets()} disabled={waBetsLoading}>
+                  {waBetsLoading ? '…' : '↻'}
+                </button>
+              </div>
+              {groups.length > 0 ? (
+                <div style={{ display: 'grid', gap: 8, maxHeight: 520, overflowY: 'auto' }}>
+                  {groups.map((g, idx) => {
+                    const open = waBetsOpen[g.match] ?? idx === 0
+                    const scoreCount = {}
+                    g.bets.forEach(b => {
+                      const s = (b.score || '?').replace('-', 'x')
+                      scoreCount[s] = (scoreCount[s] || 0) + 1
+                    })
+                    const topScore = Object.entries(scoreCount).sort((a, b) => b[1] - a[1])[0]
+                    const teams = g.match.split(' x ')
+                    return (
+                      <div key={g.match} style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                        <button
+                          onClick={() => setWaBetsOpen({ ...waBetsOpen, [g.match]: !open })}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                            width: '100%', padding: '10px 12px', background: 'var(--bg-overlay)',
+                            border: 0, cursor: 'pointer', color: 'var(--text-1)', textAlign: 'left',
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>⚽ {g.match}</span>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                            {g.bets.length} palpite(s)
+                            {topScore ? <> · mais apostado: <b style={{ color: 'var(--accent)' }}>{topScore[0]}</b> ({topScore[1]})</> : null}
+                            {' '}{open ? '▲' : '▼'}
+                          </span>
+                        </button>
+                        {open && (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table className="adm-table" style={{ fontSize: 13, minWidth: 560 }}>
+                              <thead><tr><th>Usuário</th><th>Telefone</th><th>Placar</th><th>Se empatar, avança</th><th>Quando</th></tr></thead>
+                              <tbody>
+                                {g.bets.map(b => (
+                                  <tr key={b.id}>
+                                    <td>
+                                      {b.user_name || '—'}
+                                      {b.user_email ? <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{b.user_email}</div> : null}
+                                    </td>
+                                    <td style={{ fontFamily: 'var(--font-data)' }}>{b.phone || '—'}</td>
+                                    <td style={{ fontFamily: 'var(--font-data)', color: 'var(--accent)', fontWeight: 600 }}>{(b.score || '—').replace('-', 'x')}</td>
+                                    <td>{b.et_winner_pick ? (teams[b.et_winner_pick === 'a' ? 0 : 1] || b.et_winner_pick.toUpperCase()) : '—'}</td>
+                                    <td style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>{fmtShort(b.created_at)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                  {waBetsLoading ? 'Carregando…' : 'Nenhuma aposta feita pelo chat ainda.'}
+                </div>
+              )}
             </div>
-            {waBets?.length > 0 ? (
-              <div style={{ maxHeight: 460, overflowY: 'auto', overflowX: 'auto' }}>
-                <table className="adm-table" style={{ fontSize: 13, minWidth: 560 }}>
-                  <thead><tr><th>Usuário</th><th>Telefone</th><th>Partida</th><th>Placar</th><th>Pênaltis</th><th>Quando</th></tr></thead>
-                  <tbody>
-                    {waBets.map(b => (
-                      <tr key={b.id}>
-                        <td>{b.user_name || b.user_email || '—'}</td>
-                        <td style={{ fontFamily: 'var(--font-data)' }}>{b.phone || '—'}</td>
-                        <td>{b.match}</td>
-                        <td style={{ fontFamily: 'var(--font-data)', color: 'var(--accent)' }}>{b.score || '—'}</td>
-                        <td style={{ fontFamily: 'var(--font-data)' }}>{b.et_winner_pick ? b.et_winner_pick.toUpperCase() : '—'}</td>
-                        <td style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>{fmtShort(b.created_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-                {waBetsLoading ? 'Carregando…' : 'Nenhuma aposta feita pelo chat ainda.'}
-              </div>
-            )}
-            {waBets?.length > 0 && waBetsTotal > waBets.length && (
-              <button className="btn-ghost btn-sm" onClick={() => loadWaBets(true)} disabled={waBetsLoading} style={{ marginTop: 12 }}>
-                {waBetsLoading ? 'Carregando…' : `Carregar mais (${waBets.length}/${waBetsTotal})`}
-              </button>
-            )}
-          </div>
-        )}
+          )
+        })()}
 
         {waSubTab === 'meta' && (
           <>
