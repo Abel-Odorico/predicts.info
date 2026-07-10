@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { toPng } from 'html-to-image'
 import {
@@ -55,6 +56,14 @@ function TgIcon({ size = 18 }) {
   )
 }
 
+function WaIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="#25D366" style={{ verticalAlign: '-2px' }} aria-label="WhatsApp">
+      <path d="M16.04 2.67C8.65 2.67 2.65 8.67 2.65 16.05c0 2.37.62 4.68 1.8 6.72L2.53 29.33l6.73-1.87a13.36 13.36 0 006.77 1.85h.01c7.39 0 13.39-6 13.39-13.38 0-3.57-1.39-6.93-3.92-9.46a13.28 13.28 0 00-9.47-3.8zm0 24.48h-.01a11.1 11.1 0 01-5.67-1.55l-.41-.24-4 1.1 1.07-3.9-.26-.4a11.1 11.1 0 01-1.71-5.9c0-6.14 5-11.14 11.15-11.14 2.98 0 5.78 1.16 7.88 3.27a11.06 11.06 0 013.26 7.88c0 6.14-5.01 11.14-11.15 11.14v.01zm6.11-8.35c-.33-.17-1.97-.97-2.28-1.08-.31-.11-.53-.17-.75.17-.22.33-.86 1.08-1.06 1.31-.19.22-.39.25-.72.08-.33-.17-1.4-.51-2.66-1.63-.98-.88-1.65-1.96-1.84-2.29-.19-.33-.02-.51.15-.68.15-.15.33-.39.5-.58.17-.2.22-.33.33-.55.11-.22.06-.42-.03-.58-.08-.17-.75-1.8-1.03-2.47-.27-.65-.55-.56-.75-.57-.19-.01-.42-.01-.64-.01-.22 0-.58.08-.89.42-.31.33-1.17 1.14-1.17 2.79 0 1.64 1.2 3.22 1.37 3.45.17.22 2.36 3.6 5.71 5.05.8.34 1.42.55 1.9.71.8.25 1.53.22 2.11.13.64-.1 1.97-.8 2.25-1.58.28-.77.28-1.44.2-1.58-.08-.14-.31-.22-.64-.39z" />
+    </svg>
+  )
+}
+
 const TABS = [
   { id: 'growth',      label: 'Crescimento',  icon: '📈' },
   { id: 'engagement',  label: 'Engajamento',  icon: '🔥' },
@@ -88,6 +97,112 @@ const PERIODS = [
   { id: 'year',     label: 'Ano' },
 ]
 
+function AdminModalShell({ onClose, children, maxWidth = 420 }) {
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9800,
+        background: 'rgba(3,8,14,0.75)', backdropFilter: 'blur(5px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="fade-in-1"
+        style={{
+          width: '100%', maxWidth, maxHeight: '90vh', overflowY: 'auto',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+          borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+          padding: 'var(--s5)',
+        }}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function EditUserModal({ editUser, setEditUser, editErr, saving, onSave, onClose }) {
+  const field = (label, key, type = 'text') => (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: 'block', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', marginBottom: 4 }}>
+        {label}
+      </label>
+      <input
+        type={type}
+        className="form-input"
+        value={editUser[key]}
+        onChange={e => setEditUser(u => ({ ...u, [key]: e.target.value }))}
+      />
+    </div>
+  )
+
+  return (
+    <AdminModalShell onClose={onClose}>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-1)', margin: '0 0 4px' }}>
+        Editar usuário
+      </h3>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', marginBottom: 16 }}>
+        ID {editUser.id}
+      </div>
+      {field('Nome', 'name')}
+      {field('@Username', 'username')}
+      {field('WhatsApp', 'phone')}
+      {field('E-mail', 'email', 'email')}
+      {editErr && (
+        <div style={{ color: 'var(--lose)', fontFamily: 'var(--font-cond)', fontSize: 13, marginBottom: 12 }}>
+          {editErr}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={onClose} disabled={saving}>
+          Cancelar
+        </button>
+        <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={onSave} disabled={saving}>
+          {saving ? 'Salvando...' : 'Salvar'}
+        </button>
+      </div>
+    </AdminModalShell>
+  )
+}
+
+function ConfirmDeactivateModal({ targetUser, saving, onConfirm, onClose }) {
+  return (
+    <AdminModalShell onClose={onClose}>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-1)', margin: '0 0 10px' }}>
+        Desativar usuário
+      </h3>
+      <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.5, margin: '0 0 8px' }}>
+        <strong>{targetUser.name}</strong> ({targetUser.email}) perde acesso imediatamente. Nome, e-mail, @username e telefone são anonimizados — não dá pra desfazer nem recuperar esses dados depois.
+      </p>
+      <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--text-4)', lineHeight: 1.5, margin: '0 0 16px' }}>
+        Apostas, pontuação e histórico de ranking continuam intactos.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={onClose} disabled={saving}>
+          Cancelar
+        </button>
+        <button
+          className="btn btn-sm"
+          style={{ flex: 1, background: 'var(--lose)', color: '#fff', border: 'none' }}
+          onClick={onConfirm}
+          disabled={saving}
+        >
+          {saving ? 'Desativando...' : 'Desativar'}
+        </button>
+      </div>
+    </AdminModalShell>
+  )
+}
+
 export default function Admin() {
   const { user, token } = useAuth()
   const navigate = useNavigate()
@@ -100,6 +215,13 @@ export default function Admin() {
   const [userQuery, setUserQuery] = useState('')
   const [userMsg, setUserMsg] = useState('')
   const [savingUserId, setSavingUserId] = useState(null)
+  const [emailMenu, setEmailMenu] = useState(null) // { userId, top, left }
+  const [sendingEmailAction, setSendingEmailAction] = useState(null)
+  const [editUser, setEditUser] = useState(null) // { id, name, username, phone, email }
+  const [editSaving, setEditSaving] = useState(false)
+  const [editErr, setEditErr] = useState('')
+  const [confirmDeactivate, setConfirmDeactivate] = useState(null) // user row
+  const [deactivatingId, setDeactivatingId] = useState(null)
 
   // Results
   const [matches, setMatches] = useState([])
@@ -343,6 +465,9 @@ export default function Admin() {
   const [oracleSaving,    setOracleSaving]    = useState(false)
 
   // ── Relatório ────────────────────────────────────────────────────────────────
+  // WhatsApp — só o status pro badge do header; resto vive em AdminWhatsapp.jsx (/admin/whatsapp)
+  const [waStatus, setWaStatus] = useState(null)
+
   const [report,        setReport]        = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportSending, setReportSending] = useState(false)
@@ -702,6 +827,11 @@ export default function Admin() {
     finally { setReportSending(false) }
   }
 
+  async function loadWaStatus() {
+    try { setWaStatus(await api.get('/admin/whatsapp/status', token)) }
+    catch { /* badge só some/mostra "desconhecido", sem bloquear o resto do admin */ }
+  }
+
   function toggleSeries(key) {
     setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -710,6 +840,7 @@ export default function Admin() {
     if (!user || user.role !== 'admin') { navigate('/'); return }
     loadUsers()
     loadSyncStatus()
+    loadWaStatus()
   }, [user, token])
 
   // Tab-driven lazy loading
@@ -747,6 +878,12 @@ export default function Admin() {
   useEffect(() => {
     if (!token || !user || user.role !== 'admin') return
     const iv = setInterval(loadSyncStatus, 30000)
+    return () => clearInterval(iv)
+  }, [token, user])
+
+  useEffect(() => {
+    if (!token || !user || user.role !== 'admin') return
+    const iv = setInterval(loadWaStatus, 60000)
     return () => clearInterval(iv)
   }, [token, user])
 
@@ -854,6 +991,53 @@ export default function Admin() {
       setUserMsg(`✓ ${res.email} → ${res.role}`)
     } catch (e) { setUserMsg(`✗ ${e.message}`) }
     finally { setSavingUserId(null) }
+  }
+
+  async function sendAccountEmail(userId, action) {
+    setUserMsg('')
+    setSendingEmailAction(`${userId}:${action}`)
+    setEmailMenu(null)
+    try {
+      const res = await api.post(`/admin/users/${userId}/send-account-email`, { action }, token)
+      setUserMsg(`✓ ${res.message}`)
+    } catch (e) { setUserMsg(`✗ ${e.message}`) }
+    finally { setSendingEmailAction(null) }
+  }
+
+  function openEditUser(u) {
+    setEditErr('')
+    setEditUser({ id: u.id, name: u.name || '', username: u.username || '', phone: u.phone || '', email: u.email || '' })
+  }
+
+  async function saveEditUser() {
+    if (!editUser) return
+    setEditSaving(true)
+    setEditErr('')
+    try {
+      const res = await api.patch(`/admin/users/${editUser.id}`, {
+        name: editUser.name.trim(),
+        username: editUser.username.trim(),
+        phone: editUser.phone.trim(),
+        email: editUser.email.trim(),
+      }, token)
+      setUsers(list => list.map(item => item.id === editUser.id ? { ...item, ...res } : item))
+      setUserMsg(`✓ Usuário #${res.id} atualizado`)
+      setEditUser(null)
+    } catch (e) { setEditErr(e.message || 'Erro ao salvar') }
+    finally { setEditSaving(false) }
+  }
+
+  async function deactivateUser(u) {
+    setDeactivatingId(u.id)
+    try {
+      await api.post(`/admin/users/${u.id}/deactivate`, {}, token)
+      setUsers(list => list.map(item => item.id === u.id
+        ? { ...item, is_active: false, name: `Usuário removido #${u.id}`, email: `deleted_${u.id}@predicts.local`, username: null, phone: null }
+        : item))
+      setUserMsg(`✓ Usuário #${u.id} desativado`)
+      setConfirmDeactivate(null)
+    } catch (e) { setUserMsg(`✗ ${e.message}`) }
+    finally { setDeactivatingId(null) }
   }
 
   async function startSync() {
@@ -1006,10 +1190,24 @@ export default function Admin() {
         <div className="adm-header__left">
           <div className="adm-header__title">ADMIN</div>
           <div className="adm-header__sub">predicts.info · painel de controle</div>
+          <button
+            className="btn-ghost btn-sm"
+            title={waStatus?.webhook && !waStatus.webhook.healthy ? 'Webhook com problema — aposta por WhatsApp pode não responder' : 'Status da conexão WhatsApp'}
+            onClick={() => navigate('/admin/whatsapp')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, alignSelf: 'flex-start', padding: '4px 10px' }}
+          >
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
+              background: waStatus?.instance?.state === 'open' ? 'var(--win)' : (waStatus?.instance?.state === 'connecting' ? '#f59e0b' : 'var(--lose)'),
+            }} />
+            WhatsApp {waStatus?.instance?.state === 'open' ? 'conectado' : waStatus?.instance?.state === 'connecting' ? 'conectando' : waStatus ? 'desconectado' : '…'}
+            {waStatus?.webhook && !waStatus.webhook.healthy && <span title="Webhook com problema">⚠️</span>}
+          </button>
         </div>
         <div className="adm-header__actions">
           <a href="/apostas"         className="btn btn-ghost btn-sm">🎯 Apostas</a>
           <a href="/resultados"      className="btn btn-ghost btn-sm">📋 Resultados</a>
+          <a href="/admin/whatsapp"  className="btn btn-ghost btn-sm"><WaIcon /> WhatsApp</a>
           <a href="/admin/analytics" className="btn btn-ghost btn-sm">📊 Analytics</a>
           <a href="/admin/analytics?tab=audit" className="btn btn-ghost btn-sm">🔐 Auditoria</a>
           <a href="/admin/options"   className="btn btn-ghost btn-sm">⚙️ Config</a>
@@ -1200,9 +1398,16 @@ export default function Admin() {
                   <tr><td colSpan={9} className="adm-table__empty">Nenhum usuário encontrado.</td></tr>
                 )}
                 {!usersLoading && users.map(u => (
-                  <tr key={u.id} className={u.role === 'admin' ? 'adm-table__row--admin' : ''}>
+                  <tr key={u.id} className={u.role === 'admin' ? 'adm-table__row--admin' : ''} style={!u.is_active ? { opacity: 0.5 } : undefined}>
                     <td>
-                      <div className="adm-table__name">{u.name}</div>
+                      <div className="adm-table__name">
+                        {u.name}
+                        {!u.is_active && (
+                          <span className="badge" style={{ marginLeft: 6, background: 'var(--bg-overlay)', color: 'var(--text-4)' }}>
+                            desativado
+                          </span>
+                        )}
+                      </div>
                       <div className="adm-table__id">ID {u.id}</div>
                     </td>
                     <td>
@@ -1252,10 +1457,39 @@ export default function Admin() {
                         </a>
                         <button
                           className={`btn btn-sm ${u.role === 'admin' ? 'btn-ghost' : 'btn-primary'}`}
-                          disabled={savingUserId === u.id || (u.id === user.id && u.role === 'admin')}
+                          disabled={savingUserId === u.id || !u.is_active || (u.id === user.id && u.role === 'admin')}
                           onClick={() => updateUserRole(u.id, u.role === 'admin' ? 'user' : 'admin')}
                         >
                           {savingUserId === u.id ? '...' : u.role === 'admin' ? '− Admin' : '+ Admin'}
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          title="Enviar e-mail de recuperação/troca"
+                          disabled={!u.is_active}
+                          onClick={(e) => {
+                            if (emailMenu?.userId === u.id) { setEmailMenu(null); return }
+                            const r = e.currentTarget.getBoundingClientRect()
+                            setEmailMenu({ userId: u.id, top: r.bottom + 4, left: Math.max(8, r.right - 210) })
+                          }}
+                        >
+                          ✉️
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          title="Editar dados"
+                          disabled={!u.is_active}
+                          onClick={() => openEditUser(u)}
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          title="Desativar usuário"
+                          disabled={!u.is_active || u.id === user.id}
+                          onClick={() => setConfirmDeactivate(u)}
+                          style={{ color: u.is_active ? 'var(--lose)' : undefined }}
+                        >
+                          🗑️
                         </button>
                       </div>
                     </td>
@@ -1264,6 +1498,57 @@ export default function Admin() {
               </tbody>
             </table>
           </div>
+
+          {emailMenu && (
+            <>
+              <div
+                onClick={() => setEmailMenu(null)}
+                style={{ position: 'fixed', inset: 0, zIndex: 999 }}
+              />
+              <div style={{
+                position: 'fixed', top: emailMenu.top, left: emailMenu.left, zIndex: 1000,
+                background: 'var(--bg-raised, #111e2e)', border: '1px solid var(--border)',
+                borderRadius: 6, minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              }}>
+                {[
+                  ['password', '🔑 Recuperar senha'],
+                  ['email',    '📧 Trocar e-mail'],
+                  ['phone',    '📱 Trocar telefone'],
+                ].map(([action, label]) => (
+                  <button
+                    key={action}
+                    className="btn btn-ghost btn-sm"
+                    style={{ justifyContent: 'flex-start', borderRadius: 0, textAlign: 'left' }}
+                    disabled={sendingEmailAction === `${emailMenu.userId}:${action}`}
+                    onClick={() => sendAccountEmail(emailMenu.userId, action)}
+                  >
+                    {sendingEmailAction === `${emailMenu.userId}:${action}` ? 'Enviando...' : label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {editUser && (
+            <EditUserModal
+              editUser={editUser}
+              setEditUser={setEditUser}
+              editErr={editErr}
+              saving={editSaving}
+              onSave={saveEditUser}
+              onClose={() => setEditUser(null)}
+            />
+          )}
+
+          {confirmDeactivate && (
+            <ConfirmDeactivateModal
+              targetUser={confirmDeactivate}
+              saving={deactivatingId === confirmDeactivate.id}
+              onConfirm={() => deactivateUser(confirmDeactivate)}
+              onClose={() => setConfirmDeactivate(null)}
+            />
+          )}
         </div>
       )}
 
@@ -4118,7 +4403,6 @@ export default function Admin() {
           </div>
         </div>
       )}
-
       {/* ── Tab: Competição ──────────────────────────────── */}
       {tab === 'competition' && <CompetitionTab token={token} />}
 

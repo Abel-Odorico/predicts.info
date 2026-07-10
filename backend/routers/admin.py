@@ -22,9 +22,10 @@ from models import (
     Bet, Ranking, TournamentSimulation, User, UserRole, Notification, PageView,
     UserGroup, UserGroupMember, UserGroupInvite, GroupInviteStatus, AuditLog
 )
-from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate
+from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate, AdminAccountEmail
 from engine.elo import update_ratings
 from routers.notifications import create_notification
+from routers.audit import log_action
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -316,6 +317,7 @@ def list_users(
             "phone": user.phone,
             "name": user.name,
             "role": user.role.value if user.role else UserRole.user.value,
+            "is_active": user.is_active,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
             "bets_count": int(bets_count or 0),
@@ -326,26 +328,186 @@ def list_users(
 
 
 @router.patch("/users/{user_id}")
-def update_user_role(
+def update_user(
     user_id: int,
     payload: AdminUserUpdate,
     db: Session = Depends(get_db),
     admin_user: User = Depends(require_admin),
 ):
-    try:
-        new_role = UserRole(payload.role)
-    except ValueError:
-        raise HTTPException(400, "Invalid role")
+    from routers.auth import (
+        _normalize_username, _normalize_phone, _validate_username, _validate_phone,
+        _username_exists, _phone_exists,
+    )
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-    if user.id == admin_user.id and new_role != UserRole.admin:
-        raise HTTPException(400, "You cannot remove your own admin role")
+    if not user.is_active:
+        raise HTTPException(400, "Usuário desativado — reative antes de editar")
 
-    user.role = new_role
+    changes = {}
+
+    if payload.role is not None:
+        try:
+            new_role = UserRole(payload.role)
+        except ValueError:
+            raise HTTPException(400, "Invalid role")
+        if user.id == admin_user.id and new_role != UserRole.admin:
+            raise HTTPException(400, "You cannot remove your own admin role")
+        if new_role != user.role:
+            changes["role"] = [user.role.value, new_role.value]
+            user.role = new_role
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if len(name) < 2:
+            raise HTTPException(400, "Nome deve ter ao menos 2 caracteres")
+        if name != user.name:
+            changes["name"] = [user.name, name]
+            user.name = name
+
+    if payload.username is not None:
+        username = _normalize_username(payload.username)
+        if username:
+            _validate_username(username)
+            if _username_exists(db, username, exclude_user_id=user.id):
+                raise HTTPException(409, "Usuário já está em uso")
+        if username != user.username:
+            changes["username"] = [user.username, username]
+            user.username = username
+
+    if payload.phone is not None:
+        phone = _normalize_phone(payload.phone)
+        _validate_phone(phone)
+        if phone and _phone_exists(db, phone, exclude_user_id=user.id):
+            raise HTTPException(409, "Telefone já cadastrado em outra conta")
+        if phone != user.phone:
+            changes["phone"] = [user.phone, phone]
+            user.phone = phone
+
+    if payload.email is not None:
+        email = str(payload.email).strip().lower()
+        if db.query(User).filter(func.lower(User.email) == email, User.id != user.id).first():
+            raise HTTPException(409, "E-mail já cadastrado em outra conta")
+        if email != user.email:
+            changes["email"] = [user.email, email]
+            user.email = email
+
+    if changes:
+        log_action(db, admin_user.id, "admin.edit_user", {"target_user_id": user.id, "changes": changes})
+        db.commit()
+        db.refresh(user)
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "phone": user.phone,
+        "name": user.name,
+        "role": user.role.value,
+        "is_active": user.is_active,
+    }
+
+
+@router.post("/users/{user_id}/deactivate")
+def deactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.id == admin_user.id:
+        raise HTTPException(400, "Você não pode desativar a própria conta")
+    if not user.is_active:
+        raise HTTPException(400, "Usuário já está desativado")
+
+    original = {"name": user.name, "email": user.email, "username": user.username, "phone": user.phone}
+
+    user.is_active = False
+    user.deactivated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    user.name = f"Usuário removido #{user.id}"
+    user.email = f"deleted_{user.id}@predicts.local"
+    user.username = None
+    user.phone = None
+
+    log_action(db, admin_user.id, "admin.deactivate_user", {"target_user_id": user.id, "was": original})
     db.commit()
-    return {"user_id": user.id, "email": user.email, "role": user.role.value}
+    return {"status": "ok", "user_id": user.id, "is_active": False}
+
+
+_ACCOUNT_ACTION_EXPIRE_MINUTES = 60
+_ACCOUNT_ACTION_URLS = {
+    "email": "https://predicts.info/alterar-email",
+    "phone": "https://predicts.info/alterar-telefone",
+}
+
+
+def _send_password_reset_bg(name: str, email: str, token: str) -> None:
+    from mail import send_email, reset_password_html
+    url = f"https://predicts.info/redefinir-senha?token={token}"
+    html, plain = reset_password_html(name, url, _ACCOUNT_ACTION_EXPIRE_MINUTES)
+    send_email(email, "Redefinir sua senha — Predicts", html, plain)
+
+
+def _send_account_action_bg(action: str, name: str, email: str, token: str) -> None:
+    from mail import send_email, change_email_html, change_phone_html
+    url = f"{_ACCOUNT_ACTION_URLS[action]}?token={token}"
+    if action == "email":
+        html, plain = change_email_html(name, url, _ACCOUNT_ACTION_EXPIRE_MINUTES)
+        subject = "Atualizar seu e-mail — Predicts"
+    else:
+        html, plain = change_phone_html(name, url, _ACCOUNT_ACTION_EXPIRE_MINUTES)
+        subject = "Atualizar seu telefone — Predicts"
+    send_email(email, subject, html, plain)
+
+
+@router.post("/users/{user_id}/send-account-email")
+def send_account_email(
+    user_id: int,
+    payload: AdminAccountEmail,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    import secrets
+
+    if payload.action not in ("password", "email", "phone"):
+        raise HTTPException(400, "Ação inválida — use password, email ou phone")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    expires_at = now + timedelta(minutes=_ACCOUNT_ACTION_EXPIRE_MINUTES)
+
+    if payload.action == "password":
+        from models import PasswordResetToken
+        db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        ).delete()
+        token = secrets.token_urlsafe(48)
+        db.add(PasswordResetToken(user_id=user.id, token=token, expires_at=expires_at))
+        db.commit()
+        background_tasks.add_task(_send_password_reset_bg, user.name, user.email, token)
+    else:
+        from models import AccountActionToken
+        db.query(AccountActionToken).filter(
+            AccountActionToken.user_id == user.id,
+            AccountActionToken.action == payload.action,
+            AccountActionToken.used_at.is_(None),
+        ).delete()
+        token = secrets.token_urlsafe(48)
+        db.add(AccountActionToken(user_id=user.id, action=payload.action, token=token, expires_at=expires_at))
+        db.commit()
+        background_tasks.add_task(_send_account_action_bg, payload.action, user.name, user.email, token)
+
+    log_action(db, admin_user.id, f"admin.send_account_email.{payload.action}", {"target_user_id": user_id})
+    db.commit()
+    return {"status": "ok", "message": f"E-mail de {payload.action} enviado para {user.email}"}
 
 
 @router.get("/bets/all")

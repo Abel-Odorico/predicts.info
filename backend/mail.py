@@ -164,3 +164,77 @@ def reset_password_html(name: str, reset_url: str, expire_minutes: int = 60) -> 
         f"— Predicts · predicts.info"
     )
     return html, plain
+
+
+def change_email_html(name: str, action_url: str, expire_minutes: int = 60) -> tuple[str, str]:
+    """Retorna (html, plain_text)."""
+    body = f"""
+    <div class="title">Atualizar seu e-mail</div>
+    <p class="text">Olá, <strong>{name}</strong>!</p>
+    <p class="text">
+      Um administrador do <strong>Predicts</strong> solicitou a atualização do e-mail da sua conta.
+      Clique no botão abaixo para informar o novo e-mail.
+    </p>
+    <div class="expire">
+      ⏱ Este link expira em <strong>{expire_minutes} minutos</strong>
+    </div>
+    <div class="btn-wrap">
+      <a href="{action_url}" class="btn">Atualizar E-mail</a>
+    </div>
+    <hr class="divider" />
+    <p class="text" style="font-size:13px;">
+      Se o botão não funcionar, copie e cole o link abaixo no seu navegador:
+    </p>
+    <div class="link-fallback"><a href="{action_url}">{action_url}</a></div>
+    <hr class="divider" />
+    <p class="text" style="font-size:12px; color:#5f7790;">
+      Se você não esperava este e-mail, ignore-o. Nenhuma alteração é feita sem confirmação.
+    </p>
+"""
+    html = _base_template("Atualizar E-mail — Predicts", body)
+    plain = (
+        f"Olá, {name}!\n\n"
+        f"Um administrador do Predicts solicitou a atualização do e-mail da sua conta.\n\n"
+        f"Acesse o link abaixo para informar o novo e-mail (válido por {expire_minutes} minutos):\n\n"
+        f"{action_url}\n\n"
+        f"Se você não esperava este e-mail, ignore-o.\n\n"
+        f"— Predicts · predicts.info"
+    )
+    return html, plain
+
+
+def change_phone_html(name: str, action_url: str, expire_minutes: int = 60) -> tuple[str, str]:
+    """Retorna (html, plain_text)."""
+    body = f"""
+    <div class="title">Atualizar seu telefone</div>
+    <p class="text">Olá, <strong>{name}</strong>!</p>
+    <p class="text">
+      Um administrador do <strong>Predicts</strong> solicitou a atualização do telefone/WhatsApp da sua conta.
+      Clique no botão abaixo para informar o novo número.
+    </p>
+    <div class="expire">
+      ⏱ Este link expira em <strong>{expire_minutes} minutos</strong>
+    </div>
+    <div class="btn-wrap">
+      <a href="{action_url}" class="btn">Atualizar Telefone</a>
+    </div>
+    <hr class="divider" />
+    <p class="text" style="font-size:13px;">
+      Se o botão não funcionar, copie e cole o link abaixo no seu navegador:
+    </p>
+    <div class="link-fallback"><a href="{action_url}">{action_url}</a></div>
+    <hr class="divider" />
+    <p class="text" style="font-size:12px; color:#5f7790;">
+      Se você não esperava este e-mail, ignore-o. Nenhuma alteração é feita sem confirmação.
+    </p>
+"""
+    html = _base_template("Atualizar Telefone — Predicts", body)
+    plain = (
+        f"Olá, {name}!\n\n"
+        f"Um administrador do Predicts solicitou a atualização do telefone da sua conta.\n\n"
+        f"Acesse o link abaixo para informar o novo número (válido por {expire_minutes} minutos):\n\n"
+        f"{action_url}\n\n"
+        f"Se você não esperava este e-mail, ignore-o.\n\n"
+        f"— Predicts · predicts.info"
+    )
+    return html, plain
