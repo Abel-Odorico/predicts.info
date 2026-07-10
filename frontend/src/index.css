@@ -3615,7 +3615,8 @@ img {
 .adm-shell {
   width: min(100%, 1200px);
   margin: 0 auto;
-  padding: var(--s5) var(--s4) var(--s12);
+  /* rodapé compensa o mobile-dock fixo (78px + safe area) — igual .page; sem isso o dock cobre o fim das listas */
+  padding: var(--s5) var(--s4) calc(var(--mobile-nav) + env(safe-area-inset-bottom) + var(--s5));
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -4186,7 +4187,7 @@ img {
 @media (max-width: 640px) {
   /* Shell */
   .adm-shell {
-    padding: var(--s3) var(--s2) var(--s12);
+    padding: var(--s3) var(--s2) calc(var(--mobile-nav) + env(safe-area-inset-bottom) + var(--s5));
   }
 
   /* Header */
