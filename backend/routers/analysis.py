@@ -400,16 +400,21 @@ def _fatos_verificados(results: list, team_code: str) -> str:
     fatos = []
     scorer = _get_top_scorer(team_code)
     if scorer:
-        fatos.append(f"Artilheiro do time: {scorer['player']} ({scorer['goals']} gols nesta Copa)")
+        gol_txt = "gol" if scorer["goals"] == 1 else "gols"
+        fatos.append(f"Artilheiro do time: {scorer['player']} ({scorer['goals']} {gol_txt} nesta Copa)")
 
     s = _compute_streaks(results, team_code)
     if s["total_considered"] > 0:
         if s["winless_streak"] == 0:
             fatos.append("vem de vitória no último jogo")
+        elif s["winless_streak"] == 1:
+            fatos.append("sem vencer há 1 jogo")
         else:
-            fatos.append(f"sem vencer há {s['winless_streak']} jogo(s)")
-        if s["conceded_streak"] > 0:
-            fatos.append(f"sofreu gol nos últimos {s['conceded_streak']} jogo(s) seguidos")
+            fatos.append(f"sem vencer há {s['winless_streak']} jogos")
+        if s["conceded_streak"] == 1:
+            fatos.append("sofreu gol no último jogo")
+        elif s["conceded_streak"] > 1:
+            fatos.append(f"sofreu gol nos últimos {s['conceded_streak']} jogos seguidos")
 
     return " | ".join(fatos) if fatos else "sem fato marcante disponível — use forma/ataque já fornecidos"
 
