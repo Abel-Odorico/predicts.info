@@ -120,14 +120,28 @@ def send_pending_group_posts(db: Session | None = None, log=print) -> dict:
         posted = {(m, k) for m, k in db.query(WhatsappGroupPost.match_id, WhatsappGroupPost.kind)}
 
         def _post(match_id: int, kind: str, message: str):
+            # Claim-then-send: grava o dedup ANTES de mandar — se outro processo
+            # (cron sobreposto, execução manual) disputar o mesmo aviso, um dos dois
+            # falha no unique constraint e NÃO manda (flood de 10/07 foi essa race).
             nonlocal sent
-            if wa.send_text_to_jid(db, group_jid, message):
-                db.add(WhatsappGroupPost(match_id=match_id, kind=kind))
+            db.add(WhatsappGroupPost(match_id=match_id, kind=kind))
+            try:
                 db.commit()
-                posted.add((match_id, kind))
+            except Exception:
+                db.rollback()
+                posted.add((match_id, kind))  # outro processo já reivindicou
+                return
+            posted.add((match_id, kind))
+            if wa.send_text_to_jid(db, group_jid, message):
                 sent += 1
                 log(f"[group-posts] {kind} enviado (match {match_id})")
             else:
+                # envio falhou de verdade (rede/API) — libera pra retry no próximo tick
+                db.query(WhatsappGroupPost).filter(
+                    WhatsappGroupPost.match_id == match_id, WhatsappGroupPost.kind == kind
+                ).delete()
+                db.commit()
+                posted.discard((match_id, kind))
                 errors.append(f"match {match_id} {kind}: envio falhou")
 
         upcoming = (
@@ -157,12 +171,20 @@ def send_pending_group_posts(db: Session | None = None, log=print) -> dict:
                 errors.append(f"match {m.id}: {e}")
                 log(f"[group-posts] erro no match {m.id}: {e}")
 
+        # Filtro pelo match_date, NÃO só recorded_at: apply_world_cup_snapshot APAGA e
+        # RECRIA os match_results da fase de grupos toda rodada (world_cup_sync.py),
+        # então recorded_at renasce a cada sync e sozinho deixaria o backlog inteiro
+        # parecer "recente" (flood de 73 resultados históricos em 10/07).
         recent_results = (
             db.query(MatchResult)
             .join(Match, Match.id == MatchResult.match_id)
             .options(joinedload(MatchResult.match).joinedload(Match.team_a),
                      joinedload(MatchResult.match).joinedload(Match.team_b))
-            .filter(MatchResult.recorded_at >= now - timedelta(hours=RESULT_MAX_AGE_HOURS))
+            .filter(
+                MatchResult.recorded_at >= now - timedelta(hours=RESULT_MAX_AGE_HOURS),
+                Match.match_date.isnot(None),
+                Match.match_date >= now - timedelta(hours=RESULT_MAX_AGE_HOURS),
+            )
             .all()
         )
         for r in recent_results:
