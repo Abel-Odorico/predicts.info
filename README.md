@@ -135,3 +135,4 @@ Em `/admin/analytics` (visão geral), card "🔥 Mapa de Calor por Hora" com tog
 ## Documentacao complementar
 
 - [Guia Admin](./docs/ADMIN_GUIDE.md)
+- [Contexto de Desenvolvimento](./docs/DEVELOPMENT_CONTEXT.md)

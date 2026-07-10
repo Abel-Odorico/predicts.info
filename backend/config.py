@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     slack_webhook_url: str = ""
     oracle_slack_enabled: bool = True
 
+    # WhatsApp (Evolution API)
+    whatsapp_enabled: bool = False
+    whatsapp_api_url: str = "http://evolution_api:8080"
+    whatsapp_api_key: str = ""
+    whatsapp_instance: str = "predicts"
+    whatsapp_webhook_secret: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

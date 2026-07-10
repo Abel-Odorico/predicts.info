@@ -9,3 +9,4 @@ dist/
 *.egg-info/
 venv/
 .venv/
+backend/news_admin_config.json

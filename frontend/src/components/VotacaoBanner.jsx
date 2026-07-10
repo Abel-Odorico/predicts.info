@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 
-const HIDE_PATHS = ['/votacao', '/login', '/esqueci-senha', '/redefinir-senha']
+const HIDE_PATHS = ['/votacao', '/login', '/esqueci-senha', '/redefinir-senha', '/alterar-email', '/alterar-telefone']
 
 export default function VotacaoBanner() {
   const { user, token } = useAuth()

@@ -34,6 +34,10 @@ _PUSH_CONFIG: dict[str, tuple[bool, str, str]] = {
 }
 _PUSH_DEFAULT = (True, "/", "predicts")
 
+# Retenção padrão: notificações mais antigas que isso são elegíveis pra apagar
+# via /admin/notifications/cleanup (manual) ou cleanup_notifications.py (cron diário).
+NOTIFICATION_RETENTION_DAYS = 60
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -232,6 +236,27 @@ def send_champion_reminders(
 
     db.commit()
     return {"sent": sent, "total_users": len(all_users), "already_picked": len(picked_ids)}
+
+
+@router.delete("/admin/notifications/cleanup", status_code=200)
+def cleanup_old_notifications(
+    days: int = Query(NOTIFICATION_RETENTION_DAYS, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """
+    Apaga notificações com created_at mais antigo que `days` dias.
+    Mesma regra usada pelo cron diário (cleanup_notifications.py) — aqui é
+    o disparo manual/on-demand pelo admin.
+    """
+    cutoff = _utcnow() - timedelta(days=days)
+    deleted = (
+        db.query(Notification)
+        .filter(Notification.created_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"deleted": deleted, "days": days, "cutoff": cutoff.isoformat()}
 
 
 def _serialize(n: Notification) -> dict:

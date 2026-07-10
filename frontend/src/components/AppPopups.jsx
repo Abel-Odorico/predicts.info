@@ -1,18 +1,12 @@
 /**
  * AppPopups — Central de Popups do Predicts.info
  *
- * Registro de popups (ordem de prioridade):
- * ┌─────────────────┬──────────┬──────────────────────────────────────────┐
- * │ ID              │ Delay    │ Condição                                 │
- * ├─────────────────┼──────────┼──────────────────────────────────────────┤
- * │ version         │ 0.8s     │ Nova versão não vista                    │
- * │ champion        │ 0.8s     │ Logado + prazo aberto + pick incompleto  │
- * │ install_app     │ 20s      │ Não está em modo standalone (PWA)        │
- * │ push_prompt     │ 12s      │ Logado + PWA + sem subscription push     │
- * └─────────────────┴──────────┴──────────────────────────────────────────┘
+ * Fila única: todas as condições são avaliadas de uma vez (700ms após mount,
+ * sem timers concorrentes) e resolvidas em POPUP_ORDER. Só queue[0] é
+ * renderizado — nunca dois popups sobrepostos. Fechar um avança pro próximo
+ * pendente (fluxo de navegação), sem popup "roubando" a vez de outro.
  *
- * Regra: só um popup por vez. Ao fechar, orquestrador passa para o próximo
- * da fila que ainda não foi exibido nessa sessão.
+ * Ordem: onboarding → version → competition → champion → invite → push → whatsapp
  */
 
 import { useState, useEffect } from 'react'
@@ -23,6 +17,7 @@ import { useAuth } from '../stores/authStore'
 import { invalidateChampionCache } from './MyChampionCard'
 import ShareCompetitionButton from './ShareCompetitionButton'
 import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
+import Onboarding from './Onboarding'
 
 // ── Dismiss keys (localStorage) ───────────────────────────────────────────────
 const SEEN_VERSION_KEY   = 'predicts_seen_version'
@@ -814,127 +809,276 @@ function InvitePopup({ invites, token, onClose }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// ORQUESTRADOR — controla qual popup aparece e em que ordem
+// POPUP: OPT-IN WHATSAPP
 // ═════════════════════════════════════════════════════════════════════════════
+function WhatsAppOptInPopup({ user, token, onDone }) {
+  const [phone, setPhone] = useState(user?.phone || '')
+  const [saving, setSaving] = useState(null) // 'in' | 'out' | null
+  const [err, setErr] = useState('')
+  const [done, setDone] = useState(false)
+  const [waLink, setWaLink] = useState(null)
+  const { setUser } = useAuth()
+
+  useEffect(() => {
+    let mounted = true
+    api.get('/whatsapp/contact').then(r => {
+      if (mounted && r?.available) setWaLink(r.wa_link)
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
+
+  async function activate() {
+    if (!phone.trim()) { setErr('Digita seu celular com DDD pra ativar'); return }
+    setErr(''); setSaving('in')
+    try {
+      const updated = await api.patch('/auth/profile', { phone: phone.trim(), whatsapp_opt_in: true }, token)
+      setUser(updated)
+      setSaving(null)
+      setDone(true)
+    } catch (e) { setErr(e.message || 'Erro ao salvar'); setSaving(null) }
+  }
+
+  async function dismiss() {
+    setSaving('out')
+    try {
+      const updated = await api.patch('/auth/profile', { whatsapp_prompt_dismissed: true }, token)
+      setUser(updated)
+    } catch {}
+    onDone()
+  }
+
+  if (done) {
+    return (
+      <ModalShell onClose={onDone}>
+        <div style={{ padding: '28px 24px 24px', textAlign: 'center' }}>
+          <div
+            className="pulse-accent"
+            style={{
+              width: 56, height: 56, borderRadius: 14, marginBottom: 14, marginLeft: 'auto', marginRight: 'auto',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 28,
+              background: 'linear-gradient(135deg, var(--accent-glow) 0%, var(--accent-dim) 100%)',
+              border: '1.5px solid var(--accent)',
+            }}
+          >
+            ✅
+          </div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--text-1)', margin: '0 0 10px' }}>
+            WhatsApp ativado!
+          </h2>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', margin: '0 0 20px', lineHeight: 1.5 }}>
+            Te mandamos uma mensagem de boas-vindas com o passo a passo. Abre o WhatsApp e manda um "oi" pra começar.
+          </p>
+          {waLink && (
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-primary"
+              style={{
+                display: 'block', width: '100%', textAlign: 'center', textDecoration: 'none',
+                fontFamily: 'var(--font-display)', fontWeight: 900, letterSpacing: '0.06em',
+              }}
+            >
+              💬 Abrir WhatsApp agora
+            </a>
+          )}
+          <button
+            onClick={onDone}
+            style={{ marginTop: 'var(--s3)', width: '100%', background: 'none', border: 'none', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 12, cursor: 'pointer', letterSpacing: '0.06em' }}
+          >
+            Fechar
+          </button>
+        </div>
+      </ModalShell>
+    )
+  }
+
+  return (
+    <ModalShell onClose={dismiss}>
+      <div style={{ padding: '28px 24px 24px' }}>
+        <div
+          className="pulse-accent"
+          style={{
+            width: 56, height: 56, borderRadius: 14, marginBottom: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 28,
+            background: 'linear-gradient(135deg, var(--accent-glow) 0%, var(--accent-dim) 100%)',
+            border: '1.5px solid var(--accent)',
+          }}
+        >
+          📲
+        </div>
+        <span className="section-title" style={{ margin: '0 0 8px', border: 'none', padding: 0, color: 'var(--accent)' }}>
+          Novo
+        </span>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--text-1)', margin: '0 0 10px' }}>
+          Aposte direto pelo WhatsApp
+        </h2>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', margin: '0 0 18px', lineHeight: 1.5 }}>
+          Manda <strong style={{ color: 'var(--text-1)' }}>"Brasil 2x1 Argentina"</strong> no WhatsApp, confirma com <strong style={{ color: 'var(--text-1)' }}>"SIM"</strong> e o palpite entra automático. Sem abrir o app.
+        </p>
+        <input
+          type="tel"
+          className="form-input"
+          placeholder="(11) 99999-9999"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          style={{ marginBottom: 8 }}
+        />
+        {err && <p style={{ color: 'var(--lose)', fontFamily: 'var(--font-cond)', fontSize: 12, margin: '0 0 10px' }}>{err}</p>}
+        <button
+          className="btn btn-primary"
+          style={{ width: '100%', fontFamily: 'var(--font-display)', fontWeight: 900, letterSpacing: '0.06em' }}
+          onClick={activate}
+          disabled={saving === 'in'}
+        >
+          {saving === 'in' ? 'Ativando…' : '✅ Ativar agora'}
+        </button>
+        <button
+          onClick={dismiss}
+          disabled={saving === 'out'}
+          style={{ marginTop: 'var(--s3)', width: '100%', background: 'none', border: 'none', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 12, cursor: 'pointer', letterSpacing: '0.06em' }}
+        >
+          Agora não
+        </button>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 12, textAlign: 'center' }}>
+          Dá pra ativar/desativar depois em Meu Perfil.
+        </p>
+      </div>
+    </ModalShell>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ORQUESTRADOR — fila única. Um popup por vez, próximo só entra quando o
+// anterior é fechado (fluxo de navegação, sem sobreposição/empilhamento).
+// Ordem: onboarding → version → competition → champion → invite → push → whatsapp
+// ═════════════════════════════════════════════════════════════════════════════
+const POPUP_ORDER = ['onboarding', 'version', 'competition', 'champion', 'invite', 'push', 'whatsapp']
+const ONBOARDED_KEY = 'predicts-onboarded'
+
 export default function AppPopups() {
-  const { token } = useAuth()
-  const [active, setActive] = useState(null)
+  const { token, user } = useAuth()
+  const [queue, setQueue] = useState([])
   const [versionData, setVersionData] = useState(null)
   const [competitionData, setCompetitionData] = useState(null)
   const [pendingInvites, setPendingInvites] = useState([])
 
-  // ── 0: Competition popup (3s, uma vez por competition.id) ────────────────
+  // ── Monta a fila inteira de uma vez (sem timers concorrentes) ────────────
   useEffect(() => {
     let mounted = true
-    const t = setTimeout(async () => {
-      try {
-        const c = await api.get('/competition/active')
-        if (!mounted || !c?.id) return
-        const key = `predicts_comp_seen_${c.id}`
-        if (localStorage.getItem(key)) return
-        setCompetitionData(c)
-        setActive(prev => prev === null ? 'competition' : prev)
-      } catch {}
-    }, 3000)
-    return () => { mounted = false; clearTimeout(t) }
-  }, [])
 
-  // ── 1 & 2: Version → Champion (800ms, logado) ─────────────────────────────
-  useEffect(() => {
-    let mounted = true
-    async function decide() {
+    async function build() {
+      const eligible = []
+
+      if (!localStorage.getItem(ONBOARDED_KEY)) eligible.push('onboarding')
+
       try {
         const v = await api.get('/version/latest')
-        if (mounted && v?.version && localStorage.getItem(SEEN_VERSION_KEY) !== v.version) {
-          localStorage.setItem(SEEN_VERSION_KEY, v.version)  // marca como visto imediatamente
-          setVersionData(v); setActive('version'); return
+        if (v?.version && localStorage.getItem(SEEN_VERSION_KEY) !== v.version) {
+          if (mounted) setVersionData(v)
+          eligible.push('version')
         }
       } catch {}
-      if (!token) return
-      if (CHAMP_DEADLINE - Date.now() <= 0) return
-      if (localStorage.getItem(CHAMP_DISMISS_KEY) === todayKey()) return
+
       try {
-        const pick = await api.get('/champion/pick', token)
-        if (mounted && (!pick?.champion || !pick?.runner_up)) setActive('champion')
-      } catch { if (mounted) setActive('champion') }
+        const c = await api.get('/competition/active')
+        if (c?.id && !localStorage.getItem(`predicts_comp_seen_${c.id}`)) {
+          if (mounted) setCompetitionData(c)
+          eligible.push('competition')
+        }
+      } catch {}
+
+      if (token) {
+        if (CHAMP_DEADLINE - Date.now() > 0 && localStorage.getItem(CHAMP_DISMISS_KEY) !== todayKey()) {
+          try {
+            const pick = await api.get('/champion/pick', token)
+            if (!pick?.champion || !pick?.runner_up) eligible.push('champion')
+          } catch { eligible.push('champion') }
+        }
+
+        const lastInvite = parseInt(localStorage.getItem(INVITE_DISMISS_KEY) || '0', 10)
+        if (Date.now() - lastInvite >= 30 * 60 * 1000) {
+          try {
+            const res = await api.get('/user-groups', token)
+            const inv = res?.pending_invites ?? []
+            if (inv.length > 0) {
+              if (mounted) setPendingInvites(inv)
+              eligible.push('invite')
+            }
+          } catch {}
+        }
+
+        if (
+          'serviceWorker' in navigator && 'PushManager' in window &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission !== 'denied' && Notification.permission !== 'granted' &&
+          !isDismissed(PUSH_DISMISS_KEY)
+        ) {
+          try {
+            const reg = await navigator.serviceWorker.getRegistration()
+            const sub = await reg?.pushManager?.getSubscription()
+            if (!sub) eligible.push('push')
+          } catch {}
+        }
+
+        if (user && !user.whatsapp_opt_in && !user.whatsapp_prompted_at) eligible.push('whatsapp')
+      }
+
+      if (!mounted) return
+      setQueue(POPUP_ORDER.filter(id => eligible.includes(id)))
     }
-    const t = setTimeout(decide, 800)
+
+    const t = setTimeout(build, 700)
     return () => { mounted = false; clearTimeout(t) }
   }, [token])
 
-  // ── 2.5: Invite popup (7s, logado, convites pendentes, 30min dismiss) ───
-  useEffect(() => {
-    if (!token) return
-    const last = parseInt(localStorage.getItem(INVITE_DISMISS_KEY) || '0', 10)
-    if (Date.now() - last < 30 * 60 * 1000) return
-    const t = setTimeout(async () => {
-      try {
-        const res = await api.get('/user-groups', token)
-        const inv = res?.pending_invites ?? []
-        if (inv.length > 0) {
-          setPendingInvites(inv)
-          setActive(prev => prev === null ? 'invite' : prev)
-        }
-      } catch {}
-    }, 7000)
-    return () => clearTimeout(t)
-  }, [token])
+  const active = queue[0] || null
+  function advance() { setQueue(q => q.slice(1)) }
 
-  // ── 3: Push prompt (12s, logado, PWA, sem subscription) ──────────────────
-  useEffect(() => {
-    if (!token) return
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
-    if (typeof Notification === 'undefined') return
-    if (Notification.permission === 'denied' || Notification.permission === 'granted') return
-    if (isDismissed(PUSH_DISMISS_KEY)) return
-    const t = setTimeout(async () => {
-      try {
-        const reg = await navigator.serviceWorker.getRegistration()
-        const sub = await reg?.pushManager?.getSubscription()
-        if (!sub) setActive(prev => prev === null ? 'push' : prev)
-      } catch {}
-    }, 12000)
-    return () => clearTimeout(t)
-  }, [token])
-
-  // ── Handlers de fechamento ─────────────────────────────────────────────────
+  // ── Handlers de fechamento (bookkeeping + avança a fila) ───────────────────
   function closeVersion() {
     if (versionData?.version) localStorage.setItem(SEEN_VERSION_KEY, versionData.version)
-    setActive(null)
-    setTimeout(() => {
-      if (!token || CHAMP_DEADLINE - Date.now() <= 0) return
-      if (localStorage.getItem(CHAMP_DISMISS_KEY) === todayKey()) return
-      api.get('/champion/pick', token)
-        .then(p => { if (!p?.champion || !p?.runner_up) setActive('champion') })
-        .catch(() => setActive('champion'))
-    }, 400)
+    advance()
+  }
+
+  function closeOnboarding() {
+    localStorage.setItem(ONBOARDED_KEY, '1')
+    advance()
   }
 
   function closeChampion() {
     localStorage.setItem(CHAMP_DISMISS_KEY, todayKey())
-    setActive(null)
+    advance()
   }
 
   function closePush() {
     dismiss(PUSH_DISMISS_KEY, 7)
-    setActive(null)
+    advance()
   }
 
   function closeCompetition() {
     if (competitionData?.id) localStorage.setItem(`predicts_comp_seen_${competitionData.id}`, '1')
-    setActive(null)
+    advance()
   }
 
   function closeInvite() {
     localStorage.setItem(INVITE_DISMISS_KEY, String(Date.now()))
-    setActive(null)
+    advance()
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (active === 'competition' && competitionData) return <CompetitionPopup competition={competitionData} onClose={closeCompetition} />
+  function closeWhatsapp() {
+    advance()
+  }
+
+  // ── Render — só a fila[0], nunca dois de uma vez ──────────────────────────
+  if (active === 'onboarding')             return <Onboarding onClose={closeOnboarding} />
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
+  if (active === 'competition' && competitionData) return <CompetitionPopup competition={competitionData} onClose={closeCompetition} />
   if (active === 'champion')               return <ChampionPopup token={token} onClose={closeChampion} />
   if (active === 'invite' && pendingInvites.length > 0) return <InvitePopup invites={pendingInvites} token={token} onClose={closeInvite} />
   if (active === 'push')                   return <PushPromptPopup token={token} onClose={closePush} />
+  if (active === 'whatsapp')               return <WhatsAppOptInPopup user={user} token={token} onDone={closeWhatsapp} />
   return null
 }

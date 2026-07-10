@@ -47,6 +47,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(User).filter(User.id == int(payload["sub"])).first()
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
+    if not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Conta desativada")
     return user
 
 
@@ -57,7 +59,8 @@ def get_optional_user(token: str = Depends(oauth2_scheme), db: Session = Depends
     payload = _decode(token)
     if not payload:
         return None
-    return db.query(User).filter(User.id == int(payload["sub"])).first()
+    user = db.query(User).filter(User.id == int(payload["sub"])).first()
+    return user if user and user.is_active else None
 
 
 def require_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -68,6 +71,6 @@ def require_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get
     if not payload:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
     user = db.query(User).filter(User.id == int(payload["sub"])).first()
-    if not user or user.role != UserRole.admin:
+    if not user or user.role != UserRole.admin or not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
     return user

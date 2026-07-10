@@ -89,6 +89,9 @@ class TrackPayload(BaseModel):
     path: str = "/"
     referrer: str = ""
     user_id: int | None = None
+    standalone: bool | None = None
+    utm_source: str | None = None
+    utm_campaign: str | None = None
 
 
 @router.post("/track", status_code=204)
@@ -128,6 +131,9 @@ async def track(
         browser=browser,
         os=os_,
         referrer=(payload.referrer or "")[:500],
+        standalone=payload.standalone,
+        utm_source=(payload.utm_source or None) and payload.utm_source[:60],
+        utm_campaign=(payload.utm_campaign or None) and payload.utm_campaign[:120],
     )
     db.add(pv)
     db.commit()
@@ -146,6 +152,284 @@ def public_stats(db: Session = Depends(get_db)):
         "bets": total_bets,
         "matches_finished": matches_done,
         "matches_total": matches_total,
+    }
+
+
+@router.get("/simulations")
+def simulations_stats(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    from sqlalchemy import text
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+    totals = db.execute(text("""
+        SELECT
+          COUNT(*) AS total_sims,
+          COUNT(DISTINCT ip) AS uniq_ips,
+          COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) AS uniq_registered,
+          COUNT(*) FILTER (WHERE user_id IS NOT NULL) AS sims_registered,
+          COUNT(*) FILTER (WHERE user_id IS NULL) AS sims_anon
+        FROM page_views
+        WHERE path LIKE '/__event/simulate/%' AND created_at >= :since
+    """), {"since": since}).fetchone()
+
+    funnel = db.execute(text("""
+        WITH first_seen AS (
+            SELECT ip, MIN(created_at) AS first_seen
+            FROM page_views
+            GROUP BY ip
+        ),
+        new_visitors AS (
+            SELECT ip FROM first_seen WHERE first_seen >= :since
+        ),
+        sim_ips AS (
+            SELECT DISTINCT ip FROM page_views
+            WHERE path LIKE '/__event/simulate/%' AND created_at >= :since
+        ),
+        reg_ips AS (
+            SELECT DISTINCT ip FROM page_views
+            WHERE user_id IS NOT NULL AND created_at >= :since
+        )
+        SELECT
+          (SELECT COUNT(*) FROM new_visitors) AS new_visitors,
+          (SELECT COUNT(*) FROM new_visitors nv JOIN sim_ips si ON si.ip = nv.ip) AS new_visitors_simulated,
+          (SELECT COUNT(*) FROM new_visitors nv JOIN reg_ips ri ON ri.ip = nv.ip) AS new_visitors_registered
+    """), {"since": since}).fetchone()
+
+    drop_off = db.execute(text("""
+        WITH first_seen AS (
+            SELECT ip, MIN(created_at) AS first_seen
+            FROM page_views
+            GROUP BY ip
+        ),
+        new_visitors AS (
+            SELECT ip FROM first_seen WHERE first_seen >= :since
+        ),
+        sim_ips AS (
+            SELECT DISTINCT ip FROM page_views
+            WHERE path LIKE '/__event/simulate/%' AND created_at >= :since
+        ),
+        non_sim_new AS (
+            SELECT ip FROM new_visitors WHERE ip NOT IN (SELECT ip FROM sim_ips)
+        )
+        SELECT pv.path, COUNT(DISTINCT pv.ip) AS uniq
+        FROM page_views pv
+        JOIN non_sim_new nsn ON nsn.ip = pv.ip
+        WHERE pv.created_at >= :since AND pv.path NOT LIKE '/__event/%'
+        GROUP BY pv.path
+        ORDER BY uniq DESC
+        LIMIT 15
+    """), {"since": since}).fetchall()
+
+    by_device = db.execute(text("""
+        SELECT COALESCE(device, 'desconhecido') AS device, COUNT(*) AS sims, COUNT(DISTINCT ip) AS uniq
+        FROM page_views
+        WHERE path LIKE '/__event/simulate/%' AND created_at >= :since
+        GROUP BY device
+        ORDER BY sims DESC
+    """), {"since": since}).fetchall()
+
+    time_to_sim = db.execute(text("""
+        WITH first_seen AS (
+            SELECT ip, MIN(created_at) AS first_seen FROM page_views GROUP BY ip
+        ),
+        first_sim AS (
+            SELECT ip, MIN(created_at) AS first_sim FROM page_views
+            WHERE path LIKE '/__event/simulate/%'
+            GROUP BY ip
+        )
+        SELECT
+          AVG(EXTRACT(EPOCH FROM (fs.first_sim - fseen.first_seen))) AS avg_secs,
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (fs.first_sim - fseen.first_seen))) AS median_secs
+        FROM first_sim fs
+        JOIN first_seen fseen ON fseen.ip = fs.ip
+        WHERE fseen.first_seen >= :since AND fs.first_sim >= fseen.first_seen
+    """), {"since": since}).fetchone()
+
+    top_matches_rows = db.execute(text("""
+        SELECT split_part(path, '/', 4)::int AS match_id, COUNT(*) AS sims, COUNT(DISTINCT ip) AS uniq
+        FROM page_views
+        WHERE path LIKE '/__event/simulate/%' AND created_at >= :since
+        GROUP BY match_id
+        ORDER BY sims DESC
+        LIMIT 10
+    """), {"since": since}).fetchall()
+
+    match_ids = [r.match_id for r in top_matches_rows]
+    matches_by_id = {}
+    if match_ids:
+        from models import Match
+        from sqlalchemy.orm import joinedload
+        for m in db.query(Match).options(joinedload(Match.team_a), joinedload(Match.team_b)).filter(Match.id.in_(match_ids)):
+            matches_by_id[m.id] = f"{m.team_a.code} x {m.team_b.code}" if m.team_a and m.team_b else f"Partida #{m.id}"
+
+    return {
+        "days": days,
+        "total_sims": totals.total_sims or 0,
+        "uniq_ips": totals.uniq_ips or 0,
+        "uniq_registered": totals.uniq_registered or 0,
+        "sims_registered": totals.sims_registered or 0,
+        "sims_anon": totals.sims_anon or 0,
+        "new_visitors": funnel.new_visitors or 0,
+        "new_visitors_simulated": funnel.new_visitors_simulated or 0,
+        "new_visitors_registered": funnel.new_visitors_registered or 0,
+        "drop_off_pages": [{"path": r.path, "uniq": r.uniq} for r in drop_off],
+        "by_device": [{"device": r.device, "sims": r.sims, "uniq": r.uniq} for r in by_device],
+        "time_to_first_sim": {
+            "avg_secs": round(time_to_sim.avg_secs) if time_to_sim.avg_secs is not None else None,
+            "median_secs": round(time_to_sim.median_secs) if time_to_sim.median_secs is not None else None,
+        },
+        "top_matches": [
+            {"match_id": r.match_id, "label": matches_by_id.get(r.match_id, f"Partida #{r.match_id}"), "sims": r.sims, "uniq": r.uniq}
+            for r in top_matches_rows
+        ],
+    }
+
+
+@router.get("/traffic-sources")
+def traffic_sources(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """De onde vêm os visitantes: PWA instalado, direto, busca, redes sociais, outros sites + indicação."""
+    from sqlalchemy import text
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+    # apenas a 1ª página vista de cada visitante no período — navegação interna
+    # subsequente (referrer = o próprio site) não é uma "origem" de tráfego.
+    rows = db.execute(text("""
+        WITH first_view AS (
+            SELECT DISTINCT ON (ip) ip, referrer, standalone, utm_source
+            FROM page_views
+            WHERE created_at >= :since
+            ORDER BY ip, created_at ASC
+        )
+        SELECT
+          CASE
+            WHEN utm_source IS NOT NULL AND utm_source != '' THEN 'utm:' || lower(utm_source)
+            WHEN standalone THEN 'pwa'
+            WHEN referrer = '' OR referrer IS NULL THEN 'direto'
+            WHEN referrer ILIKE '%predicts.info%' THEN 'direto'
+            WHEN referrer ILIKE '%google.%' THEN 'busca'
+            WHEN referrer ILIKE '%instagram%' OR referrer ILIKE '%facebook%' OR referrer ILIKE '%whatsapp%'
+              OR referrer ILIKE '%wa.me%' OR referrer ILIKE '%t.co%' OR referrer ILIKE '%twitter%' OR referrer ILIKE '%x.com%'
+              OR referrer ILIKE '%tiktok%'
+              THEN 'social'
+            ELSE 'outros_sites'
+          END AS source,
+          COUNT(*) AS uniq
+        FROM first_view
+        GROUP BY source
+    """), {"since": since}).fetchall()
+
+    referred = db.execute(text("""
+        SELECT
+          COUNT(*) FILTER (WHERE referred_by IS NOT NULL) AS referred,
+          COUNT(*) AS total
+        FROM users
+        WHERE created_at >= :since
+    """), {"since": since}).fetchone()
+
+    labels = {"pwa": "App instalado (PWA)", "direto": "Acesso direto", "busca": "Busca (Google)", "social": "Redes sociais", "outros_sites": "Outros sites"}
+    by_source = {r.source: r.uniq for r in rows}
+    sources = [{"source": k, "label": labels.get(k, f"Campanha: {k.split(':', 1)[1]}" if k.startswith('utm:') else k), "uniq": v}
+               for k, v in by_source.items()]
+    # garante que os 5 baldes fixos apareçam mesmo com 0
+    for k, v in labels.items():
+        if k not in by_source:
+            sources.append({"source": k, "label": v, "uniq": 0})
+    sources.sort(key=lambda s: -s["uniq"])
+
+    return {
+        "days": days,
+        "sources": sources,
+        "new_users": referred.total or 0,
+        "new_users_referred": referred.referred or 0,
+    }
+
+
+@router.get("/simulation-impact")
+def simulation_impact(
+    days: int = 30,
+    weeks: int = 8,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """
+    1) Conversão: usuários cadastrados que simularam uma partida → % que apostaram nessa mesma partida.
+    2) Retenção: compara curva de retenção semanal (WoW, por atividade de aposta) entre
+       usuários que já simularam alguma vez vs os que nunca simularam.
+    """
+    from sqlalchemy import text
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+    conv = db.execute(text("""
+        WITH sim_pairs AS (
+            SELECT user_id, split_part(path, '/', 4)::int AS match_id
+            FROM page_views
+            WHERE path LIKE '/__event/simulate/%' AND user_id IS NOT NULL AND created_at >= :since
+            GROUP BY user_id, split_part(path, '/', 4)
+        )
+        SELECT
+          COUNT(*) AS total_pairs,
+          COUNT(*) FILTER (
+            WHERE EXISTS (
+              SELECT 1 FROM bets b WHERE b.user_id = sim_pairs.user_id AND b.match_id = sim_pairs.match_id
+            )
+          ) AS converted_pairs
+        FROM sim_pairs
+    """), {"since": since}).fetchone()
+
+    sim_user_ids_rows = db.execute(text("""
+        SELECT DISTINCT user_id FROM page_views
+        WHERE path LIKE '/__event/simulate/%' AND user_id IS NOT NULL
+    """)).fetchall()
+    sim_user_ids = {r.user_id for r in sim_user_ids_rows}
+
+    bet_rows = db.execute(text("""
+        SELECT user_id, date_trunc('week', created_at)::date AS week_start
+        FROM bets
+        WHERE created_at IS NOT NULL
+        ORDER BY week_start
+    """)).fetchall()
+
+    def _retention_curve(rows):
+        if not rows:
+            return {"weeks": [], "avg_wow": None}
+        first_week, week_users = {}, {}
+        for user_id, week_start in rows:
+            if user_id not in first_week:
+                first_week[user_id] = week_start
+            week_users.setdefault(week_start, set()).add(user_id)
+        all_weeks = sorted(week_users.keys())
+        cutoff = all_weeks[-weeks] if len(all_weeks) >= weeks else all_weeks[0]
+        target_weeks = [w for w in all_weeks if w >= cutoff]
+        out, prev_active = [], set()
+        for w in target_weeks:
+            active = week_users[w]
+            wow = round(len(active & prev_active) / len(prev_active) * 100, 1) if prev_active else None
+            out.append({"week_start": w.isoformat(), "active": len(active), "wow_retention": wow})
+            prev_active = active
+        wow_vals = [w["wow_retention"] for w in out if w["wow_retention"] is not None]
+        avg = round(sum(wow_vals) / len(wow_vals), 1) if wow_vals else None
+        return {"weeks": out, "avg_wow": avg}
+
+    rows_simulated = [(u, w) for u, w in bet_rows if u in sim_user_ids]
+    rows_never     = [(u, w) for u, w in bet_rows if u not in sim_user_ids]
+
+    return {
+        "days": days,
+        "weeks": weeks,
+        "conversion": {
+            "total_pairs": conv.total_pairs or 0,
+            "converted_pairs": conv.converted_pairs or 0,
+            "pct": round((conv.converted_pairs or 0) / conv.total_pairs * 100, 1) if conv.total_pairs else 0,
+        },
+        "retention_simulated": _retention_curve(rows_simulated),
+        "retention_never_simulated": _retention_curve(rows_never),
     }
 
 
@@ -437,6 +721,84 @@ def recent(
         }
         for r in rows
     ]
+
+
+@router.get("/v2-usage")
+def v2_usage(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Adoção da proposta V2 da tela de simulação (/partida/{id}/v2) vs V1."""
+    import re
+    from sqlalchemy import text
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(days=days)
+    rows = (
+        db.query(PageView.path, PageView.ip, PageView.user_id, PageView.created_at)
+        .filter(PageView.created_at >= since, PageView.path.like("/partida/%"))
+        .all()
+    )
+
+    v1_re = re.compile(r"^/partida/(\d+)$")
+    v2_re = re.compile(r"^/partida/(\d+)/v2$")
+
+    v1_views, v2_views = 0, 0
+    v2_ips, v2_users = set(), set()
+    v1_ips = set()
+    v2_match_counter: Counter = Counter()
+    day_counter: Counter = Counter()
+
+    for r in rows:
+        m2 = v2_re.match(r.path)
+        if m2:
+            v2_views += 1
+            if r.ip: v2_ips.add(r.ip)
+            if r.user_id: v2_users.add(r.user_id)
+            v2_match_counter[int(m2.group(1))] += 1
+            day_counter[r.created_at.strftime("%Y-%m-%d")] += 1
+            continue
+        m1 = v1_re.match(r.path)
+        if m1:
+            v1_views += 1
+            if r.ip: v1_ips.add(r.ip)
+
+    total = v1_views + v2_views
+    adoption_pct = round(v2_views / total * 100, 1) if total else 0.0
+
+    top_match_ids = [mid for mid, _ in v2_match_counter.most_common(8)]
+    teams_map = {}
+    if top_match_ids:
+        trows = db.execute(
+            text("""
+                SELECT m.id, ta.code, ta.name, tb.code, tb.name
+                FROM matches m
+                JOIN teams ta ON ta.id = m.team_a_id
+                JOIN teams tb ON tb.id = m.team_b_id
+                WHERE m.id = ANY(:ids)
+            """),
+            {"ids": top_match_ids},
+        ).fetchall()
+        teams_map = {t[0]: {"team_a": t[1], "team_a_name": t[2], "team_b": t[3], "team_b_name": t[4]} for t in trows}
+
+    top_matches = [
+        {"match_id": mid, "views": c, **teams_map.get(mid, {})}
+        for mid, c in v2_match_counter.most_common(8)
+    ]
+
+    views_per_day = [{"date": d, "views": c} for d, c in sorted(day_counter.items())]
+
+    return {
+        "period_days": days,
+        "v1_views": v1_views,
+        "v2_views": v2_views,
+        "adoption_pct": adoption_pct,
+        "v2_unique_ips": len(v2_ips),
+        "v2_unique_users": len(v2_users),
+        "v1_unique_ips": len(v1_ips),
+        "top_matches": top_matches,
+        "views_per_day": views_per_day,
+    }
 
 
 @router.get("/top-users")

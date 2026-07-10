@@ -129,6 +129,11 @@ class MatchResult(Base):
     xg_b = Column(Numeric(4, 2))
     result = Column(Enum("a", "draw", "b", name="match_outcome"), nullable=False)
     recorded_at = Column(DateTime, default=_utcnow)
+    went_to_extra_time = Column(Boolean, default=False)
+    decided_by_penalties = Column(Boolean, default=False)
+    et_winner = Column(Enum("a", "b", name="et_winner"), nullable=True)
+    penalty_score_a = Column(Integer, nullable=True)
+    penalty_score_b = Column(Integer, nullable=True)
 
     match = relationship("Match", back_populates="result")
 
@@ -156,6 +161,31 @@ class SimulationCache(Base):
     match = relationship("Match", back_populates="simulation")
 
 
+class TeamHeadToHead(Base):
+    __tablename__ = "team_head_to_head"
+
+    id = Column(Integer, primary_key=True)
+    team_a_code = Column(String(3), nullable=False)
+    team_b_code = Column(String(3), nullable=False)
+    wins_a = Column(Integer)
+    wins_b = Column(Integer)
+    draws = Column(Integer)
+    total_matches = Column(Integer)
+    summary = Column(Text)
+    recent_results = Column(Text)  # JSON: [{"date","competition","result"}], mais recente primeiro
+    source = Column(String(20), nullable=False, default="web_search")
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class MatchProjection(Base):
+    __tablename__ = "match_projections"
+
+    id = Column(Integer, primary_key=True)
+    match_id = Column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), nullable=False, unique=True)
+    sent_at = Column(DateTime, default=_utcnow)
+    telegram_message_id = Column(Integer)
+
+
 class TournamentSimulation(Base):
     __tablename__ = "tournament_simulations"
 
@@ -180,6 +210,13 @@ class User(Base):
     created_at  = Column(DateTime, default=_utcnow)
     updated_at  = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     referred_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    whatsapp_opt_in = Column(Boolean, default=False, nullable=False)
+    whatsapp_opt_in_at = Column(DateTime, nullable=True)
+    whatsapp_opt_out_at = Column(DateTime, nullable=True)
+    whatsapp_prompted_at = Column(DateTime, nullable=True)
+    whatsapp_prefs = Column(JSONB, nullable=True)  # {"bet_reminder","bet_confirmation","version_update","ranking_highlight": bool}
+    is_active = Column(Boolean, default=True, nullable=False)
+    deactivated_at = Column(DateTime, nullable=True)
 
     bets = relationship("Bet", back_populates="user")
     ranking = relationship("Ranking", back_populates="user", uselist=False)
@@ -202,6 +239,20 @@ class PasswordResetToken(Base):
     user = relationship("User")
 
 
+class AccountActionToken(Base):
+    __tablename__ = "account_action_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    action = Column(String(20), nullable=False)  # 'email' | 'phone'
+    token = Column(String(64), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    user = relationship("User")
+
+
 class Bet(Base):
     __tablename__ = "bets"
     __table_args__ = (UniqueConstraint("user_id", "match_id", name="uq_user_match_bet"),)
@@ -212,6 +263,8 @@ class Bet(Base):
     score_a = Column(Integer, nullable=False)
     score_b = Column(Integer, nullable=False)
     points_earned = Column(Integer, default=0)
+    et_winner_pick = Column(Enum("a", "b", name="et_winner_pick"), nullable=True)
+    et_points_earned = Column(Integer, default=0)
     locked_at = Column(DateTime)
     evaluated_at = Column(DateTime)
     created_at = Column(DateTime, default=_utcnow)
@@ -419,6 +472,9 @@ class PageView(Base):
     browser    = Column(String(40))
     os         = Column(String(40))
     referrer   = Column(String(500))
+    standalone = Column(Boolean, nullable=True)   # true = aberto como PWA instalado
+    utm_source = Column(String(60), nullable=True)
+    utm_campaign = Column(String(120), nullable=True)
     created_at = Column(DateTime, default=_utcnow, index=True)
 
     user = relationship("User", foreign_keys=[user_id])
@@ -449,6 +505,66 @@ class AppVersion(Base):
     changes     = Column(JSONB, nullable=True)
     notified_at = Column(DateTime, nullable=True)
     created_at  = Column(DateTime, default=_utcnow, index=True)
+
+
+class WhatsappMessage(Base):
+    __tablename__ = "whatsapp_messages"
+
+    id         = Column(Integer, primary_key=True)
+    direction  = Column(String(10), nullable=False)   # inbound | outbound
+    phone      = Column(String(30), nullable=False, index=True)
+    body       = Column(Text, nullable=True)
+    status     = Column(String(20), default="sent")   # sent | failed | received
+    match_id   = Column(Integer, ForeignKey("matches.id"), nullable=True)
+    meta       = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+
+
+class WhatsappBetSession(Base):
+    __tablename__ = "whatsapp_bet_sessions"
+
+    id           = Column(Integer, primary_key=True)
+    phone        = Column(String(30), nullable=False, index=True)
+    state        = Column(String(30), nullable=False)   # aguardando_confirmacao
+    match_id     = Column(Integer, ForeignKey("matches.id"), nullable=True)
+    draft_score_a = Column(Integer, nullable=True)
+    draft_score_b = Column(Integer, nullable=True)
+    draft_et_winner_pick = Column(Enum("a", "b", name="et_winner_pick"), nullable=True)  # mata-mata: quem avança se empatar no tempo normal
+    list_json    = Column(Text, nullable=True)  # state='lista_enviada': JSON [match_id,...] ordenado por número
+    created_at   = Column(DateTime, default=_utcnow)
+    expires_at   = Column(DateTime, nullable=False)
+
+
+class WhatsappCampaign(Base):
+    __tablename__ = "whatsapp_campaigns"
+
+    id            = Column(Integer, primary_key=True)
+    message       = Column(Text, nullable=False)
+    target_filter = Column(JSONB, nullable=True)
+    status        = Column(String(20), default="draft")   # draft | running | done | canceled
+    created_by    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at    = Column(DateTime, default=_utcnow)
+
+
+class WhatsappCampaignRecipient(Base):
+    __tablename__ = "whatsapp_campaign_recipients"
+
+    id          = Column(Integer, primary_key=True)
+    campaign_id = Column(Integer, ForeignKey("whatsapp_campaigns.id"), nullable=False, index=True)
+    phone       = Column(String(30), nullable=False)
+    status      = Column(String(20), default="pending")   # pending | sent | failed
+    sent_at     = Column(DateTime, nullable=True)
+
+
+class WhatsappGroupPost(Base):
+    __tablename__ = "whatsapp_group_posts"
+
+    id       = Column(Integer, primary_key=True)
+    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    kind     = Column(String(20), nullable=False)   # projection | reminder | result
+    sent_at  = Column(DateTime, default=_utcnow)
+
+    __table_args__ = (UniqueConstraint("match_id", "kind", name="uq_wa_group_post_match_kind"),)
 
 
 class PhaseCompetition(Base):

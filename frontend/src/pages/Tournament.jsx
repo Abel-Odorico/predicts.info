@@ -650,7 +650,8 @@ function KoMatchCard({ match, matchLookup }) {
   const date = formatBracketDate(match.match_date)
   const ta = match.resolved_team_a
   const tb = match.resolved_team_b
-  const probA = ta && tb ? eloWinProb(ta.elo_rating, tb.elo_rating) : null
+  const isFinished = match.status === 'finished' && match.score_a != null && match.score_b != null
+  const probA = !isFinished && ta && tb ? eloWinProb(ta.elo_rating, tb.elo_rating) : null
   const probB = probA != null ? 1 - probA : null
 
   return (
@@ -667,6 +668,8 @@ function KoMatchCard({ match, matchLookup }) {
           candidates={match.candidate_thirds_a}
           matchLookup={matchLookup}
           winProb={probA}
+          score={isFinished ? match.score_a : null}
+          isWinner={isFinished ? match.score_a > match.score_b : null}
         />
         <div className="ko-card__sep">
           <span>vs</span>
@@ -678,6 +681,8 @@ function KoMatchCard({ match, matchLookup }) {
           candidates={match.candidate_thirds_b}
           matchLookup={matchLookup}
           winProb={probB}
+          score={isFinished ? match.score_b : null}
+          isWinner={isFinished ? match.score_b > match.score_a : null}
         />
       </div>
     </div>
@@ -689,12 +694,12 @@ function eloWinProb(eloA, eloB) {
   return 1 / (1 + Math.pow(10, (eloB - eloA) / 400))
 }
 
-function KoTeamRow({ team, label, candidates, matchLookup, winProb }) {
+function KoTeamRow({ team, label, candidates, matchLookup, winProb, score, isWinner }) {
   if (team) {
     const eloNorm = Math.min(100, Math.max(0, ((team.elo_rating - 1400) / 700) * 100))
     const probPct = winProb != null ? Math.round(winProb * 100) : null
     return (
-      <div className="ko-team">
+      <div className="ko-team" style={isWinner === false ? { opacity: 0.55 } : undefined}>
         {team.flag_url
           ? <img src={team.flag_url} alt={team.code} className="ko-team__flag" />
           : <span className="ko-team__flag-ph" />
@@ -704,7 +709,14 @@ function KoTeamRow({ team, label, candidates, matchLookup, winProb }) {
           <span className="ko-team__code">{team.code} · G{team.group_name}{team.position}</span>
         </div>
         <div className="ko-team__elo-wrap">
-          {probPct != null && (
+          {score != null ? (
+            <span style={{
+              fontFamily: 'var(--font-data)', fontSize: 20, fontWeight: 900,
+              color: isWinner ? 'var(--win)' : 'var(--text-2)',
+            }}>
+              {score}
+            </span>
+          ) : probPct != null && (
             <span className="ko-team__prob" style={{
               color: probPct >= 55 ? 'var(--accent)' : probPct >= 45 ? 'var(--text-2)' : 'var(--text-3)'
             }}>
@@ -836,7 +848,7 @@ function BkCard2({ matchNum, matchLookup, isFinal, isThird }) {
   const m      = matchLookup[matchNum]
   const ta     = m?.resolved_team_a
   const tb     = m?.resolved_team_b
-  const result = m?.result
+  const result = (m?.score_a != null && m?.score_b != null) ? { score_a: m.score_a, score_b: m.score_b } : null
   const dt     = bkDate(m?.match_date)
 
   let winA = null, winB = null
@@ -976,7 +988,7 @@ function BkMobileCard({ matchNum, matchLookup }) {
   const m      = matchLookup[matchNum]
   const ta     = m?.resolved_team_a
   const tb     = m?.resolved_team_b
-  const result = m?.result
+  const result = (m?.score_a != null && m?.score_b != null) ? { score_a: m.score_a, score_b: m.score_b } : null
   const dt     = bkDate(m?.match_date)
   const half   = MATCH_HALF[matchNum]
   const isFinal  = matchNum === FINAL_MN

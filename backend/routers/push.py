@@ -120,6 +120,11 @@ def subscribe(
             p256dh=body.p256dh,
             auth=body.auth,
         ))
+    # 1 subscription ativa por usuário — dispositivo mais recente substitui os anteriores,
+    # senão push de versão/aposta/lembrete manda pra todo endpoint velho acumulado (duplicidade).
+    db.query(PushSubscription).filter(
+        PushSubscription.user_id == user.id, PushSubscription.endpoint != body.endpoint,
+    ).delete()
     db.commit()
 
     if is_new:

@@ -434,6 +434,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
   const [focusScore, setFocusScore] = useState(false)
   const [sa, setSa]             = useState(existingBet?.score_a ?? 0)
   const [sb, setSb]             = useState(existingBet?.score_b ?? 0)
+  const [etWinnerPick, setEtWinnerPick] = useState(existingBet?.et_winner_pick ?? null)
   const [msg, setMsg]           = useState('')
   const [saving, setSaving]     = useState(false)
   const [confirmed, setConfirmed]       = useState(false)
@@ -470,14 +471,15 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
     if (existingBet && !open) {
       setSa(existingBet.score_a)
       setSb(existingBet.score_b)
+      setEtWinnerPick(existingBet.et_winner_pick ?? null)
     }
-  }, [existingBet?.score_a, existingBet?.score_b, open])
+  }, [existingBet?.score_a, existingBet?.score_b, existingBet?.et_winner_pick, open])
 
   async function fetchOdds() {
     if (odds || oddsLoading) return
     setOddsLoading(true)
     try {
-      const data = await api.post(`/matches/${match.id}/simulate?n=100000`, null)
+      const data = await api.post(`/matches/${match.id}/simulate?n=100000`, null, token)
       setOdds(data)
     } catch (_) {}
     finally { setOddsLoading(false) }
@@ -522,7 +524,9 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
     setSaving(true)
     setMsg('')
     try {
-      const data = await api.post('/bets', { match_id: match.id, score_a: scoreA, score_b: scoreB }, token)
+      const payload = { match_id: match.id, score_a: scoreA, score_b: scoreB }
+      if (match.phase !== 'group' && etWinnerPick) payload.et_winner_pick = etWinnerPick
+      const data = await api.post('/bets', payload, token)
       onBetPlaced(match.id, {
         ...data,
         match_id: match.id,
@@ -537,6 +541,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         official_score_a: null,
         official_score_b: null,
         result: null,
+        et_winner_pick: match.phase !== 'group' ? etWinnerPick : null,
       })
       setConfirmed(true)
       setOpen(false)
@@ -753,9 +758,56 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
               <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} compact />
             </span>
           </div>
+
+          {match.phase !== 'group' && (
+            <div
+              style={{
+                marginTop: 'var(--s3)',
+                background: 'linear-gradient(135deg, var(--accent-glow) 0%, transparent 100%)',
+                border: '1.5px dashed var(--accent)',
+                borderRadius: 10,
+                padding: 'var(--s3)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 'var(--s2)', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 16 }}>🥅</span>
+                <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 800, fontSize: 13, color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Prorrogação / Pênaltis
+                </span>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 800, color: 'var(--win)', border: '1px solid var(--win)', borderRadius: 999, padding: '2px 9px' }}>
+                  +10 pts
+                </span>
+              </div>
+              <p style={{ textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', marginBottom: 'var(--s3)' }}>
+                Se empatar no tempo normal, quem avança? <span style={{ color: 'var(--text-4)' }}>(opcional)</span>
+              </p>
+              <div style={{ display: 'flex', gap: 'var(--s3)' }}>
+                {[['a', match.team_a], ['b', match.team_b]].map(([side, team]) => (
+                  <button
+                    key={side}
+                    type="button"
+                    onClick={() => setEtWinnerPick(p => p === side ? null : side)}
+                    style={{
+                      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                      padding: '10px 8px', borderRadius: 8, cursor: 'pointer',
+                      border: etWinnerPick === side ? '2px solid var(--accent)' : '1.5px solid var(--border)',
+                      background: etWinnerPick === side ? 'var(--accent-glow)' : 'var(--bg-raised)',
+                    }}
+                  >
+                    {team?.flag_url && <img src={team.flag_url} alt={team.code} style={{ width: 30, height: 21, objectFit: 'cover', borderRadius: 2 }} />}
+                    <span style={{ fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 14, color: etWinnerPick === side ? 'var(--accent)' : 'var(--text-2)' }}>
+                      {team?.code}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             className="btn btn-primary w-full"
+            style={{ marginTop: 'var(--s3)' }}
             onClick={placeBet}
             disabled={saving}
           >
@@ -1049,6 +1101,19 @@ function BetRow({ bet, index, onOpenSimulation, onEditBet }) {
               {bet.points_earned ?? 0}
             </span>
           </div>
+        </div>
+      )}
+
+      {bet.et_winner_pick && (
+        <div style={{ marginTop: 'var(--s2)', textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+          🥅 Pênaltis: {bet.et_winner_pick === 'a' ? bet.team_a_code : bet.team_b_code}
+          {hasOfficial && (
+            bet.decided_by_penalties
+              ? (bet.et_winner_pick === bet.et_winner
+                  ? <span style={{ color: 'var(--win)' }}> · acertou (+{bet.et_points_earned ?? 0} pts)</span>
+                  : <span style={{ color: 'var(--lose)' }}> · errou</span>)
+              : <span style={{ color: 'var(--text-4)' }}> · não foi a pênaltis, não contou</span>
+          )}
         </div>
       )}
 

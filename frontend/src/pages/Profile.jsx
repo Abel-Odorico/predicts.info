@@ -41,8 +41,28 @@ export default function Profile() {
   const [name, setName]         = useState(user?.name ?? '')
   const [username, setUsername] = useState(user?.username ?? '')
   const [phone, setPhone]       = useState(user?.phone ?? '')
+  const [waOptIn, setWaOptIn]   = useState(user?.whatsapp_opt_in ?? false)
   const [profileMsg, setProfileMsg] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
+  const [waLink, setWaLink] = useState(null)
+  const [waPrefsSaving, setWaPrefsSaving] = useState(null) // key sendo salvo agora, ou null
+
+  useEffect(() => {
+    api.get('/whatsapp/contact').then(r => { if (r?.available) setWaLink(r.wa_link) }).catch(() => {})
+  }, [])
+
+  const waPrefs = user?.whatsapp_prefs || {}
+  function waPrefOn(key) { return waPrefs[key] !== false } // ausente = ligado (default)
+
+  async function toggleWaPref(key) {
+    const next = !waPrefOn(key)
+    setWaPrefsSaving(key)
+    try {
+      const updated = await api.patch('/auth/profile', { whatsapp_prefs: { [key]: next } }, token)
+      setUser(updated)
+    } catch { /* silencioso — usuário pode tentar de novo */ }
+    finally { setWaPrefsSaving(null) }
+  }
 
   const [curPwd, setCurPwd]   = useState('')
   const [newPwd, setNewPwd]   = useState('')
@@ -71,6 +91,7 @@ export default function Profile() {
         name: name.trim() || undefined,
         username: username.trim() || null,
         phone: phone.trim() || null,
+        whatsapp_opt_in: phone.trim() ? waOptIn : false,
       }, token)
       setUser(updated)
       setProfileMsg('✓ Perfil atualizado com sucesso')
@@ -231,6 +252,60 @@ export default function Profile() {
                 placeholder="(11) 99999-9999"
                 autoComplete="tel"
               />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13, marginTop: 10, cursor: phone.trim() ? 'pointer' : 'not-allowed', opacity: phone.trim() ? 1 : 0.5 }}>
+                <input
+                  type="checkbox"
+                  checked={waOptIn}
+                  disabled={!phone.trim()}
+                  onChange={e => setWaOptIn(e.target.checked)}
+                />
+                📲 Quero apostar por WhatsApp — manda "Brasil 2x1 Argentina" e confirma
+              </label>
+              {!phone.trim() && (
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+                  Precisa cadastrar um telefone pra ativar.
+                </div>
+              )}
+              {user?.whatsapp_opt_in && waLink && (
+                <a
+                  href={waLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-sm"
+                  style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', background: '#25D366', color: '#073' }}
+                >
+                  💬 Chamar no WhatsApp
+                </a>
+              )}
+              {user?.whatsapp_opt_in && (
+                <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-overlay)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Quais mensagens você quer receber
+                  </div>
+                  {[
+                    { key: 'bet_reminder', label: '⏰ Lembrete de aposta pendente (1h antes do jogo)' },
+                    { key: 'bet_confirmation', label: '✅ Confirmação quando eu apostar pelo site' },
+                    { key: 'ranking_highlight', label: '🔥 Destaque quando eu entrar no Top 10 do ranking' },
+                    { key: 'version_update', label: '🚀 Novidades e atualizações do site' },
+                  ].map(({ key, label }) => (
+                    <label
+                      key={key}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13,
+                        cursor: 'pointer', padding: '5px 0', opacity: waPrefsSaving === key ? 0.5 : 1,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={waPrefOn(key)}
+                        disabled={waPrefsSaving === key}
+                        onChange={() => toggleWaPref(key)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label className="form-label">E-mail <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(não editável)</span></label>

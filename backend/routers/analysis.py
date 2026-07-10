@@ -350,6 +350,75 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
     raise ValueError(f"Todos os providers esgotados. Último erro: {last_exc}")
 
 
+def _compute_streaks(results: list, team_code: str) -> dict:
+    """A partir de recent_a/recent_b (mais recente primeiro), calcula fatos honestos:
+    jogos seguidos sem vencer e jogos seguidos sofrendo gol, olhando do mais recente pra trás."""
+    if not results:
+        return {"winless_streak": 0, "conceded_streak": 0, "total_considered": 0}
+
+    winless, conceded_streak = 0, 0
+    stop_winless, stop_conceded = False, False
+    for r in results:
+        gf, ga = (r["score_a"], r["score_b"]) if r["team_a"] == team_code else (r["score_b"], r["score_a"])
+        if not stop_winless:
+            if gf > ga:
+                stop_winless = True
+            else:
+                winless += 1
+        if not stop_conceded:
+            if ga > 0:
+                conceded_streak += 1
+            else:
+                stop_conceded = True
+        if stop_winless and stop_conceded:
+            break
+
+    return {"winless_streak": winless, "conceded_streak": conceded_streak, "total_considered": len(results)}
+
+
+def _get_top_scorer(team_code: str) -> dict | None:
+    """Lê o cache de artilheiros (populado por GET /tournament/awards, Wikipedia)
+    sem chamar a Wikipedia direto daqui — geração de análise não pode depender
+    de latência/erro de fonte externa nova."""
+    try:
+        from routers.awards import _redis as _awards_redis, AWARDS_CACHE_KEY
+        r = _awards_redis()
+        cached = r.get(AWARDS_CACHE_KEY)
+        if not cached:
+            return None
+        data = json.loads(cached)
+        for s in data.get("top_scorers", []):
+            if s.get("team") == team_code:
+                return {"player": s["player"], "goals": s["goals"]}
+    except Exception:
+        pass
+    return None
+
+
+def _fatos_verificados(results: list, team_code: str) -> str:
+    """Monta a linha de fatos reais (não-invenção) que vira base do campo 'hook'."""
+    fatos = []
+    scorer = _get_top_scorer(team_code)
+    if scorer:
+        gol_txt = "gol" if scorer["goals"] == 1 else "gols"
+        fatos.append(f"Artilheiro do time: {scorer['player']} ({scorer['goals']} {gol_txt} nesta Copa)")
+
+    s = _compute_streaks(results, team_code)
+    if s["total_considered"] > 0:
+        if s["winless_streak"] == 0:
+            fatos.append("vem de vitória no último jogo")
+        elif s["winless_streak"] == 1:
+            fatos.append("sem vencer há 1 jogo")
+        else:
+            fatos.append(f"sem vencer há {s['winless_streak']} jogos")
+        if s["conceded_streak"] == 1:
+            fatos.append("sofreu gol no último jogo")
+        elif s["conceded_streak"] > 1:
+            fatos.append(f"sofreu gol nos últimos {s['conceded_streak']} jogos seguidos")
+
+    return " | ".join(fatos) if fatos else "sem fato marcante disponível — use forma/ataque já fornecidos"
+
+
 DEFAULT_PROMPT_TEMPLATE = (
     "Você é um jornalista esportivo sênior especializado em futebol internacional, "
     "com décadas de cobertura de Copas do Mundo e profundo conhecimento tático.\n"
@@ -378,8 +447,16 @@ DEFAULT_PROMPT_TEMPLATE = (
     "Convocados:\n{team_b_players}\n"
     "Resultados nesta Copa:\n{team_b_results}\n"
     "{mc_probs}\n"
+    "## Fatos verificados (não são opinião — números reais, use como base do campo \"hook\")\n"
+    "{team_a_code}: {team_a_fatos}\n"
+    "{team_b_code}: {team_b_fatos}\n\n"
     "## SAÍDA — JSON PURO (sem markdown, sem ```):\n"
     '{{\n'
+    '  "hook": "UMA frase curta e impactante pra ABRIR a análise, tipo manchete de jornal esportivo. '
+    'Use SOMENTE números da seção Fatos Verificados acima (artilheiro e gols, sequência sem vencer, jogos seguidos sofrendo gol). '
+    'PROIBIDO inventar número, sequência ou estatística que não esteja literalmente nos Fatos Verificados. '
+    'Se os Fatos Verificados de um time disserem \'sem fato marcante disponível\', use forma/ataque/xG já fornecidos pra esse time. '
+    'Ex: \'{team_a_name} chega embalado com {team_a_name} artilheiro da Copa, enquanto {team_b_name} não vence há X jogos.\'",\n'
     '  "overview": "3 parágrafos: (1) contexto e o que está em jogo — mencione pontos na tabela, situação de classificação; '
     '(2) histórico entre as seleções em Copas — confrontos anteriores, rivalidade, surpresas históricas; '
     '(3) estado atual neste torneio — quem entrou bem, quem decepcionou até aqui",\n'
@@ -463,8 +540,12 @@ def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, r
             f"  Placares mais prováveis: {scores_str}\n"
         )
 
+    team_a_fatos = _fatos_verificados(recent_a, team_a.code)
+    team_b_fatos = _fatos_verificados(recent_b, team_b.code)
+
     template = custom_template.strip() if custom_template else DEFAULT_PROMPT_TEMPLATE
     return template.format(
+        team_a_fatos=team_a_fatos, team_b_fatos=team_b_fatos,
         team_a_name=team_a.name, team_a_code=team_a.code,
         team_a_elo=team_a.elo_rating or "N/D",
         team_a_wc_apps=team_a.world_cup_appearances or "N/D",

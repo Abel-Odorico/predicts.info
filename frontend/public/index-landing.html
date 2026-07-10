@@ -229,6 +229,22 @@
     .feature-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 1.75rem; transition: border-color 150ms; }
     .feature-card:hover { border-color: var(--ctaBorder); }
     .feature-icon { margin-bottom: 1rem; color: var(--accent2); }
+    .feature-card-new { position: relative; border-color: var(--ctaBorder); }
+    .feature-new-tag {
+      position: absolute; top: 1rem; right: 1rem;
+      font-size: 0.65rem; font-weight: 800; letter-spacing: 0.08em;
+      color: var(--accent2); background: var(--pill); border: 1px solid var(--ctaBorder);
+      border-radius: 100px; padding: 0.2rem 0.6rem;
+    }
+    /* Regra Zero: entrada (herda .reveal) + loop perpétuo sutil no ícone,
+       numa única declaração de animation (2 classes separadas cancelam uma
+       a outra no cascade — ver bug documentado no skill predicts). */
+    @keyframes featureIconPulse {
+      0%, 100% { filter: drop-shadow(0 0 0 transparent); transform: scale(1); }
+      50%       { filter: drop-shadow(0 0 6px var(--accent2)); transform: scale(1.08); }
+    }
+    .feature-icon-glow { animation: featureIconPulse 2.6s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .feature-icon-glow { animation: none; } }
     [data-lucide] { stroke: currentColor; vertical-align: -0.2em; }
     .lw-title [data-lucide] { color: var(--accent2); margin-right: 2px; vertical-align: -3px; }
     .hero-sp-item [data-lucide] { color: var(--accent2); vertical-align: -2px; }
@@ -567,6 +583,22 @@
         <div class="feature-desc" data-en>Predict exact scorelines before each match. Earn points for correct results and exact scores. Compete on the leaderboard.</div>
         <div class="feature-desc" data-pt>Aposte no placar exato antes de cada jogo. Ganhe pontos por acertos e placares exatos. Dispute o ranking geral.</div>
       </div>
+      <div class="feature-card reveal feature-card-new">
+        <div class="feature-icon feature-icon-glow"><i data-lucide="sparkles" width="30" height="30"></i></div>
+        <span class="feature-new-tag" data-en>NEW</span><span class="feature-new-tag" data-pt>NOVO</span>
+        <div class="feature-title" data-en>AI Analysis with Real Insight</div>
+        <div class="feature-title" data-pt>Análise IA com Insight Real</div>
+        <div class="feature-desc" data-en>Every match opens with a headline built from real numbers — top scorer of the tournament, winless streaks, goals conceded in a row. No invented stats.</div>
+        <div class="feature-desc" data-pt>Cada partida abre com uma manchete montada com números reais — artilheiro da Copa, sequência sem vencer, jogos seguidos sofrendo gol. Nenhum dado inventado.</div>
+      </div>
+      <div class="feature-card reveal feature-card-new">
+        <div class="feature-icon feature-icon-glow"><i data-lucide="swords" width="30" height="30"></i></div>
+        <span class="feature-new-tag" data-en>NEW</span><span class="feature-new-tag" data-pt>NOVO</span>
+        <div class="feature-title" data-en>Head-to-Head History</div>
+        <div class="feature-title" data-pt>Confronto Direto</div>
+        <div class="feature-desc" data-en>All-time record between the two teams — wins, draws, goals, and the last 3 meetings with date and score. Feeds directly into the prediction model.</div>
+        <div class="feature-desc" data-pt>Retrospecto all-time entre as duas seleções — vitórias, empates, gols e os 3 últimos confrontos com data e placar. Alimenta direto o modelo de previsão.</div>
+      </div>
     </div>
   </section>
 
@@ -589,30 +621,30 @@
     <div class="how-grid">
       <div class="how-step">
         <div class="how-num">1</div>
-        <div class="how-title" data-en>Elo Ratings</div>
-        <div class="how-title" data-pt>Ratings Elo</div>
-        <div class="how-desc" data-en>Each team has an Elo rating reflecting their historical strength. Updated after every real match result.</div>
-        <div class="how-desc" data-pt>Cada seleção tem um rating Elo que reflete sua força histórica. Atualizado após cada resultado real.</div>
+        <div class="how-title" data-en>Implied Odds (Elo)</div>
+        <div class="how-title" data-pt>Odds Implícitas (Elo)</div>
+        <div class="how-desc" data-en>53.7% of the model weight. Win probability derived from Elo rating, recalibrated with bootstrap fit over real finished Copa matches.</div>
+        <div class="how-desc" data-pt>53.7% do peso do modelo. Probabilidade de vitória derivada do rating Elo, recalibrada com fit estatístico sobre jogos reais já encerrados da Copa.</div>
       </div>
       <div class="how-step">
         <div class="how-num">2</div>
-        <div class="how-title" data-en>Poisson Model</div>
-        <div class="how-title" data-pt>Modelo de Poisson</div>
-        <div class="how-desc" data-en>Expected goals (λ) computed from Elo + form + xG + market value. Goals follow a Poisson distribution.</div>
-        <div class="how-desc" data-pt>Gols esperados (λ) calculados com Elo + forma + xG + valor de mercado. Os gols seguem distribuição de Poisson.</div>
+        <div class="how-title" data-en>Cross xG</div>
+        <div class="how-title" data-pt>xG Cruzado</div>
+        <div class="how-desc" data-en>41.3% of the weight. Attack vs. opponent's defense for this exact matchup — not just season averages.</div>
+        <div class="how-desc" data-pt>41.3% do peso. Ataque de um time contra a defesa específica do adversário — não é só média da temporada.</div>
       </div>
       <div class="how-step">
         <div class="how-num">3</div>
-        <div class="how-title">Monte Carlo</div>
-        <div class="how-desc" data-en>1,000,000 match simulations run in parallel using NumPy. Each simulation plays out the full tournament independently.</div>
-        <div class="how-desc" data-pt>1.000.000 de simulações rodadas em paralelo com NumPy. Cada simulação joga o torneio inteiro de forma independente.</div>
+        <div class="how-title" data-en>Head-to-Head</div>
+        <div class="how-title" data-pt>Confronto Direto</div>
+        <div class="how-desc" data-en>5% of the weight. All-time history between the two teams nudges the odds when one side has a historical edge.</div>
+        <div class="how-desc" data-pt>5% do peso. Histórico all-time entre as duas seleções pesa levemente quando um lado tem domínio histórico.</div>
       </div>
       <div class="how-step">
         <div class="how-num">4</div>
-        <div class="how-title" data-en>Live Updates</div>
-        <div class="how-title" data-pt>Atualização ao Vivo</div>
-        <div class="how-desc" data-en>Real Copa 2026 data synced every 6 hours. Elo ratings recalibrated after each finished match.</div>
-        <div class="how-desc" data-pt>Dados reais da Copa 2026 sincronizados a cada 6 horas. Ratings Elo recalibrados após cada partida encerrada.</div>
+        <div class="how-title">Monte Carlo</div>
+        <div class="how-desc" data-en>1,000,000 match simulations run in parallel using NumPy to get the 20 most likely scorelines and win probabilities.</div>
+        <div class="how-desc" data-pt>1.000.000 de simulações rodadas em paralelo com NumPy pra chegar nos 20 placares mais prováveis e nas probabilidades de vitória.</div>
       </div>
     </div>
   </section>

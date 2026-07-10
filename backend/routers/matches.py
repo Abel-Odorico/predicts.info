@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from sqlalchemy.orm import Session, joinedload
 import json, hashlib, time
 from datetime import datetime, timedelta, timezone
@@ -6,12 +6,14 @@ import redis as redis_lib
 
 from database import get_db
 from config import settings
-from models import Match, Team, SimulationCache, MatchPhase, MatchStatus, Bet, User
+from models import Match, Team, SimulationCache, MatchPhase, MatchStatus, Bet, User, PageView
 from schemas import MatchSimulationResponse
 from engine.weights import compute_weighted_lambdas, TeamInput
 from engine.monte_carlo import simulate_match
+from h2h_lookup import get_h2h_cached
 from routers.live import fetch_world_cup_live_games, _normalize_team_name
-from auth_utils import get_current_user
+from routers.analytics import _parse_ua, _geo_lookup
+from auth_utils import get_current_user, get_optional_user
 from world_cup_official import fetch_official_knockout_schedule
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -97,9 +99,10 @@ def _team_to_input(t: Team) -> TeamInput:
     )
 
 
-def _data_hash(ta: Team, tb: Team) -> str:
+def _data_hash(ta: Team, tb: Team, h2h: dict | None = None) -> str:
     key = f"{ta.code}{ta.elo_rating}{ta.avg_goals_for}{ta.xg_for}{ta.form_10}" \
-          f"{tb.code}{tb.elo_rating}{tb.avg_goals_for}{tb.xg_for}{tb.form_10}"
+          f"{tb.code}{tb.elo_rating}{tb.avg_goals_for}{tb.xg_for}{tb.form_10}" \
+          f"{h2h or ''}"
     return hashlib.md5(key.encode()).hexdigest()
 
 
@@ -248,12 +251,37 @@ def get_match(match_id: int, db: Session = Depends(get_db)):
     return payload
 
 
+async def _log_simulation_event(request: Request, db: Session, user: User | None, match_id: int) -> None:
+    ip = (
+        request.headers.get("X-Real-IP", "").strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    ua = request.headers.get("User-Agent", "")
+    device, browser, os_ = _parse_ua(ua)
+    country_code, country_name, city = await _geo_lookup(ip)
+    db.add(PageView(
+        path=f"/__event/simulate/{match_id}",
+        ip=ip,
+        user_id=user.id if user else None,
+        country=country_code,
+        country_name=country_name,
+        city=city,
+        device=device,
+        browser=browser,
+        os=os_,
+        referrer=request.headers.get("Referer", "")[:500],
+    ))
+    db.commit()
+
+
 @router.post("/{match_id}/simulate", response_model=MatchSimulationResponse)
-def simulate_match_endpoint(
+async def simulate_match_endpoint(
+    request: Request,
     match_id: int,
     n: int = Query(default=None, ge=10_000, le=2_000_000),
     force: bool = Query(default=False),
     db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
 ):
     m = db.query(Match).options(joinedload(Match.team_a), joinedload(Match.team_b)).filter(
         Match.id == match_id
@@ -261,8 +289,11 @@ def simulate_match_endpoint(
     if not m:
         raise HTTPException(404, "Match not found")
 
+    await _log_simulation_event(request, db, user, match_id)
+
+    h2h = get_h2h_cached(db, m.team_a.code, m.team_b.code)
     simulations = n or settings.mc_simulations
-    data_hash = _data_hash(m.team_a, m.team_b)
+    data_hash = _data_hash(m.team_a, m.team_b, h2h)
     cache_key = f"sim:{match_id}:{data_hash}:{simulations}"
 
     # Try Redis cache first (skip if force=true)
@@ -281,7 +312,9 @@ def simulate_match_endpoint(
     tb = _team_to_input(m.team_b)
 
     phase_str = m.phase.value if m.phase else "group"
-    lambda_a, lambda_b, weights_used = compute_weighted_lambdas(ta, tb, is_neutral=m.is_neutral, phase=phase_str)
+    lambda_a, lambda_b, weights_used = compute_weighted_lambdas(
+        ta, tb, is_neutral=m.is_neutral, phase=phase_str, h2h=h2h,
+    )
 
     start = time.time()
     sim = simulate_match(lambda_a, lambda_b, n=simulations)
@@ -301,6 +334,7 @@ def simulate_match_endpoint(
         "top_scores": sim["top_scores"],
         "recommended_score": sim["recommended_score"],
         "model_weights": weights_used,
+        "h2h": h2h,
         "simulations": simulations,
         "elapsed_ms": round(elapsed * 1000),
         "cached": False,

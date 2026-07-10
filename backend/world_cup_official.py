@@ -26,6 +26,58 @@ def _fetch_raw(title: str) -> str:
         return response.text
 
 
+# Dramatic knockout matches (penalty shootouts especially) tend to get their
+# own Wikipedia sub-article — the section is transcluded via {{#lst:Page|Label}}
+# instead of holding the {{football box}} inline. Same pattern already fixed
+# for the group-stage parser in world_cup_sync.py; knockout parser needs it too,
+# since these are exactly the matches this feature cares about (penalty winner).
+_LST_PATTERN = re.compile(r"\{\{#lst:([^|}]+)\|([^|}]+)\}\}")
+
+
+def _resolve_block(block: str, cache: dict[str, str]) -> str:
+    lst = _LST_PATTERN.search(block)
+    if not lst:
+        return block
+    page_title, label = lst.group(1).strip(), lst.group(2).strip()
+    if page_title not in cache:
+        cache[page_title] = _fetch_raw(page_title.replace(" ", "_"))
+    sub_text = cache[page_title]
+    sub_match = re.search(
+        rf'<section begin="?{re.escape(label)}"? />(.*?)<section end="?{re.escape(label)}"? />',
+        sub_text,
+        flags=re.S,
+    )
+    if not sub_match:
+        raise ValueError(f"Could not resolve transcluded block {page_title}/{label}")
+    return sub_match.group(1)
+
+
+def _parse_extra_time_from_block(block: str, sa: int, sb: int) -> dict:
+    """Extract extra-time/penalty info. Wikipedia's #invoke:Football box (Lua
+    module, used on the live R32/knockout pages) uses |aet=yes and plain
+    |penaltyscore=A–B (en dash, same separator as |score=). Confirmed against
+    real 2026 WC data (Germany vs Paraguay, R32-3: |penaltyscore=3–4)."""
+    aet = bool(re.search(r"\|aet=\s*[Yy]es", block))
+    pen_m = re.search(r"\|penaltyscore=\s*(\d+)[–‒-](\d+)", block)
+    penalty_score_a = penalty_score_b = None
+    decided_by_penalties = False
+    et_winner = None
+    if pen_m:
+        penalty_score_a, penalty_score_b = int(pen_m.group(1)), int(pen_m.group(2))
+        decided_by_penalties = True
+        et_winner = "a" if penalty_score_a > penalty_score_b else "b"
+    went_to_extra_time = aet or decided_by_penalties
+    if went_to_extra_time and et_winner is None and sa != sb:
+        et_winner = "a" if sa > sb else "b"
+    return {
+        "went_to_extra_time": went_to_extra_time,
+        "decided_by_penalties": decided_by_penalties,
+        "et_winner": et_winner,
+        "penalty_score_a": penalty_score_a,
+        "penalty_score_b": penalty_score_b,
+    }
+
+
 def _slot_label(raw: str) -> str:
     value = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
     value = re.sub(r"\{\{#invoke:flag\|fb(?:-rt)?\|[A-Z]{0,3}\}\}", "", value)
@@ -60,28 +112,41 @@ def _phase_for_section(section: str) -> str:
 
 def fetch_official_knockout_schedule() -> list[dict]:
     text = _fetch_raw(KNOCKOUT_TITLE)
+    # Section body captured loosely (not anchored to inline #invoke:football box)
+    # so transcluded {{#lst:Sub article|Label}} blocks (dramatic/penalty matches
+    # with their own article) get resolved instead of silently skipped.
     pattern = re.compile(
-        r'<section begin="([^"]+)" />\{\{#invoke:football box\|main(.*?)\}\}<section end="[^"]+" />',
+        r'<section begin="([^"]+)" />(.*?)<section end="[^"]+" />',
         flags=re.S,
     )
+    lst_cache: dict[str, str] = {}
     matches = []
-    for section, block in pattern.findall(text):
+    for section, raw_block in pattern.findall(text):
+        try:
+            block = _resolve_block(raw_block, lst_cache)
+        except ValueError:
+            continue
+        if "#invoke:" not in block.lower() or "football box" not in block.lower():
+            continue
         team1_match = re.search(r"\|team1=(.+)", block)
         team2_match = re.search(r"\|team2=(.+)", block)
         score_link_match = re.search(r"\|score=\{\{score link\|[^|]+\|Match (\d+)\}\}", block)
+        score = _parse_score_from_block(block)
         venue, city = _parse_stadium(block)
-        matches.append(
-            {
-                "section": section,
-                "phase": _phase_for_section(section),
-                "match_number": int(score_link_match.group(1)) if score_link_match else None,
-                "match_date": _parse_local_datetime(block),
-                "venue": venue,
-                "city": city,
-                "team_a_label": _slot_label(team1_match.group(1) if team1_match else ""),
-                "team_b_label": _slot_label(team2_match.group(1) if team2_match else ""),
-            }
-        )
+        entry = {
+            "section": section,
+            "phase": _phase_for_section(section),
+            "match_number": int(score_link_match.group(1)) if score_link_match else None,
+            "match_date": _parse_local_datetime(block),
+            "venue": venue,
+            "city": city,
+            "team_a_label": _slot_label(team1_match.group(1) if team1_match else ""),
+            "team_b_label": _slot_label(team2_match.group(1) if team2_match else ""),
+            "score": score,
+        }
+        if score:
+            entry.update(_parse_extra_time_from_block(block, *score))
+        matches.append(entry)
 
     final_raw = _fetch_raw(FINAL_TITLE)
     infobox = re.search(r"\{\{Infobox football match(.*?)\n\}\}", final_raw, flags=re.S)
@@ -226,20 +291,30 @@ def _parse_score_from_block(block: str) -> tuple[int, int] | None:
 def fetch_r32_schedule() -> list[dict]:
     """Fetch Round of 32 matches from Wikipedia (separate page)."""
     text = _fetch_raw(R32_TITLE)
+    # Loose section body (not anchored to inline #invoke:football box) so
+    # {{#lst:Sub article|Label}} transclusions (penalty-shootout matches with
+    # their own article) get resolved instead of silently skipped.
     pattern = re.compile(
-        r'<section begin="([^"]+)" />\{\{#invoke:[Ff]ootball box\|main(.*?)\}\}<section end="[^"]+" />',
+        r'<section begin="([^"]+)" />(.*?)<section end="[^"]+" />',
         flags=re.S,
     )
+    lst_cache: dict[str, str] = {}
     matches = []
-    for section, block in pattern.findall(text):
+    for section, raw_block in pattern.findall(text):
         if not section.startswith("R32"):
+            continue
+        try:
+            block = _resolve_block(raw_block, lst_cache)
+        except ValueError:
+            continue
+        if "#invoke:" not in block.lower() or "football box" not in block.lower():
             continue
         t1 = re.search(r"\|team1=(.+)", block)
         t2 = re.search(r"\|team2=(.+)", block)
         mn = re.search(r"\|score=\{\{score link\|[^|]+\|Match (\d+)\}\}", block)
         score = _parse_score_from_block(block)
         venue, city = _parse_stadium(block)
-        matches.append({
+        entry = {
             "section": section,
             "phase": "r32",
             "match_number": int(mn.group(1)) if mn else None,
@@ -249,9 +324,44 @@ def fetch_r32_schedule() -> list[dict]:
             "team_a_code": _extract_team_code(t1.group(1)) if t1 else None,
             "team_b_code": _extract_team_code(t2.group(1)) if t2 else None,
             "score": score,
-        })
+        }
+        if score:
+            entry.update(_parse_extra_time_from_block(block, *score))
+        matches.append(entry)
     matches.sort(key=lambda m: (m["match_date"] or datetime.max, m["match_number"] or 999))
     return matches
+
+
+def _upsert_match_result(db: Session, existing: Match, item: dict, log_fn, label: str) -> bool:
+    """Create/update MatchResult (score + et/penalty fields) for a knockout match.
+    Returns True if something changed."""
+    score = item.get("score")
+    if score is None or not _match_likely_over(existing.match_date):
+        return False
+    sa, sb = score
+    outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
+    et_fields = dict(
+        went_to_extra_time=item.get("went_to_extra_time", False),
+        decided_by_penalties=item.get("decided_by_penalties", False),
+        et_winner=item.get("et_winner"),
+        penalty_score_a=item.get("penalty_score_a"),
+        penalty_score_b=item.get("penalty_score_b"),
+    )
+    if existing.result is None:
+        db.add(MatchResult(match_id=existing.id, score_a=sa, score_b=sb, result=outcome, **et_fields))
+        existing.status = MatchStatus.finished
+        log_fn(f"  ✓ Resultado {label}: {sa}–{sb}" + ("  (pênaltis)" if et_fields["decided_by_penalties"] else ""))
+        return True
+    changed = existing.result.score_a != sa or existing.result.score_b != sb
+    existing.result.score_a = sa
+    existing.result.score_b = sb
+    existing.result.result = outcome
+    for k, v in et_fields.items():
+        if getattr(existing.result, k) != v:
+            changed = True
+        setattr(existing.result, k, v)
+    existing.status = MatchStatus.finished
+    return changed
 
 
 def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
@@ -305,27 +415,8 @@ def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
                 if existing is None:
                     skipped += 1
                     continue
-                score = item["score"]
-                if score is not None and _match_likely_over(existing.match_date):
-                    sa, sb = score
-                    if existing.result is None:
-                        outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
-                        db.add(MatchResult(
-                            match_id=existing.id,
-                            score_a=sa,
-                            score_b=sb,
-                            result=outcome,
-                        ))
-                        existing.status = MatchStatus.finished
-                        updated += 1
-                        _log(f"  ✓ Resultado {code_a} x {code_b}: {sa}–{sb}")
-                    elif existing.result.score_a != sa or existing.result.score_b != sb:
-                        existing.result.score_a = sa
-                        existing.result.score_b = sb
-                        outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
-                        existing.result.result = outcome
-                        existing.status = MatchStatus.finished
-                        updated += 1
+                if _upsert_match_result(db, existing, item, _log, f"{code_a} x {code_b}"):
+                    updated += 1
                 continue
 
             existing = db.query(Match).filter(Match.match_number == mn).first()
@@ -370,27 +461,8 @@ def sync_knockout_matches(db_url: str, log: LogFn = None) -> dict:
                 if changed:
                     updated += 1
 
-            score = item["score"]
-            if score is not None and _match_likely_over(existing.match_date):
-                sa, sb = score
-                if existing.result is None:
-                    outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
-                    db.add(MatchResult(
-                        match_id=existing.id,
-                        score_a=sa,
-                        score_b=sb,
-                        result=outcome,
-                    ))
-                    existing.status = MatchStatus.finished
-                    updated += 1
-                    _log(f"  ✓ Resultado Match {mn}: {sa}–{sb}")
-                elif existing.result.score_a != sa or existing.result.score_b != sb:
-                    existing.result.score_a = sa
-                    existing.result.score_b = sb
-                    outcome = "a" if sa > sb else ("b" if sb > sa else "draw")
-                    existing.result.result = outcome
-                    existing.status = MatchStatus.finished
-                    updated += 1
+            if _upsert_match_result(db, existing, item, _log, f"Match {mn}"):
+                updated += 1
 
         db.commit()
         _log(f"R32 sync: {created} criadas, {updated} atualizadas, {skipped} puladas")

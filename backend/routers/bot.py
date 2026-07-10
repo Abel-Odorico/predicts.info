@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from auth_utils import get_current_user
@@ -389,6 +389,12 @@ ORACLE_CONFIG_KEYS = (
 ORACLE_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 ORACLE_DEFAULT_OR_MODEL     = "meta-llama/llama-3.3-70b-instruct:free"
 
+# Gate de confiança: LLM só pode divergir do baseline estatístico (Monte Carlo/Elo)
+# se tiver confiança >= threshold OU houver desfalque relevante (lesão/suspensão).
+# Motivo: dados reais mostram que divergências do baseline sem esse filtro derrubam
+# a taxa de acerto de placar exato pela metade (11% -> 3.8% no histórico do Oráculo).
+ORACLE_CONFIDENCE_GATE = 85
+
 
 def _oracle_raw_config(db: Session) -> dict:
     from sqlalchemy import text
@@ -508,8 +514,9 @@ def _build_oracle_prompt(db: Session, match: Match, base: tuple[int, int]) -> st
     phase = match.phase.value if match.phase else "grupo"
     is_knockout = phase not in ("group", "grupo")
     phase_hint = (
-        "MATA-MATA: jogos eliminatórios tendem a ser mais fechados (menos gols). "
-        "Empates no tempo normal são comuns — neste bolão, preveja o placar no tempo regulamentar (90 min)."
+        "MATA-MATA: preveja o placar no tempo regulamentar (90 min), pênaltis não contam pro bolão. "
+        "NÃO reduza gols automaticamente por ser eliminatória — dados reais desta Copa mostram jogos "
+        "com tantos gols quanto na fase de grupos. Só preveja placar baixo se xG/forma indicarem defesas fortes de fato."
         if is_knockout else
         "FASE DE GRUPOS: times buscam vitória, mais gols esperados. "
         "Favoritos claros (ELO >150 pts acima) vencem ~70% das vezes."
@@ -540,9 +547,12 @@ def _build_oracle_prompt(db: Session, match: Match, base: tuple[int, int]) -> st
         "Analise TODOS os dados acima. Prioridade de decisão:\n"
         "1. Se o favorito do ELO (>100 pts acima) tem xG > 1.5 e forma positiva → aposte na vitória do favorito.\n"
         "2. Use os top-placares do Monte Carlo como âncora — desvie só se dados de forma/lesões justificarem.\n"
-        "3. Em mata-mata com times equilibrados (ELO <80 pts de diferença), prefira placar fechado (1-0, 0-1, 1-1).\n"
+        "3. NÃO chute placar baixo só por ser mata-mata ou times parecerem equilibrados — isso historicamente "
+        "faz o modelo subestimar gols. Baseie o total de gols em xG e Monte Carlo, não em intuição de jogo truncado.\n"
         "4. Lesionados/suspensos (⚠️/🚫) nos convocados podem reduzir o poder ofensivo — ajuste os gols.\n"
-        "5. Confirme o baseline do modelo se não houver razão clara para alterar.\n\n"
+        "5. Só se afaste do baseline com convicção real (lesão/suspensão de titular decisivo, forma "
+        "muito destoante). Divergência sem motivo forte derruba a taxa de acerto de placar exato — "
+        "na dúvida, confirme o baseline.\n\n"
         "Responda em JSON PURO (sem markdown, sem ```):\n"
         "{\n"
         f'  "score_a": <int gols {ta.code}>,\n'
@@ -551,6 +561,18 @@ def _build_oracle_prompt(db: Session, match: Match, base: tuple[int, int]) -> st
         '  "reason": "3-5 frases em PT-BR: qual dado foi decisivo, por que confirma ou altera o baseline, lesões consideradas"\n'
         "}"
     )
+
+
+def _has_relevant_absence(db: Session, match: Match) -> bool:
+    """True se algum convocado das duas equipes está lesionado/suspenso."""
+    from models import Player
+    team_ids = [t for t in (match.team_a_id, match.team_b_id) if t]
+    if not team_ids:
+        return False
+    return db.query(Player.id).filter(
+        Player.team_id.in_(team_ids),
+        or_(Player.is_injured.is_(True), Player.is_suspended.is_(True)),
+    ).first() is not None
 
 
 def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
@@ -587,12 +609,31 @@ def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
         if not (0 <= sa <= 20 and 0 <= sb <= 20):
             raise ValueError("placar fora de faixa")
         conf = content.get("confidence")
-        result.update({
-            "score_a": sa, "score_b": sb,
-            "source": f"llm/{model_tag}", "model_tag": model_tag,
-            "confidence": int(conf) if conf is not None else None,
-            "reason": str(content.get("reason") or "").strip()[:1000] or None,
-        })
+        conf_int = int(conf) if conf is not None else None
+        reason = str(content.get("reason") or "").strip()[:1000] or None
+
+        deviated = (sa, sb) != (base_a, base_b)
+        gate_ok = (conf_int is not None and conf_int >= ORACLE_CONFIDENCE_GATE) or _has_relevant_absence(db, match)
+        if deviated and not gate_ok:
+            # Baixa confiança e sem desfalque relevante: divergir do baseline aqui
+            # historicamente derruba a taxa de acerto de placar exato — mantém o baseline.
+            result.update({
+                "score_a": base_a, "score_b": base_b,
+                "source": f"llm/{model_tag}/gated", "model_tag": model_tag,
+                "confidence": conf_int,
+                "reason": (
+                    f"IA sugeriu {sa}x{sb} (confiança {conf_int}) mas ficou abaixo do gate "
+                    f"({ORACLE_CONFIDENCE_GATE}) sem desfalque relevante — mantido baseline {base_a}x{base_b}. "
+                    + (reason or "")
+                )[:1000],
+            })
+        else:
+            result.update({
+                "score_a": sa, "score_b": sb,
+                "source": f"llm/{model_tag}", "model_tag": model_tag,
+                "confidence": conf_int,
+                "reason": reason,
+            })
     except Exception as e:
         result["reason"] = f"IA indisponível ({str(e)[:120]}) — mantido modelo estatístico {base_a}x{base_b}."
     return result
@@ -623,9 +664,18 @@ def _oracle_telegram(db: Session, match: Match, decision: dict, action: str, old
             lines.append(f"<i>Palpite anterior: {old[0]} x {old[1]}</i>")
         if decision.get("confidence") is not None:
             lines.append(f"🎯 Confiança: <b>{decision['confidence']}%</b>")
-        if decision.get("probs") and decision["probs"][0] is not None:
-            pa, pd, pb = decision["probs"]
-            lines.append(f"📊 Probabilidades: {pa:.0f}% / {pd:.0f}% / {pb:.0f}%")
+
+        # Mesma fundamentação (probabilidades/xG/Elo/forma/campanha/H2H) da
+        # Projeção automática — reusa build_analysis_body pra não duplicar o
+        # cálculo de lambdas/Monte Carlo/H2H em dois lugares.
+        try:
+            from projections import build_analysis_body
+            body = build_analysis_body(db, match)
+            if body:
+                lines += [""] + body
+        except Exception as e:
+            print(f"[oracle_telegram] fundamentação indisponível: {e}", flush=True)
+
         if decision.get("reason"):
             lines += ["", f"💬 {_html.escape(decision['reason'])}"]
         if decision.get("model_tag"):

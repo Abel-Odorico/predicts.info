@@ -156,6 +156,7 @@ def register(payload: UserCreate, background_tasks: BackgroundTasks, request: Re
         password_hash=hash_password(payload.password),
         role=UserRole.user,
         referred_by=referred_by_id,
+        whatsapp_opt_in=bool(phone) and payload.whatsapp_opt_in,
     )
     db.add(user)
     db.flush()
@@ -191,6 +192,14 @@ def register(payload: UserCreate, background_tasks: BackgroundTasks, request: Re
     except Exception:
         pass
 
+    # Boas-vindas no WhatsApp (só se optou e tem telefone) — nunca manda senha, usuário digitou a própria
+    if user.whatsapp_opt_in and user.phone:
+        try:
+            from routers.whatsapp import send_welcome_whatsapp
+            background_tasks.add_task(send_welcome_whatsapp, user.id)
+        except Exception:
+            pass
+
     return user
 
 
@@ -204,6 +213,8 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
     user = db.query(User).filter(User.email == form.username).first()
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(401, "Invalid credentials")
+    if not user.is_active:
+        raise HTTPException(401, "Conta desativada")
     token = create_token(user.id, user.role.value)
     log_action(db, user.id, "login", None, ip)
     db.commit()
@@ -219,6 +230,7 @@ def me(user: User = Depends(get_current_user)):
 def update_profile(
     payload: ProfileUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -253,6 +265,34 @@ def update_profile(
             raise HTTPException(409, "Telefone já cadastrado em outra conta")
         changes["phone"] = {"from": user.phone, "to": phone}
         user.phone = phone
+
+    if payload.whatsapp_opt_in is not None and payload.whatsapp_opt_in != user.whatsapp_opt_in:
+        now = datetime.now(timezone.utc)
+        changes["whatsapp_opt_in"] = {"from": user.whatsapp_opt_in, "to": payload.whatsapp_opt_in}
+        user.whatsapp_opt_in = payload.whatsapp_opt_in
+        user.whatsapp_prompted_at = user.whatsapp_prompted_at or now
+        if payload.whatsapp_opt_in:
+            user.whatsapp_opt_in_at = now
+            log_action(db, user.id, "whatsapp.opt_in", {"phone": user.phone}, request.client.host if request.client else None)
+            if user.phone:
+                try:
+                    from routers.whatsapp import send_welcome_whatsapp
+                    background_tasks.add_task(send_welcome_whatsapp, user.id)
+                except Exception:
+                    pass
+        else:
+            user.whatsapp_opt_out_at = now
+            log_action(db, user.id, "whatsapp.opt_out", {"phone": user.phone}, request.client.host if request.client else None)
+
+    if payload.whatsapp_prompt_dismissed and not user.whatsapp_prompted_at:
+        user.whatsapp_prompted_at = datetime.now(timezone.utc)
+        changes["whatsapp_prompt_dismissed"] = {"from": None, "to": True}
+        log_action(db, user.id, "whatsapp.prompt_dismissed", None, request.client.host if request.client else None)
+
+    if payload.whatsapp_prefs is not None:
+        merged = {**(user.whatsapp_prefs or {}), **payload.whatsapp_prefs}
+        changes["whatsapp_prefs"] = {"from": user.whatsapp_prefs, "to": merged}
+        user.whatsapp_prefs = merged
 
     if not changes:
         return user
@@ -387,3 +427,91 @@ def reset_password(payload: ResetPasswordPayload, db: Session = Depends(get_db))
     log_action(db, user.id, "password.reset", None, None)
     db.commit()
     return {"status": "ok", "message": "Senha redefinida com sucesso"}
+
+
+# ── Alterar E-mail / Telefone (link iniciado pelo admin) ───────────────────
+
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+class ChangeEmailPayload(BaseModel):
+    token: str
+    new_email: str
+
+
+class ChangePhonePayload(BaseModel):
+    token: str
+    new_phone: str
+
+
+def _get_valid_action_token(db: Session, token: str, action: str):
+    from models import AccountActionToken
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    rec = db.query(AccountActionToken).filter(
+        AccountActionToken.token == token,
+        AccountActionToken.action == action,
+        AccountActionToken.used_at.is_(None),
+        AccountActionToken.expires_at > now,
+    ).first()
+    if not rec:
+        raise HTTPException(400, "Link inválido ou expirado")
+    return rec
+
+
+@router.get("/account-action/validate")
+def validate_account_action_token(
+    token: str = Query(...),
+    action: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    if action not in ("email", "phone"):
+        raise HTTPException(400, "Ação inválida")
+    rec = _get_valid_action_token(db, token, action)
+    return {
+        "valid": True,
+        "email": rec.user.email if rec.user else None,
+        "phone": rec.user.phone if rec.user else None,
+    }
+
+
+@router.post("/change-email")
+def change_email(payload: ChangeEmailPayload, request: Request, db: Session = Depends(get_db)):
+    from models import AccountActionToken
+    rec = _get_valid_action_token(db, payload.token, "email")
+    new_email = payload.new_email.strip().lower()
+    if not _EMAIL_RE.match(new_email):
+        raise HTTPException(400, "E-mail inválido")
+
+    existing = db.query(User).filter(func.lower(User.email) == new_email, User.id != rec.user_id).first()
+    if existing:
+        raise HTTPException(400, "Este e-mail já está em uso")
+
+    user = db.query(User).filter(User.id == rec.user_id).first()
+    if not user:
+        raise HTTPException(404, "Usuário não encontrado")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    user.email = new_email
+    rec.used_at = now
+    log_action(db, user.id, "profile.email_change", None, request.client.host if request.client else None)
+    db.commit()
+    return {"status": "ok", "message": "E-mail atualizado com sucesso"}
+
+
+@router.post("/change-phone")
+def change_phone(payload: ChangePhonePayload, request: Request, db: Session = Depends(get_db)):
+    rec = _get_valid_action_token(db, payload.token, "phone")
+    new_phone = _normalize_phone(payload.new_phone)
+    if new_phone:
+        _validate_phone(new_phone)
+
+    user = db.query(User).filter(User.id == rec.user_id).first()
+    if not user:
+        raise HTTPException(404, "Usuário não encontrado")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    user.phone = new_phone
+    rec.used_at = now
+    log_action(db, user.id, "profile.phone_change", None, request.client.host if request.client else None)
+    db.commit()
+    return {"status": "ok", "message": "Telefone atualizado com sucesso"}

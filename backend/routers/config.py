@@ -59,6 +59,18 @@ DEFAULTS: dict[str, str] = {
     # Telegram
     "telegram_bot_token":    "",
     "telegram_chat_id":      "",
+    # WhatsApp (Evolution API)
+    "whatsapp_enabled":      "false",
+    "whatsapp_api_url":      "",
+    "whatsapp_api_key":      "",
+    "whatsapp_instance":     "predicts",
+    "whatsapp_webhook_secret": "",
+    # WhatsApp Oficial (Meta Cloud API) — em paralelo ao Evolution/Baileys, não substitui
+    "whatsapp_meta_enabled":      "false",
+    "whatsapp_meta_token":        "",
+    "whatsapp_meta_phone_id":     "",
+    "whatsapp_meta_waba_id":      "",
+    "whatsapp_meta_verify_token": "",
     # Video upload
     "video_upload_token":    "peep2026",
 }

@@ -9,6 +9,14 @@ import AppPopups, { InstallAppPopup } from './AppPopups'
 import NotificationBell from './NotificationBell'
 import LiveFloating from './LiveFloating'
 
+function WaIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="#25D366" style={{ verticalAlign: '-2px' }} aria-label="WhatsApp">
+      <path d="M16.04 2.67C8.65 2.67 2.65 8.67 2.65 16.05c0 2.37.62 4.68 1.8 6.72L2.53 29.33l6.73-1.87a13.36 13.36 0 006.77 1.85h.01c7.39 0 13.39-6 13.39-13.38 0-3.57-1.39-6.93-3.92-9.46a13.28 13.28 0 00-9.47-3.8zm0 24.48h-.01a11.1 11.1 0 01-5.67-1.55l-.41-.24-4 1.1 1.07-3.9-.26-.4a11.1 11.1 0 01-1.71-5.9c0-6.14 5-11.14 11.15-11.14 2.98 0 5.78 1.16 7.88 3.27a11.06 11.06 0 013.26 7.88c0 6.14-5.01 11.14-11.15 11.14v.01zm6.11-8.35c-.33-.17-1.97-.97-2.28-1.08-.31-.11-.53-.17-.75.17-.22.33-.86 1.08-1.06 1.31-.19.22-.39.25-.72.08-.33-.17-1.4-.51-2.66-1.63-.98-.88-1.65-1.96-1.84-2.29-.19-.33-.02-.51.15-.68.15-.15.33-.39.5-.58.17-.2.22-.33.33-.55.11-.22.06-.42-.03-.58-.08-.17-.75-1.8-1.03-2.47-.27-.65-.55-.56-.75-.57-.19-.01-.42-.01-.64-.01-.22 0-.58.08-.89.42-.31.33-1.17 1.14-1.17 2.79 0 1.64 1.2 3.22 1.37 3.45.17.22 2.36 3.6 5.71 5.05.8.34 1.42.55 1.9.71.8.25 1.53.22 2.11.13.64-.1 1.97-.8 2.25-1.58.28-.77.28-1.44.2-1.58-.08-.14-.31-.22-.64-.39z" />
+    </svg>
+  )
+}
+
 const THEMES = ['light', 'dark', 'system']
 const THEME_META = {
   light:  { icon: <SunIcon />,     label: 'Claro'   },
@@ -30,6 +38,7 @@ const NAV_DRAWER = [
 
 const ADMIN_NAV = [
   { to: '/admin',           icon: '🛠',  label: 'Painel Admin'   },
+  { to: '/admin/whatsapp',  icon: <WaIcon />, label: 'WhatsApp'  },
   { to: '/admin/analytics', icon: '📊', label: 'Analytics'      },
   { to: '/admin/options',   icon: '⚙️', label: 'Configurações'  },
 ]

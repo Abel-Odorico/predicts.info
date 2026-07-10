@@ -1,13 +1,23 @@
 """
-Weighted model combining 7 factors into final lambda values.
+Weighted model combining 8 factors into final lambda values.
 
-Weights (calibrated against 64 Copa 2026 group matches — 2026-06-27):
-  20% Elo
-  45% Market odds (Elo-implied; best single predictor in calibration)
-  25% xG cross-factor (attack_a × defense_b)
-   5% Form (last 10 games)
-   3% Market value
-   2% World Cup history
+Weights (recalibrated against 93 finished Copa 2026 matches — 2026-07-06,
+bootstrap median over 100 resamples, max-likelihood fit on exact scoreline
+via Dixon-Coles/Monte Carlo):
+  53.7% Market odds (elo_win_probabilities-derived — no real odds feed exists,
+        this factor is Elo via a different nonlinear transform, not book odds)
+  41.3% xG cross-factor (attack_a × defense_b)
+   5.0% H2H (confrontos diretos all-time, cache team_head_to_head) — carve-out
+        manual do fit acima (2026-07-07), não fit estatístico: dado esparso
+        demais pra calibrar (maioria dos pares tem poucos ou zero jogos
+        registrados). Neutro (mult=1.0) quando não há linha cacheada pro par.
+   0% Elo (subsumed by market_odds — redundant, dropped in the fit)
+   0% Form, Market value, World Cup history (near-zero marginal signal in fit)
+
+Caveat: fit uses CURRENT team Elo/xG/form as a proxy for pre-match inputs
+(no historical per-match snapshot exists — same limitation as the prior
+calibration). Bootstrap std on the odds/xg split is ~17pp — meaningful
+uncertainty, treat as directional not exact.
 
 Design:
   lambda = GLOBAL_AVG_GOALS * composite  (NOT base_lambda * composite)
@@ -16,10 +26,9 @@ Design:
   - knockout rounds naturally produce fewer goals (teams play more cautiously)
   - r32/r16 → 0.88x  |  qf/sf/final → 0.82x
 
-Calibration (2026-06-27):
-  Previous Brier: 0.1882  |  After: ~0.1689 (-10.3%)
-  GLOBAL_AVG_GOALS updated 1.35 → 1.50 (real tournament avg: 1.47)
-  Form range widened: 0.85-1.15 → 0.75-1.20
+Calibration history:
+  2026-06-27: Brier 0.1882 → 0.1689 (-10.3%), 64 group matches
+  2026-07-06: Brier 0.4976 → 0.4776 (-4.0%), 93 finished matches, bootstrap median
 """
 
 from dataclasses import dataclass
@@ -27,13 +36,14 @@ from engine.elo import elo_win_probabilities, elo_to_attack_multiplier
 from engine.poisson import GLOBAL_AVG_GOALS
 
 WEIGHTS = {
-    "elo": 0.20,
-    "market_odds": 0.45,
-    "xg": 0.25,
-    "form": 0.05,
-    "market_value": 0.03,
-    "wc_history": 0.02,
+    "elo": 0.00,
+    "market_odds": 0.537,
+    "xg": 0.413,
+    "form": 0.00,
+    "market_value": 0.00,
+    "wc_history": 0.00,
     "ml_ensemble": 0.00,
+    "h2h": 0.05,
 }
 
 # Phase dampening — Copa knockout games have ~15% fewer goals than group stage
@@ -95,12 +105,16 @@ def compute_weighted_lambdas(
     team_b: TeamInput,
     is_neutral: bool = True,
     phase: str = "group",
+    h2h: dict | None = None,
 ) -> tuple[float, float, dict]:
     """
     Returns (lambda_a, lambda_b, weights_used).
 
     Base is GLOBAL_AVG_GOALS (1.35), not team-specific avg_goals, to avoid
     double-counting attack/defense information already present in xG factor.
+
+    h2h: {"wins_a", "wins_b", "draws", "total"} already oriented team_a/team_b
+    (see h2h_lookup.get_h2h_cached). None/total=0 → factor stays neutral (1.0).
     """
 
     # --- Factor 1: Elo (35%) ---
@@ -144,6 +158,16 @@ def compute_weighted_lambdas(
     ml_mult_a = elo_mult_a
     ml_mult_b = elo_mult_b
 
+    # --- Factor 8: H2H confrontos diretos (5%) — neutro sem histórico cacheado ---
+    total_h2h = (h2h or {}).get("total") or 0
+    if total_h2h > 0:
+        win_rate_a = (h2h["wins_a"] + 0.5 * h2h["draws"]) / total_h2h
+        h2h_mult_a = max(0.85, min(1.15, 1.0 + (win_rate_a - 0.5) * 0.6))
+        h2h_mult_b = max(0.85, min(1.15, 1.0 + ((1.0 - win_rate_a) - 0.5) * 0.6))
+    else:
+        h2h_mult_a = 1.0
+        h2h_mult_b = 1.0
+
     w = WEIGHTS
     composite_a = (
         w["elo"] * elo_mult_a
@@ -153,6 +177,7 @@ def compute_weighted_lambdas(
         + w["market_value"] * mv_mult_a
         + w["wc_history"] * wc_mult_a
         + w["ml_ensemble"] * ml_mult_a
+        + w["h2h"] * h2h_mult_a
     )
     composite_b = (
         w["elo"] * elo_mult_b
@@ -162,6 +187,7 @@ def compute_weighted_lambdas(
         + w["market_value"] * mv_mult_b
         + w["wc_history"] * wc_mult_b
         + w["ml_ensemble"] * ml_mult_b
+        + w["h2h"] * h2h_mult_b
     )
 
     # Base is GLOBAL_AVG_GOALS (not team-specific) to avoid double-counting.

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 
 const STEPS = [
@@ -22,34 +22,33 @@ const STEPS = [
   },
 ]
 
-export default function Onboarding() {
-  const [visible, setVisible] = useState(false)
+export default function Onboarding({ onClose }) {
   const [step, setStep] = useState(0)
   const [animDir, setAnimDir] = useState('in')
-
-  useEffect(() => {
-    if (!localStorage.getItem('predicts-onboarded')) {
-      setTimeout(() => setVisible(true), 600)
-    }
-  }, [])
 
   function next() {
     if (step < STEPS.length - 1) {
       setAnimDir('out')
       setTimeout(() => { setStep(s => s + 1); setAnimDir('in') }, 200)
     } else {
-      localStorage.setItem('predicts-onboarded', '1')
-      setVisible(false)
+      onClose()
     }
   }
-
-  if (!visible) return null
 
   const s = STEPS[step]
 
   return createPortal(
-    <div className="onboarding-overlay">
-      <div className="onboarding-card">
+    <div className="onboarding-overlay" onClick={onClose}>
+      <div className="onboarding-card" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
+        <button
+          onClick={onClose}
+          aria-label="Fechar"
+          style={{
+            position: 'absolute', top: 12, right: 12, zIndex: 2,
+            width: 30, height: 30, borderRadius: 8, border: 'none', cursor: 'pointer',
+            background: 'var(--bg-overlay)', color: 'var(--text-2)', fontSize: 16, lineHeight: 1,
+          }}
+        >×</button>
         <div className={`onboarding-step onboarding-step--${animDir}`}>
           <div className="onboarding-step__icon">{s.icon}</div>
           <div className="onboarding-step__title">{s.title}</div>
@@ -65,7 +64,7 @@ export default function Onboarding() {
         </button>
         {step < STEPS.length - 1 && (
           <button
-            onClick={() => { localStorage.setItem('predicts-onboarded', '1'); setVisible(false) }}
+            onClick={onClose}
             style={{ marginTop: 'var(--s3)', width: '100%', background: 'none', border: 'none', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 12, cursor: 'pointer', letterSpacing: '0.06em' }}
           >
             Pular
