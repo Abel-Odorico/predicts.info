@@ -188,6 +188,39 @@ def _match_list_message(matches: list[Match]) -> str:
     )
 
 
+_INVITE_COOLDOWN_DAYS = 30
+
+
+def _maybe_invite_unknown(db: Session, phone: str) -> None:
+    """Número sem conta mandou mensagem: responde UMA vez com convite de cadastro,
+    depois silêncio por _INVITE_COOLDOWN_DAYS (dedup por meta kind=invite no log) —
+    trava anti-loop com outros bots/auto-respostas e anti-ruído. Envia daqui mesmo
+    (não retorna texto pro webhook) pra gravar o log com o marcador do dedup."""
+    ja_convidado = db.query(WhatsappMessage).filter(
+        WhatsappMessage.phone == phone,
+        WhatsappMessage.direction == "outbound",
+        WhatsappMessage.meta["kind"].astext == "invite",
+        WhatsappMessage.created_at > _utcnow() - timedelta(days=_INVITE_COOLDOWN_DAYS),
+    ).first()
+    if ja_convidado:
+        return None
+    msg = (
+        "👋 *Oi! Aqui é o bot de palpites do Predicts — o simulador da Copa 2026.*\n\n"
+        "Esse número ainda não tá vinculado a nenhuma conta. Pra apostar por aqui:\n"
+        "1️⃣ Cria tua conta grátis em predicts.info\n"
+        "2️⃣ Cadastra esse telefone no perfil e ativa o WhatsApp\n"
+        "3️⃣ Volta aqui e manda o placar, tipo *Brasil 2x1 Argentina*\n\n"
+        "🏆 Bolão, ranking e projeções estatísticas te esperando!"
+    )
+    ok = wa.send_text(db, phone, msg, ignore_quiet=True)  # resposta a mensagem recebida
+    db.add(WhatsappMessage(
+        direction="outbound", phone=phone, body=msg,
+        status="sent" if ok else "failed", meta={"kind": "invite"},
+    ))
+    db.commit()
+    return None
+
+
 def _model_prediction_message(db: Session, query_norm: str) -> str:
     """Projeção do modelo no chat: reusa a mensagem da Projeção do Telegram
     (build_projection_message) convertida pra formatação do WhatsApp pelos helpers
@@ -386,7 +419,7 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
     # preferência pela conta com opt-in ativo (2 contas no mesmo fone: comportamento antigo)
     user = next((u for u in candidates if u.whatsapp_opt_in), candidates[0] if candidates else None)
     if not user:
-        return None  # número não vinculado a conta — ignora silenciosamente
+        return _maybe_invite_unknown(db, phone)  # convite de cadastro, 1x por fone/30d
 
     if not user.whatsapp_opt_in:
         # opt-out feito por mensagem: só responde ao pedido de religar, resto silêncio
