@@ -713,6 +713,7 @@ export default function AdminWhatsapp() {
                     { id: 'opt_in', label: 'Só quem tem opt-in ativo', hint: 'recomendado' },
                     { id: 'no_bets', label: 'Opt-in + nunca apostou', hint: 'reengajamento' },
                     { id: 'all', label: 'Todos com telefone cadastrado', hint: '⚠️ ignora opt-in' },
+                    { id: 'test', label: 'Só admins', hint: '🧪 teste do disparo' },
                   ].map(seg => (
                     <label key={seg.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13, cursor: 'pointer' }}>
                       <input type="radio" name="wa-campaign-segment" checked={waCampaignSegment === seg.id} onChange={() => changeWaCampaignSegment(seg.id)} />

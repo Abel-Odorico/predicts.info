@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from database import get_db, SessionLocal
 from auth_utils import require_admin
 from models import (
-    User, Match, MatchStatus, MatchPhase, Bet, WhatsappMessage, WhatsappBetSession,
+    User, UserRole, Match, MatchStatus, MatchPhase, Bet, WhatsappMessage, WhatsappBetSession,
     WhatsappCampaign, WhatsappCampaignRecipient, SiteConfig, AuditLog,
 )
 from routers.bets import _is_open
@@ -971,6 +971,9 @@ class CampaignPayload(BaseModel):
 
 def _campaign_recipients_query(db: Session, segment: str):
     q = db.query(User).filter(User.phone.isnot(None))
+    if segment == "test":
+        # só admins — valida o pipeline inteiro (worker → Evolution → entrega) sem atingir usuário real
+        return q.filter(User.role == UserRole.admin)
     if segment == "all":
         return q
     q = q.filter(User.whatsapp_opt_in == True)  # noqa: E712
