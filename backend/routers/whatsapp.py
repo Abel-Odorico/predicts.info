@@ -736,6 +736,38 @@ def whatsapp_contact(db: Session = Depends(get_db)):
     }
 
 
+_ACK_STATUS = {"SERVER_ACK": "sent", "DELIVERY_ACK": "delivered", "READ": "read", "PLAYED": "read"}
+_ACK_RANK = {"pending": 0, "failed": 0, "sent": 1, "delivered": 2, "read": 3}
+
+
+def _apply_message_acks(db: Session, data) -> None:
+    """MESSAGES_UPDATE da Evolution: ack de entrega (✓✓) e leitura por mensagem.
+    Casa pelo key.id guardado no envio (wa_message_id). Ack só PROMOVE status
+    (sent → delivered → read), nunca rebaixa — updates chegam fora de ordem."""
+    items = data if isinstance(data, list) else [data]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        key_id = item.get("keyId") or ((item.get("key") or {}).get("id"))
+        new_status = _ACK_STATUS.get((item.get("status") or "").upper())
+        if not key_id or not new_status:
+            continue
+        for row in db.query(WhatsappMessage).filter(WhatsappMessage.wa_message_id == key_id).all():
+            if _ACK_RANK.get(new_status, 0) > _ACK_RANK.get(row.status or "sent", 0):
+                row.status = new_status
+        now = _utcnow()
+        for rec in db.query(WhatsappCampaignRecipient).filter(
+            WhatsappCampaignRecipient.wa_message_id == key_id
+        ).all():
+            if _ACK_RANK.get(new_status, 0) > _ACK_RANK.get(rec.status or "sent", 0):
+                rec.status = new_status
+            if new_status in ("delivered", "read") and not rec.delivered_at:
+                rec.delivered_at = now
+            if new_status == "read" and not rec.read_at:
+                rec.read_at = now
+    db.commit()
+
+
 @router.post("/webhook/whatsapp")
 def whatsapp_webhook(
     payload: dict,
@@ -745,6 +777,10 @@ def whatsapp_webhook(
 ):
     if not _webhook_secret_ok(db, request.query_params.get("secret")):
         raise HTTPException(403, "Invalid webhook secret")
+
+    if payload.get("event") == "messages.update":
+        _apply_message_acks(db, payload.get("data"))
+        return {"ok": True}
 
     if payload.get("event") != "messages.upsert":
         return {"ok": True}
@@ -913,16 +949,23 @@ def admin_list_campaigns(db: Session = Depends(get_db), admin: User = Depends(re
     campaigns = db.query(WhatsappCampaign).order_by(WhatsappCampaign.id.desc()).limit(30).all()
     out = []
     for c in campaigns:
-        total = db.query(WhatsappCampaignRecipient).filter(WhatsappCampaignRecipient.campaign_id == c.id).count()
-        sent = db.query(WhatsappCampaignRecipient).filter(
-            WhatsappCampaignRecipient.campaign_id == c.id, WhatsappCampaignRecipient.status == "sent"
-        ).count()
-        failed = db.query(WhatsappCampaignRecipient).filter(
-            WhatsappCampaignRecipient.campaign_id == c.id, WhatsappCampaignRecipient.status == "failed"
-        ).count()
+        counts = dict(
+            db.query(WhatsappCampaignRecipient.status, func.count(WhatsappCampaignRecipient.id))
+            .filter(WhatsappCampaignRecipient.campaign_id == c.id)
+            .group_by(WhatsappCampaignRecipient.status)
+            .all()
+        )
+        delivered = counts.get("delivered", 0)
+        read = counts.get("read", 0)
         out.append({
             "id": c.id, "message": c.message, "status": c.status,
-            "created_at": c.created_at, "total": total, "sent": sent, "failed": failed,
+            "created_at": c.created_at, "scheduled_at": c.scheduled_at,
+            "total": sum(counts.values()),
+            # sent acumula os que progrediram pra delivered/read (ack só melhora o status)
+            "sent": counts.get("sent", 0) + delivered + read,
+            "failed": counts.get("failed", 0),
+            "delivered": delivered + read,  # lido implica entregue
+            "read": read,
         })
     return out
 
@@ -1144,7 +1187,8 @@ def admin_whatsapp_bets(
 class CampaignPayload(BaseModel):
     message: str
     only_opt_in: bool = True
-    segment: str = "opt_in"  # opt_in | all | no_bets
+    segment: str = "opt_in"  # opt_in | all | no_bets | test
+    scheduled_at: str | None = None  # "YYYY-MM-DDTHH:MM" em BRT (datetime-local do admin); None = manda já
 
 
 def _campaign_recipients_query(db: Session, segment: str):
@@ -1169,15 +1213,27 @@ def admin_campaign_preview(segment: str = Query(default="opt_in"), db: Session =
 @router.post("/admin/whatsapp/campaign", status_code=201)
 def admin_create_campaign(payload: CampaignPayload, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     q = _campaign_recipients_query(db, payload.segment)
-    phones = [u.phone for u in q.all() if u.phone]
+    recipients = [(u.id, u.phone) for u in q.all() if u.phone]
 
-    campaign = WhatsappCampaign(message=payload.message, status="running", created_by=admin.id)
+    scheduled_utc = None
+    if payload.scheduled_at:
+        try:
+            # datetime-local do admin vem em BRT — banco guarda UTC (+3h)
+            scheduled_utc = datetime.fromisoformat(payload.scheduled_at) + timedelta(hours=3)
+        except ValueError:
+            raise HTTPException(400, "scheduled_at inválido — use YYYY-MM-DDTHH:MM")
+        if scheduled_utc <= _utcnow():
+            scheduled_utc = None  # horário no passado = manda já
+
+    campaign = WhatsappCampaign(
+        message=payload.message, status="running", created_by=admin.id, scheduled_at=scheduled_utc,
+    )
     db.add(campaign)
     db.flush()
-    for phone in phones:
-        db.add(WhatsappCampaignRecipient(campaign_id=campaign.id, phone=phone))
+    for user_id, phone in recipients:
+        db.add(WhatsappCampaignRecipient(campaign_id=campaign.id, phone=phone, user_id=user_id))
     db.commit()
-    return {"id": campaign.id, "recipients": len(phones)}
+    return {"id": campaign.id, "recipients": len(recipients), "scheduled_at": scheduled_utc}
 
 
 @router.get("/admin/whatsapp/campaign/{campaign_id}")

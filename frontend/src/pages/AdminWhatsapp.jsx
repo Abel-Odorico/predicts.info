@@ -59,6 +59,7 @@ export default function AdminWhatsapp() {
   const [waTestText,   setWaTestText]   = useState('')
   const [waSending,    setWaSending]    = useState(false)
   const [waCampaignMsg, setWaCampaignMsg] = useState('')
+  const [waCampaignSchedule, setWaCampaignSchedule] = useState('')
   const [waCampaignSegment, setWaCampaignSegment] = useState('opt_in')
   const [waCampaignPreview, setWaCampaignPreview] = useState(null)
   const [waCampaignPreviewLoading, setWaCampaignPreviewLoading] = useState(false)
@@ -189,12 +190,18 @@ export default function AdminWhatsapp() {
 
   async function createWaCampaign() {
     if (!waCampaignMsg.trim()) return
-    if (!window.confirm(`Enviar pra ${waCampaignPreview ?? '?'} destinatário(s)? Não dá pra desfazer.`)) return
+    const quando = waCampaignSchedule ? `agendado pra ${new Date(waCampaignSchedule).toLocaleString('pt-BR')}` : 'envio imediato'
+    if (!window.confirm(`Enviar pra ${waCampaignPreview ?? '?'} destinatário(s) (${quando})? Não dá pra desfazer.`)) return
     setWaMsg('')
     try {
-      const r = await api.post('/admin/whatsapp/campaign', { message: waCampaignMsg, segment: waCampaignSegment }, token)
-      setWaMsg(`✓ Campanha criada — ${r.recipients} destinatário(s) na fila`)
-      setWaCampaignMsg('')
+      const r = await api.post('/admin/whatsapp/campaign', {
+        message: waCampaignMsg, segment: waCampaignSegment,
+        scheduled_at: waCampaignSchedule || null,
+      }, token)
+      setWaMsg(r.scheduled_at
+        ? `✓ Campanha agendada — ${r.recipients} destinatário(s) na fila`
+        : `✓ Campanha criada — ${r.recipients} destinatário(s) na fila`)
+      setWaCampaignMsg(''); setWaCampaignSchedule('')
       loadWaCampaigns()
     } catch (e) { setWaMsg(`✗ ${e?.message || 'erro'}`) }
   }
@@ -785,8 +792,19 @@ export default function AdminWhatsapp() {
                   value={waCampaignMsg} onChange={e => setWaCampaignMsg(e.target.value)}
                 />
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: -6 }}>
-                  {waCampaignMsg.length} caracteres
+                  {waCampaignMsg.length} caracteres · variáveis: <code>{'{nome}'}</code> <code>{'{primeiro_nome}'}</code> <code>{'{pontos}'}</code> <code>{'{posicao}'}</code>
                 </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                  ⏰ Agendar (opcional):
+                  <input
+                    type="datetime-local" className="form-input" style={{ width: 'auto', padding: '6px 8px' }}
+                    value={waCampaignSchedule} onChange={e => setWaCampaignSchedule(e.target.value)}
+                  />
+                  {waCampaignSchedule && (
+                    <button className="btn-ghost btn-sm" onClick={() => setWaCampaignSchedule('')}>× limpar</button>
+                  )}
+                </label>
 
                 <div style={{ display: 'grid', gap: 6 }}>
                   {[
@@ -824,7 +842,7 @@ export default function AdminWhatsapp() {
               {waCampaigns?.length > 0 && (
                 <div className="adm-table-wrap">
                 <table className="adm-table" style={{ fontSize: 13 }}>
-                  <thead><tr><th>#</th><th>Mensagem</th><th>Status</th><th>Enviado</th><th>Falhas</th><th>Criada</th><th>Ações</th></tr></thead>
+                  <thead><tr><th>#</th><th>Mensagem</th><th>Status</th><th>Enviado</th><th>✓✓ / Lidas</th><th>Falhas</th><th>Criada</th><th>Ações</th></tr></thead>
                   <tbody>
                     {waCampaigns.map(c => (
                       <tr key={c.id}>
@@ -832,10 +850,20 @@ export default function AdminWhatsapp() {
                         <td
                           style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
                           title="Ver mensagem completa"
-                          onClick={() => setWaDetail({ title: `Campanha #${c.id}`, body: c.message, meta: `${c.status} · ${c.sent}/${c.total} enviados · ${c.failed} falhas` })}
+                          onClick={() => setWaDetail({ title: `Campanha #${c.id}`, body: c.message, meta: `${c.status} · ${c.sent}/${c.total} enviados · ${c.delivered ?? 0} entregues · ${c.read ?? 0} lidas · ${c.failed} falhas` })}
                         >{c.message}</td>
-                        <td>{c.status}</td>
+                        <td>
+                          {c.status}
+                          {c.scheduled_at && c.status === 'running' && new Date(c.scheduled_at + 'Z') > new Date() && (
+                            <span style={{ display: 'block', fontSize: 10, color: 'var(--text-4)', fontFamily: 'var(--font-cond)' }}>
+                              ⏰ {new Date(c.scheduled_at + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </td>
                         <td style={{ fontFamily: 'var(--font-data)' }}>{c.sent}/{c.total}</td>
+                        <td style={{ fontFamily: 'var(--font-data)' }} title="Entregues (✓✓) / lidas">
+                          {c.delivered ?? 0}<span style={{ color: 'var(--text-4)' }}> / </span><span style={{ color: 'var(--win)' }}>{c.read ?? 0}</span>
+                        </td>
                         <td style={{ fontFamily: 'var(--font-data)', color: c.failed > 0 ? 'var(--lose)' : 'var(--text-3)' }}>{c.failed}</td>
                         <td style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>{fmtShort(c.created_at)}</td>
                         <td style={{ display: 'flex', gap: 6 }}>

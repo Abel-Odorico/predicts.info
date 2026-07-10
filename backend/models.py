@@ -514,8 +514,9 @@ class WhatsappMessage(Base):
     direction  = Column(String(10), nullable=False)   # inbound | outbound
     phone      = Column(String(30), nullable=False, index=True)
     body       = Column(Text, nullable=True)
-    status     = Column(String(20), default="sent")   # sent | failed | received
+    status     = Column(String(20), default="sent")   # sent | failed | received | delivered | read
     match_id   = Column(Integer, ForeignKey("matches.id"), nullable=True)
+    wa_message_id = Column(String(64), nullable=True, index=True)  # key.id da Evolution — casa acks do MESSAGES_UPDATE
     meta       = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=_utcnow, index=True)
 
@@ -542,6 +543,7 @@ class WhatsappCampaign(Base):
     message       = Column(Text, nullable=False)
     target_filter = Column(JSONB, nullable=True)
     status        = Column(String(20), default="draft")   # draft | running | done | canceled
+    scheduled_at  = Column(DateTime, nullable=True)   # UTC; worker só processa depois desse horário
     created_by    = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at    = Column(DateTime, default=_utcnow)
 
@@ -552,8 +554,12 @@ class WhatsappCampaignRecipient(Base):
     id          = Column(Integer, primary_key=True)
     campaign_id = Column(Integer, ForeignKey("whatsapp_campaigns.id"), nullable=False, index=True)
     phone       = Column(String(30), nullable=False)
-    status      = Column(String(20), default="pending")   # pending | sent | failed
-    sent_at     = Column(DateTime, nullable=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True)   # pra renderizar variáveis {nome}/{pontos}/{posicao}
+    status      = Column(String(20), default="pending")   # pending | sent | failed | delivered | read
+    wa_message_id = Column(String(64), nullable=True, index=True)
+    sent_at      = Column(DateTime, nullable=True)
+    delivered_at = Column(DateTime, nullable=True)
+    read_at      = Column(DateTime, nullable=True)
 
 
 class WhatsappGroupPost(Base):

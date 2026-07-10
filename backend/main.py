@@ -570,6 +570,15 @@ def _run_migrations():
                 promo_text VARCHAR(300),
                 created_at TIMESTAMP DEFAULT NOW()
             )""",
+            # WhatsApp: campanha agendada + variáveis por destinatário + acks de entrega/leitura
+            "ALTER TABLE whatsapp_campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP",
+            "ALTER TABLE whatsapp_campaign_recipients ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "ALTER TABLE whatsapp_campaign_recipients ADD COLUMN IF NOT EXISTS wa_message_id VARCHAR(64)",
+            "ALTER TABLE whatsapp_campaign_recipients ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP",
+            "ALTER TABLE whatsapp_campaign_recipients ADD COLUMN IF NOT EXISTS read_at TIMESTAMP",
+            "CREATE INDEX IF NOT EXISTS ix_wa_recipients_msgid ON whatsapp_campaign_recipients (wa_message_id) WHERE wa_message_id IS NOT NULL",
+            "ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS wa_message_id VARCHAR(64)",
+            "CREATE INDEX IF NOT EXISTS ix_wa_messages_msgid ON whatsapp_messages (wa_message_id) WHERE wa_message_id IS NOT NULL",
         ]:
             try:
                 conn.execute(text(alter))

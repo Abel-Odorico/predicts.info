@@ -106,19 +106,17 @@ def resolve_number(db: Session, phone: str) -> str | None:
     return digits  # fallback: melhor tentar o número naive do que não mandar nada
 
 
-def send_text(db: Session, phone: str, message: str, ignore_quiet: bool = False) -> bool:
-    """Manda texto simples. Retorna True/False, nunca levanta — chamador decide o que fazer com falha.
-
-    ignore_quiet=True só pra mensagem que RESPONDE ação do usuário (webhook, boas-vindas,
-    confirmação de aposta, envio manual do admin) — o resto respeita o modo silêncio."""
+def send_text_full(db: Session, phone: str, message: str, ignore_quiet: bool = False) -> str | None:
+    """Como send_text, mas retorna o key.id da mensagem na Evolution (ou None em falha) —
+    quem quiser rastrear ack de entrega/leitura (MESSAGES_UPDATE) guarda esse id."""
     cfg = _cfg(db)
     if not cfg["enabled"] or not cfg["api_key"]:
-        return False
+        return None
     if not ignore_quiet and is_quiet_now(db):
-        return False
+        return None
     number = resolve_number(db, phone)
     if not number:
-        return False
+        return None
     try:
         resp = httpx.post(
             f"{cfg['url']}/message/sendText/{cfg['instance']}",
@@ -126,9 +124,23 @@ def send_text(db: Session, phone: str, message: str, ignore_quiet: bool = False)
             json={"number": number, "text": message},
             timeout=15,
         )
-        return resp.status_code < 300
+        if resp.status_code >= 300:
+            return None
+        try:
+            msg_id = ((resp.json() or {}).get("key") or {}).get("id")
+        except ValueError:
+            msg_id = None
+        return msg_id or "sent-no-id"  # 2xx sem id parseável ainda conta como enviado
     except httpx.HTTPError:
-        return False
+        return None
+
+
+def send_text(db: Session, phone: str, message: str, ignore_quiet: bool = False) -> bool:
+    """Manda texto simples. Retorna True/False, nunca levanta — chamador decide o que fazer com falha.
+
+    ignore_quiet=True só pra mensagem que RESPONDE ação do usuário (webhook, boas-vindas,
+    confirmação de aposta, envio manual do admin) — o resto respeita o modo silêncio."""
+    return send_text_full(db, phone, message, ignore_quiet=ignore_quiet) is not None
 
 
 def send_list(db: Session, phone: str, title: str, description: str, button_text: str, sections: list[dict], ignore_quiet: bool = False) -> bool:
