@@ -79,15 +79,20 @@ _OPTOUT_WORDS = ("parar", "sair", "descadastrar", "cancelar avisos", "stop")
 _OPTIN_WORDS = ("voltar", "ativar", "reativar")
 _LIST_SCORE_RE = re.compile(r"^\s*(\d{1,2})\s*[\)\.\-:]?\s*(\d{1,2})\s*x\s*(\d{1,2})\s*$")
 
-_HELP_MESSAGE = (
-    "👋 *Oi! Aqui é o bot de palpites do Predicts.*\n\n"
-    "Manda *menu* pra ver as opções, *jogos* pra lista numerada dos jogos abertos, ou manda o placar direto: *Brasil 2x1 Argentina*\n"
-    "Eu confirmo e você responde *SIM* pra valer.\n\n"
-    "*ranking* mostra o top 5 e sua posição · *palpites* mostra seus palpites e pontos.\n"
-    "*palpite* + time (ex: *palpite Espanha*) mostra a projeção do modelo pro jogo.\n"
-    "Pra desligar os avisos, manda *parar*.\n\n"
-    "🏆 predicts.info"
-)
+def _help_message(nome: str | None = None) -> str:
+    """Saudação personalizada: nome do cadastro (preferência) ou pushName da Evolution."""
+    primeiro = (nome or "").split()[0] if nome else None
+    saudacao = f"👋 *Oi, {primeiro}! Aqui é o bot de palpites do Predicts.*" if primeiro \
+        else "👋 *Oi! Aqui é o bot de palpites do Predicts.*"
+    return (
+        f"{saudacao}\n\n"
+        "Manda *menu* pra ver as opções, *jogos* pra lista numerada dos jogos abertos, ou manda o placar direto: *Brasil 2x1 Argentina*\n"
+        "Eu confirmo e você responde *SIM* pra valer.\n\n"
+        "*ranking* mostra o top 5 e sua posição · *palpites* mostra seus palpites e pontos.\n"
+        "*palpite* + time (ex: *palpite Espanha*) mostra a projeção do modelo pro jogo.\n"
+        "Pra desligar os avisos, manda *parar*.\n\n"
+        "🏆 predicts.info"
+    )
 
 _MENU_TEXT_FALLBACK = (
     "📱 *Menu Predicts*\n\n"
@@ -202,7 +207,7 @@ def _match_list_message(db: Session, matches: list[Match], user: User) -> str:
 _INVITE_COOLDOWN_DAYS = 30
 
 
-def _maybe_invite_unknown(db: Session, phone: str) -> None:
+def _maybe_invite_unknown(db: Session, phone: str, push_name: str | None = None) -> None:
     """Número sem conta mandou mensagem: responde UMA vez com convite de cadastro,
     depois silêncio por _INVITE_COOLDOWN_DAYS (dedup por meta kind=invite no log) —
     trava anti-loop com outros bots/auto-respostas e anti-ruído. Envia daqui mesmo
@@ -215,8 +220,11 @@ def _maybe_invite_unknown(db: Session, phone: str) -> None:
     ).first()
     if ja_convidado:
         return None
+    primeiro = (push_name or "").split()[0] if push_name else None
+    saudacao = f"👋 *Oi, {primeiro}! Aqui é o bot de palpites do Predicts — o simulador da Copa 2026.*" if primeiro \
+        else "👋 *Oi! Aqui é o bot de palpites do Predicts — o simulador da Copa 2026.*"
     msg = (
-        "👋 *Oi! Aqui é o bot de palpites do Predicts — o simulador da Copa 2026.*\n\n"
+        f"{saudacao}\n\n"
         "Esse número ainda não tá vinculado a nenhuma conta. Pra apostar por aqui:\n"
         "1️⃣ Cria tua conta grátis em predicts.info\n"
         "2️⃣ Cadastra esse telefone no perfil e ativa o WhatsApp\n"
@@ -332,7 +340,8 @@ def _my_bets_message(db: Session, user: User) -> str:
     if not pending and not evaluated:
         return "📊 Você ainda não fez nenhum palpite. Manda *jogos* pra ver a lista e apostar!"
 
-    partes = ["📊 *Seus palpites*"]
+    primeiro = (user.name or "").split()[0] if user.name else None
+    partes = [f"📊 *Palpites de {primeiro}*" if primeiro else "📊 *Seus palpites*"]
     if pending:
         linhas = []
         for b in pending:
@@ -420,8 +429,10 @@ def _start_bet_session(db: Session, phone: str, match: Match, score_a: int, scor
     return _confirmation_message(match, score_a, score_b, None)
 
 
-def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
-    """Retorna a resposta a mandar de volta, ou None se não deve responder."""
+def _handle_inbound(db: Session, phone: str, text: str, push_name: str | None = None) -> str | None:
+    """Retorna a resposta a mandar de volta, ou None se não deve responder.
+    push_name = nome do contato no WhatsApp (pushName da Evolution) — fallback de
+    saudação quando não dá pra usar o nome do cadastro."""
     target_core = _phone_core(phone)
     candidates = [
         u for u in db.query(User).filter(User.phone.isnot(None), User.is_active == True).all()  # noqa: E712
@@ -430,7 +441,7 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
     # preferência pela conta com opt-in ativo (2 contas no mesmo fone: comportamento antigo)
     user = next((u for u in candidates if u.whatsapp_opt_in), candidates[0] if candidates else None)
     if not user:
-        return _maybe_invite_unknown(db, phone)  # convite de cadastro, 1x por fone/30d
+        return _maybe_invite_unknown(db, phone, push_name)  # convite de cadastro, 1x por fone/30d
 
     if not user.whatsapp_opt_in:
         # opt-out feito por mensagem: só responde ao pedido de religar, resto silêncio
@@ -575,7 +586,7 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
         # wa.me do opt-in caía no silêncio), "quero apostar", ou "3" do menu numerado
         first_word = norm.split()[0].strip("!?.,") if norm else ""
         if norm in _HELP_WORDS or first_word in _HELP_WORDS or "quero apostar" in norm or norm == "3":
-            return _HELP_MESSAGE
+            return _help_message(user.name or push_name)
         return None  # texto sem placar reconhecível — não responde (evita ruído em conversa normal)
 
     candidates = _find_candidate_matches(db, text)
@@ -679,7 +690,7 @@ def run_pending_bet_reminders(
     rows = db.execute(text(f"""
         SELECT m.id AS match_id, ta.name AS team_a, ta.code AS team_a_code,
                tb.name AS team_b, tb.code AS team_b_code, m.match_date,
-               u.id AS user_id, u.phone
+               u.id AS user_id, u.phone, u.name AS user_name
         FROM matches m
         JOIN teams ta ON ta.id = m.team_a_id
         JOIN teams tb ON tb.id = m.team_b_id
@@ -704,24 +715,32 @@ def run_pending_bet_reminders(
                 "team_b": PT_NAMES.get(r.team_b_code, r.team_b),
                 "match_date": r.match_date, "recipients": [],
             }
-        by_match[r.match_id]["recipients"].append({"user_id": r.user_id, "phone": r.phone})
+        by_match[r.match_id]["recipients"].append({"user_id": r.user_id, "phone": r.phone, "name": r.user_name})
 
     result_matches = []
     total_sent = 0
     for match_id, info in by_match.items():
         brt_time = (info["match_date"] - timedelta(hours=3)).strftime("%H:%M")
-        msg = (
-            f"⏰ *{info['team_a']} x {info['team_b']} começa em 1h!*\n\n"
-            f"Você ainda não apostou nesse jogo. Manda o placar aqui, tipo "
-            f"*{info['team_a']} 2x1 {info['team_b']}*, confirma com *SIM* e garante "
-            f"seus pontos antes da bola rolar.\n\n"
-            f"Jogo às {brt_time} BRT."
-        )
+
+        def _msg(nome: str | None) -> str:
+            primeiro = (nome or "").split()[0] if nome else None
+            abertura = f"⏰ *{primeiro}, {info['team_a']} x {info['team_b']} começa em 1h!*" if primeiro \
+                else f"⏰ *{info['team_a']} x {info['team_b']} começa em 1h!*"
+            return (
+                f"{abertura}\n\n"
+                f"Você ainda não apostou nesse jogo. Manda o placar aqui, tipo "
+                f"*{info['team_a']} 2x1 {info['team_b']}*, confirma com *SIM* e garante "
+                f"seus pontos antes da bola rolar.\n\n"
+                f"Jogo às {brt_time} BRT."
+            )
+
+        msg = _msg(None)  # prévia do dry_run (sem nome, texto-base)
         if not dry_run:
             for rec in info["recipients"]:
-                ok = wa.send_text(db, rec["phone"], msg, ignore_quiet=True)
+                corpo = _msg(rec.get("name"))
+                ok = wa.send_text(db, rec["phone"], corpo, ignore_quiet=True)
                 db.add(WhatsappMessage(
-                    direction="outbound", phone=rec["phone"], body=msg,
+                    direction="outbound", phone=rec["phone"], body=corpo,
                     match_id=match_id, status="sent" if ok else "failed",
                 ))
                 db.commit()
@@ -838,11 +857,15 @@ def whatsapp_webhook(
     if not phone or not text:
         return {"ok": True}
 
-    db.add(WhatsappMessage(direction="inbound", phone=phone, body=text, status="received"))
+    push_name = (data.get("pushName") or "").strip() or None  # nome do contato no WhatsApp
+    db.add(WhatsappMessage(
+        direction="inbound", phone=phone, body=text, status="received",
+        meta={"push_name": push_name} if push_name else None,
+    ))
     db.commit()
 
     try:
-        reply = _handle_inbound(db, phone, text)
+        reply = _handle_inbound(db, phone, text, push_name)
     except Exception:
         reply = None
     if reply:
