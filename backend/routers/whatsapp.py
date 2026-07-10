@@ -176,16 +176,27 @@ def _open_matches_for_list(db: Session) -> list[Match]:
     return [m for m in upcoming if _is_open(m)][:20]
 
 
-def _match_list_message(matches: list[Match]) -> str:
+def _match_list_message(db: Session, matches: list[Match], user: User) -> str:
+    bets = {
+        b.match_id: b
+        for b in db.query(Bet).filter(Bet.user_id == user.id, Bet.match_id.in_([m.id for m in matches]))
+    }
     linhas = []
     for i, m in enumerate(matches, start=1):
         local = m.match_date - timedelta(hours=3)  # match_date é UTC, exibir BRT
-        linhas.append(f"{i}. {_pt(m.team_a)} x {_pt(m.team_b)} — {local.strftime('%d/%m %H:%M')}")
+        linha = f"{i}. {_pt(m.team_a)} x {_pt(m.team_b)} — {local.strftime('%d/%m %H:%M')}"
+        bet = bets.get(m.id)
+        if bet:
+            linha += f"\n   ✅ seu palpite: {bet.score_a}x{bet.score_b}"
+            if bet.et_winner_pick:
+                avanca = m.team_a if bet.et_winner_pick == "a" else m.team_b
+                linha += f" (avança {_pt(avanca)})"
+        linhas.append(linha)
     corpo = "\n".join(linhas)
-    return (
-        f"📋 *Jogos abertos pra apostar:*\n{corpo}\n\n"
-        f"Manda o número e o placar, tipo: *1 2x1*"
-    )
+    rodape = "Manda o número e o placar, tipo: *1 2x1*"
+    if bets:
+        rodape += " — vale também pra trocar um palpite já feito."
+    return f"📋 *Jogos abertos pra apostar:*\n{corpo}\n\n{rodape}"
 
 
 _INVITE_COOLDOWN_DAYS = 30
@@ -556,7 +567,7 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
             expires_at=_utcnow() + timedelta(minutes=10),
         ))
         db.commit()
-        return _match_list_message(matches)
+        return _match_list_message(db, matches, user)
 
     score = _extract_score(text)
     if not score:
