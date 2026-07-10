@@ -93,6 +93,7 @@ export default function Login({ initialMode = 'login' }) {
   const [name, setName]     = useState('')
   const [username, setUsername] = useState('')
   const [phone, setPhone]   = useState('')
+  const [waOptIn, setWaOptIn] = useState(false)
   const [usernameStatus, setUsernameStatus] = useState(null)
   const [checkingUsername, setCheckingUsername] = useState(false)
   const [err, setErr]       = useState('')
@@ -162,7 +163,7 @@ export default function Login({ initialMode = 'login' }) {
       } else {
         if (pass.length < 8) { setErr('A senha deve ter ao menos 8 caracteres'); setLoad(false); return }
         const refPayload = refId ? { referred_by: parseInt(refId, 10) } : {}
-        await api.post('/auth/register', { email, password: pass, name, username: normalizedUsername, phone, ...refPayload })
+        await api.post('/auth/register', { email, password: pass, name, username: normalizedUsername, phone, whatsapp_opt_in: waOptIn, ...refPayload })
         const data = await api.login(email, pass)
         const me = await api.get('/auth/me', data.access_token)
         login(me, data.access_token)
@@ -291,6 +292,15 @@ export default function Login({ initialMode = 'login' }) {
                       required
                       autoComplete="tel"
                     />
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, fontSize: 12, color: 'var(--text-3)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={waOptIn}
+                        onChange={e => setWaOptIn(e.target.checked)}
+                        style={{ marginTop: 2 }}
+                      />
+                      Quero receber avisos e apostar pelo WhatsApp neste número
+                    </label>
                   </div>
                 </>
               )}

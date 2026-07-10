@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -73,6 +73,7 @@ class MatchSimulationResponse(BaseModel):
     top_scores: list[ScoreProb]
     recommended_score: ScoreProb
     model_weights: dict[str, float]
+    h2h: dict | None = None
     simulations: int
     cached: bool
 
@@ -134,6 +135,7 @@ class UserCreate(BaseModel):
     username: str | None = None
     phone: str | None = None
     referred_by: int | None = None
+    whatsapp_opt_in: bool = False
 
 
 class UserResponse(BaseModel):
@@ -143,6 +145,9 @@ class UserResponse(BaseModel):
     phone: str | None = None
     name: str
     role: str
+    whatsapp_opt_in: bool = False
+    whatsapp_prompted_at: datetime | None = None
+    whatsapp_prefs: dict | None = None
     theme: str = 'system'
     created_at: datetime
 
@@ -153,6 +158,9 @@ class ProfileUpdate(BaseModel):
     name: str | None = None
     username: str | None = None
     phone: str | None = None
+    whatsapp_opt_in: bool | None = None
+    whatsapp_prompt_dismissed: bool | None = None
+    whatsapp_prefs: dict | None = None
 
 
 class PasswordChange(BaseModel):
@@ -161,7 +169,15 @@ class PasswordChange(BaseModel):
 
 
 class AdminUserUpdate(BaseModel):
-    role: str
+    role: str | None = None
+    name: str | None = None
+    username: str | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+
+
+class AdminAccountEmail(BaseModel):
+    action: str  # 'password' | 'email' | 'phone'
 
 
 class Token(BaseModel):
@@ -174,6 +190,7 @@ class BetCreate(BaseModel):
     match_id: int
     score_a: int
     score_b: int
+    et_winner_pick: Optional[Literal["a", "b"]] = None
 
 
 class BetResponse(BaseModel):
@@ -182,6 +199,8 @@ class BetResponse(BaseModel):
     score_a: int
     score_b: int
     points_earned: int
+    et_winner_pick: Optional[str] = None
+    et_points_earned: int = 0
     created_at: datetime
 
     model_config = {"from_attributes": True}

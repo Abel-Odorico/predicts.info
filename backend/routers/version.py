@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from auth_utils import require_admin
-from models import AppVersion, User
+from models import AppVersion, User, WhatsappMessage
 
 router = APIRouter(tags=["version"])
 
@@ -79,7 +79,11 @@ def notify_version(
     if v.notified_at:
         raise HTTPException(409, "Essa versão já foi notificada — não envia de novo")
 
+    from routers.whatsapp import _wants
+    import whatsapp_client as wa
+
     users = db.query(User).all()
+    wa_sent = 0
     for user in users:
         create_notification(
             db, user.id,
@@ -88,7 +92,20 @@ def notify_version(
             body=v.description or (v.changes[0] if v.changes else None),
             meta={"version_id": v.id, "version": v.version, "changes": v.changes},
         )
+        if user.whatsapp_opt_in and user.phone and _wants(user.whatsapp_prefs, "version_update"):
+            changes_txt = "\n".join(f"• {c}" for c in (v.changes or [])[:5])
+            msg = (
+                f"🚀 *Novidade no Predicts — v{v.version}*\n"
+                f"{v.title}\n\n"
+                + (f"{v.description}\n\n" if v.description else "")
+                + (f"{changes_txt}\n\n" if changes_txt else "")
+                + "predicts.info/changelog"
+            )
+            ok = wa.send_text(db, user.phone, msg)
+            db.add(WhatsappMessage(direction="outbound", phone=user.phone, body=msg, status="sent" if ok else "failed"))
+            if ok:
+                wa_sent += 1
 
     v.notified_at = _utcnow()
     db.commit()
-    return {"sent": len(users), "version": v.version}
+    return {"sent": len(users), "whatsapp_sent": wa_sent, "version": v.version}

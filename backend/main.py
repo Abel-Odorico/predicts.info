@@ -224,6 +224,71 @@ async def _match_reminder_loop():
         await asyncio.sleep(5 * 60)
 
 
+async def _pending_bet_whatsapp_reminder_loop():
+    """WhatsApp 1h antes do jogo pra quem tem opt-in mas AINDA NÃO apostou nesse jogo.
+    Mesmo padrão de janela do _match_reminder_loop (push), mas o público-alvo é o oposto:
+    aqui é quem falta apostar, não quem já apostou. Lógica de query/envio compartilhada com o
+    teste manual do admin em routers/whatsapp.py::run_pending_bet_reminders."""
+    from database import SessionLocal
+    from routers.whatsapp import run_pending_bet_reminders
+
+    _sent: set[int] = set()   # match_ids já processados (reset no restart — ok)
+    await asyncio.sleep(90)
+    print("[wa-reminder] loop de lembrete de palpite pendente iniciado (checa a cada 5min)", flush=True)
+    while True:
+        try:
+            def _job():
+                db = SessionLocal()
+                try:
+                    now = datetime.now(timezone.utc).replace(tzinfo=None)
+                    result = run_pending_bet_reminders(
+                        db,
+                        window_start=now + timedelta(minutes=50),
+                        window_end=now + timedelta(minutes=70),
+                        exclude_match_ids=_sent,
+                    )
+                    for m in result["matches"]:
+                        _sent.add(m["match_id"])
+                        print(f"[wa-reminder] match {m['match_id']} → {m['recipients_count']} lembrete(s) enviados", flush=True)
+                    return result["total_sent"]
+                finally:
+                    db.close()
+
+            loop = asyncio.get_event_loop()
+            total = await loop.run_in_executor(None, _job)
+            if total:
+                print(f"[wa-reminder] {total} lembrete(s) enviados neste ciclo", flush=True)
+        except Exception as e:
+            print(f"[wa-reminder] erro: {e}", flush=True)
+        await asyncio.sleep(5 * 60)
+
+
+async def _achievements_loop():
+    """Concede conquistas automaticamente — antes só rodava via POST manual
+    /admin/achievements/evaluate, que ninguém nunca chamou (tabela user_achievements
+    ficava sempre vazia, conquistas nunca apareciam no perfil de ninguém)."""
+    from database import SessionLocal
+    from routers.achievements import run_achievement_evaluation
+
+    await asyncio.sleep(150)
+    print("[achievements] loop iniciado (checa a cada 15min)", flush=True)
+    while True:
+        try:
+            def _job():
+                db = SessionLocal()
+                try:
+                    return run_achievement_evaluation(db)
+                finally:
+                    db.close()
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, _job)
+            if result["granted"]:
+                print(f"[achievements] {result['granted']} conquista(s) concedida(s) neste ciclo", flush=True)
+        except Exception as e:
+            print(f"[achievements] erro: {e}", flush=True)
+        await asyncio.sleep(15 * 60)
+
+
 async def _football_data_sync_loop():
     """Sync resultados e bracket mata-mata via football-data.org a cada 6h."""
     from database import SessionLocal
@@ -601,9 +666,11 @@ async def lifespan(app: FastAPI):
     oracle_task = asyncio.create_task(_oracle_predictor_loop())
     fd_task = asyncio.create_task(_football_data_sync_loop())
     reminder_task = asyncio.create_task(_match_reminder_loop())
+    wa_reminder_task = asyncio.create_task(_pending_bet_whatsapp_reminder_loop())
     activation_task = asyncio.create_task(_activation_email_loop())
+    achievements_task = asyncio.create_task(_achievements_loop())
     yield
-    for t in (task, report_task, oracle_task, fd_task, reminder_task, activation_task):
+    for t in (task, report_task, oracle_task, fd_task, reminder_task, wa_reminder_task, activation_task, achievements_task):
         t.cancel()
         try:
             await t
@@ -667,6 +734,8 @@ app.include_router(football_data_router.router, prefix="/api")
 app.include_router(news_admin_router.router,    prefix="/api")
 from routers import videoupload as videoupload_router
 app.include_router(videoupload_router.router,  prefix="/api")
+from routers import whatsapp as whatsapp_router
+app.include_router(whatsapp_router.router,     prefix="/api")
 
 
 @app.get("/api")
