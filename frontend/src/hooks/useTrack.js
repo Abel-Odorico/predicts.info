@@ -8,6 +8,13 @@ export function useTrack() {
 
   useEffect(() => {
     try {
+      const qs = new URLSearchParams(location.search)
+      const utmSource = qs.get('utm_source')
+      if (utmSource) {
+        sessionStorage.setItem('predicts_utm_source', utmSource)
+        const utmCampaign = qs.get('utm_campaign')
+        if (utmCampaign) sessionStorage.setItem('predicts_utm_campaign', utmCampaign)
+      }
       fetch('/api/analytics/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -15,6 +22,10 @@ export function useTrack() {
           path: location.pathname,
           referrer: document.referrer || '',
           user_id: user?.id ?? null,
+          standalone: window.matchMedia?.('(display-mode: standalone)').matches
+            || window.navigator.standalone === true,
+          utm_source: sessionStorage.getItem('predicts_utm_source') || null,
+          utm_campaign: sessionStorage.getItem('predicts_utm_campaign') || null,
         }),
         keepalive: true,
       }).catch(() => {})

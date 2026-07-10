@@ -202,6 +202,18 @@ export default function Analytics() {
   const [funnel, setFunnel]                 = useState(null)
   const [funnelLoading, setFunnelLoading]   = useState(false)
 
+  const [simStats, setSimStats]             = useState(null)
+  const [simStatsLoading, setSimStatsLoading] = useState(false)
+
+  const [simImpact, setSimImpact]           = useState(null)
+  const [simImpactLoading, setSimImpactLoading] = useState(false)
+
+  const [traffic, setTraffic]               = useState(null)
+  const [trafficLoading, setTrafficLoading] = useState(false)
+
+  const [v2Usage, setV2Usage]               = useState(null)
+  const [v2UsageLoading, setV2UsageLoading] = useState(false)
+
   useEffect(() => {
     setLoading(true)
     Promise.all([
@@ -217,6 +229,15 @@ export default function Analytics() {
     if (tab !== 'audit') return
     loadAudit()
   }, [tab, token])
+
+  useEffect(() => {
+    if (tab !== 'pages') return
+    setV2UsageLoading(true)
+    api.get(`/analytics/v2-usage?days=${days}`, token)
+      .then(d => setV2Usage(d))
+      .catch(() => {})
+      .finally(() => setV2UsageLoading(false))
+  }, [tab, days, token])
 
   useEffect(() => {
     if (tab !== 'usuarios') return
@@ -247,12 +268,27 @@ export default function Analytics() {
   }, [tab, token])
 
   useEffect(() => {
-    if (tab !== 'funil') return
+    if (tab !== 'retencao') return
     setFunnelLoading(true)
     api.get(`/analytics/funnel?days=${days}`, token)
       .then(d => setFunnel(d))
       .catch(console.error)
       .finally(() => setFunnelLoading(false))
+    setSimStatsLoading(true)
+    api.get(`/analytics/simulations?days=${days}`, token)
+      .then(d => setSimStats(d))
+      .catch(console.error)
+      .finally(() => setSimStatsLoading(false))
+    setSimImpactLoading(true)
+    api.get(`/analytics/simulation-impact?days=30&weeks=8`, token)
+      .then(d => setSimImpact(d))
+      .catch(console.error)
+      .finally(() => setSimImpactLoading(false))
+    setTrafficLoading(true)
+    api.get(`/analytics/traffic-sources?days=${days}`, token)
+      .then(d => setTraffic(d))
+      .catch(console.error)
+      .finally(() => setTrafficLoading(false))
   }, [tab, days, token])
 
   function loadBetsAudit(res = betsResultFilter, user = betsUserFilter, off = betsOffset) {
@@ -286,14 +322,13 @@ export default function Analytics() {
 
   const TABS = [
     { id: 'overview',  label: '📊 Visão Geral' },
-    { id: 'funil',     label: '🔽 Funil' },
     { id: 'usuarios',  label: '👥 Usuários' },
     { id: 'pages',     label: '📄 Páginas' },
     { id: 'geo',       label: '🌍 Localidade' },
     { id: 'tech',      label: '💻 Tecnologia' },
     { id: 'recent',    label: '🕐 Recentes' },
     { id: 'bets',      label: '🎯 Apostas' },
-    { id: 'retencao',  label: '🔄 Retenção' },
+    { id: 'retencao',  label: '🔄 Retenção & Funil' },
     { id: 'audit',     label: '🔐 Auditoria' },
   ]
 
@@ -462,109 +497,6 @@ export default function Analytics() {
         </div>
       )}
 
-      {/* Funil tab */}
-      {tab === 'funil' && (
-        <div className="fade-in-1" style={{ marginTop: 'var(--s4)' }}>
-          {funnelLoading || !funnel ? (
-            <Spinner text="Carregando funil..." />
-          ) : (
-            <div className="card">
-              <div className="card__header">
-                <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>
-                  🔽 Funil de Conversão — últimos {funnel.days} dias
-                </span>
-              </div>
-              <div className="card__body">
-                {funnel.steps.map((s, i) => {
-                  const maxV = funnel.steps[0]?.views || 1
-                  const barW = Math.max(4, Math.round(s.views / maxV * 100))
-                  const pct = s.pct_landing ?? s.pct_prev
-                  const isBottleneck = pct < 30 && i > 0 && s.note === null
-                  const color = i === 0 ? 'var(--accent)'
-                    : pct >= 60 ? 'var(--win)'
-                    : pct >= 30 ? '#f59e0b'
-                    : 'var(--lose)'
-                  const labelPct = i === funnel.steps.length - 1
-                    ? `${s.pct_prev}% dos cadastros`
-                    : i > 0
-                      ? `${pct}% da landing`
-                      : null
-                  return (
-                    <div key={i} style={{ marginBottom: 'var(--s4)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{
-                            width: 22, height: 22, borderRadius: '50%', background: color,
-                            color: '#fff', display: 'inline-flex', alignItems: 'center',
-                            justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0,
-                          }}>{i + 1}</span>
-                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', fontWeight: 700 }}>
-                            {s.step}
-                          </span>
-                          {isBottleneck && (
-                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, background: 'rgba(239,68,68,0.12)', color: 'var(--lose)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
-                              GARGALO
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                          {labelPct && (
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, fontWeight: 700 }}>
-                              {labelPct}
-                            </span>
-                          )}
-                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--text-1)', fontWeight: 900 }}>
-                            {s.views.toLocaleString('pt-BR')}
-                          </span>
-                        </div>
-                      </div>
-                      <div style={{ background: 'var(--bg-overlay)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
-                        <div style={{
-                          width: `${barW}%`, height: '100%', borderRadius: 4,
-                          background: color, transition: 'width 0.6s ease',
-                        }} />
-                      </div>
-                      {s.note && (
-                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3, fontStyle: 'italic' }}>
-                          ℹ️ {s.note}
-                        </div>
-                      )}
-                      {s.drop > 0 && i > 0 && s.note === null && (
-                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
-                          ↳ {s.drop.toLocaleString('pt-BR')} saíram nesta etapa
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-
-                {/* Resumo */}
-                <div style={{
-                  marginTop: 'var(--s4)', padding: 'var(--s3)', background: 'var(--bg-overlay)',
-                  borderRadius: 8, border: '1px solid var(--border)',
-                }}>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Resumo
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 'var(--s3)' }}>
-                    {[
-                      { label: 'Landing → Cadastro', value: `${funnel.steps[4] && funnel.steps[0]?.views ? ((funnel.steps[4].views / funnel.steps[0].views) * 100).toFixed(1) : 0}%`, color: 'var(--accent)' },
-                      { label: 'Cadastro → 1ª aposta', value: `${funnel.steps[4]?.pct_prev ?? 0}%`, color: 'var(--win)' },
-                      { label: 'Maior drop', value: funnel.steps.slice(1).sort((a,b) => a.pct_prev - b.pct_prev)[0]?.step || '—', color: 'var(--lose)', small: true },
-                    ].map(m => (
-                      <div key={m.label} style={{ textAlign: 'center' }}>
-                        <div style={{ fontFamily: 'var(--font-data)', fontSize: m.small ? 12 : 20, fontWeight: 900, color: m.color, lineHeight: 1.2 }}>{m.value}</div>
-                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>{m.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Usuários tab */}
       {tab === 'usuarios' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--s4)', marginTop: 'var(--s4)' }} className="fade-in-1">
@@ -707,7 +639,58 @@ export default function Analytics() {
 
       {/* Pages tab */}
       {tab === 'pages' && (
-        <div className="card fade-in-1" style={{ marginTop: 'var(--s4)' }}>
+        <>
+          <div className="card fade-in-1">
+            <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>⚡ Adoção V2 (proposta simulação)</span></div>
+            <div className="card__body">
+              {v2UsageLoading ? <Spinner /> : v2Usage ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 'var(--s4)', marginBottom: 'var(--s5)' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--accent)' }}>{v2Usage.adoption_pct}%</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>das visitas na tela de simulação foram V2</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-1)' }}>{v2Usage.v2_views}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>visitas V2 ({v2Usage.v1_views} V1)</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-1)' }}>{v2Usage.v2_unique_ips}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>visitantes únicos (IP) na V2</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-1)' }}>{v2Usage.v2_unique_users}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>usuários logados testaram V2</div>
+                    </div>
+                  </div>
+                  {v2Usage.top_matches.length > 0 && (
+                    <>
+                      <div className="section-title">Partidas mais testadas na V2</div>
+                      <div className="stack gap-3">
+                        {v2Usage.top_matches.map(m => (
+                          <div key={m.match_id} style={{ display: 'grid', gridTemplateColumns: '1fr 120px', alignItems: 'center', gap: 'var(--s3)' }}>
+                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: 'var(--text-1)' }}>
+                              {m.team_a ? `${m.team_a} × ${m.team_b}` : `#${m.match_id}`}
+                            </span>
+                            <MiniBar value={m.views} max={v2Usage.top_matches[0].views} />
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {v2Usage.v2_views === 0 && (
+                    <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+                      Ninguém visitou a V2 ainda neste período.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)' }}>Sem dados.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="card fade-in-2" style={{ marginTop: 'var(--s4)' }}>
           <div className="card__header"><span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>📄 Todas as Páginas</span></div>
           <div className="card__body">
             <div className="stack gap-4">
@@ -733,7 +716,8 @@ export default function Analytics() {
               </>
             )}
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Geo tab */}
@@ -965,6 +949,360 @@ export default function Analytics() {
       {/* Retenção tab */}
       {tab === 'retencao' && (
         <div className="fade-in-1" style={{ marginTop: 'var(--s4)' }}>
+          {/* ── Origem de tráfego ────────────────────────────────── */}
+          {trafficLoading || !traffic ? (
+            <Spinner text="Carregando origem de tráfego..." />
+          ) : (
+            <div className="card" style={{ marginBottom: 'var(--s4)' }}>
+              <div className="card__header">
+                <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>
+                  🌐 De onde vêm os visitantes — últimos {traffic.days} dias
+                </span>
+              </div>
+              <div className="card__body">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 'var(--s4)' }}>
+                  {traffic.sources.map(s => {
+                    const maxV = traffic.sources[0]?.uniq || 1
+                    const barW = Math.max(4, Math.round(s.uniq / maxV * 100))
+                    return (
+                      <div key={s.source} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', width: 150, flexShrink: 0 }}>
+                          {s.label}
+                        </span>
+                        <div style={{ flex: 1, background: 'var(--bg-overlay)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                          <div style={{ width: `${barW}%`, height: '100%', borderRadius: 4, background: 'var(--accent)' }} />
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-1)', fontWeight: 700, width: 40, textAlign: 'right' }}>
+                          {s.uniq}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{
+                  padding: 'var(--s3)', background: 'var(--bg-overlay)', borderRadius: 8,
+                  border: '1px solid var(--border)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)',
+                }}>
+                  👥 Indicação entre usuários: <strong style={{ color: 'var(--text-1)' }}>{traffic.new_users_referred}</strong> de {traffic.new_users} novos cadastros vieram de link de indicação
+                  {traffic.new_users ? ` (${Math.round(traffic.new_users_referred / traffic.new_users * 100)}%)` : ''}.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Funil de conversão ────────────────────────────────── */}
+          {funnelLoading || !funnel ? (
+            <Spinner text="Carregando funil..." />
+          ) : (
+            <div className="card">
+              <div className="card__header">
+                <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>
+                  🔽 Funil de Conversão — últimos {funnel.days} dias
+                </span>
+              </div>
+              <div className="card__body">
+                {funnel.steps.map((s, i) => {
+                  const maxV = funnel.steps[0]?.views || 1
+                  const barW = Math.max(4, Math.round(s.views / maxV * 100))
+                  const pct = s.pct_landing ?? s.pct_prev
+                  const isBottleneck = pct < 30 && i > 0 && s.note === null
+                  const color = i === 0 ? 'var(--accent)'
+                    : pct >= 60 ? 'var(--win)'
+                    : pct >= 30 ? '#f59e0b'
+                    : 'var(--lose)'
+                  const labelPct = i === funnel.steps.length - 1
+                    ? `${s.pct_prev}% dos cadastros`
+                    : i > 0
+                      ? `${pct}% da landing`
+                      : null
+                  return (
+                    <div key={i} style={{ marginBottom: 'var(--s4)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: '50%', background: color,
+                            color: '#fff', display: 'inline-flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0,
+                          }}>{i + 1}</span>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', fontWeight: 700 }}>
+                            {s.step}
+                          </span>
+                          {isBottleneck && (
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, background: 'rgba(239,68,68,0.12)', color: 'var(--lose)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
+                              GARGALO
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          {labelPct && (
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, fontWeight: 700 }}>
+                              {labelPct}
+                            </span>
+                          )}
+                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, color: 'var(--text-1)', fontWeight: 900 }}>
+                            {s.views.toLocaleString('pt-BR')}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ background: 'var(--bg-overlay)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${barW}%`, height: '100%', borderRadius: 4,
+                          background: color, transition: 'width 0.6s ease',
+                        }} />
+                      </div>
+                      {s.note && (
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3, fontStyle: 'italic' }}>
+                          ℹ️ {s.note}
+                        </div>
+                      )}
+                      {s.drop > 0 && i > 0 && s.note === null && (
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+                          ↳ {s.drop.toLocaleString('pt-BR')} saíram nesta etapa
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Resumo */}
+                <div style={{
+                  marginTop: 'var(--s4)', padding: 'var(--s3)', background: 'var(--bg-overlay)',
+                  borderRadius: 8, border: '1px solid var(--border)',
+                }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Resumo
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 'var(--s3)' }}>
+                    {[
+                      { label: 'Landing → Cadastro', value: `${funnel.steps[4] && funnel.steps[0]?.views ? ((funnel.steps[4].views / funnel.steps[0].views) * 100).toFixed(1) : 0}%`, color: 'var(--accent)' },
+                      { label: 'Cadastro → 1ª aposta', value: `${funnel.steps[4]?.pct_prev ?? 0}%`, color: 'var(--win)' },
+                      { label: 'Maior drop', value: funnel.steps.slice(1).sort((a,b) => a.pct_prev - b.pct_prev)[0]?.step || '—', color: 'var(--lose)', small: true },
+                    ].map(m => (
+                      <div key={m.label} style={{ textAlign: 'center' }}>
+                        <div style={{ fontFamily: 'var(--font-data)', fontSize: m.small ? 12 : 20, fontWeight: 900, color: m.color, lineHeight: 1.2 }}>{m.value}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Simulações geradas ────────────────────────────────── */}
+          {simStatsLoading || !simStats ? (
+            <Spinner text="Carregando simulações..." />
+          ) : (
+            <div className="card" style={{ marginTop: 'var(--s4)' }}>
+              <div className="card__header">
+                <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>
+                  🎲 Simulações geradas — últimos {simStats.days} dias
+                </span>
+              </div>
+              <div className="card__body">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 'var(--s3)', marginBottom: 'var(--s4)' }}>
+                  {[
+                    { label: 'Total de simulações', value: simStats.total_sims, color: 'var(--accent)' },
+                    { label: 'Visitantes únicos que simularam', value: simStats.uniq_ips, color: 'var(--win)' },
+                    { label: 'Simulações de cadastrados', value: simStats.sims_registered, color: 'var(--text-1)' },
+                    { label: 'Simulações anônimas', value: simStats.sims_anon, color: '#f59e0b' },
+                  ].map(m => (
+                    <div key={m.label} style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 20, fontWeight: 900, color: m.color, lineHeight: 1.2 }}>
+                        {(m.value ?? 0).toLocaleString('pt-BR')}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{
+                  padding: 'var(--s3)', background: 'var(--bg-overlay)', borderRadius: 8,
+                  border: '1px solid var(--border)', marginBottom: 'var(--s4)',
+                }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Novos visitantes ({simStats.new_visitors.toLocaleString('pt-BR')})
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 'var(--s3)' }}>
+                    {[
+                      { label: 'Geraram simulação', value: simStats.new_visitors_simulated, total: simStats.new_visitors, color: 'var(--win)' },
+                      { label: 'Se cadastraram', value: simStats.new_visitors_registered, total: simStats.new_visitors, color: 'var(--accent)' },
+                    ].map(m => (
+                      <div key={m.label} style={{ textAlign: 'center' }}>
+                        <div style={{ fontFamily: 'var(--font-data)', fontSize: 18, fontWeight: 900, color: m.color, lineHeight: 1.2 }}>
+                          {(m.value ?? 0).toLocaleString('pt-BR')}
+                          <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 700 }}>
+                            {' '}({simStats.new_visitors ? Math.round((m.value / simStats.new_visitors) * 100) : 0}%)
+                          </span>
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 3 }}>{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
+                  {/* Por dispositivo */}
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Simulações por dispositivo
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {simStats.by_device.length === 0 && (
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Sem dados.</div>
+                      )}
+                      {simStats.by_device.map(d => {
+                        const maxV = simStats.by_device[0]?.sims || 1
+                        const barW = Math.max(4, Math.round(d.sims / maxV * 100))
+                        return (
+                          <div key={d.device} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', width: 80, flexShrink: 0, textTransform: 'capitalize' }}>{d.device}</span>
+                            <div style={{ flex: 1, background: 'var(--bg-overlay)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                              <div style={{ width: `${barW}%`, height: '100%', borderRadius: 4, background: 'var(--accent)' }} />
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-1)', fontWeight: 700, width: 30, textAlign: 'right' }}>{d.sims}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Tempo até 1ª simulação */}
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Tempo até 1ª simulação
+                    </div>
+                    {simStats.time_to_first_sim.median_secs == null ? (
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Sem dados suficientes.</div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 'var(--s4)' }}>
+                        <div>
+                          <div style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 900, color: 'var(--accent)' }}>
+                            {simStats.time_to_first_sim.median_secs < 60
+                              ? `${simStats.time_to_first_sim.median_secs}s`
+                              : `${Math.round(simStats.time_to_first_sim.median_secs / 60)}min`}
+                          </div>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>mediana</div>
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 900, color: 'var(--text-2)' }}>
+                            {simStats.time_to_first_sim.avg_secs < 60
+                              ? `${simStats.time_to_first_sim.avg_secs}s`
+                              : `${Math.round(simStats.time_to_first_sim.avg_secs / 60)}min`}
+                          </div>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)' }}>média</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Partidas mais simuladas */}
+                <div style={{ marginBottom: 'var(--s4)' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Partidas mais simuladas
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {simStats.top_matches.length === 0 && (
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Sem dados no período.</div>
+                    )}
+                    {simStats.top_matches.map(m => {
+                      const maxV = simStats.top_matches[0]?.sims || 1
+                      const barW = Math.max(4, Math.round(m.sims / maxV * 100))
+                      return (
+                        <div key={m.match_id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', width: 100, flexShrink: 0 }}>{m.label}</span>
+                          <div style={{ flex: 1, background: 'var(--bg-overlay)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                            <div style={{ width: `${barW}%`, height: '100%', borderRadius: 4, background: 'var(--win)' }} />
+                          </div>
+                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-1)', fontWeight: 700, width: 30, textAlign: 'right' }}>{m.sims}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Onde os novos visitantes que NÃO simularam pararam
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {simStats.drop_off_pages.length === 0 && (
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Sem dados no período.</div>
+                  )}
+                  {simStats.drop_off_pages.map(p => {
+                    const maxV = simStats.drop_off_pages[0]?.uniq || 1
+                    const barW = Math.max(4, Math.round(p.uniq / maxV * 100))
+                    return (
+                      <div key={p.path} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-2)', width: 180, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.path}
+                        </span>
+                        <div style={{ flex: 1, background: 'var(--bg-overlay)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                          <div style={{ width: `${barW}%`, height: '100%', borderRadius: 4, background: 'var(--lose)' }} />
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-1)', fontWeight: 700, width: 30, textAlign: 'right' }}>
+                          {p.uniq}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Simulação vale a pena? conversão + retenção comparada ── */}
+          {simImpactLoading || !simImpact ? (
+            <Spinner text="Calculando impacto das simulações..." />
+          ) : (
+            <div className="card" style={{ marginTop: 'var(--s4)' }}>
+              <div className="card__header">
+                <span className="section-title" style={{ margin: 0, border: 0, padding: 0 }}>
+                  💡 Simulação vale a pena? — últimos {simImpact.days} dias
+                </span>
+              </div>
+              <div className="card__body">
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 'var(--s5)', flexWrap: 'wrap',
+                  padding: 'var(--s4)', background: 'var(--bg-overlay)', borderRadius: 8,
+                  border: '1px solid var(--border)', marginBottom: 'var(--s4)',
+                }}>
+                  <div style={{ textAlign: 'center', minWidth: 100 }}>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: 'var(--win)', lineHeight: 1 }}>
+                      {simImpact.conversion.pct}%
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>
+                      simulou → apostou na mesma partida
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', flex: 1, minWidth: 200 }}>
+                    {simImpact.conversion.converted_pairs.toLocaleString('pt-BR')} de {simImpact.conversion.total_pairs.toLocaleString('pt-BR')} pares usuário×partida simulados viraram aposta na mesma partida.
+                  </div>
+                </div>
+
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Retenção WoW: quem simulou vs quem nunca simulou ({simImpact.weeks} semanas)
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: 'var(--s4)' }}>
+                  {[
+                    { label: 'Já simulou alguma vez', data: simImpact.retention_simulated, color: 'var(--win)' },
+                    { label: 'Nunca simulou', data: simImpact.retention_never_simulated, color: 'var(--lose)' },
+                  ].map(g => (
+                    <div key={g.label} style={{ padding: 'var(--s3)', background: 'var(--bg-overlay)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)', fontWeight: 700, marginBottom: 6 }}>{g.label}</div>
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 26, fontWeight: 900, color: g.color, lineHeight: 1 }}>
+                        {g.data.avg_wow != null ? `${g.data.avg_wow}%` : '—'}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>
+                        média retenção WoW · {g.data.weeks.at(-1)?.active ?? 0} ativos na última semana
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {(retentionLoading || cohortLoading) && !retention && <Spinner text="Calculando retenção..." />}
           {retention && (() => {
             const s = retention.summary
@@ -993,7 +1331,7 @@ export default function Analytics() {
             return (
               <>
                 {/* ── Banner de saúde ─────────────────────────────────── */}
-                <div style={{ borderRadius: 'var(--radius)', background: hc.bg, border: `1px solid ${hc.color}33`, padding: 'var(--s5) var(--s6)', display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap' }}>
+                <div style={{ marginTop: 'var(--s4)', borderRadius: 'var(--radius)', background: hc.bg, border: `1px solid ${hc.color}33`, padding: 'var(--s5) var(--s6)', display: 'flex', alignItems: 'center', gap: 'var(--s6)', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 120 }}>
                     <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: hc.color }}>{hc.icon} {hc.label}</span>
                     <span style={{ fontFamily: 'var(--font-display)', fontSize: 42, fontWeight: 900, lineHeight: 1, color: hc.color }}>{wow != null ? `${wow}%` : '—'}</span>
