@@ -480,7 +480,7 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
             return f"🤔 Falta o placar! Manda o número do jogo com o placar junto, tipo: *{norm} 2x1*"
 
     if norm in _MENU_WORDS:
-        if wa.send_list(db, phone, "Predicts.info", "Escolhe uma opção 👇", "Ver opções", _MENU_SECTIONS):
+        if wa.send_list(db, phone, "Predicts.info", "Escolhe uma opção 👇", "Ver opções", _MENU_SECTIONS, ignore_quiet=True):
             db.add(WhatsappMessage(direction="outbound", phone=phone, body="[menu nativo]", status="sent"))
             db.commit()
             return None  # já mandou por fora do fluxo normal de texto
@@ -567,7 +567,7 @@ def send_welcome_whatsapp(user_id: int) -> None:
             "Manda *menu* sempre que quiser rever essas opções.\n"
             "predicts.info"
         )
-        ok = wa.send_text(db, user.phone, welcome)
+        ok = wa.send_text(db, user.phone, welcome, ignore_quiet=True)
         db.add(WhatsappMessage(direction="outbound", phone=user.phone, body=welcome, status="sent" if ok else "failed"))
         db.commit()
     except Exception:
@@ -594,7 +594,7 @@ def send_bet_confirmation_whatsapp(user_id: int, match_id: int, score_a: int, sc
             f"{_pt(match.team_a)} {score_a}x{score_b} {_pt(match.team_b)}\n\n"
             f"🏆 Boa sorte! Dá pra ajustar até a bola rolar."
         )
-        ok = wa.send_text(db, user.phone, msg)
+        ok = wa.send_text(db, user.phone, msg, ignore_quiet=True)
         db.add(WhatsappMessage(direction="outbound", phone=user.phone, body=msg, match_id=match.id, status="sent" if ok else "failed"))
         db.commit()
     except Exception:
@@ -675,7 +675,7 @@ def run_pending_bet_reminders(
         )
         if not dry_run:
             for rec in info["recipients"]:
-                ok = wa.send_text(db, rec["phone"], msg)
+                ok = wa.send_text(db, rec["phone"], msg, ignore_quiet=True)
                 db.add(WhatsappMessage(
                     direction="outbound", phone=rec["phone"], body=msg,
                     match_id=match_id, status="sent" if ok else "failed",
@@ -766,7 +766,7 @@ def whatsapp_webhook(
     except Exception:
         reply = None
     if reply:
-        wa.send_text(db, phone, reply)
+        wa.send_text(db, phone, reply, ignore_quiet=True)
         db.add(WhatsappMessage(direction="outbound", phone=phone, body=reply, status="sent"))
         db.commit()
     return {"ok": True}
@@ -781,7 +781,7 @@ class SendPayload(BaseModel):
 
 @router.post("/admin/whatsapp/send")
 def admin_send(payload: SendPayload, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    ok = wa.send_text(db, payload.phone, payload.message)
+    ok = wa.send_text(db, payload.phone, payload.message, ignore_quiet=True)
     db.add(WhatsappMessage(direction="outbound", phone=payload.phone, body=payload.message, status="sent" if ok else "failed"))
     db.commit()
     if not ok:
@@ -891,7 +891,7 @@ class ChatSendPayload(BaseModel):
 
 @router.post("/admin/whatsapp/chat/send")
 def admin_chat_send(payload: ChatSendPayload, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    ok = wa.send_text_to_jid(db, payload.jid, payload.message)
+    ok = wa.send_text_to_jid(db, payload.jid, payload.message, ignore_quiet=True)
     phone = payload.jid.split("@")[0]
     db.add(WhatsappMessage(direction="outbound", phone=phone, body=payload.message, status="sent" if ok else "failed"))
     db.commit()

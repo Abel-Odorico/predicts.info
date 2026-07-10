@@ -47,6 +47,10 @@ export default function AdminWhatsapp() {
 
   const [waStatus,     setWaStatus]     = useState(null)
   const [waStatusLoading, setWaStatusLoading] = useState(false)
+  const [quietEnabled, setQuietEnabled] = useState(true)
+  const [quietStart,   setQuietStart]   = useState('22')
+  const [quietEnd,     setQuietEnd]     = useState('8')
+  const [quietSaving,  setQuietSaving]  = useState(false)
   const [waQr,         setWaQr]         = useState(null)
   const [waQrLoading,  setWaQrLoading]  = useState(false)
   const [waEnabled,    setWaEnabled]    = useState(false)
@@ -110,8 +114,27 @@ export default function AdminWhatsapp() {
       ])
       setWaStatus(status)
       setWaEnabled((cfg.whatsapp_enabled || 'false') === 'true')
+      setQuietEnabled((cfg.whatsapp_quiet_enabled || 'true') === 'true')
+      setQuietStart(cfg.whatsapp_quiet_start || '22')
+      setQuietEnd(cfg.whatsapp_quiet_end || '8')
     } catch (e) { setWaMsg(`✗ ${e?.message || 'erro'}`) }
     finally { setWaStatusLoading(false) }
+  }
+
+  async function saveQuietHours(nextEnabled, nextStart, nextEnd) {
+    setQuietSaving(true)
+    try {
+      await api.post('/site-config/bulk', {
+        updates: {
+          whatsapp_quiet_enabled: nextEnabled ? 'true' : 'false',
+          whatsapp_quiet_start: String(nextStart),
+          whatsapp_quiet_end: String(nextEnd),
+        },
+      }, token)
+      setQuietEnabled(nextEnabled); setQuietStart(String(nextStart)); setQuietEnd(String(nextEnd))
+      setWaMsg(nextEnabled ? `✓ Modo silêncio: ${nextStart}h às ${nextEnd}h (BRT)` : '✓ Modo silêncio desligado')
+    } catch (e) { setWaMsg(`✗ ${e?.message || 'erro ao salvar silêncio'}`) }
+    finally { setQuietSaving(false) }
   }
 
   async function loadWaQr() {
@@ -529,6 +552,44 @@ export default function AdminWhatsapp() {
                 <input type="checkbox" checked={waEnabled} onChange={toggleWaEnabled} />
                 WhatsApp ativado (envios/recebimento liberados)
               </label>
+            </div>
+
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16,
+              padding: '12px 16px', background: 'var(--bg-overlay)', borderRadius: 10,
+              border: '1px solid var(--border)', fontFamily: 'var(--font-cond)', fontSize: 13,
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 700 }}>
+                <input
+                  type="checkbox"
+                  checked={quietEnabled}
+                  disabled={quietSaving}
+                  onChange={() => saveQuietHours(!quietEnabled, quietStart, quietEnd)}
+                />
+                🌙 Modo silêncio
+              </label>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: quietEnabled ? 1 : 0.45 }}>
+                das
+                <select
+                  value={quietStart} disabled={!quietEnabled || quietSaving}
+                  onChange={e => saveQuietHours(quietEnabled, e.target.value, quietEnd)}
+                  style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-1)' }}
+                >
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h}h</option>)}
+                </select>
+                às
+                <select
+                  value={quietEnd} disabled={!quietEnabled || quietSaving}
+                  onChange={e => saveQuietHours(quietEnabled, quietStart, e.target.value)}
+                  style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text-1)' }}
+                >
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h}h</option>)}
+                </select>
+                (BRT)
+              </span>
+              <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
+                Bloqueia campanha, lembrete, grupo, resultado e novidades na janela. Resposta a mensagem recebida sempre sai.
+              </span>
             </div>
 
             {waStatus?.info && (

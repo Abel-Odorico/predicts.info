@@ -65,6 +65,11 @@ DEFAULTS: dict[str, str] = {
     "whatsapp_api_key":      "",
     "whatsapp_instance":     "predicts",
     "whatsapp_webhook_secret": "",
+    # Modo silêncio: bloqueia mensagem PROATIVA (campanha, lembrete, grupo, resultado,
+    # destaque, novidades) na janela configurada. Resposta a mensagem recebida sempre passa.
+    "whatsapp_quiet_enabled": "true",
+    "whatsapp_quiet_start":   "22",  # hora BRT (0-23), início da janela
+    "whatsapp_quiet_end":     "8",   # hora BRT (0-23), fim da janela
     # WhatsApp Oficial (Meta Cloud API) — em paralelo ao Evolution/Baileys, não substitui
     "whatsapp_meta_enabled":      "false",
     "whatsapp_meta_token":        "",

@@ -115,6 +115,11 @@ def send_pending_group_posts(db: Session | None = None, log=print) -> dict:
         if not group_jid:
             log("[group-posts] grupo oficial não configurado, pulando")
             return {"sent": 0, "errors": []}
+        if wa.is_quiet_now(db):
+            # modo silêncio: pula o tick antes de reivindicar dedup — projeção/lembrete
+            # saem no primeiro tick da manhã se ainda estiverem na janela deles
+            log("[group-posts] modo silêncio ativo, pulando")
+            return {"sent": 0, "errors": []}
 
         now = _utcnow()
         posted = {(m, k) for m, k in db.query(WhatsappGroupPost.match_id, WhatsappGroupPost.kind)}

@@ -23,6 +23,10 @@ def _utcnow():
 def run():
     db = SessionLocal()
     try:
+        if wa.is_quiet_now(db):
+            # modo silêncio: pula o tick inteiro — recipients ficam "pending" e a
+            # campanha retoma sozinha no primeiro tick fora da janela (nada vira "failed")
+            return
         pending = (
             db.query(WhatsappCampaignRecipient)
             .join(WhatsappCampaign, WhatsappCampaignRecipient.campaign_id == WhatsappCampaign.id)

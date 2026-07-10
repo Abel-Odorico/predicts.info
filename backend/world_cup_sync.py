@@ -895,6 +895,9 @@ def _notify_bet_results_whatsapp(db, events: list[dict]) -> None:
         from models import WhatsappMessage
         import whatsapp_client as wa
 
+        if wa.is_quiet_now(db):
+            return  # modo silêncio: DM de resultado some (sino/push cobrem), sem log "failed"
+
         # posição pós-rebuild, mesma ordenação do site (pontos > placares exatos)
         rows = (
             db.query(Ranking)

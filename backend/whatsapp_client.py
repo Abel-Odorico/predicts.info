@@ -29,6 +29,36 @@ def _cfg(db: Session) -> dict:
     }
 
 
+def is_quiet_now(db: Session) -> bool:
+    """Modo silêncio (horário BRT): True = mensagem PROATIVA bloqueada agora.
+
+    Regra do produto: nunca mandar WhatsApp de madrugada, EXCETO resposta a mensagem
+    que o usuário acabou de mandar (chamador passa ignore_quiet=True). Config no admin
+    (site_config): whatsapp_quiet_enabled / whatsapp_quiet_start / whatsapp_quiet_end.
+    Janela cruza meia-noite normalmente (ex.: 22 → 8)."""
+    from datetime import datetime, timezone, timedelta
+
+    rows = {
+        r.key: r.value
+        for r in db.query(SiteConfig).filter(SiteConfig.key.in_([
+            "whatsapp_quiet_enabled", "whatsapp_quiet_start", "whatsapp_quiet_end",
+        ]))
+    }
+    if (rows.get("whatsapp_quiet_enabled") or "true").lower() != "true":
+        return False
+    try:
+        start = int(rows.get("whatsapp_quiet_start") or 22) % 24
+        end = int(rows.get("whatsapp_quiet_end") or 8) % 24
+    except (TypeError, ValueError):
+        start, end = 22, 8
+    if start == end:
+        return False  # janela vazia = silêncio desligado na prática
+    hour_brt = (datetime.now(timezone.utc) - timedelta(hours=3)).hour
+    if start < end:
+        return start <= hour_brt < end
+    return hour_brt >= start or hour_brt < end  # cruza meia-noite
+
+
 def normalize_jid(phone: str) -> str:
     """Reduz telefone a dígitos puros com DDI (formato que a Evolution API espera em 'number').
 
@@ -76,10 +106,15 @@ def resolve_number(db: Session, phone: str) -> str | None:
     return digits  # fallback: melhor tentar o número naive do que não mandar nada
 
 
-def send_text(db: Session, phone: str, message: str) -> bool:
-    """Manda texto simples. Retorna True/False, nunca levanta — chamador decide o que fazer com falha."""
+def send_text(db: Session, phone: str, message: str, ignore_quiet: bool = False) -> bool:
+    """Manda texto simples. Retorna True/False, nunca levanta — chamador decide o que fazer com falha.
+
+    ignore_quiet=True só pra mensagem que RESPONDE ação do usuário (webhook, boas-vindas,
+    confirmação de aposta, envio manual do admin) — o resto respeita o modo silêncio."""
     cfg = _cfg(db)
     if not cfg["enabled"] or not cfg["api_key"]:
+        return False
+    if not ignore_quiet and is_quiet_now(db):
         return False
     number = resolve_number(db, phone)
     if not number:
@@ -96,7 +131,7 @@ def send_text(db: Session, phone: str, message: str) -> bool:
         return False
 
 
-def send_list(db: Session, phone: str, title: str, description: str, button_text: str, sections: list[dict]) -> bool:
+def send_list(db: Session, phone: str, title: str, description: str, button_text: str, sections: list[dict], ignore_quiet: bool = False) -> bool:
     """Menu nativo WhatsApp (lista clicável). Baileys manda o payload certinho, mas WhatsApp
     restringe mensagem interativa a critério do cliente do usuário — nem todo app renderiza
     (mais comum em número pessoal, não Business API oficial). 2xx aqui NÃO garante que apareceu
@@ -106,6 +141,8 @@ def send_list(db: Session, phone: str, title: str, description: str, button_text
     """
     cfg = _cfg(db)
     if not cfg["enabled"] or not cfg["api_key"]:
+        return False
+    if not ignore_quiet and is_quiet_now(db):
         return False
     number = resolve_number(db, phone)
     if not number:
@@ -129,11 +166,13 @@ def send_list(db: Session, phone: str, title: str, description: str, button_text
         return False
 
 
-def send_text_to_jid(db: Session, jid: str, message: str) -> bool:
+def send_text_to_jid(db: Session, jid: str, message: str, ignore_quiet: bool = False) -> bool:
     """Manda texto direto pro JID (sem resolve_number) — usado na thread do admin, onde o jid
     já vem de /chat/findChats (inclui @lid, que não tem telefone real pra normalizar)."""
     cfg = _cfg(db)
     if not cfg["enabled"] or not cfg["api_key"]:
+        return False
+    if not ignore_quiet and is_quiet_now(db):
         return False
     try:
         resp = httpx.post(
