@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session, joinedload, sessionmaker
 from auth_utils import require_admin
 from database import get_db
 from models import Match, MatchPhase, MatchStatus, Team, User
-from world_cup_official import fetch_official_knockout_schedule, resolve_slot, candidate_thirds
+from world_cup_official import (
+    fetch_official_knockout_schedule,
+    resolve_slot,
+    candidate_thirds,
+    _upsert_match_result,
+)
 
 router = APIRouter(prefix="/admin", tags=["knockout"])
 
@@ -143,13 +148,17 @@ def run_knockout_sync(db_url: str, log=None) -> dict:
                 if not team_a or not team_b:
                     pending.append(entry.get("section"))
                     continue
-                db.add(Match(
+                existing = Match(
                     phase=phase, team_a_id=team_a.id, team_b_id=team_b.id,
                     match_date=entry.get("match_date"), bet_deadline=entry.get("match_date"),
                     venue=entry.get("venue"), city=entry.get("city"),
                     match_number=match_number, is_neutral=True, status=MatchStatus.scheduled,
-                ))
+                )
+                db.add(existing)
+                db.flush()
                 created += 1
+            if _upsert_match_result(db, existing, entry, _log, entry.get("section") or f"Match {match_number}"):
+                updated += 1
         db.commit()
         _log(f"✓ Mata-mata: {created} criadas, {updated} atualizadas, {len(pending)} pendentes")
         return {"created": created, "updated": updated, "pending": len(pending)}
@@ -257,7 +266,7 @@ def sync_knockout(db: Session = Depends(get_db), _: User = Depends(require_admin
                 })
                 continue
 
-            match = Match(
+            existing = Match(
                 phase=phase,
                 team_a_id=team_a.id,
                 team_b_id=team_b.id,
@@ -269,8 +278,12 @@ def sync_knockout(db: Session = Depends(get_db), _: User = Depends(require_admin
                 is_neutral=True,
                 status=MatchStatus.scheduled,
             )
-            db.add(match)
+            db.add(existing)
+            db.flush()
             created += 1
+
+        if _upsert_match_result(db, existing, entry, lambda *_: None, entry.get("section") or f"Match {match_number}"):
+            updated += 1
 
     db.commit()
     return {

@@ -258,15 +258,39 @@ def knockout_phases(db: Session = Depends(get_db)):
     """
     Consolidated view of all knockout matches with next-round info.
     R32: resolved from DB (has real team data).
-    R16+: from official schedule (team_a/b_label until resolved).
+    R16+: from official schedule, com fallback pro banco (join por match_date)
+    quando a Wikipedia ainda não editou o rótulo do time.
     Each match includes `next_match_number` so the UI can draw the path.
     """
     from sqlalchemy.orm import joinedload
     import re
 
+    table = compute_group_tables(db)
+    db_by_date = {
+        m.match_date: m
+        for m in db.query(Match)
+            .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+            .filter(Match.phase != MatchPhase.group, Match.match_date.isnot(None))
+            .all()
+    }
+
     # ── Build next-match map from schedule labels ─────────────────────────────
     # e.g. "Winner Match 73" → extract 73 → that match feeds into this schedule entry
     schedule = fetch_official_knockout_schedule()
+    for entry in schedule:
+        slot_a = resolve_slot(entry["team_a_label"], table)
+        slot_b = resolve_slot(entry["team_b_label"], table)
+        db_match = db_by_date.get(entry.get("match_date"))
+        if db_match:
+            if not slot_a and db_match.team_a:
+                slot_a = _team_min(db_match.team_a)
+            if not slot_b and db_match.team_b:
+                slot_b = _team_min(db_match.team_b)
+        entry["resolved_team_a"] = slot_a
+        entry["resolved_team_b"] = slot_b
+        entry["status"] = db_match.status.value if db_match and hasattr(db_match.status, "value") else None
+        entry["score_a"] = db_match.result.score_a if db_match and db_match.result else None
+        entry["score_b"] = db_match.result.score_b if db_match and db_match.result else None
     # map: source_match_number → schedule_entry (the next match)
     feeds_into: dict[int, dict] = {}
     for entry in schedule:
@@ -329,6 +353,9 @@ def knockout_phases(db: Session = Depends(get_db)):
                 "team_b_label": entry.get("team_b_label"),
                 "resolved_team_a": entry.get("resolved_team_a"),
                 "resolved_team_b": entry.get("resolved_team_b"),
+                "status": entry.get("status"),
+                "score_a": entry.get("score_a"),
+                "score_b": entry.get("score_b"),
                 "next_match_number": next_e["match_number"] if next_e else None,
                 "next_match_date": str(next_e["match_date"]) if next_e and next_e.get("match_date") else None,
                 "next_venue": next_e.get("venue") if next_e else None,
@@ -380,13 +407,41 @@ def knockout_phases(db: Session = Depends(get_db)):
     }
 
 
+def _team_min(t: Team | None) -> dict | None:
+    if not t:
+        return None
+    return {"id": t.id, "code": t.code, "name": t.name, "group_name": t.group_name, "flag_url": t.flag_url}
+
+
 @router.get("/official-bracket")
 def official_bracket(db: Session = Depends(get_db)):
     table = compute_group_tables(db)
+
+    # nosso banco (sincronizado por hora via football-data.org) resolve R16+
+    # mais rápido e de forma mais confiável que o scraping da Wikipedia, que só
+    # atualiza o rótulo de time quando um editor voluntário edita a página.
+    # Join por match_date: o `match_number` da Wikipedia (1-104, numeração oficial
+    # FIFA) não é o mesmo `match_number` gravado no banco (ID da API football-data),
+    # mas o horário do jogo é o mesmo em ambas as fontes.
+    from sqlalchemy.orm import joinedload
+    db_by_date = {
+        m.match_date: m
+        for m in db.query(Match)
+            .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+            .filter(Match.phase != MatchPhase.group, Match.match_date.isnot(None))
+            .all()
+    }
+
     schedule = []
     for item in fetch_official_knockout_schedule():
         slot_a = resolve_slot(item["team_a_label"], table)
         slot_b = resolve_slot(item["team_b_label"], table)
+        db_match = db_by_date.get(item.get("match_date"))
+        if db_match:
+            if not slot_a and db_match.team_a:
+                slot_a = _team_min(db_match.team_a)
+            if not slot_b and db_match.team_b:
+                slot_b = _team_min(db_match.team_b)
         schedule.append(
             {
                 **item,
@@ -394,6 +449,9 @@ def official_bracket(db: Session = Depends(get_db)):
                 "resolved_team_b": slot_b,
                 "candidate_thirds_a": candidate_thirds(item["team_a_label"], table),
                 "candidate_thirds_b": candidate_thirds(item["team_b_label"], table),
+                "status": db_match.status.value if db_match and hasattr(db_match.status, "value") else None,
+                "score_a": db_match.result.score_a if db_match and db_match.result else None,
+                "score_b": db_match.result.score_b if db_match and db_match.result else None,
             }
         )
 

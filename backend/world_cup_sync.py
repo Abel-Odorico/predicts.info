@@ -25,6 +25,7 @@ from models import (
     SimulationCache,
     Team,
     TournamentSimulation,
+    User,
 )
 
 LogFn = Callable[[str], None] | None
@@ -178,6 +179,12 @@ def _score_points_v2(score_a: int, score_b: int, result_a: int, result_b: int) -
 
 def _score_points(score_a: int, score_b: int, result_a: int, result_b: int, match_date=None) -> tuple[int, bool, bool]:
     return _score_points_v2(score_a, score_b, result_a, result_b)
+
+
+# Bônus fixo pra quem acerta o vencedor na prorrogação/pênaltis (mata-mata).
+# Só avaliado quando o jogo realmente foi decidido nos pênaltis — em tempo
+# normal a aposta simplesmente não conta (nem soma nem zera).
+ET_WINNER_BONUS_POINTS = 10
 
 
 # Wikipedia atualiza o placar {{score|a|b}} da infobox EM TEMPO REAL durante o
@@ -614,6 +621,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         finished_count = 0
         new_matches = 0
         result_by_match_id: dict[int, tuple[int, int]] = {}
+        et_result_by_match_id: dict[int, MatchResult] = {}
         match_label_by_id: dict[int, str] = {}
         match_date_by_id: dict[int, datetime] = {}
 
@@ -695,6 +703,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         ):
             if ko_match.result and ko_match.id not in result_by_match_id:
                 result_by_match_id[ko_match.id] = (ko_match.result.score_a, ko_match.result.score_b)
+                et_result_by_match_id[ko_match.id] = ko_match.result
                 match_date_by_id[ko_match.id] = ko_match.match_date
                 ta = db.query(Team).filter(Team.id == ko_match.team_a_id).first()
                 tb = db.query(Team).filter(Team.id == ko_match.team_b_id).first()
@@ -726,11 +735,20 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 bet.points_earned = points
                 bet.evaluated_at = now_utc
                 evaluated_count += 1
+
+                et_result = et_result_by_match_id.get(bet.match_id)
+                if et_result and et_result.decided_by_penalties and bet.et_winner_pick:
+                    bet.et_points_earned = (
+                        ET_WINNER_BONUS_POINTS if bet.et_winner_pick == et_result.et_winner else 0
+                    )
+                else:
+                    bet.et_points_earned = 0
+
                 stats = ranking_totals.setdefault(
                     bet.user_id,
                     {"total_points": 0, "exact_scores": 0, "correct_results": 0},
                 )
-                stats["total_points"] += points
+                stats["total_points"] += points + bet.et_points_earned
                 if exact:
                     stats["exact_scores"] += 1
                 elif correct_result:
@@ -765,6 +783,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 # ko_match agora inclui pela existência do MatchResult, não
                 # por Match.status, então chegar aqui significa ausência real.
                 bet.points_earned = 0
+                bet.et_points_earned = 0
                 bet.evaluated_at = None
 
         for user_id, stats in ranking_totals.items():
@@ -779,16 +798,16 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
 
         # Notify top 3 ranking (once per day per position)
         db.flush()
-        top3 = (
+        top10 = (
             db.query(Ranking)
             .order_by(Ranking.total_points.desc())
-            .limit(3)
+            .limit(10)
             .all()
         )
         medals = ["🥇", "🥈", "🥉"]
         from datetime import date
         today_start = datetime.combine(date.today(), datetime.min.time())
-        for pos, ranking in enumerate(top3, start=1):
+        for pos, ranking in enumerate(top10, start=1):
             already = db.query(Notification).filter(
                 Notification.user_id == ranking.user_id,
                 Notification.type == "ranking_top3",
@@ -799,10 +818,38 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 db.add(Notification(
                     user_id=ranking.user_id,
                     type="ranking_top3",
-                    title=f"{medals[pos - 1]} Você está em {pos}º lugar!",
+                    title=f"{medals[pos - 1]} Você está em {pos}º lugar!" if pos <= 3 else f"🔥 Você está no Top 10! {pos}º lugar",
                     body=f"Com {ranking.total_points} pontos no ranking geral.",
                     meta={"position": pos, "points": ranking.total_points},
                 ))
+                if pos <= 10:
+                    _notify_ranking_highlight_whatsapp(db, ranking.user_id, pos, ranking.total_points)
+
+
+def _notify_ranking_highlight_whatsapp(db, user_id: int, position: int, points: int) -> None:
+    """'Mensagem de destaque' — avisa por WhatsApp quem entrou no Top 10, se optou nisso.
+    Mesmo dedup diário do bloco acima (chamado só quando a Notification in-app é nova)."""
+    try:
+        from routers.whatsapp import _wants
+        import whatsapp_client as wa
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.phone or not user.whatsapp_opt_in:
+            return
+        if not _wants(user.whatsapp_prefs, "ranking_highlight"):
+            return
+        medal = ["🥇", "🥈", "🥉"][position - 1] if position <= 3 else "🔥"
+        first_name = (user.name or "").split()[0] if user.name else None
+        handle = f" (@{user.username})" if user.username else ""
+        saudacao = f"{first_name}{handle}, você" if first_name else "Você"
+        msg = (
+            f"{medal} *Destaque no ranking!*\n"
+            f"{saudacao} está em {position}º lugar geral, com {points} pontos.\n\n"
+            f"predicts.info/ranking"
+        )
+        wa.send_text(db, user.phone, msg)
+    except Exception:
+        pass
 
         db.commit()
         if notif_count:

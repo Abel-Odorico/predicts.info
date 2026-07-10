@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import case, desc, func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from auth_utils import get_current_user
-from models import Bet, Match, MatchStatus, Ranking, User
+from models import Bet, Match, MatchPhase, MatchStatus, Ranking, User
 from schemas import BetCreate, RankingRow
 from routers.audit import log_action
 
@@ -46,6 +46,8 @@ def _bet_dict(b: Bet) -> dict:
         "score_a": b.score_a,
         "score_b": b.score_b,
         "points_earned": b.points_earned,
+        "et_winner_pick": b.et_winner_pick,
+        "et_points_earned": b.et_points_earned,
         "result": _bet_result(b),
         "created_at": b.created_at,
         "locked_at": b.locked_at,
@@ -61,6 +63,10 @@ def _bet_dict(b: Bet) -> dict:
         "team_b_flag": match.team_b.flag_url if match and match.team_b else None,
         "official_score_a": result.score_a if result else None,
         "official_score_b": result.score_b if result else None,
+        "decided_by_penalties": result.decided_by_penalties if result else False,
+        "et_winner": result.et_winner if result else None,
+        "penalty_score_a": result.penalty_score_a if result else None,
+        "penalty_score_b": result.penalty_score_b if result else None,
         "is_open": _is_open(match) if match else False,
     }
 
@@ -87,10 +93,18 @@ def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranki
 def place_bet(
     payload: BetCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     ip = request.client.host if request.client else None
+
+    def _notify_whatsapp(match_id: int, score_a: int, score_b: int):
+        try:
+            from routers.whatsapp import send_bet_confirmation_whatsapp
+            background_tasks.add_task(send_bet_confirmation_whatsapp, user.id, match_id, score_a, score_b)
+        except Exception:
+            pass
 
     def _log_rejected(reason: str, match: Match | None = None):
         log_action(
@@ -117,25 +131,34 @@ def place_bet(
         _log_rejected("bets_closed", match)
         raise HTTPException(409, "Bets closed for this match")
 
+    # Palpite de vencedor na prorrogação/pênaltis só existe em mata-mata —
+    # fase de grupos não tem prorrogação.
+    et_winner_pick = payload.et_winner_pick if match.phase != MatchPhase.group else None
+
     existing = db.query(Bet).filter(
         Bet.user_id == user.id, Bet.match_id == payload.match_id
     ).first()
     if existing:
         existing.score_a = payload.score_a
         existing.score_b = payload.score_b
+        existing.et_winner_pick = et_winner_pick
         log_action(db, user.id, "bet.place", {
             "match_id": payload.match_id,
             "score": f"{payload.score_a}-{payload.score_b}",
+            "et_winner_pick": et_winner_pick,
             "updated": True,
         })
         db.commit()
         db.refresh(existing)
+        _notify_whatsapp(match.id, existing.score_a, existing.score_b)
         return {
             "id": existing.id,
             "match_id": existing.match_id,
             "score_a": existing.score_a,
             "score_b": existing.score_b,
             "points_earned": existing.points_earned,
+            "et_winner_pick": existing.et_winner_pick,
+            "et_points_earned": existing.et_points_earned,
             "result": _bet_result(existing),
             "created_at": existing.created_at,
             "updated": True,
@@ -147,6 +170,7 @@ def place_bet(
         match_id=payload.match_id,
         score_a=payload.score_a,
         score_b=payload.score_b,
+        et_winner_pick=et_winner_pick,
         locked_at=locked_at,
     )
     db.add(bet)
@@ -154,17 +178,21 @@ def place_bet(
     log_action(db, user.id, "bet.place", {
         "match_id": payload.match_id,
         "score": f"{payload.score_a}-{payload.score_b}",
+        "et_winner_pick": et_winner_pick,
         "updated": False,
         "bet_id": bet.id,
     })
     db.commit()
     db.refresh(bet)
+    _notify_whatsapp(match.id, bet.score_a, bet.score_b)
     return {
         "id": bet.id,
         "match_id": bet.match_id,
         "score_a": bet.score_a,
         "score_b": bet.score_b,
         "points_earned": bet.points_earned,
+        "et_winner_pick": bet.et_winner_pick,
+        "et_points_earned": bet.et_points_earned,
         "result": _bet_result(bet),
         "created_at": bet.created_at,
         "updated": False,
@@ -186,9 +214,16 @@ def update_bet(
         raise HTTPException(409, "Bets closed")
     bet.score_a = payload.score_a
     bet.score_b = payload.score_b
+    bet.et_winner_pick = payload.et_winner_pick if match.phase != MatchPhase.group else None
     db.commit()
     db.refresh(bet)
-    return {"id": bet.id, "match_id": bet.match_id, "score_a": bet.score_a, "score_b": bet.score_b}
+    return {
+        "id": bet.id,
+        "match_id": bet.match_id,
+        "score_a": bet.score_a,
+        "score_b": bet.score_b,
+        "et_winner_pick": bet.et_winner_pick,
+    }
 
 
 @router.get("/bets/mine")
