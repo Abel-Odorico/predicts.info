@@ -664,9 +664,18 @@ def _oracle_telegram(db: Session, match: Match, decision: dict, action: str, old
             lines.append(f"<i>Palpite anterior: {old[0]} x {old[1]}</i>")
         if decision.get("confidence") is not None:
             lines.append(f"🎯 Confiança: <b>{decision['confidence']}%</b>")
-        if decision.get("probs") and decision["probs"][0] is not None:
-            pa, pd, pb = decision["probs"]
-            lines.append(f"📊 Probabilidades: {pa:.0f}% / {pd:.0f}% / {pb:.0f}%")
+
+        # Mesma fundamentação (probabilidades/xG/Elo/forma/campanha/H2H) da
+        # Projeção automática — reusa build_analysis_body pra não duplicar o
+        # cálculo de lambdas/Monte Carlo/H2H em dois lugares.
+        try:
+            from projections import build_analysis_body
+            body = build_analysis_body(db, match)
+            if body:
+                lines += [""] + body
+        except Exception as e:
+            print(f"[oracle_telegram] fundamentação indisponível: {e}", flush=True)
+
         if decision.get("reason"):
             lines += ["", f"💬 {_html.escape(decision['reason'])}"]
         if decision.get("model_tag"):

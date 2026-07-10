@@ -18,6 +18,7 @@ from world_cup_sync import (
     invalidate_simulation_cache,
     sync_team_stats,
 )
+from projections import send_pending_projections
 
 
 def log(message: str) -> None:
@@ -50,6 +51,13 @@ def main() -> None:
     ko = sync_knockout_matches(settings.database_url, log=log)
     log(f"Eliminatórias R32: {ko['created']} criadas, {ko['updated']} atualizadas, {ko['skipped']} puladas")
     invalidate_simulation_cache(log=log)
+
+    try:
+        result = send_pending_projections(log=log)
+        log(f"Projeções Telegram: {result['sent']} enviada(s)" + (f", erros: {result['errors']}" if result["errors"] else ""))
+    except Exception as exc:
+        log(f"Projeções Telegram falharam (ignorado): {exc}")
+
     log("Pronto.")
 
 
