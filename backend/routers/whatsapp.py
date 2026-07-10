@@ -23,7 +23,7 @@ from database import get_db, SessionLocal
 from auth_utils import require_admin
 from models import (
     User, UserRole, Match, MatchStatus, MatchPhase, Bet, WhatsappMessage, WhatsappBetSession,
-    WhatsappCampaign, WhatsappCampaignRecipient, SiteConfig, AuditLog,
+    WhatsappCampaign, WhatsappCampaignRecipient, SiteConfig, AuditLog, Ranking, MatchResult,
 )
 from routers.bets import _is_open
 from routers.audit import log_action
@@ -71,20 +71,26 @@ _HELP_WORDS = ("ajuda", "help", "comandos", "oi", "ola", "bom dia", "boa tarde",
 _MENU_WORDS = ("menu", "opcoes", "opções")
 _LIST_WORDS = ("jogos", "rodada", "abertos", "lista", "partidas")
 _RANKING_WORDS = ("ranking", "classificacao", "classificação")
+_MYBETS_WORDS = ("palpites", "meus palpites", "meus", "minhas apostas", "apostas", "meus pontos", "pontos")
+_OPTOUT_WORDS = ("parar", "sair", "descadastrar", "cancelar avisos", "stop")
+_OPTIN_WORDS = ("voltar", "ativar", "reativar")
 _LIST_SCORE_RE = re.compile(r"^\s*(\d{1,2})\s*[\)\.\-:]?\s*(\d{1,2})\s*x\s*(\d{1,2})\s*$")
 
 _HELP_MESSAGE = (
     "👋 *Oi! Aqui é o bot de palpites do Predicts.*\n\n"
     "Manda *menu* pra ver as opções, *jogos* pra lista numerada dos jogos abertos, ou manda o placar direto: *Brasil 2x1 Argentina*\n"
     "Eu confirmo e você responde *SIM* pra valer.\n\n"
-    "🏆 Ranking e mais em predicts.info"
+    "*ranking* mostra o top 5 e sua posição · *palpites* mostra seus palpites e pontos.\n"
+    "Pra desligar os avisos, manda *parar*.\n\n"
+    "🏆 predicts.info"
 )
 
 _MENU_TEXT_FALLBACK = (
     "📱 *Menu Predicts*\n\n"
     "1️⃣ Manda *jogos* — lista numerada dos jogos abertos\n"
-    "2️⃣ Manda *ranking* — link do ranking geral\n"
-    "3️⃣ Manda *ajuda* — como apostar por aqui\n\n"
+    "2️⃣ Manda *ranking* — top 5 + sua posição\n"
+    "3️⃣ Manda *ajuda* — como apostar por aqui\n"
+    "4️⃣ Manda *palpites* — seus palpites e pontos\n\n"
     "Pra apostar: escolhe o número da lista + placar (*1 2x1*), ou já manda direto o nome do time (*Brasil 2x1 Argentina*)."
 )
 
@@ -92,7 +98,8 @@ _MENU_SECTIONS = [{
     "title": "O que você quer fazer?",
     "rows": [
         {"title": "📋 Jogos abertos", "description": "Lista numerada pra apostar pelo número", "rowId": "jogos"},
-        {"title": "🏆 Ranking", "description": "Link do ranking geral", "rowId": "ranking"},
+        {"title": "🏆 Ranking", "description": "Top 5 + sua posição e pontos", "rowId": "ranking"},
+        {"title": "📊 Meus palpites", "description": "Seus palpites e pontos", "rowId": "palpites"},
         {"title": "❓ Ajuda", "description": "Como apostar pelo WhatsApp", "rowId": "ajuda"},
     ],
 }]
@@ -175,6 +182,90 @@ def _match_list_message(matches: list[Match]) -> str:
     )
 
 
+def _ranking_message(db: Session, user: User) -> str:
+    """Top 5 + posição do usuário — mesma ordenação do GET /ranking (bets.py):
+    pontos > placares exatos > nº de apostas > nome."""
+    from sqlalchemy import desc
+    bet_counts = (
+        db.query(Bet.user_id.label("user_id"), func.count(Bet.id).label("total_bets"))
+        .group_by(Bet.user_id).subquery()
+    )
+    rows = (
+        db.query(
+            User.id, User.name,
+            func.coalesce(Ranking.total_points, 0).label("pts"),
+            func.coalesce(Ranking.exact_scores, 0).label("exact"),
+        )
+        .outerjoin(Ranking, User.id == Ranking.user_id)
+        .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+        .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
+        .order_by(
+            desc(func.coalesce(Ranking.total_points, 0)),
+            desc(func.coalesce(Ranking.exact_scores, 0)),
+            desc(func.coalesce(bet_counts.c.total_bets, 0)),
+            User.name.asc(),
+        )
+        .all()
+    )
+    medals = ["🥇", "🥈", "🥉", "4º", "5º"]
+    linhas = [
+        f"{medals[i]} {r.name} — {r.pts} pts" + (f" ({r.exact} na mosca)" if r.exact else "")
+        for i, r in enumerate(rows[:5])
+    ]
+    msg = "🏆 *Ranking Geral — Top 5*\n\n" + "\n".join(linhas)
+    pos = next((i + 1 for i, r in enumerate(rows) if r.id == user.id), None)
+    if pos is None:
+        msg += "\n\n📍 Você ainda não pontuou — manda *jogos* e entra na disputa!"
+    elif pos > 5:
+        me = rows[pos - 1]
+        msg += f"\n\n📍 Você: {pos}º com {me.pts} pts" + (f" ({me.exact} na mosca)" if me.exact else "")
+    else:
+        msg += f"\n\n📍 Você tá no top 5! 🔥"
+    return msg + "\n\nCompleto: predicts.info/ranking"
+
+
+def _my_bets_message(db: Session, user: User) -> str:
+    """Palpites pendentes (jogos ainda não avaliados) + últimos avaliados com pontos."""
+    pending = (
+        db.query(Bet).join(Match, Match.id == Bet.match_id)
+        .filter(Bet.user_id == user.id, Bet.evaluated_at.is_(None))
+        .order_by(Match.match_date).limit(5).all()
+    )
+    evaluated = (
+        db.query(Bet, MatchResult).join(Match, Match.id == Bet.match_id)
+        .outerjoin(MatchResult, MatchResult.match_id == Match.id)
+        .filter(Bet.user_id == user.id, Bet.evaluated_at.isnot(None))
+        .order_by(Match.match_date.desc()).limit(3).all()
+    )
+    if not pending and not evaluated:
+        return "📊 Você ainda não fez nenhum palpite. Manda *jogos* pra ver a lista e apostar!"
+
+    partes = ["📊 *Seus palpites*"]
+    if pending:
+        linhas = []
+        for b in pending:
+            m = db.query(Match).filter(Match.id == b.match_id).first()
+            local = (m.match_date - timedelta(hours=3)).strftime("%d/%m %H:%M") if m.match_date else "?"
+            linhas.append(f"• {_pt(m.team_a)} {b.score_a}x{b.score_b} {_pt(m.team_b)} — {local}")
+        partes.append("⏳ *Aguardando jogo:*\n" + "\n".join(linhas))
+    if evaluated:
+        linhas = []
+        for b, r in evaluated:
+            m = db.query(Match).filter(Match.id == b.match_id).first()
+            pts = (b.points_earned or 0) + (b.et_points_earned or 0)
+            icone = "🎯" if b.points_earned in (3, 25) else ("✅" if pts > 0 else "❌")
+            final = f" (final {r.score_a}x{r.score_b})" if r else ""
+            linhas.append(f"{icone} {_pt(m.team_a)} {b.score_a}x{b.score_b} {_pt(m.team_b)}{final} — +{pts} pts")
+        partes.append("🏁 *Últimos avaliados:*\n" + "\n".join(linhas))
+
+    ranking = db.query(Ranking).filter(Ranking.user_id == user.id).first()
+    if ranking:
+        partes.append(f"Total: *{ranking.total_points} pts* · predicts.info/apostas")
+    else:
+        partes.append("predicts.info/apostas")
+    return "\n\n".join(partes)
+
+
 _SKIP_WORDS = ("pular", "passar", "nenhum", "nao", "não", "n", "skip")
 
 
@@ -240,13 +331,23 @@ def _start_bet_session(db: Session, phone: str, match: Match, score_a: int, scor
 def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
     """Retorna a resposta a mandar de volta, ou None se não deve responder."""
     target_core = _phone_core(phone)
-    user = next(
-        (u for u in db.query(User).filter(User.whatsapp_opt_in == True).all()  # noqa: E712
-         if _phone_core(u.phone or "") == target_core),
-        None,
-    )
+    candidates = [
+        u for u in db.query(User).filter(User.phone.isnot(None), User.is_active == True).all()  # noqa: E712
+        if _phone_core(u.phone or "") == target_core
+    ]
+    # preferência pela conta com opt-in ativo (2 contas no mesmo fone: comportamento antigo)
+    user = next((u for u in candidates if u.whatsapp_opt_in), candidates[0] if candidates else None)
     if not user:
-        return None  # número não vinculado a conta com opt-in — ignora silenciosamente
+        return None  # número não vinculado a conta — ignora silenciosamente
+
+    if not user.whatsapp_opt_in:
+        # opt-out feito por mensagem: só responde ao pedido de religar, resto silêncio
+        if _norm(text) in _OPTIN_WORDS:
+            user.whatsapp_opt_in = True
+            log_action(db, user.id, "whatsapp.opt_in", {"via": "whatsapp"})
+            db.commit()
+            return "🔔 *Avisos religados!* Bem-vindo de volta. Manda *menu* pra ver as opções."
+        return None
 
     session = db.query(WhatsappBetSession).filter(
         WhatsappBetSession.phone == phone,
@@ -337,10 +438,25 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
             return None  # já mandou por fora do fluxo normal de texto
         return _MENU_TEXT_FALLBACK  # sendList falhou (rede/API) — fallback texto
 
-    # "1/2/3" solto = resposta ao menu numerado da boas-vindas/_MENU_TEXT_FALLBACK
+    if norm in _OPTOUT_WORDS:
+        user.whatsapp_opt_in = False
+        if session:
+            db.delete(session)
+        log_action(db, user.id, "whatsapp.opt_out", {"via": "whatsapp"})
+        db.commit()
+        return (
+            "🔕 *Avisos desligados.* Não mando mais nada por aqui.\n"
+            "Sua conta no site continua normal. Pra religar, manda *voltar* "
+            "ou ativa no seu perfil em predicts.info"
+        )
+
+    # "1/2/3/4" solto = resposta ao menu numerado da boas-vindas/_MENU_TEXT_FALLBACK
     # (caso real: usuários responderam "1" e ficavam sem resposta nenhuma)
     if norm in _RANKING_WORDS or norm == "2":
-        return "🏆 Ranking geral: https://predicts.info/ranking"
+        return _ranking_message(db, user)
+
+    if norm in _MYBETS_WORDS or norm == "4":
+        return _my_bets_message(db, user)
 
     if norm in _LIST_WORDS or norm == "1":
         matches = _open_matches_for_list(db)
