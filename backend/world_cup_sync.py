@@ -825,6 +825,26 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 if pos <= 10:
                     _notify_ranking_highlight_whatsapp(db, ranking.user_id, pos, ranking.total_points)
 
+        db.commit()
+        if notif_count:
+            _log(log, f"✓ Notificações criadas: {notif_count} apostas")
+
+    _log(
+        log,
+        f"✓ Copa real aplicada: {len(snapshot['teams'])} seleções, {len(match_rows)} jogos, {player_count} convocados",
+    )
+    _log(log, f"✓ Apostas avaliadas: {evaluated_count} (bets nunca apagadas)")
+    if new_matches:
+        _log(log, f"✓ Novas partidas criadas: {new_matches}")
+    return {
+        "teams": len(snapshot["teams"]),
+        "matches": len(match_rows),
+        "players": player_count,
+        "finished_matches": finished_count,
+        "new_matches": new_matches,
+        "evaluated_bets": evaluated_count,
+    }
+
 
 def _notify_ranking_highlight_whatsapp(db, user_id: int, position: int, points: int) -> None:
     """'Mensagem de destaque' — avisa por WhatsApp quem entrou no Top 10, se optou nisso.
@@ -850,26 +870,6 @@ def _notify_ranking_highlight_whatsapp(db, user_id: int, position: int, points: 
         wa.send_text(db, user.phone, msg)
     except Exception:
         pass
-
-        db.commit()
-        if notif_count:
-            _log(log, f"✓ Notificações criadas: {notif_count} apostas")
-
-    _log(
-        log,
-        f"✓ Copa real aplicada: {len(snapshot['teams'])} seleções, {len(match_rows)} jogos, {player_count} convocados",
-    )
-    _log(log, f"✓ Apostas avaliadas: {evaluated_count} (bets nunca apagadas)")
-    if new_matches:
-        _log(log, f"✓ Novas partidas criadas: {new_matches}")
-    return {
-        "teams": len(snapshot["teams"]),
-        "matches": len(match_rows),
-        "players": player_count,
-        "finished_matches": finished_count,
-        "new_matches": new_matches,
-        "evaluated_bets": evaluated_count,
-    }
 
 
 def _fetch_tsv_rows(client: httpx.Client, slug: str) -> list[list[str]] | None:
