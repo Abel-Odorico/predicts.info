@@ -953,14 +953,17 @@ function RankingPodium({ data, champPicks }) {
 
 // ── BetsList ──────────────────────────────────────────────────────────────────
 function betStatus(bet) {
-  if (bet.official_score_a === null || bet.official_score_a === undefined) {
+  // Usa o campo `result` da API (exact/correct/wrong), não o valor absoluto dos
+  // pontos — assim fica imune a mudança de escala da pontuação (V1/V2/futuras).
+  const evaluated = bet.official_score_a !== null && bet.official_score_a !== undefined
+  if (!evaluated || bet.result == null) {
     return { label: 'Pendente', icon: '⏳', color: 'var(--text-4)' }
   }
-  if (bet.points_earned === 25) {
-    return { label: 'Exato', icon: '🎯', color: 'var(--win)' }
+  if (bet.result === 'exact') {
+    return { label: `Exato +${bet.points_earned ?? 0}`, icon: '🎯', color: 'var(--win)' }
   }
-  if (bet.points_earned >= 10) {
-    return { label: `Certo +${bet.points_earned}`, icon: '✅', color: 'var(--accent)' }
+  if (bet.result === 'correct') {
+    return { label: `Certo +${bet.points_earned ?? 0}`, icon: '✅', color: 'var(--accent)' }
   }
   return { label: 'Errou', icon: '❌', color: 'var(--lose)' }
 }

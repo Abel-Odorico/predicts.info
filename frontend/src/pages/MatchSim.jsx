@@ -15,6 +15,7 @@ const WEIGHT_LABELS = {
   market_value: 'Valor de Mercado (5%)',
   wc_history:   'Histórico em Copas (5%)',
   ml_ensemble:  'ML Ensemble (5%)',
+  h2h:          'Confrontos Diretos (5%)',
 }
 
 export default function MatchSim() {
@@ -25,6 +26,7 @@ export default function MatchSim() {
   const [loading, setLoading] = useState(true)
   const [simRunning, setSimRunning] = useState(false)
   const [betScore, setBetScore] = useState({ a: 0, b: 0 })
+  const [etWinnerPick, setEtWinnerPick] = useState(null)
   const [betMsg, setBetMsg] = useState('')
   const [existingBet, setExistingBet] = useState(null)
   const [n, setN] = useState(1000000)
@@ -35,6 +37,7 @@ export default function MatchSim() {
   const [genError, setGenError]         = useState('')
   const [participants, setParticipants] = useState(null)
   const [participantsLoading, setParticipantsLoading] = useState(false)
+  const [showWeights, setShowWeights] = useState(false)
   const betRef = useRef(null)
 
   useEffect(() => { fetchAll() }, [id])
@@ -93,6 +96,7 @@ export default function MatchSim() {
         if (found) {
           setExistingBet(found)
           setBetScore({ a: String(found.score_a), b: String(found.score_b) })
+          setEtWinnerPick(found.et_winner_pick || null)
         }
       }
     } catch (e) {
@@ -121,7 +125,9 @@ export default function MatchSim() {
     const sb = parseInt(betScore.b)
     if (isNaN(sa) || isNaN(sb) || sa < 0 || sb < 0) { setBetMsg('Preencha o placar'); return }
     try {
-      const data = await api.post('/bets', { match_id: Number(id), score_a: sa, score_b: sb }, token)
+      const payload = { match_id: Number(id), score_a: sa, score_b: sb }
+      if (match?.phase !== 'group' && etWinnerPick) payload.et_winner_pick = etWinnerPick
+      const data = await api.post('/bets', payload, token)
       setExistingBet(data)
       setBetMsg(`✓ Aposta ${sa}×${sb} ${data.updated ? 'atualizada' : 'registrada'}!`)
     } catch (e) {
@@ -156,6 +162,14 @@ export default function MatchSim() {
           {match.team_a.code} vs {match.team_b.code}
         </span>
         {match.status === 'finished' && <span className="badge badge-done">FIM</span>}
+        <Link
+          to={`/partida/${id}/v2`}
+          className="btn btn-ghost btn-sm"
+          style={{ marginLeft: 'auto', fontFamily: 'var(--font-cond)', fontSize: 11, letterSpacing: '0.04em' }}
+          title="Experimentar a proposta visual V2 desta tela"
+        >
+          ⚡ Testar V2
+        </Link>
       </div>
 
       <div className="card card--accent fade-in-1">
@@ -163,6 +177,37 @@ export default function MatchSim() {
           ? <Spinner text="Rodando 1.000.000 simulações..." />
           : <ProbBar sim={sim} matchData={match} />
         }
+
+        {!simRunning && sim?.recommended_score && (
+          <div
+            onClick={() => (token && bettingOpen) ? handleScoreSelect(sim.recommended_score.score) : undefined}
+            className="pulse-accent"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, var(--accent-glow) 0%, var(--accent-dim) 100%)',
+              border: '1.5px solid var(--accent)', borderRadius: 10,
+              padding: '12px 16px', marginTop: 'var(--s3)',
+              cursor: (token && bettingOpen) ? 'pointer' : 'default',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--accent)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>
+                🔮 Palpite do Modelo
+              </span>
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 26, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '0.04em' }}>
+                {match.team_a.code} {sim.recommended_score.score.replace('x', ' × ')} {match.team_b.code}
+              </span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>
+                {sim.recommended_score.prob.toFixed(1)}%
+              </span>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
+                de probabilidade
+              </div>
+            </div>
+          </div>
+        )}
 
         {!simRunning && sim && (
           <div className="sim-toolbar">
@@ -195,6 +240,111 @@ export default function MatchSim() {
           </div>
         )}
       </div>
+
+      {match.status !== 'finished' && (
+        <div className="card card--accent pulse-accent mt-6" ref={betRef}>
+          <div className="card__header">
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+              🎯 Apostar no Placar
+            </span>
+          </div>
+          <div className="card__body">
+            {!token ? (
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13, marginBottom: 'var(--s4)' }}>
+                  Faça login para apostar
+                </p>
+                <Link to="/login" className="btn btn-primary btn-sm">Entrar</Link>
+              </div>
+            ) : !bettingOpen ? (
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
+                  Apostas encerradas — partida iniciou.
+                </p>
+              </div>
+            ) : (
+              <div>
+                {existingBet && (
+                  <div style={{ textAlign: 'center', marginBottom: 'var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--win)' }}>
+                    ✓ Aposta atual: {existingBet.score_a} × {existingBet.score_b}
+                    {existingBet.et_winner_pick && ` · pênaltis: ${existingBet.et_winner_pick === 'a' ? match.team_a.code : match.team_b.code}`}
+                    {' '}— altere abaixo
+                  </div>
+                )}
+                <div className="bet-form">
+                  <div className="bet-form__team-label">{match.team_a.code}</div>
+                  <div className="bet-form__score">
+                    <ScoreInput value={betScore.a} onChange={v => setBetScore(s => ({ ...s, a: v }))} autoFocus />
+                    <span className="score-sep">×</span>
+                    <ScoreInput value={betScore.b} onChange={v => setBetScore(s => ({ ...s, b: v }))} />
+                  </div>
+                  <div className="bet-form__team-label">{match.team_b.code}</div>
+                </div>
+
+                {match.phase !== 'group' && (
+                  <div
+                    style={{
+                      marginTop: 'var(--s4)',
+                      background: 'linear-gradient(135deg, var(--accent-glow) 0%, transparent 100%)',
+                      border: '1.5px dashed var(--accent)',
+                      borderRadius: 10,
+                      padding: 'var(--s3)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 'var(--s2)', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 16 }}>🥅</span>
+                      <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 800, fontSize: 13, color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                        Prorrogação / Pênaltis
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 800, color: 'var(--win)', border: '1px solid var(--win)', borderRadius: 999, padding: '2px 9px' }}>
+                        +10 pts
+                      </span>
+                    </div>
+                    <p style={{ textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', marginBottom: 'var(--s3)' }}>
+                      Se empatar, quem avança? <span style={{ color: 'var(--text-4)' }}>(opcional)</span>
+                    </p>
+                    <div style={{ display: 'flex', gap: 'var(--s3)' }}>
+                      {[['a', match.team_a], ['b', match.team_b]].map(([side, team]) => (
+                        <button
+                          key={side}
+                          type="button"
+                          onClick={() => setEtWinnerPick(p => p === side ? null : side)}
+                          style={{
+                            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                            padding: '10px 8px', borderRadius: 8, cursor: 'pointer',
+                            border: etWinnerPick === side ? '2px solid var(--accent)' : '1.5px solid var(--border)',
+                            background: etWinnerPick === side ? 'var(--accent-glow)' : 'var(--bg-raised)',
+                          }}
+                        >
+                          {team.flag_url && <img src={team.flag_url} alt={team.code} style={{ width: 30, height: 21, objectFit: 'cover', borderRadius: 2 }} />}
+                          <span style={{ fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 14, color: etWinnerPick === side ? 'var(--accent)' : 'var(--text-2)' }}>
+                            {team.code}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button onClick={placeBet} className="btn btn-primary w-full" style={{ marginTop: 'var(--s3)' }}>
+                  {existingBet ? 'Atualizar Aposta' : 'Confirmar Aposta'}
+                </button>
+                {betMsg && (
+                  <p style={{ marginTop: 'var(--s3)', textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 13, color: betMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
+                    {betMsg}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {sim?.h2h && (
+        <div className="mt-6">
+          <H2HCard h2h={sim.h2h} teamA={match.team_a} teamB={match.team_b} />
+        </div>
+      )}
 
       {/* ── Análise IA — logo após probabilidades ─────────────────────────── */}
       <div className="mt-6">
@@ -235,36 +385,6 @@ export default function MatchSim() {
           <div className="card__body">
             {sim ? (
               <>
-                {/* Placar recomendado — condicionado ao resultado mais provável */}
-                {sim.recommended_score && (
-                  <div
-                    onClick={() => (token && bettingOpen) ? handleScoreSelect(sim.recommended_score.score) : undefined}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      background: 'linear-gradient(135deg, rgba(15,122,120,0.18) 0%, rgba(15,122,120,0.06) 100%)',
-                      border: '1.5px solid var(--accent)', borderRadius: 10,
-                      padding: '10px 14px', marginBottom: 'var(--s3)',
-                      cursor: (token && bettingOpen) ? 'pointer' : 'default',
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--accent)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>
-                        ⭐ Placar Recomendado
-                      </span>
-                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '0.04em' }}>
-                        {sim.recommended_score.score.replace('x', ' × ')}
-                      </span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontFamily: 'var(--font-data)', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>
-                        {sim.recommended_score.prob.toFixed(1)}%
-                      </span>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
-                        de probabilidade
-                      </div>
-                    </div>
-                  </div>
-                )}
                 {token && bettingOpen && (
                   <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', marginBottom: 'var(--s3)', letterSpacing: '0.05em' }}>
                     Clique num placar para preencher sua aposta ↓
@@ -284,82 +404,37 @@ export default function MatchSim() {
         <div className="stack">
           {sim?.model_weights && (
             <div className="card fade-in-3">
-              <div className="card__header">
+              <button onClick={() => setShowWeights(v => !v)} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+                background: 'none', border: 'none', cursor: 'pointer', padding: 'var(--s4)',
+              }}>
                 <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
                   Pesos do Modelo
                 </span>
-              </div>
-              <div className="card__body">
-                <div className="weights-grid">
-                  {Object.entries(sim.model_weights).map(([k, v]) => (
-                    <div key={k} className="weight-row">
-                      <div>
-                        <div className="weight-row__label">{WEIGHT_LABELS[k] || k}</div>
-                        <div className="weight-row__bar">
-                          <div className="weight-row__bar-fill" style={{ width: `${v}%` }} />
+                <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{showWeights ? '▲ encolher' : '▼ expandir'}</span>
+              </button>
+              {showWeights && (
+                <div className="card__body fade-in-1" style={{ paddingTop: 0 }}>
+                  <div className="weights-grid">
+                    {Object.entries(sim.model_weights).map(([k, v]) => (
+                      <div key={k} className="weight-row">
+                        <div>
+                          <div className="weight-row__label">{WEIGHT_LABELS[k] || k}</div>
+                          <div className="weight-row__bar">
+                            <div className="weight-row__bar-fill" style={{ width: `${v}%` }} />
+                          </div>
                         </div>
+                        <span className="weight-row__pct">{v}%</span>
                       </div>
-                      <span className="weight-row__pct">{v}%</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           {token && !isBettingOpen(match) && (
             <ParticipantBets data={participants} loading={participantsLoading} myUserId={user?.id} teamA={match.team_a} teamB={match.team_b} />
-          )}
-
-          {match.status !== 'finished' && (
-            <div className="card fade-in-4" ref={betRef}>
-              <div className="card__header">
-                <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-                  🎯 Apostar no Placar
-                </span>
-              </div>
-              <div className="card__body">
-                {!token ? (
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13, marginBottom: 'var(--s4)' }}>
-                      Faça login para apostar
-                    </p>
-                    <Link to="/login" className="btn btn-primary btn-sm">Entrar</Link>
-                  </div>
-                ) : !bettingOpen ? (
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-                      Apostas encerradas — partida iniciou.
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    {existingBet && (
-                      <div style={{ textAlign: 'center', marginBottom: 'var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--win)' }}>
-                        ✓ Aposta atual: {existingBet.score_a} × {existingBet.score_b} — altere abaixo
-                      </div>
-                    )}
-                    <div className="bet-form">
-                      <div className="bet-form__team-label">{match.team_a.code}</div>
-                      <div className="bet-form__score">
-                        <ScoreInput value={betScore.a} onChange={v => setBetScore(s => ({ ...s, a: v }))} autoFocus />
-                        <span className="score-sep">×</span>
-                        <ScoreInput value={betScore.b} onChange={v => setBetScore(s => ({ ...s, b: v }))} />
-                      </div>
-                      <div className="bet-form__team-label">{match.team_b.code}</div>
-                    </div>
-                    <button onClick={placeBet} className="btn btn-primary w-full" style={{ marginTop: 'var(--s3)' }}>
-                      {existingBet ? 'Atualizar Aposta' : 'Confirmar Aposta'}
-                    </button>
-                    {betMsg && (
-                      <p style={{ marginTop: 'var(--s3)', textAlign: 'center', fontFamily: 'var(--font-cond)', fontSize: 13, color: betMsg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
-                        {betMsg}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
           )}
 
           {match.result && (
@@ -478,6 +553,89 @@ function ParticipantBets({ data, loading, myUserId, teamA, teamB }) {
   )
 }
 
+function H2HCard({ h2h, teamA, teamB }) {
+  const total = h2h.total || 1
+  const pctA = (h2h.wins_a / total) * 100
+  const pctD = (h2h.draws / total) * 100
+  const pctB = (h2h.wins_b / total) * 100
+  const seg = (pct, color, delayMs) => pct > 0 ? (
+    <div
+      className="h2h-bar-seg"
+      style={{
+        width: `${pct}%`, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        minWidth: 2, animationDelay: `${delayMs}ms`,
+      }}
+    >
+      {pct >= 12 && <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, fontWeight: 800, color: '#fff' }}>{pct.toFixed(0)}%</span>}
+    </div>
+  ) : null
+
+  return (
+    <div className="card card--accent fade-in-2">
+      <div className="card__header">
+        <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+          ⚔️ Confronto Direto — Histórico All-Time
+        </span>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+          {h2h.total} jogo{h2h.total === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="card__body">
+        <div className="h2h-bar-track" style={{ display: 'flex', height: 28, borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+          {seg(pctA, 'var(--win)', 0)}
+          {seg(pctD, 'var(--text-4)', 120)}
+          {seg(pctB, 'var(--lose)', 240)}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: 'var(--s3)' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--win)' }}>
+              {h2h.wins_a}<span style={{ fontSize: 13, opacity: 0.7 }}> ({pctA.toFixed(0)}%)</span>
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>{teamA?.code}</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--text-2)' }}>
+              {h2h.draws}<span style={{ fontSize: 13, opacity: 0.7 }}> ({pctD.toFixed(0)}%)</span>
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>Empates</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--lose)' }}>
+              {h2h.wins_b}<span style={{ fontSize: 13, opacity: 0.7 }}> ({pctB.toFixed(0)}%)</span>
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>{teamB?.code}</div>
+          </div>
+        </div>
+
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', textAlign: 'center', margin: 0 }}>
+          {h2h.summary || `${h2h.total} jogo${h2h.total === 1 ? '' : 's'} disputado${h2h.total === 1 ? '' : 's'} entre as seleções.`}
+        </p>
+
+        {h2h.recent_results?.length > 0 && (
+          <div style={{ marginTop: 'var(--s3)', borderTop: '1px solid var(--border)', paddingTop: 'var(--s3)' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--s2)' }}>
+              Últimos confrontos
+            </div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {h2h.recent_results.map((r, i) => (
+                <li key={i} style={{
+                  fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)',
+                  display: 'flex', justifyContent: 'space-between', gap: 8,
+                  background: 'var(--bg-overlay)', borderRadius: 6, padding: '6px 10px',
+                }}>
+                  <span style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{r.date}{r.competition ? ` · ${r.competition}` : ''}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700 }}>{r.result}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ScoreInput({ value, onChange, autoFocus }) {
   const v = Number(value) || 0
   return (
@@ -511,8 +669,14 @@ function SimAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
         <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 400 }}>{show ? '▲' : '▼'}</span>
       </button>
 
+      {analysis.hook && (
+        <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--accent-dim)', border: '1px solid var(--border-accent)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, color: 'var(--text-1)' }}>
+          📊 {analysis.hook}
+        </div>
+      )}
+
       {analysis.verdict && (
-        <div style={{ marginTop: 10, padding: '8px 14px', background: 'rgba(15,122,120,0.1)', border: '1px solid rgba(15,122,120,0.3)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--accent)' }}>
+        <div style={{ marginTop: 10, padding: '8px 14px', background: 'var(--accent-dim)', border: '1px solid var(--border-accent)', borderRadius: 8, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--accent)' }}>
           {analysis.verdict}
         </div>
       )}

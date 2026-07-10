@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Layout        from './components/Layout'
 import VotacaoBanner from './components/VotacaoBanner'
-import Onboarding    from './components/Onboarding'
 import Spinner       from './components/Spinner'
 import AdSlot        from './components/AdSlot'
 import { useAuth }   from './stores/authStore'
@@ -10,6 +9,7 @@ import { api }       from './api'
 
 const Dashboard     = lazy(() => import('./pages/Dashboard'))
 const MatchSim      = lazy(() => import('./pages/MatchSim'))
+const MatchSimV2    = lazy(() => import('./pages/MatchSimV2'))
 const Tournament    = lazy(() => import('./pages/Tournament'))
 const Groups        = lazy(() => import('./pages/Groups'))
 const Decisivos     = lazy(() => import('./pages/Decisivos'))
@@ -20,6 +20,7 @@ const Login         = lazy(() => import('./pages/Login'))
 const UserHistory   = lazy(() => import('./pages/UserHistory'))
 const Results       = lazy(() => import('./pages/Results'))
 const AdminOptions  = lazy(() => import('./pages/AdminOptions'))
+const AdminWhatsapp = lazy(() => import('./pages/AdminWhatsapp'))
 const Analytics     = lazy(() => import('./pages/Analytics'))
 const Privacy       = lazy(() => import('./pages/Privacy'))
 const Terms         = lazy(() => import('./pages/Terms'))
@@ -31,6 +32,8 @@ const JoinGroup     = lazy(() => import('./pages/JoinGroup'))
 const Profile       = lazy(() => import('./pages/Profile'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
+const AlterarEmail    = lazy(() => import('./pages/AlterarEmail'))
+const AlterarTelefone = lazy(() => import('./pages/AlterarTelefone'))
 const Votacao       = lazy(() => import('./pages/Votacao'))
 const Regras        = lazy(() => import('./pages/Regras'))
 const Changelog     = lazy(() => import('./pages/Changelog'))
@@ -59,13 +62,13 @@ export default function App() {
           <UpdateBanner />
           <VotacaoBanner />
           <ProfileCompletionNotice />
-          <Onboarding />
           <AdSlotByRoute slot="header" />
           <Suspense fallback={<Spinner />}>
             <Routes>
               <Route path="/"            element={<Dashboard />} />
               <Route path="/dashboard"   element={<Dashboard />} />
               <Route path="/partida/:id" element={<MatchSim />} />
+              <Route path="/partida/:id/v2" element={<MatchSimV2 />} />
               <Route path="/torneio"     element={<Tournament />} />
               <Route path="/grupos"      element={<Groups />} />
               <Route path="/decisivos"   element={<Decisivos />} />
@@ -78,6 +81,7 @@ export default function App() {
               <Route path="/usuarios/:userId/historico" element={<UserHistory />} />
               <Route path="/admin"            element={<Admin />} />
               <Route path="/admin/options"    element={<AdminOptions />} />
+              <Route path="/admin/whatsapp"   element={<AdminWhatsapp />} />
               <Route path="/admin/analytics"  element={<Analytics />} />
               <Route path="/login"            element={<Login />} />
               <Route path="/entrar"           element={<Login initialMode="register" />} />
@@ -88,6 +92,8 @@ export default function App() {
               <Route path="/perfil"           element={<Profile />} />
               <Route path="/esqueci-senha"    element={<ForgotPassword />} />
               <Route path="/redefinir-senha"  element={<ResetPassword />} />
+              <Route path="/alterar-email"    element={<AlterarEmail />} />
+              <Route path="/alterar-telefone" element={<AlterarTelefone />} />
               <Route path="/votacao"          element={<Votacao />} />
               <Route path="/regras"           element={<Regras />} />
               <Route path="/changelog"        element={<Changelog />} />
@@ -255,7 +261,7 @@ function PullToRefresh() {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
+      position: 'fixed', top: 'env(safe-area-inset-top, 0px)', left: 0, right: 0, zIndex: 9998,
       height: pullY,
       background: 'var(--bg-card)',
       borderBottom: `2px solid ${isReady ? 'var(--accent)' : 'var(--border)'}`,
