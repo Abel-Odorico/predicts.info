@@ -556,6 +556,17 @@ class WhatsappCampaignRecipient(Base):
     sent_at     = Column(DateTime, nullable=True)
 
 
+class WhatsappGroupPost(Base):
+    __tablename__ = "whatsapp_group_posts"
+
+    id       = Column(Integer, primary_key=True)
+    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    kind     = Column(String(20), nullable=False)   # projection | reminder | result
+    sent_at  = Column(DateTime, default=_utcnow)
+
+    __table_args__ = (UniqueConstraint("match_id", "kind", name="uq_wa_group_post_match_kind"),)
+
+
 class PhaseCompetition(Base):
     __tablename__ = "phase_competitions"
 

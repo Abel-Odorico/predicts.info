@@ -87,6 +87,7 @@ export default function AdminWhatsapp() {
   const [waSubTab, setWaSubTab] = useState('overview')
   const [waGroups, setWaGroups] = useState(null)
   const [waGroupsLoading, setWaGroupsLoading] = useState(false)
+  const [waOfficialJid, setWaOfficialJid] = useState('')
   const [waThread, setWaThread] = useState(null) // { jid, name, messages, loading, sending, draft, error }
   const [waGroupManage, setWaGroupManage] = useState(null) // { jid, subject, subjectDraft, description, descriptionDraft, participants, loading, busy, error }
 
@@ -215,9 +216,25 @@ export default function AdminWhatsapp() {
 
   async function loadWaGroups() {
     setWaGroupsLoading(true)
-    try { setWaGroups(await api.get('/admin/whatsapp/groups', token)) }
-    catch (e) { setWaMsg(`✗ ${e?.message || 'erro ao listar grupos'}`) }
+    try {
+      const [groups, official] = await Promise.allSettled([
+        api.get('/admin/whatsapp/groups', token),
+        api.get('/admin/whatsapp/group/official', token),
+      ])
+      if (groups.status === 'fulfilled') setWaGroups(groups.value)
+      else setWaMsg(`✗ ${groups.reason?.message || 'erro ao listar grupos'}`)
+      if (official.status === 'fulfilled') setWaOfficialJid(official.value?.group_jid || '')
+    }
     finally { setWaGroupsLoading(false) }
+  }
+
+  async function setOfficialGroup(jid) {
+    setWaMsg('')
+    try {
+      await api.put('/admin/whatsapp/group/official', { group_jid: jid }, token)
+      setWaOfficialJid(jid)
+      setWaMsg(jid ? '✓ Grupo oficial definido — avisos automáticos ativos' : '✓ Avisos automáticos desativados')
+    } catch (e) { setWaMsg(`✗ ${e?.message || 'erro ao definir grupo oficial'}`) }
   }
 
   async function createWaGroup() {
@@ -808,10 +825,13 @@ export default function AdminWhatsapp() {
                   {waGroupsLoading ? '…' : '↻'}
                 </button>
               </div>
+              <div style={{ padding: '4px 0 12px', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
+                ⭐ O grupo oficial recebe avisos automáticos: projeção 24h antes, lembrete 1h antes e resultado final de cada jogo.
+              </div>
               {waGroups?.length > 0 ? (
                 <div className="adm-table-wrap">
                 <table className="adm-table" style={{ fontSize: 13 }}>
-                  <thead><tr><th>Nome</th><th>Participantes</th><th>Criado</th></tr></thead>
+                  <thead><tr><th>Nome</th><th>Participantes</th><th>Criado</th><th>Oficial</th></tr></thead>
                   <tbody>
                     {waGroups.map(g => (
                       <tr
@@ -820,9 +840,16 @@ export default function AdminWhatsapp() {
                         title="Ver participantes"
                         onClick={() => openGroupManage(g.id, g.subject)}
                       >
-                        <td>{g.subject || '—'}</td>
+                        <td>{g.subject || '—'}{g.id === waOfficialJid && <span style={{ marginLeft: 6 }} title="Grupo oficial">⭐</span>}</td>
                         <td style={{ fontFamily: 'var(--font-data)' }}>{g.size ?? '—'}</td>
                         <td style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>{g.creation ? fmtShort(new Date(g.creation * 1000).toISOString()) : '—'}</td>
+                        <td onClick={e => e.stopPropagation()}>
+                          {g.id === waOfficialJid ? (
+                            <button className="btn-ghost btn-sm btn-ghost--active" onClick={() => setOfficialGroup('')}>⭐ Oficial — remover</button>
+                          ) : (
+                            <button className="btn-ghost btn-sm" onClick={() => setOfficialGroup(g.id)}>Definir oficial</button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

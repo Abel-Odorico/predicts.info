@@ -19,6 +19,7 @@ from world_cup_sync import (
     sync_team_stats,
 )
 from projections import send_pending_projections
+from whatsapp_group_poster import send_pending_group_posts
 
 
 def log(message: str) -> None:
@@ -57,6 +58,12 @@ def main() -> None:
         log(f"Projeções Telegram: {result['sent']} enviada(s)" + (f", erros: {result['errors']}" if result["errors"] else ""))
     except Exception as exc:
         log(f"Projeções Telegram falharam (ignorado): {exc}")
+
+    try:
+        gp = send_pending_group_posts(log=log)
+        log(f"Grupo WhatsApp: {gp['sent']} aviso(s)" + (f", erros: {gp['errors']}" if gp["errors"] else ""))
+    except Exception as exc:
+        log(f"Avisos no grupo WhatsApp falharam (ignorado): {exc}")
 
     log("Pronto.")
 

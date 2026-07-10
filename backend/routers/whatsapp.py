@@ -1111,3 +1111,27 @@ def admin_leave_group(group_jid: str, db: Session = Depends(get_db), admin: User
     if not wa.leave_group(db, group_jid):
         raise HTTPException(502, "Falha ao sair do grupo")
     return {"ok": True}
+
+
+@router.get("/admin/whatsapp/group/official")
+def admin_get_official_group(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    row = db.query(SiteConfig).filter(SiteConfig.key == "whatsapp_group_jid").first()
+    return {"group_jid": (row.value if row else "") or ""}
+
+
+class OfficialGroupPayload(BaseModel):
+    group_jid: str  # vazio desativa os avisos automáticos
+
+
+@router.put("/admin/whatsapp/group/official")
+def admin_set_official_group(payload: OfficialGroupPayload, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    jid = payload.group_jid.strip()
+    if jid and not jid.endswith("@g.us"):
+        raise HTTPException(400, "JID de grupo inválido (esperado sufixo @g.us)")
+    row = db.query(SiteConfig).filter(SiteConfig.key == "whatsapp_group_jid").first()
+    if row:
+        row.value = jid
+    else:
+        db.add(SiteConfig(key="whatsapp_group_jid", value=jid))
+    db.commit()
+    return {"ok": True, "group_jid": jid}
