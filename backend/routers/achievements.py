@@ -2,13 +2,13 @@
 GET  /achievements                    — list all achievements with unlock status for current user
 POST /admin/achievements/evaluate     — scan all users, grant earned achievements
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 from database import get_db
 from auth_utils import get_current_user, require_admin
-from models import Bet, Match, MatchPhase, Ranking, User, UserGroup
+from models import Bet, Match, MatchPhase, Notification, Ranking, User, UserGroup
 
 router = APIRouter(tags=["achievements"])
 
@@ -20,6 +20,10 @@ ACHIEVEMENTS = {
     "streak_5":      {"icon": "⚡", "title": "Maratonista",        "desc": "5 acertos seguidos"},
     "top1":          {"icon": "🏆", "title": "Campeão",            "desc": "Chegou ao 1° lugar no ranking"},
     "top3":          {"icon": "🥉", "title": "Pódio",              "desc": "Chegou ao top 3 no ranking"},
+    "lider":         {"icon": "🥇", "title": "Líder",               "desc": "Chegou ao 1° lugar no ranking geral"},
+    "vice_lider":    {"icon": "🥈", "title": "Vice-Líder",         "desc": "Chegou ao 2° lugar no ranking geral"},
+    "terceiro_lugar":{"icon": "🥉", "title": "Terceiro Lugar",     "desc": "Chegou ao 3° lugar no ranking geral"},
+    "destaque_rodada":{"icon": "🌟", "title": "Destaque da Rodada", "desc": "Foi quem mais pontuou na semana"},
     "bet_all":       {"icon": "💯", "title": "Completo",           "desc": "Apostou em todos os jogos da fase de grupos"},
     "group_creator": {"icon": "👑", "title": "Fundador",           "desc": "Criou um grupo privado"},
 }
@@ -78,11 +82,9 @@ def list_achievements(
     return result
 
 
-@router.post("/admin/achievements/evaluate")
-def evaluate_achievements(
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
-):
+def run_achievement_evaluation(db: Session) -> dict:
+    """Núcleo reusável — chamado pela rota admin (manual) e pelo cron automático
+    (main.py::_achievements_loop). Escaneia todos os usuários e concede o que já foi ganho."""
     users = db.query(User).all()
     granted_total = 0
 
@@ -92,6 +94,25 @@ def evaluate_achievements(
 
     # Group stage match count
     group_match_count = db.query(Match).filter(Match.phase == MatchPhase.group).count()
+
+    # Destaque da rodada — quem mais pontuou nos últimos 7 dias (janela corrida, não
+    # "rodada" numerada — Copa não tem rodada fixa por jogo). Empate: todos que baterem
+    # o máximo levam a conquista (não escolhe só 1 arbitrariamente).
+    week_ago = _utcnow() - timedelta(days=7)
+    weekly_scores = (
+        db.query(
+            Bet.user_id,
+            func.sum(func.coalesce(Bet.points_earned, 0) + func.coalesce(Bet.et_points_earned, 0)).label("pts"),
+        )
+        .filter(Bet.evaluated_at.isnot(None), Bet.evaluated_at >= week_ago)
+        .group_by(Bet.user_id)
+        .all()
+    )
+    weekly_top_user_ids: set[int] = set()
+    if weekly_scores:
+        max_pts = max(s.pts for s in weekly_scores)
+        if max_pts > 0:
+            weekly_top_user_ids = {s.user_id for s in weekly_scores if s.pts == max_pts}
 
     for user in users:
         existing = _get_unlocked(db, user.id)
@@ -123,6 +144,13 @@ def evaluate_achievements(
         pos = rank_pos.get(user.id, 999)
         if pos == 1: _grant(db, user.id, "top1", existing)
         if pos <= 3: _grant(db, user.id, "top3", existing)
+        if pos == 1: _grant(db, user.id, "lider", existing)
+        if pos == 2: _grant(db, user.id, "vice_lider", existing)
+        if pos == 3: _grant(db, user.id, "terceiro_lugar", existing)
+
+        # destaque_rodada — unlock único (permanente); não "perde" se outro superar depois
+        if user.id in weekly_top_user_ids:
+            _grant(db, user.id, "destaque_rodada", existing)
 
         # bet_all — bet on all group stage games
         if group_match_count > 0:
@@ -140,6 +168,23 @@ def evaluate_achievements(
 
         db.commit()
         new_unlocked = _get_unlocked(db, user.id)
+        for code in new_unlocked.keys() - existing.keys():
+            meta = ACHIEVEMENTS[code]
+            db.add(Notification(
+                user_id=user.id, type="achievement_unlocked",
+                title=f"{meta['icon']} Conquista desbloqueada: {meta['title']}",
+                body=meta["desc"],
+                meta={"code": code},
+            ))
         granted_total += len(new_unlocked) - len(existing)
+        db.commit()
 
     return {"evaluated": len(users), "granted": granted_total}
+
+
+@router.post("/admin/achievements/evaluate")
+def evaluate_achievements(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return run_achievement_evaluation(db)
