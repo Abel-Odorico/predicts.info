@@ -139,13 +139,17 @@ def _pt(v: float, casas: int = 1) -> str:
     return f"{float(v):.{casas}f}".replace(".", ",")
 
 
-def build_analysis_body(db: Session, match: Match) -> list[str] | None:
+def build_analysis_body(db: Session, match: Match, cache_only: bool = False) -> list[str] | None:
     """
     Bloco de dados (probabilidades → fundamentação → campanha → H2H → modelo),
     sem cabeçalho. Compartilhado entre a Projeção automática (Telegram 24h antes)
     e o Oráculo Predictor (routers/bot.py) — mesma fundamentação, cabeçalhos
     diferentes, pra não duplicar o cálculo de lambdas/Monte Carlo/H2H em dois
     lugares.
+
+    cache_only=True: H2H só do cache (sem fallback LLM) — pra chamadas síncronas
+    com latência crítica (ex.: resposta do bot no webhook do WhatsApp). Par sem
+    cache = seção H2H simplesmente não entra.
     """
     ta, tb = match.team_a, match.team_b
     if not ta or not tb:
@@ -154,7 +158,10 @@ def build_analysis_body(db: Session, match: Match) -> list[str] | None:
     ta_in = _team_to_input(ta)
     tb_in = _team_to_input(tb)
     phase_str = match.phase.value if match.phase else "group"
-    h2h = _get_or_fetch_h2h(db, ta.code, tb.code, ta.name, tb.name)
+    if cache_only:
+        h2h = get_h2h_cached(db, ta.code, tb.code)
+    else:
+        h2h = _get_or_fetch_h2h(db, ta.code, tb.code, ta.name, tb.name)
     lambda_a, lambda_b, weights_used = compute_weighted_lambdas(
         ta_in, tb_in, is_neutral=match.is_neutral, phase=phase_str, h2h=h2h,
     )
@@ -200,7 +207,7 @@ def build_analysis_body(db: Session, match: Match) -> list[str] | None:
     return lines
 
 
-def build_projection_message(db: Session, match: Match) -> str | None:
+def build_projection_message(db: Session, match: Match, cache_only: bool = False) -> str | None:
     ta, tb = match.team_a, match.team_b
     if not ta or not tb:
         return None
@@ -214,7 +221,7 @@ def build_projection_message(db: Session, match: Match) -> str | None:
         "qf": "Quartas de Final", "sf": "Semifinal", "3rd": "Terceiro Lugar", "final": "Final",
     }.get(phase_str, phase_str)
 
-    body = build_analysis_body(db, match)
+    body = build_analysis_body(db, match, cache_only=cache_only)
     if body is None:
         return None
 

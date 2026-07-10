@@ -72,6 +72,9 @@ _MENU_WORDS = ("menu", "opcoes", "opções")
 _LIST_WORDS = ("jogos", "rodada", "abertos", "lista", "partidas")
 _RANKING_WORDS = ("ranking", "classificacao", "classificação")
 _MYBETS_WORDS = ("palpites", "meus palpites", "meus", "minhas apostas", "apostas", "meus pontos", "pontos")
+# 1ª palavra = pedido de projeção do modelo ("palpite espanha belgica", "projecao final").
+# _norm tira acento, só formas sem acento aqui. "palpites" (plural exato) = _MYBETS_WORDS.
+_PREDICT_WORDS = ("palpite", "projecao", "previsao", "prognostico", "modelo")
 _OPTOUT_WORDS = ("parar", "sair", "descadastrar", "cancelar avisos", "stop")
 _OPTIN_WORDS = ("voltar", "ativar", "reativar")
 _LIST_SCORE_RE = re.compile(r"^\s*(\d{1,2})\s*[\)\.\-:]?\s*(\d{1,2})\s*x\s*(\d{1,2})\s*$")
@@ -81,6 +84,7 @@ _HELP_MESSAGE = (
     "Manda *menu* pra ver as opções, *jogos* pra lista numerada dos jogos abertos, ou manda o placar direto: *Brasil 2x1 Argentina*\n"
     "Eu confirmo e você responde *SIM* pra valer.\n\n"
     "*ranking* mostra o top 5 e sua posição · *palpites* mostra seus palpites e pontos.\n"
+    "*palpite* + time (ex: *palpite Espanha*) mostra a projeção do modelo pro jogo.\n"
     "Pra desligar os avisos, manda *parar*.\n\n"
     "🏆 predicts.info"
 )
@@ -90,7 +94,8 @@ _MENU_TEXT_FALLBACK = (
     "1️⃣ Manda *jogos* — lista numerada dos jogos abertos\n"
     "2️⃣ Manda *ranking* — top 5 + sua posição\n"
     "3️⃣ Manda *ajuda* — como apostar por aqui\n"
-    "4️⃣ Manda *palpites* — seus palpites e pontos\n\n"
+    "4️⃣ Manda *palpites* — seus palpites e pontos\n"
+    "5️⃣ Manda *palpite* + time — projeção do modelo (ex: *palpite Espanha*)\n\n"
     "Pra apostar: escolhe o número da lista + placar (*1 2x1*), ou já manda direto o nome do time (*Brasil 2x1 Argentina*)."
 )
 
@@ -100,6 +105,7 @@ _MENU_SECTIONS = [{
         {"title": "📋 Jogos abertos", "description": "Lista numerada pra apostar pelo número", "rowId": "jogos"},
         {"title": "🏆 Ranking", "description": "Top 5 + sua posição e pontos", "rowId": "ranking"},
         {"title": "📊 Meus palpites", "description": "Seus palpites e pontos", "rowId": "palpites"},
+        {"title": "🔮 Palpite do modelo", "description": "Projeção do próximo jogo (ou manda: palpite + time)", "rowId": "palpite"},
         {"title": "❓ Ajuda", "description": "Como apostar pelo WhatsApp", "rowId": "ajuda"},
     ],
 }]
@@ -180,6 +186,48 @@ def _match_list_message(matches: list[Match]) -> str:
         f"📋 *Jogos abertos pra apostar:*\n{corpo}\n\n"
         f"Manda o número e o placar, tipo: *1 2x1*"
     )
+
+
+def _model_prediction_message(db: Session, query_norm: str) -> str:
+    """Projeção do modelo no chat: reusa a mensagem da Projeção do Telegram
+    (build_projection_message) convertida pra formatação do WhatsApp pelos helpers
+    do poster do grupo. cache_only: sem LLM no caminho — webhook é síncrono,
+    resposta lenta faz a Evolution reenviar o evento (duplicata)."""
+    from projections import build_projection_message
+    from whatsapp_group_poster import _html_to_wa, _translate_team_names
+
+    now = _utcnow()
+    window = (
+        db.query(Match)
+        .filter(
+            Match.status == MatchStatus.scheduled,
+            Match.match_date.isnot(None),
+            Match.match_date >= now - timedelta(hours=6),
+            Match.match_date <= now + timedelta(days=10),
+        )
+        .order_by(Match.match_date)
+        .all()
+    )
+    window = [m for m in window if m.team_a and m.team_b]
+    if not window:
+        return "🤔 Nenhum jogo agendado nos próximos dias pra projetar."
+
+    if query_norm:
+        matches = [m for m in window if _team_hits(m.team_a, query_norm) and _team_hits(m.team_b, query_norm)]
+        if not matches:  # só um time citado também vale
+            matches = [m for m in window if _team_hits(m.team_a, query_norm) or _team_hits(m.team_b, query_norm)]
+        if not matches:
+            proximos = "\n".join(f"• {_pt(m.team_a)} x {_pt(m.team_b)}" for m in window[:5])
+            return f"🤔 Não achei jogo agendado desses times. Próximos jogos:\n{proximos}\n\nManda *palpite* + nome do time."
+        match = matches[0]
+    else:
+        match = window[0]  # "palpite" seco = próximo jogo
+
+    msg = build_projection_message(db, match, cache_only=True)
+    if not msg:
+        return f"🤔 Não consegui calcular agora. Vê no site: predicts.info/partida/{match.id}"
+    corpo = _translate_team_names(_html_to_wa(msg), match)
+    return f"{corpo}\n\nAposta aí: *{_pt(match.team_a)} 2x1 {_pt(match.team_b)}* (com teu placar) 😉"
 
 
 def _ranking_message(db: Session, user: User) -> str:
@@ -457,6 +505,11 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
 
     if norm in _MYBETS_WORDS or norm == "4":
         return _my_bets_message(db, user)
+
+    first_word = norm.split()[0] if norm else ""
+    if first_word in _PREDICT_WORDS or norm == "5":
+        resto = norm[len(first_word):].strip() if first_word in _PREDICT_WORDS else ""
+        return _model_prediction_message(db, resto)
 
     if norm in _LIST_WORDS or norm == "1":
         matches = _open_matches_for_list(db)
