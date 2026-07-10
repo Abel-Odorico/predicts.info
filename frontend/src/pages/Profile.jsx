@@ -285,6 +285,7 @@ export default function Profile() {
                   {[
                     { key: 'bet_reminder', label: '⏰ Lembrete de aposta pendente (1h antes do jogo)' },
                     { key: 'bet_confirmation', label: '✅ Confirmação quando eu apostar pelo site' },
+                    { key: 'match_result', label: '🏁 Resultado do meu palpite quando o jogo termina' },
                     { key: 'ranking_highlight', label: '🔥 Destaque quando eu entrar no Top 10 do ranking' },
                     { key: 'version_update', label: '🚀 Novidades e atualizações do site' },
                   ].map(({ key, label }) => (

@@ -724,6 +724,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         ranking_totals: dict[int, dict[str, int]] = {}
         evaluated_count = 0
         notif_count = 0
+        wa_result_events: list[dict] = []  # DMs de resultado pós-jogo (enviadas após rebuild do ranking)
         now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
         for bet in db.query(Bet).all():
             result_scores = result_by_match_id.get(bet.match_id)
@@ -776,6 +777,13 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                             title="❌ Resultado errado",
                             body=f"{label} · seu palpite: {bet.score_a}–{bet.score_b}", meta=meta))
                     notif_count += 1
+                    wa_result_events.append({
+                        "user_id": bet.user_id, "match_id": bet.match_id,
+                        "bet_a": bet.score_a, "bet_b": bet.score_b,
+                        "res_a": result_scores[0], "res_b": result_scores[1],
+                        "points": points, "et_points": bet.et_points_earned or 0,
+                        "exact": exact, "correct": correct_result,
+                    })
             else:
                 # Sem MatchResult pra esse jogo agora (nunca teve, ou foi
                 # corrigido/apagado) — limpa e fica pendente. A causa raiz do
@@ -825,6 +833,8 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 if pos <= 10:
                     _notify_ranking_highlight_whatsapp(db, ranking.user_id, pos, ranking.total_points)
 
+        _notify_bet_results_whatsapp(db, wa_result_events)
+
         db.commit()
         if notif_count:
             _log(log, f"✓ Notificações criadas: {notif_count} apostas")
@@ -868,6 +878,74 @@ def _notify_ranking_highlight_whatsapp(db, user_id: int, position: int, points: 
             f"predicts.info/ranking"
         )
         wa.send_text(db, user.phone, msg)
+    except Exception:
+        pass
+
+
+def _notify_bet_results_whatsapp(db, events: list[dict]) -> None:
+    """DM pós-jogo pra quem apostou: placar final + como foi o palpite + posição nova
+    no ranking. Só primeira avaliação da bet (dedup do chamador via already_evaluated_bet_ids),
+    só opt-in ativo com pref `match_result`. Chamado DEPOIS do rebuild dos rankings
+    (posição fresca), ANTES do commit final. Isolado — nunca derruba o sync."""
+    if not events:
+        return
+    try:
+        from routers.whatsapp import _wants
+        from team_names_pt import PT_NAMES
+        from models import WhatsappMessage
+        import whatsapp_client as wa
+
+        # posição pós-rebuild, mesma ordenação do site (pontos > placares exatos)
+        rows = (
+            db.query(Ranking)
+            .order_by(Ranking.total_points.desc(), Ranking.exact_scores.desc())
+            .all()
+        )
+        pos_by_user = {r.user_id: (i + 1, r.total_points) for i, r in enumerate(rows)}
+
+        for ev in events:
+            try:
+                user = db.query(User).filter(User.id == ev["user_id"]).first()
+                if (
+                    not user or not user.phone or not user.whatsapp_opt_in
+                    or not getattr(user, "is_active", True)
+                    or not _wants(user.whatsapp_prefs, "match_result")
+                ):
+                    continue
+                match = db.query(Match).filter(Match.id == ev["match_id"]).first()
+                ta = db.query(Team).filter(Team.id == match.team_a_id).first() if match else None
+                tb = db.query(Team).filter(Team.id == match.team_b_id).first() if match else None
+                if not ta or not tb:
+                    continue
+                na, nb = PT_NAMES.get(ta.code, ta.name), PT_NAMES.get(tb.code, tb.name)
+
+                total = ev["points"] + ev["et_points"]
+                if ev["exact"]:
+                    veredito = f"🎯 *NA MOSCA! +{total} pts*"
+                elif ev["correct"]:
+                    veredito = f"✅ Acertou o resultado: *+{total} pts*"
+                elif total > 0:
+                    veredito = f"🥅 Acertou quem avança: *+{total} pts*"
+                else:
+                    veredito = "❌ Não foi dessa vez — 0 pts"
+                bonus = ""
+                if ev["et_points"] and (ev["exact"] or ev["correct"]):
+                    bonus = f"\n🥅 (inclui +{ev['et_points']} de bônus por acertar quem avança)"
+
+                pos, pts = pos_by_user.get(user.id, (None, None))
+                rank_line = f"\n\n📊 Você: *{pos}º lugar* · {pts} pts" if pos else ""
+
+                msg = (
+                    f"🏁 *Fim de jogo: {na} {ev['res_a']} x {ev['res_b']} {nb}*\n\n"
+                    f"Seu palpite: {ev['bet_a']}x{ev['bet_b']}\n"
+                    f"{veredito}{bonus}{rank_line}\n\n"
+                    f"predicts.info/ranking"
+                )
+                ok = wa.send_text(db, user.phone, msg)
+                db.add(WhatsappMessage(direction="outbound", phone=user.phone, body=msg,
+                                       status="sent" if ok else "failed"))
+            except Exception:
+                continue
     except Exception:
         pass
 
