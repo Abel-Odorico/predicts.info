@@ -308,8 +308,10 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
             db.commit()
             return "❌ Palpite cancelado. Manda de novo assim: *Brasil 2x1 Argentina*"
 
+    norm = _norm(text)
+
     if session and session.state == "lista_enviada":
-        m = _LIST_SCORE_RE.match(_norm(text))
+        m = _LIST_SCORE_RE.match(norm)
         if m:
             try:
                 ids = json.loads(session.list_json or "[]")
@@ -325,18 +327,22 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
             db.delete(session)
             return _start_bet_session(db, phone, match, score_a, score_b)
         # não bateu número+placar — cai pro fluxo normal (nome dos times, novo 'jogos', etc.)
+        if re.fullmatch(r"\d{1,2}", norm):
+            return f"🤔 Falta o placar! Manda o número do jogo com o placar junto, tipo: *{norm} 2x1*"
 
-    if _norm(text) in _MENU_WORDS:
+    if norm in _MENU_WORDS:
         if wa.send_list(db, phone, "Predicts.info", "Escolhe uma opção 👇", "Ver opções", _MENU_SECTIONS):
             db.add(WhatsappMessage(direction="outbound", phone=phone, body="[menu nativo]", status="sent"))
             db.commit()
             return None  # já mandou por fora do fluxo normal de texto
         return _MENU_TEXT_FALLBACK  # sendList falhou (rede/API) — fallback texto
 
-    if _norm(text) in _RANKING_WORDS:
+    # "1/2/3" solto = resposta ao menu numerado da boas-vindas/_MENU_TEXT_FALLBACK
+    # (caso real: usuários responderam "1" e ficavam sem resposta nenhuma)
+    if norm in _RANKING_WORDS or norm == "2":
         return "🏆 Ranking geral: https://predicts.info/ranking"
 
-    if _norm(text) in _LIST_WORDS:
+    if norm in _LIST_WORDS or norm == "1":
         matches = _open_matches_for_list(db)
         if not matches:
             return "📋 Nenhum jogo aberto pra apostar agora. Volta mais tarde!"
@@ -352,7 +358,10 @@ def _handle_inbound(db: Session, phone: str, text: str) -> str | None:
 
     score = _extract_score(text)
     if not score:
-        if _norm(text) in _HELP_WORDS:
+        # saudação exata, 1ª palavra saudação ("Oi! Quero apostar..." — texto do próprio link
+        # wa.me do opt-in caía no silêncio), "quero apostar", ou "3" do menu numerado
+        first_word = norm.split()[0].strip("!?.,") if norm else ""
+        if norm in _HELP_WORDS or first_word in _HELP_WORDS or "quero apostar" in norm or norm == "3":
             return _HELP_MESSAGE
         return None  # texto sem placar reconhecível — não responde (evita ruído em conversa normal)
 

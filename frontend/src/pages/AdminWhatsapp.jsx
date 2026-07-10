@@ -80,6 +80,7 @@ export default function AdminWhatsapp() {
   const [waBetsLoading, setWaBetsLoading] = useState(false)
   const [waBetsTotal, setWaBetsTotal] = useState(null)
   const [waBetsOpen, setWaBetsOpen] = useState({})
+  const [waBetsPeriod, setWaBetsPeriod] = useState('all') // all | today | 7d | 30d
   const [waChats, setWaChats] = useState(null)
   const [waChatsLoading, setWaChatsLoading] = useState(false)
   const [waChatsQuery, setWaChatsQuery] = useState('')
@@ -980,25 +981,43 @@ export default function AdminWhatsapp() {
         )}
 
         {waSubTab === 'apostas' && (() => {
+          const cutoffs = { today: 1, '7d': 7, '30d': 30 }
+          const cutoff = cutoffs[waBetsPeriod]
+            ? Date.now() - cutoffs[waBetsPeriod] * 24 * 60 * 60 * 1000
+            : null
+          const visible = (waBets || []).filter(b =>
+            !cutoff || new Date(normalizeDate(b.created_at)).getTime() >= cutoff
+          )
           // agrupa por partida preservando ordem (endpoint já vem mais recente primeiro)
           const groups = []
           const byMatch = {}
-          for (const b of (waBets || [])) {
+          for (const b of visible) {
             if (!byMatch[b.match]) { byMatch[b.match] = { match: b.match, bets: [] }; groups.push(byMatch[b.match]) }
             byMatch[b.match].bets.push(b)
           }
           return (
             <div className="adm-card">
-              <div className="adm-card__header">
+              <div className="adm-card__header" style={{ flexWrap: 'wrap', gap: 8 }}>
                 <span className="adm-card__title">
-                  🎯 Apostas via chat WhatsApp{waBetsTotal != null ? ` — ${waBetsTotal} palpite(s) em ${groups.length} partida(s)` : ''}
+                  🎯 Apostas via chat WhatsApp — {visible.length} palpite(s) em {groups.length} partida(s)
                 </span>
-                <button className="btn btn-sm" onClick={() => loadWaBets()} disabled={waBetsLoading}>
-                  {waBetsLoading ? '…' : '↻'}
-                </button>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {[['all', 'Tudo'], ['today', '24h'], ['7d', '7 dias'], ['30d', '30 dias']].map(([id, label]) => (
+                    <button
+                      key={id}
+                      className={`btn-ghost btn-sm${waBetsPeriod === id ? ' btn-ghost--active' : ''}`}
+                      onClick={() => setWaBetsPeriod(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button className="btn btn-sm" onClick={() => loadWaBets()} disabled={waBetsLoading}>
+                    {waBetsLoading ? '…' : '↻'}
+                  </button>
+                </div>
               </div>
               {groups.length > 0 ? (
-                <div style={{ display: 'grid', gap: 8, maxHeight: 520, overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gap: 8 }}>
                   {groups.map((g, idx) => {
                     const open = waBetsOpen[g.match] ?? idx === 0
                     const scoreCount = {}
@@ -1052,7 +1071,7 @@ export default function AdminWhatsapp() {
                 </div>
               ) : (
                 <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-4)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-                  {waBetsLoading ? 'Carregando…' : 'Nenhuma aposta feita pelo chat ainda.'}
+                  {waBetsLoading ? 'Carregando…' : (waBets?.length ? 'Nenhum palpite no período selecionado.' : 'Nenhuma aposta feita pelo chat ainda.')}
                 </div>
               )}
             </div>
