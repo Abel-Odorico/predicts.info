@@ -535,11 +535,19 @@ def _handle_inbound(db: Session, phone: str, text: str, push_name: str | None = 
             return f"🤔 Falta o placar! Manda o número do jogo com o placar junto, tipo: *{norm} 2x1*"
 
     if norm in _MENU_WORDS:
+        if session and session.state == "lista_enviada":
+            # menu substitui a lista de jogos: número solto depois do menu volta a ser
+            # atalho do menu (1-5), não jogo da lista — caso real: usuário pediu jogos,
+            # depois menu, respondeu "2" (ranking) e caiu no "falta o placar"
+            db.delete(session)
+            db.commit()
         if wa.send_list(db, phone, "Predicts.info", "Escolhe uma opção 👇", "Ver opções", _MENU_SECTIONS, ignore_quiet=True):
             db.add(WhatsappMessage(direction="outbound", phone=phone, body="[menu nativo]", status="sent"))
             db.commit()
             return None  # já mandou por fora do fluxo normal de texto
-        return _MENU_TEXT_FALLBACK  # sendList falhou (rede/API) — fallback texto
+        # sendList quebrado na Evolution 2.3.7 ("this.isZero is not a function") —
+        # na prática o menu numerado em texto É o menu; manter tentativa nativa é grátis
+        return _MENU_TEXT_FALLBACK
 
     if norm in _OPTOUT_WORDS:
         user.whatsapp_opt_in = False
