@@ -24,7 +24,7 @@ export default function Groups() {
           runners_up: qp.runners_up || [],
           best_thirds: qp.best_thirds || [],
         })
-        setBracket((bracketData.schedule || []).filter(m => m.phase === 'r32'))
+        setBracket(bracketData.schedule || [])
       })
       .catch(console.error)
       .finally(() => setLoad(false))
@@ -41,11 +41,30 @@ export default function Groups() {
 
   const totalQualified = qualified.winners.length + qualified.runners_up.length + qualified.best_thirds.length
 
+  // Fase de grupos encerrada quando os 32 classificados estão definidos
+  const stageOver = totalQualified >= 32
+
+  // Fase atual do mata-mata = primeira fase com jogo ainda sem placar
+  const PHASE_ORDER = ['r32', 'r16', 'qf', 'sf', '3rd', 'final']
+  const PHASE_PT = {
+    r32: '16avos de Final', r16: 'Oitavas de Final', qf: 'Quartas de Final',
+    sf: 'Semifinais', '3rd': 'Disputa de 3º Lugar', final: 'Final',
+  }
+  const currentPhase = PHASE_ORDER.find(p =>
+    bracket.some(m => m.phase === p && !Array.isArray(m.score))
+  )
+
+  const r32Bracket = bracket.filter(m => m.phase === 'r32' && (m.resolved_team_a || m.resolved_team_b || m.team_a_label || m.team_b_label))
+
   return (
     <div className="page">
       <div className="fade-in-1">
         <h1 className="page-title">FASE DE GRUPOS</h1>
-        <p className="page-subtitle">12 Grupos · 48 Seleções · Top 2 + 8 melhores 3ºs avançam</p>
+        <p className="page-subtitle">
+          {stageOver
+            ? 'Encerrada · Tabelas finais dos 12 grupos · 32 seleções classificadas'
+            : '12 Grupos · 48 Seleções · Top 2 + 8 melhores 3ºs avançam'}
+        </p>
       </div>
 
       {/* ── Legenda ──────────────────────────────────────────────────── */}
@@ -61,24 +80,49 @@ export default function Groups() {
             <LegendaBadge color="var(--text-4)" label="Eliminado" />
           </div>
           <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-3)' }}>
-            {totalQualified}/32 seleções definidas
+            {stageOver ? 'Fase encerrada · 32 classificadas' : `${totalQualified}/32 seleções definidas`}
           </span>
         </div>
       </div>
 
-      {/* ── Chaveamento parcial R32 ───────────────────────────────────── */}
-      {bracket.length > 0 && (
+      {/* ── Fase encerrada: CTA pro mata-mata ─────────────────────────── */}
+      {stageOver && (
+        <div
+          className="card card--accent mt-6 fade-in-3"
+          onClick={() => navigate('/torneio')}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 'var(--s4)', padding: 'var(--s4) var(--s5)', cursor: 'pointer', flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s4)' }}>
+            <span style={{ fontSize: 26 }}>🏆</span>
+            <div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                Mata-mata em andamento{currentPhase ? ` · ${PHASE_PT[currentPhase]}` : ''}
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                A fase de grupos acabou — acompanhe o chaveamento, resultados e projeções de título.
+              </div>
+            </div>
+          </div>
+          <span className="btn btn-sm">Ver chaveamento →</span>
+        </div>
+      )}
+
+      {/* ── Chaveamento parcial R32 (só durante a fase de grupos) ─────── */}
+      {!stageOver && r32Bracket.length > 0 && (
         <div className="card mt-6 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-              ⚔️ Confrontos Projetados — Oitavas de Final
+              ⚔️ Confrontos Projetados — 16avos de Final
             </span>
             <span className="badge badge-group">
-              {bracket.filter(m => m.resolved_team_a && m.resolved_team_b).length}/{bracket.length} definidos
+              {r32Bracket.filter(m => m.resolved_team_a && m.resolved_team_b).length}/{r32Bracket.length} definidos
             </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 'var(--s2)', padding: 'var(--s4)' }}>
-            {bracket.map(m => {
+            {r32Bracket.map(m => {
               const ta = m.resolved_team_a
               const tb = m.resolved_team_b
               const resolved = ta && tb
@@ -118,7 +162,7 @@ export default function Groups() {
         <div className="card mt-6 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-              ✅ Classificados Parciais
+              ✅ {stageOver ? 'Classificados ao Mata-Mata' : 'Classificados Parciais'}
             </span>
             <span className="badge badge-group">{totalQualified}/32</span>
           </div>
