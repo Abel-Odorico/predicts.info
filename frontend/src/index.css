@@ -10530,3 +10530,19 @@ strong.pts {
 
 .v2-footnote { text-align: center; font-family: 'Chakra Petch', monospace; font-size: 11px; color: var(--v2-chalk-mute); margin: 30px 0 6px; letter-spacing: 0.03em; }
 .v2-footnote b { color: var(--v2-floodlight-ink); }
+
+/* ── GroupRanking: tabela Classificação do Grupo com colunas extras ───────── */
+.grp-rank-grid {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 60px;
+  gap: var(--s2);
+}
+.grp-rank-grid .grp-col-x { display: none; }
+@media (min-width: 720px) {
+  .grp-rank-grid {
+    grid-template-columns: 36px minmax(0, 1fr) 44px 44px 44px 48px 48px 70px;
+  }
+  .grp-rank-grid .grp-col-x { display: flex; }
+  /* chip "hoje" na linha do nome vira redundante com a coluna Hoje */
+  .grp-rank-grid .grp-today-chip { display: none; }
+}

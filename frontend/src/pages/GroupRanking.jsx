@@ -88,6 +88,7 @@ export default function GroupRanking() {
   const [data, setData] = useState(null)
   const [matchStats, setMatchStats] = useState({ finished: 0, total: 0 })
   const [todayTop, setTodayTop] = useState(null)
+  const [todayPts, setTodayPts] = useState({})
   const [highlights, setHighlights] = useState(null)
   const [prevPositions, setPrevPos] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -183,6 +184,7 @@ export default function GroupRanking() {
           .filter(r => memberIds.has(r.user_id))
           .sort((a, b) => b.total_points - a.total_points)
         setTodayTop(groupToday[0] || null)
+        setTodayPts(Object.fromEntries(groupToday.map(r => [r.user_id, r.total_points])))
       }
       savePositions(groupId, groupData.ranking ?? [])
     }).finally(() => setLoading(false))
@@ -643,9 +645,18 @@ export default function GroupRanking() {
               </div>
             ) : (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 60px', gap: 'var(--s2)', padding: '6px var(--s4)', borderBottom: '1px solid var(--border)' }}>
-                  {[['#', 'center'], ['Participante', 'left'], ['Pts', 'right']].map(([h, align]) => (
-                    <span key={h} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)', textAlign: align }}>{h}</span>
+                <div className="grp-rank-grid" style={{ padding: '6px var(--s4)', borderBottom: '1px solid var(--border)' }}>
+                  {[
+                    ['#', 'center', '', 'Posição'],
+                    ['Participante', 'left', '', ''],
+                    ['🎯', 'center', 'grp-col-x', 'Placares exatos'],
+                    ['✅', 'center', 'grp-col-x', 'Resultados certos'],
+                    ['❌', 'center', 'grp-col-x', 'Erros'],
+                    ['Méd', 'center', 'grp-col-x', 'Média de pontos por palpite'],
+                    ['Hoje', 'center', 'grp-col-x', 'Pontos ganhos hoje'],
+                    ['Pts', 'right', '', 'Pontos totais'],
+                  ].map(([h, align, cls, tip]) => (
+                    <span key={h} className={cls} title={tip} style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)', textAlign: align, justifyContent: 'center' }}>{h}</span>
                   ))}
                 </div>
                 {displayRanking.map((r, i) => {
@@ -670,9 +681,9 @@ export default function GroupRanking() {
                   return (
                     <div key={r.user_id}>
                       <div
-                        className={`ranking-row fade-in ${podiumClass}`}
+                        className={`ranking-row fade-in grp-rank-grid ${podiumClass}`}
                         onClick={() => setExpandedUserId(isExpanded ? null : r.user_id)}
-                        style={{ display: 'grid', gridTemplateColumns: '36px 1fr 60px', gap: 'var(--s2)', animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : r.is_me ? '3px solid var(--accent)' : '3px solid transparent', background: isExpanded ? 'color-mix(in srgb, var(--accent) 6%, var(--bg-raised))' : r.is_me && i >= 3 ? 'rgba(15,122,120,0.04)' : undefined, cursor: 'pointer', userSelect: 'none' }}>
+                        style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : r.is_me ? '3px solid var(--accent)' : '3px solid transparent', background: isExpanded ? 'color-mix(in srgb, var(--accent) 6%, var(--bg-raised))' : r.is_me && i >= 3 ? 'rgba(15,122,120,0.04)' : undefined, cursor: 'pointer', userSelect: 'none' }}>
                         <div style={{ textAlign: 'center', alignSelf: 'start', paddingTop: 4 }}>
                           <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
                             {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
@@ -712,13 +723,34 @@ export default function GroupRanking() {
                               </span>
                             </div>
                             {form.length > 0 && <FormDots form={form} />}
+                            {(todayPts[r.user_id] || 0) > 0 && (
+                              <span className="grp-today-chip" style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--win)', background: 'color-mix(in srgb, var(--win) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--win) 30%, transparent)', borderRadius: 10, padding: '0 6px', whiteSpace: 'nowrap' }}>
+                                🔥 +{todayPts[r.user_id]} hoje
+                              </span>
+                            )}
                           </div>
                         </div>
+                        {[
+                          { key: 'ex', val: r.exact_scores, color: 'var(--win)' },
+                          { key: 'ok', val: r.correct_results, color: 'var(--accent)' },
+                          { key: 'er', val: Math.max(0, erros), color: 'var(--lose)' },
+                          { key: 'med', val: r.total_bets > 0 ? (r.total_points / r.total_bets).toFixed(1) : '–', color: 'var(--text-2)' },
+                          { key: 'hoje', val: (todayPts[r.user_id] || 0) > 0 ? `+${todayPts[r.user_id]}` : '–', color: (todayPts[r.user_id] || 0) > 0 ? 'var(--win)' : 'var(--text-4)' },
+                        ].map(c => (
+                          <span key={c.key} className="grp-col-x" style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, color: c.color, alignItems: 'center', justifyContent: 'center' }}>{c.val}</span>
+                        ))}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                           <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent)', fontWeight: 700 }}>{r.effective_points ?? r.total_points}</span>
                           {r.champion_bonus > 0 && (
                             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#e8a030', fontWeight: 700, background: '#e8a03018', border: '1px solid #e8a03040', borderRadius: 10, padding: '1px 5px' }}>🏆+{r.champion_bonus}</span>
                           )}
+                          {i > 0 && (() => {
+                            const topPts = displayRanking[0] ? (displayRanking[0].effective_points ?? displayRanking[0].total_points) : 0
+                            const diff = topPts - (r.effective_points ?? r.total_points)
+                            return diff > 0 ? (
+                              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>−{diff} do líder</span>
+                            ) : null
+                          })()}
                           <div style={{ width: 36, height: 3, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
                             <div style={{ height: '100%', borderRadius: 2, width: `${leaderPts > 0 ? ((r.effective_points ?? r.total_points) / leaderPts) * 100 : 0}%`, background: i === 0 ? '#e8a030' : i === 1 ? 'var(--text-3)' : 'var(--accent)', transition: 'width 600ms ease' }} />
                           </div>
@@ -731,13 +763,15 @@ export default function GroupRanking() {
                         <div className="fade-in-1" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-raised)', padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
 
                           {/* Stats breakdown */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(58px, 1fr))', gap: 4 }}>
                             {[
                               { icon: '🎯', label: 'Exatos', val: r.exact_scores, color: 'var(--win)' },
                               { icon: '✅', label: 'Certos', val: r.correct_results, color: 'var(--accent)' },
                               { icon: '❌', label: 'Erros', val: Math.max(0, erros), color: 'var(--lose)' },
                               { icon: '📝', label: 'Total', val: r.total_bets, color: 'var(--text-2)' },
                               { icon: '📊', label: 'Aprov.', val: aprv !== null ? `${aprv}%` : '–', color: aprv !== null && aprv >= 50 ? 'var(--win)' : 'var(--text-2)' },
+                              { icon: '⚖️', label: 'Média', val: r.total_bets > 0 ? (r.total_points / r.total_bets).toFixed(1) : '–', color: 'var(--text-2)' },
+                              { icon: '🔥', label: 'Hoje', val: (todayPts[r.user_id] || 0) > 0 ? `+${todayPts[r.user_id]}` : '0', color: (todayPts[r.user_id] || 0) > 0 ? 'var(--win)' : 'var(--text-3)' },
                             ].map(s => (
                               <div key={s.label} style={{ textAlign: 'center', padding: '6px 4px', borderRadius: 8, background: 'var(--bg-surface)' }}>
                                 <div style={{ fontFamily: 'var(--font-data)', fontSize: 15, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.val}</div>
