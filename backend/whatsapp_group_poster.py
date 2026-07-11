@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session, joinedload
 
+from competitions import get_competition_id
 from database import SessionLocal
 from models import Match, MatchResult, MatchStatus, SiteConfig, WhatsappGroupPost
 import whatsapp_client as wa
@@ -157,6 +158,7 @@ def send_pending_group_posts(db: Session | None = None, log=print) -> dict:
                 Match.match_date.isnot(None),
                 Match.match_date > now,
                 Match.match_date <= now + timedelta(hours=PROJECTION_WINDOW_HOURS),
+                Match.competition_id == get_competition_id(db),
             )
             .order_by(Match.match_date)
             .all()
@@ -189,6 +191,7 @@ def send_pending_group_posts(db: Session | None = None, log=print) -> dict:
                 MatchResult.recorded_at >= now - timedelta(hours=RESULT_MAX_AGE_HOURS),
                 Match.match_date.isnot(None),
                 Match.match_date >= now - timedelta(hours=RESULT_MAX_AGE_HOURS),
+                Match.competition_id == get_competition_id(db),
             )
             .all()
         )

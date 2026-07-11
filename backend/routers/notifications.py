@@ -147,12 +147,14 @@ def send_reminders(
     now = _utcnow()
     deadline = now + timedelta(hours=hours_ahead)
 
+    from competitions import get_competition_id
     upcoming = (
         db.query(Match)
         .filter(
             Match.status == MatchStatus.scheduled,
             Match.match_date >= now,
             Match.match_date <= deadline,
+            Match.competition_id == get_competition_id(db),
         )
         .all()
     )

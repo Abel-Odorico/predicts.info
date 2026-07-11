@@ -17,6 +17,7 @@ from datetime import timedelta
 import httpx
 from sqlalchemy.orm import Session, joinedload
 
+from competitions import get_competition_id
 from database import SessionLocal
 from models import Match, MatchStatus, MatchProjection, TeamHeadToHead
 from engine.weights import compute_weighted_lambdas
@@ -257,6 +258,7 @@ def send_pending_projections(db: Session | None = None, log=print) -> dict:
                 Match.match_date.isnot(None),
                 Match.match_date <= cutoff,
                 Match.match_date > _utcnow(),
+                Match.competition_id == get_competition_id(db),
             )
             .all()
         )

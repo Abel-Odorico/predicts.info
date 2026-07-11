@@ -70,6 +70,7 @@ class Team(Base):
 
     id = Column(Integer, primary_key=True)
     competition_id = Column(Integer, ForeignKey("competitions.id"))
+    external_id = Column(Integer, unique=True)  # id football-data.org
     name = Column(String(100), nullable=False)
     code = Column(String(3), nullable=False, unique=True)
     confederation = Column(Enum(Confederation), nullable=False)
@@ -117,6 +118,7 @@ class Match(Base):
 
     id = Column(Integer, primary_key=True)
     competition_id = Column(Integer, ForeignKey("competitions.id"))
+    external_id = Column(Integer, unique=True)  # id football-data.org
     phase = Column(Enum(MatchPhase), nullable=False, default=MatchPhase.group)
     team_a_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
     team_b_id = Column(Integer, ForeignKey("teams.id"), nullable=False)

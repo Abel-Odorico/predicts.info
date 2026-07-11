@@ -34,6 +34,7 @@ from routers import telegram as telegram_router
 from routers import competition as competition_router
 from routers import referral as referral_router
 from routers import football_data_sync as football_data_router
+from routers import brasileirao_sync as brasileirao_router
 from routers import news_admin as news_admin_router
 from routers import waitlist as waitlist_router
 from routers.knockout import run_knockout_sync
@@ -620,6 +621,11 @@ def _run_migrations():
             # ranking agora é por competição: unique de user_id vira (user_id, competition_id)
             "ALTER TABLE rankings DROP CONSTRAINT IF EXISTS rankings_user_id_key",
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_rankings_user_comp ON rankings (user_id, competition_id)",
+            # Fase 2: id externo (football-data.org) pra mapeamento robusto de clubes/jogos
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS external_id INTEGER",
+            "ALTER TABLE matches ADD COLUMN IF NOT EXISTS external_id INTEGER",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_teams_external ON teams (external_id) WHERE external_id IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_matches_external ON matches (external_id) WHERE external_id IS NOT NULL",
         ]:
             try:
                 conn.execute(text(alter))
@@ -793,6 +799,7 @@ app.include_router(telegram_router.router,      prefix="/api")
 app.include_router(competition_router.router,   prefix="/api")
 app.include_router(referral_router.router,      prefix="/api")
 app.include_router(football_data_router.router, prefix="/api")
+app.include_router(brasileirao_router.router, prefix="/api")
 app.include_router(news_admin_router.router,    prefix="/api")
 app.include_router(waitlist_router.router,      prefix="/api")
 from routers import videoupload as videoupload_router

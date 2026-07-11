@@ -12,6 +12,7 @@ import redis as redis_lib
 from sqlalchemy.orm import joinedload
 
 from config import settings
+from competitions import get_competition_id
 from database import SessionLocal
 from models import Bet, Match, MatchStatus
 from routers.matches import _build_live_lookup, _live_match_key
@@ -38,7 +39,8 @@ def main() -> int:
         matches = (
             db.query(Match)
             .options(joinedload(Match.team_a), joinedload(Match.team_b))
-            .filter(Match.status == MatchStatus.scheduled)
+            .filter(Match.status == MatchStatus.scheduled,
+                    Match.competition_id == get_competition_id(db))
             .all()
         )
 

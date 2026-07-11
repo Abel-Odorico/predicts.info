@@ -11,7 +11,10 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 @router.get("")
 def list_groups(db: Session = Depends(get_db)):
     teams = db.query(Team).filter(Team.group_name.isnot(None)).order_by(Team.group_name, Team.name).all()
-    matches = db.query(Match).filter(Match.phase == MatchPhase.group).all()
+    from competitions import get_competition_id
+    matches = db.query(Match).filter(
+        Match.phase == MatchPhase.group, Match.competition_id == get_competition_id(db)
+    ).all()
 
     group_rows: dict[str, list] = defaultdict(list)
     stats_by_team: dict[int, dict] = {}

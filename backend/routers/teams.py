@@ -15,7 +15,8 @@ def list_teams(
     limit: int = Query(48, le=48),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Team)
+    from competitions import get_competition_id
+    q = db.query(Team).filter(Team.competition_id == get_competition_id(db))
     if confederation:
         q = q.filter(Team.confederation == confederation.upper())
     if group_name:
@@ -25,7 +26,14 @@ def list_teams(
 
 @router.get("/ranking", response_model=list[TeamResponse])
 def teams_by_elo(limit: int = Query(48, le=48), db: Session = Depends(get_db)):
-    return db.query(Team).order_by(Team.elo_rating.desc()).limit(limit).all()
+    from competitions import get_competition_id
+    return (
+        db.query(Team)
+        .filter(Team.competition_id == get_competition_id(db))
+        .order_by(Team.elo_rating.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/{code}", response_model=TeamResponse)

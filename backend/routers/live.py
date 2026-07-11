@@ -298,9 +298,11 @@ def world_cup_live_feed(db: Session = Depends(get_db)):
     from sqlalchemy.orm import joinedload
     data = fetch_world_cup_live_games()
 
+    from competitions import get_competition_id
     db_matches = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .filter(Match.competition_id == get_competition_id(db))
         .all()
     )
     match_lookup = {
@@ -483,10 +485,11 @@ def _build_tables(teams: list[Team], scored: list[tuple]) -> dict:
 @router.get("/classification")
 def live_classification(db: Session = Depends(get_db)):
     teams = db.query(Team).filter(Team.group_name.isnot(None)).all()
+    from competitions import get_competition_id
     matches = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
-        .filter(Match.phase == MatchPhase.group)
+        .filter(Match.phase == MatchPhase.group, Match.competition_id == get_competition_id(db))
         .all()
     )
 

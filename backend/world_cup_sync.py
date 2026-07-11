@@ -515,6 +515,8 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
     Session = sessionmaker(bind=engine)
 
     with Session() as db:
+        from competitions import get_competition_id
+        copa_id_snap = get_competition_id(db)
         legacy_teams = {
             team.code: {
                 "market_value_eur": team.market_value_eur,
@@ -527,7 +529,9 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 "form_10": float(team.form_10),
                 "form_20": float(team.form_20),
             }
-            for team in db.query(Team).all()
+            for team in db.query(Team).filter(
+                or_(Team.competition_id == copa_id_snap, Team.competition_id.is_(None))
+            ).all()
         }
 
         # Build lookup of existing matches by stable key — used for upsert.
@@ -535,7 +539,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         existing_matches_by_key: dict[tuple, Match] = {}
         for m in db.query(Match).options(
             joinedload(Match.team_a), joinedload(Match.team_b)
-        ).all():
+        ).filter(or_(Match.competition_id == copa_id_snap, Match.competition_id.is_(None))).all():
             if m.team_a and m.team_b:
                 key = _bet_match_key(
                     m.phase.value if m.phase else None,
@@ -546,12 +550,22 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 existing_matches_by_key[key] = m
 
         # Safe deletes: cache, simulations, results (NOT bets, NOT matches, NOT ranking)
-        db.query(SimulationCache).delete()
+        copa_match_ids_all = [
+            r[0] for r in db.query(Match.id).filter(
+                or_(Match.competition_id == copa_id_snap, Match.competition_id.is_(None))
+            ).all()
+        ]
+        db.query(SimulationCache).filter(
+            SimulationCache.match_id.in_(copa_match_ids_all)
+        ).delete(synchronize_session=False)
         db.query(TournamentSimulation).delete()
         # Only delete group-stage results; knockout results (R32+) are preserved
         # so bets on those matches can still be evaluated in this same sync cycle.
         group_match_ids = [
-            r[0] for r in db.query(Match.id).filter(Match.phase == MatchPhase.group).all()
+            r[0] for r in db.query(Match.id).filter(
+                Match.phase == MatchPhase.group,
+                or_(Match.competition_id == copa_id_snap, Match.competition_id.is_(None)),
+            ).all()
         ]
         db.query(MatchResult).filter(MatchResult.match_id.in_(group_match_ids)).delete(
             synchronize_session=False
@@ -559,13 +573,21 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         db.query(Player).delete()
 
         current_codes = {team["code"] for team in snapshot["teams"]}
-        for stale in db.query(Team).filter(~Team.code.in_(current_codes)).all():
+        # Só seleções da Copa podem ficar stale — clubes de outras competições
+        # (Brasileirão) NUNCA são apagados pelo sync da Copa.
+        for stale in db.query(Team).filter(
+            ~Team.code.in_(current_codes),
+            or_(Team.competition_id == copa_id_snap, Team.competition_id.is_(None)),
+        ).all():
             db.delete(stale)
         db.flush()
 
         team_by_code: dict[str, Team] = {}
         for team_data in snapshot["teams"]:
-            existing = db.query(Team).filter(Team.code == team_data["code"]).first()
+            existing = db.query(Team).filter(
+                Team.code == team_data["code"],
+                or_(Team.competition_id == copa_id_snap, Team.competition_id.is_(None)),
+            ).first()
             legacy = legacy_teams.get(team_data["code"], {})
             team = existing or Team(
                 code=team_data["code"],
@@ -1051,7 +1073,10 @@ def sync_team_stats(db_url: str, log: LogFn = None) -> dict:
     updated = 0
     errors: list[str] = []
     with Session() as db, httpx.Client(headers=HEADERS, follow_redirects=True) as client:
-        teams = db.query(Team).order_by(Team.code).all()
+        from competitions import get_competition_id
+        teams = db.query(Team).filter(
+            or_(Team.competition_id == get_competition_id(db), Team.competition_id.is_(None))
+        ).order_by(Team.code).all()
         for index, team in enumerate(teams, start=1):
             stats = None
             for slug in _elo_slug_candidates(team.code, team.name):

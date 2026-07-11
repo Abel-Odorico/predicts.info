@@ -142,7 +142,11 @@ def _run_sync(db_url: str, trigger: str = "manual"):
             bot = _get_bot(db_bot)
             if bot:
                 now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-                open_matches = db_bot.query(Match).filter(Match.status == MatchStatus.scheduled).all()
+                from competitions import get_competition_id
+                open_matches = db_bot.query(Match).filter(
+                    Match.status == MatchStatus.scheduled,
+                    Match.competition_id == get_competition_id(db_bot),
+                ).all()
                 existing_ids = {b.match_id for b in db_bot.query(Bet.match_id).filter(Bet.user_id == bot.id).all()}
                 created = 0
                 for m in open_matches:

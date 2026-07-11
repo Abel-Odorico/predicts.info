@@ -100,7 +100,9 @@ def run_achievement_evaluation(db: Session) -> dict:
     rank_pos = {r.user_id: i + 1 for i, r in enumerate(rankings)}
 
     # Group stage match count
-    group_match_count = db.query(Match).filter(Match.phase == MatchPhase.group).count()
+    group_match_count = db.query(Match).filter(
+        Match.phase == MatchPhase.group, Match.competition_id == copa_id
+    ).count()
 
     # Destaque da rodada — quem mais pontuou nos últimos 7 dias (janela corrida, não
     # "rodada" numerada — Copa não tem rodada fixa por jogo). Empate: todos que baterem

@@ -25,6 +25,7 @@ from models import (
 )
 from engine.poisson import pick_recommended_score
 from routers.champion import ChampionPick
+from competitions import get_competition_id
 from world_cup_sync import _score_points_v2
 
 BOT_EMAIL = "bot@predicts.info"
@@ -182,7 +183,11 @@ def bot_bet(
 
     now = _utcnow()
 
-    q = db.query(Match).filter(Match.status == MatchStatus.scheduled)
+    from competitions import get_competition_id
+    q = db.query(Match).filter(
+        Match.status == MatchStatus.scheduled,
+        Match.competition_id == get_competition_id(db),
+    )
     if phase:
         try:
             q = q.filter(Match.phase == MatchPhase(phase))
@@ -831,6 +836,7 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
             Match.match_date.isnot(None),
             Match.match_date > now,
             Match.match_date <= horizon,
+            Match.competition_id == get_competition_id(db),
         )
         .order_by(Match.match_date.asc())
         .all()

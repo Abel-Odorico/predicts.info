@@ -112,10 +112,13 @@ def list_matches(
     group_name: str | None = Query(None),
     group: str | None = Query(None),
     status: str | None = Query(None),
+    competition: str = Query("copa2026"),
     limit: int | None = Query(None, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
+    from competitions import get_competition_id
     q = db.query(Match).options(joinedload(Match.team_a), joinedload(Match.team_b))
+    q = q.filter(Match.competition_id == get_competition_id(db, competition))
     if phase:
         q = q.filter(Match.phase == phase)
     gn = group_name or group
@@ -136,10 +139,12 @@ def list_matches(
 
 
 @router.get("/calendar", tags=["matches"])
-def calendar_matches(db: Session = Depends(get_db)):
+def calendar_matches(competition: str = Query("copa2026"), db: Session = Depends(get_db)):
+    from competitions import get_competition_id
     matches = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+        .filter(Match.competition_id == get_competition_id(db, competition))
         .order_by(Match.match_date, Match.match_number)
         .all()
     )

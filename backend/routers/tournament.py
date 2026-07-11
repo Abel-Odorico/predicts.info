@@ -49,7 +49,10 @@ def _build_teams(db: Session) -> tuple[list[dict], dict[str, list[int]], list[di
     # Ensure exactly 4 teams per group — skip incomplete groups
     groups = {g: ids for g, ids in groups.items() if len(ids) == 4}
     played_matches = []
-    for match in db.query(Match).filter(Match.phase == MatchPhase.group).all():
+    from competitions import get_competition_id
+    for match in db.query(Match).filter(
+        Match.phase == MatchPhase.group, Match.competition_id == get_competition_id(db)
+    ).all():
         if not match.result or not match.group_name:
             continue
         played_matches.append(

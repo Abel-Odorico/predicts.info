@@ -19,6 +19,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from competitions import get_competition_id
 from database import get_db, SessionLocal
 from auth_utils import require_admin
 from models import (
@@ -161,9 +162,11 @@ def _team_hits(team, norm: str) -> bool:
 def _find_candidate_matches(db: Session, text: str) -> list[Match]:
     norm = _norm(text)
     today = _utcnow()
+    from competitions import get_competition_id
     window = db.query(Match).filter(
         Match.match_date >= today - timedelta(hours=6),
         Match.match_date <= today + timedelta(hours=18),
+        Match.competition_id == get_competition_id(db),
     ).all()
     hits = []
     for m in window:
@@ -174,9 +177,11 @@ def _find_candidate_matches(db: Session, text: str) -> list[Match]:
 
 def _open_matches_for_list(db: Session) -> list[Match]:
     """Jogos que ainda aceitam aposta, ordenados por data — vira a lista numerada do comando 'jogos'."""
+    from competitions import get_competition_id
     upcoming = db.query(Match).filter(
         Match.status == MatchStatus.scheduled,
         Match.match_date >= _utcnow() - timedelta(hours=6),
+        Match.competition_id == get_competition_id(db),
     ).order_by(Match.match_date).all()
     return [m for m in upcoming if _is_open(m)][:20]
 
@@ -256,6 +261,7 @@ def _model_prediction_message(db: Session, query_norm: str) -> str:
             Match.match_date.isnot(None),
             Match.match_date >= now - timedelta(hours=6),
             Match.match_date <= now + timedelta(days=10),
+            Match.competition_id == get_competition_id(db),
         )
         .order_by(Match.match_date)
         .all()
