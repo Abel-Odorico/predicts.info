@@ -6,18 +6,18 @@
  * renderizado — nunca dois popups sobrepostos. Fechar um avança pro próximo
  * pendente (fluxo de navegação), sem popup "roubando" a vez de outro.
  *
- * Ordem: onboarding → version → competition → champion → invite → push → whatsapp
+ * Ordem: version → competition → champion → invite → push → whatsapp
+ * (onboarding virou página: visitante novo é redirecionado pra /bem-vindo)
  */
 
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import { invalidateChampionCache } from './MyChampionCard'
 import ShareCompetitionButton from './ShareCompetitionButton'
 import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
-import Onboarding from './Onboarding'
 
 // ── Dismiss keys (localStorage) ───────────────────────────────────────────────
 const SEEN_VERSION_KEY   = 'predicts_seen_version'
@@ -953,9 +953,9 @@ function WhatsAppOptInPopup({ user, token, onDone }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // ORQUESTRADOR — fila única. Um popup por vez, próximo só entra quando o
 // anterior é fechado (fluxo de navegação, sem sobreposição/empilhamento).
-// Ordem: onboarding → version → competition → champion → invite → push → whatsapp
+// Ordem: version → competition → champion → invite → push → whatsapp
 // ═════════════════════════════════════════════════════════════════════════════
-const POPUP_ORDER = ['onboarding', 'version', 'competition', 'champion', 'invite', 'push', 'whatsapp']
+const POPUP_ORDER = ['version', 'competition', 'champion', 'invite', 'push', 'whatsapp']
 const ONBOARDED_KEY = 'predicts-onboarded'
 
 export default function AppPopups() {
@@ -964,6 +964,17 @@ export default function AppPopups() {
   const [versionData, setVersionData] = useState(null)
   const [competitionData, setCompetitionData] = useState(null)
   const [pendingInvites, setPendingInvites] = useState([])
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+
+  // ── Onboarding: visitante novo entrando pela home vai pra página /bem-vindo
+  // (deep links — /partida/X, /bolao/token etc. — não são sequestrados)
+  useEffect(() => {
+    if (!localStorage.getItem(ONBOARDED_KEY) && (pathname === '/' || pathname === '/dashboard')) {
+      navigate('/bem-vindo', { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Monta a fila inteira de uma vez (sem timers concorrentes) ────────────
   useEffect(() => {
@@ -971,8 +982,6 @@ export default function AppPopups() {
 
     async function build() {
       const eligible = []
-
-      if (!localStorage.getItem(ONBOARDED_KEY)) eligible.push('onboarding')
 
       try {
         const v = await api.get('/version/latest')
@@ -1043,11 +1052,6 @@ export default function AppPopups() {
     advance()
   }
 
-  function closeOnboarding() {
-    localStorage.setItem(ONBOARDED_KEY, '1')
-    advance()
-  }
-
   function closeChampion() {
     localStorage.setItem(CHAMP_DISMISS_KEY, todayKey())
     advance()
@@ -1073,7 +1077,8 @@ export default function AppPopups() {
   }
 
   // ── Render — só a fila[0], nunca dois de uma vez ──────────────────────────
-  if (active === 'onboarding')             return <Onboarding onClose={closeOnboarding} />
+  // Na página de boas-vindas nenhum popup entra na frente — o conteúdo é ela.
+  if (pathname === '/bem-vindo') return null
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
   if (active === 'competition' && competitionData) return <CompetitionPopup competition={competitionData} onClose={closeCompetition} />
   if (active === 'champion')               return <ChampionPopup token={token} onClose={closeChampion} />

@@ -39,6 +39,7 @@ const Regras        = lazy(() => import('./pages/Regras'))
 const Changelog     = lazy(() => import('./pages/Changelog'))
 const ChampionPick  = lazy(() => import('./pages/ChampionPick'))
 const PosCopa       = lazy(() => import('./pages/PosCopa'))
+const BemVindo      = lazy(() => import('./pages/BemVindo'))
 
 function RefCapture() {
   useEffect(() => {
@@ -99,6 +100,7 @@ export default function App() {
               <Route path="/changelog"        element={<Changelog />} />
               <Route path="/campeao"          element={<ChampionPick />} />
               <Route path="/pos-copa"         element={<PosCopa />} />
+              <Route path="/bem-vindo"        element={<BemVindo />} />
             </Routes>
           </Suspense>
           <AdSlotByRoute slot="content" />
