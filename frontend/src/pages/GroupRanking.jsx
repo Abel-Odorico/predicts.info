@@ -607,6 +607,11 @@ export default function GroupRanking() {
                     <div className="group-podium__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
                     <div className="group-podium__name" title={r.name}>{r.name}{r.is_me ? ' ★' : ''}</div>
                     <div className="group-podium__pts">{r.effective_points ?? r.total_points} pts</div>
+                    {r.exact_scores > 0 && (
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--win)', marginTop: 2 }}>
+                        🎯 {r.exact_scores} exato{r.exact_scores !== 1 ? 's' : ''}
+                      </div>
+                    )}
                     <div className="group-podium__platform" />
                   </div>
                 ))}
@@ -723,6 +728,11 @@ export default function GroupRanking() {
                               </span>
                             </div>
                             {form.length > 0 && <FormDots form={form} />}
+                            {r.exact_scores > 0 && (
+                              <span className="grp-exact-chip" style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--win)', background: 'color-mix(in srgb, var(--win) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--win) 30%, transparent)', borderRadius: 10, padding: '0 6px', whiteSpace: 'nowrap' }}>
+                                🎯 {r.exact_scores} exato{r.exact_scores !== 1 ? 's' : ''}
+                              </span>
+                            )}
                             {(todayPts[r.user_id] || 0) > 0 && (
                               <span className="grp-today-chip" style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--win)', background: 'color-mix(in srgb, var(--win) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--win) 30%, transparent)', borderRadius: 10, padding: '0 6px', whiteSpace: 'nowrap' }}>
                                 🔥 +{todayPts[r.user_id]} hoje
@@ -730,8 +740,12 @@ export default function GroupRanking() {
                             )}
                           </div>
                         </div>
+                        <span className="grp-col-x" style={{ alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, fontWeight: 800, color: 'var(--win)', background: 'color-mix(in srgb, var(--win) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--win) 35%, transparent)', borderRadius: 8, padding: '2px 8px', lineHeight: 1.4 }}>
+                            {r.exact_scores}
+                          </span>
+                        </span>
                         {[
-                          { key: 'ex', val: r.exact_scores, color: 'var(--win)' },
                           { key: 'ok', val: r.correct_results, color: 'var(--accent)' },
                           { key: 'er', val: Math.max(0, erros), color: 'var(--lose)' },
                           { key: 'med', val: r.total_bets > 0 ? (r.total_points / r.total_bets).toFixed(1) : '–', color: 'var(--text-2)' },

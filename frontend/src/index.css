@@ -10543,6 +10543,7 @@ strong.pts {
     grid-template-columns: 36px minmax(0, 1fr) 44px 44px 44px 48px 48px 70px;
   }
   .grp-rank-grid .grp-col-x { display: flex; }
-  /* chip "hoje" na linha do nome vira redundante com a coluna Hoje */
-  .grp-rank-grid .grp-today-chip { display: none; }
+  /* chips da linha do nome viram redundantes com as colunas Hoje/exatos */
+  .grp-rank-grid .grp-today-chip,
+  .grp-rank-grid .grp-exact-chip { display: none; }
 }
