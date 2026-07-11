@@ -18,6 +18,58 @@ const INSTALL_BANNER_KEY  = 'predicts_install_banner_v1'
 const INSTALL_BANNER_DAYS = 30   // reaparece a cada 30 dias
 const INSTALL_BANNER_X    = 60   // dismiss manual → 60 dias
 
+// Teaser do Brasileirão → /pos-copa (waitlist). Dismiss persiste em localStorage.
+const BR_TEASER_KEY = 'predicts_br_teaser_v1'
+
+function BrasileiraoTeaser({ navigate }) {
+  const [hidden, setHidden] = useState(() => localStorage.getItem(BR_TEASER_KEY) === '1')
+  if (hidden) return null
+
+  function dismiss(e) {
+    e.stopPropagation()
+    localStorage.setItem(BR_TEASER_KEY, '1')
+    setHidden(true)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/pos-copa#avise-me')}
+      style={{
+        width: '100%', margin: '12px 0', padding: '14px 16px',
+        background: 'linear-gradient(135deg, #0b4d1f 0%, #063616 100%)',
+        border: '1.5px solid rgba(46,204,113,0.55)', borderRadius: 12,
+        display: 'flex', alignItems: 'center', gap: 12,
+        cursor: 'pointer', textAlign: 'left', position: 'relative',
+      }}
+    >
+      <span style={{ fontSize: 28, flexShrink: 0 }}>🇧🇷</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#2ecc71', letterSpacing: '0.08em' }}>
+          EM BREVE
+        </div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: '#fff', marginTop: 2 }}>
+          Brasileirão no Predicts
+        </div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
+          Palpites por rodada, projeção de título, G4 e rebaixamento. Entra na lista →
+        </div>
+      </div>
+      <span
+        onClick={dismiss}
+        role="button"
+        aria-label="Dispensar"
+        style={{
+          position: 'absolute', top: 6, right: 10, fontSize: 16,
+          color: 'rgba(255,255,255,0.55)', padding: 4, lineHeight: 1,
+        }}
+      >
+        ×
+      </span>
+    </button>
+  )
+}
+
 function InstallBanner() {
   const { install, isStandalone, installed, hasPrompt } = useInstallPrompt()
   const [showPopup, setShowPopup] = useState(false)
@@ -505,6 +557,8 @@ export default function Dashboard() {
       <MyChampionCard compact />
 
       <InstallBanner />
+
+      <BrasileiraoTeaser navigate={navigate} />
 
       {/* ── Competição de Fase ── */}
       {competition && (() => {

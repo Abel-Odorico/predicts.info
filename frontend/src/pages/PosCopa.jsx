@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../api'
+import { useAuth } from '../stores/authStore'
 import './PosCopa.css'
 import CompetitionCard from '../components/poscopa/CompetitionCard'
 import MatchCard from '../components/poscopa/MatchCard'
@@ -39,6 +41,79 @@ function getCompColor(slug) {
 // as duas formas de navegar dentro da página irem sempre pro mesmo lugar
 function scrollToSection(id, opts) {
   document.getElementById(id)?.scrollIntoView({ block: 'start', ...opts })
+}
+
+// Waitlist do Brasileirão — único bloco da página que grava dado REAL
+// (POST /waitlist). Logado entra com 1 clique; anônimo deixa e-mail.
+function WaitlistCard() {
+  const { user, token } = useAuth()
+  const [email, setEmail] = useState('')
+  const [state, setState] = useState('idle') // idle | loading | done | already | error
+  const [errMsg, setErrMsg] = useState('')
+
+  useEffect(() => {
+    if (!token) return
+    api.get('/waitlist/status?competition=brasileirao', token)
+      .then((d) => { if (d.joined) setState('already') })
+      .catch(() => {})
+  }, [token])
+
+  async function join(e) {
+    e?.preventDefault()
+    setState('loading')
+    setErrMsg('')
+    try {
+      const d = await api.post(
+        '/waitlist',
+        { competition: 'brasileirao', email: user ? undefined : email.trim() },
+        token,
+      )
+      setState(d.already ? 'already' : 'done')
+    } catch (err) {
+      setErrMsg(err.message || 'Não deu certo. Tenta de novo.')
+      setState('error')
+    }
+  }
+
+  const joined = state === 'done' || state === 'already'
+
+  return (
+    <div className="pc-waitlist">
+      <div className="pc-waitlist__icon">🔔</div>
+      <h2 className="pc-waitlist__title">Quero ser avisado quando o Brasileirão chegar</h2>
+      <p className="pc-waitlist__sub">
+        Palpites por rodada, projeção de título, G4 e rebaixamento — te avisamos no lançamento.
+      </p>
+      {joined ? (
+        <p className="pc-waitlist__done">
+          ✅ {state === 'already' ? 'Você já está na lista!' : 'Pronto, você está na lista!'} Te avisamos no lançamento.
+        </p>
+      ) : (
+        <form className="pc-waitlist__form" onSubmit={join}>
+          {!user && (
+            <input
+              type="email"
+              required
+              className="pc-waitlist__input"
+              placeholder="seu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={state === 'loading'}
+            />
+          )}
+          <button type="submit" className="pc-btn pc-btn--primary" disabled={state === 'loading'}>
+            {state === 'loading' ? 'Enviando…' : user ? 'Me avisa quando lançar' : 'Entrar na lista'}
+          </button>
+        </form>
+      )}
+      {state === 'error' && <p className="pc-waitlist__error">{errMsg}</p>}
+      {!user && !joined && (
+        <p className="pc-waitlist__hint">
+          Já tem conta? <Link to="/login">Entra</Link> e participa com 1 clique.
+        </p>
+      )}
+    </div>
+  )
 }
 
 export default function PosCopa() {
@@ -215,7 +290,12 @@ export default function PosCopa() {
         </div>
       </section>
 
-      {/* ---------- 9. enquete + beta ---------- */}
+      {/* ---------- 9. waitlist (dado real, não mock) ---------- */}
+      <section id="avise-me" className="pc-section">
+        <WaitlistCard />
+      </section>
+
+      {/* ---------- 10. enquete + beta ---------- */}
       <section id="beta" className="pc-section">
         <PollCard options={pollOptions} />
       </section>

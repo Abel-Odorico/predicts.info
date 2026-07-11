@@ -491,3 +491,64 @@
   .pc-lb__row { grid-template-columns: 20px 1fr auto; }
   .pc-lb__row-hits, .pc-lb__row-evo { display: none; }
 }
+
+/* ── waitlist (dado real) ─────────────────────────────────────────────── */
+.pc-waitlist {
+  border: 1px solid var(--pc-glass-border);
+  background: var(--pc-glass-bg);
+  border-radius: var(--radius);
+  padding: var(--s10) var(--s6);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+}
+.pc-waitlist__icon {
+  font-size: 34px;
+  animation: pc-waitlist-ring 2.8s ease-in-out infinite;
+}
+@keyframes pc-waitlist-ring {
+  0%, 78%, 100% { transform: rotate(0); }
+  82% { transform: rotate(-14deg); }
+  86% { transform: rotate(11deg); }
+  90% { transform: rotate(-7deg); }
+  94% { transform: rotate(4deg); }
+}
+.pc-waitlist__title {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 3vw, 28px);
+  color: var(--text-1);
+  margin: 0;
+}
+.pc-waitlist__sub {
+  color: var(--text-3);
+  font-size: 14px;
+  margin: 0;
+  max-width: 480px;
+}
+.pc-waitlist__form {
+  display: flex;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--s2);
+}
+.pc-waitlist__input {
+  background: var(--bg-overlay);
+  border: 1px solid var(--pc-glass-border);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  padding: 10px 14px;
+  font-size: 14px;
+  min-width: 240px;
+}
+.pc-waitlist__input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.pc-waitlist__done { color: var(--win); font-weight: 700; margin: var(--s2) 0 0; }
+.pc-waitlist__error { color: var(--lose); font-size: 13px; margin: 0; }
+.pc-waitlist__hint { color: var(--text-4); font-size: 12px; margin: 0; }
+.pc-waitlist__hint a { color: var(--accent); }
+@media (max-width: 640px) {
+  .pc-waitlist__form { flex-direction: column; width: 100%; }
+  .pc-waitlist__input { min-width: 0; width: 100%; }
+}

@@ -35,6 +35,7 @@ from routers import competition as competition_router
 from routers import referral as referral_router
 from routers import football_data_sync as football_data_router
 from routers import news_admin as news_admin_router
+from routers import waitlist as waitlist_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -579,6 +580,17 @@ def _run_migrations():
             "CREATE INDEX IF NOT EXISTS ix_wa_recipients_msgid ON whatsapp_campaign_recipients (wa_message_id) WHERE wa_message_id IS NOT NULL",
             "ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS wa_message_id VARCHAR(64)",
             "CREATE INDEX IF NOT EXISTS ix_wa_messages_msgid ON whatsapp_messages (wa_message_id) WHERE wa_message_id IS NOT NULL",
+            # competition_waitlist — interesse pré-lançamento de novas competições (Brasileirão etc.)
+            """CREATE TABLE IF NOT EXISTS competition_waitlist (
+                id SERIAL PRIMARY KEY,
+                competition VARCHAR(40) NOT NULL DEFAULT 'brasileirao',
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                email VARCHAR(255),
+                ip VARCHAR(64),
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_waitlist_comp_user ON competition_waitlist (competition, user_id) WHERE user_id IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_waitlist_comp_email ON competition_waitlist (competition, lower(email)) WHERE email IS NOT NULL AND user_id IS NULL",
         ]:
             try:
                 conn.execute(text(alter))
@@ -741,6 +753,7 @@ app.include_router(competition_router.router,   prefix="/api")
 app.include_router(referral_router.router,      prefix="/api")
 app.include_router(football_data_router.router, prefix="/api")
 app.include_router(news_admin_router.router,    prefix="/api")
+app.include_router(waitlist_router.router,      prefix="/api")
 from routers import videoupload as videoupload_router
 app.include_router(videoupload_router.router,  prefix="/api")
 from routers import whatsapp as whatsapp_router
