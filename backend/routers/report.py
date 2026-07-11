@@ -73,6 +73,45 @@ def _build_report(db: Session) -> dict:
             GROUP BY ip HAVING MIN(created_at) >= :d
         ) t
     """), {"d": today}).scalar() or 0
+    new_visitors_week = db.execute(text("""
+        SELECT COUNT(*) FROM (
+            SELECT ip FROM page_views WHERE ip IS NOT NULL
+            GROUP BY ip HAVING MIN(created_at) >= :d
+        ) t
+    """), {"d": week_ago}).scalar() or 0
+    views_total = db.execute(text("SELECT COUNT(*) FROM page_views")).scalar() or 0
+    unique_total = db.execute(
+        text("SELECT COUNT(DISTINCT ip) FROM page_views WHERE ip IS NOT NULL")
+    ).scalar() or 0
+
+    # ── WhatsApp ────────────────────────────────────────
+    wa_opt_in = db.execute(text(
+        "SELECT COUNT(*) FROM users WHERE whatsapp_opt_in = TRUE AND is_active = TRUE"
+    )).scalar() or 0
+    wa_in_today = db.execute(text(
+        "SELECT COUNT(*) FROM whatsapp_messages WHERE direction = 'inbound' AND created_at >= :d"
+    ), {"d": today}).scalar() or 0
+    wa_out_today = db.execute(text(
+        "SELECT COUNT(*) FROM whatsapp_messages WHERE direction = 'outbound' AND created_at >= :d"
+    ), {"d": today}).scalar() or 0
+    wa_in_week = db.execute(text(
+        "SELECT COUNT(*) FROM whatsapp_messages WHERE direction = 'inbound' AND created_at >= :d"
+    ), {"d": week_ago}).scalar() or 0
+    wa_out_week = db.execute(text(
+        "SELECT COUNT(*) FROM whatsapp_messages WHERE direction = 'outbound' AND created_at >= :d"
+    ), {"d": week_ago}).scalar() or 0
+    wa_contacts_today = db.execute(text(
+        "SELECT COUNT(DISTINCT phone) FROM whatsapp_messages WHERE direction = 'inbound' AND created_at >= :d"
+    ), {"d": today}).scalar() or 0
+    # Apostas feitas pelo bot (audit_logs.details é TEXT via json.dumps)
+    wa_bets_today = db.execute(text("""
+        SELECT COUNT(*) FROM audit_logs
+        WHERE action = 'bet.place' AND details LIKE '%"via": "whatsapp"%' AND created_at >= :d
+    """), {"d": today}).scalar() or 0
+    wa_bets_total = db.execute(text("""
+        SELECT COUNT(*) FROM audit_logs
+        WHERE action = 'bet.place' AND details LIKE '%"via": "whatsapp"%'
+    """)).scalar() or 0
 
     # ── Apostas ─────────────────────────────────────────
     total_bets = db.execute(text("SELECT COUNT(*) FROM bets")).scalar() or 0
@@ -169,6 +208,19 @@ def _build_report(db: Session) -> dict:
             "new_visitors_today": new_visitors_today,
             "week": views_week,
             "unique_week": unique_week,
+            "new_visitors_week": new_visitors_week,
+            "total": views_total,
+            "unique_total": unique_total,
+        },
+        "whatsapp": {
+            "opt_in": wa_opt_in,
+            "in_today": wa_in_today,
+            "out_today": wa_out_today,
+            "in_week": wa_in_week,
+            "out_week": wa_out_week,
+            "contacts_today": wa_contacts_today,
+            "bets_today": wa_bets_today,
+            "bets_total": wa_bets_total,
         },
         "bets": {
             "total": total_bets,
@@ -208,11 +260,12 @@ def _build_report(db: Session) -> dict:
 
 
 def _format_text(data: dict) -> str:
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from html import escape as _e
 
-    dt = datetime.fromisoformat(data["generated_at"])
-    br_str = dt.strftime("%d/%m/%Y às %H:%Mh (UTC)")
+    # Banco guarda UTC; exibição sempre em Brasília (UTC-3)
+    dt = datetime.fromisoformat(data["generated_at"]) - timedelta(hours=3)
+    br_str = dt.strftime("%d/%m/%Y às %H:%Mh (Brasília)")
 
     u = data["users"]
     v = data["views"]
@@ -231,13 +284,26 @@ def _format_text(data: dict) -> str:
         "",
         "📈 <b>ACESSOS</b>",
         f"• Hoje: <b>{v['today']}</b> views · <b>{v['unique_today']}</b> únicos · <b>{v['new_visitors_today']}</b> novos",
-        f"• Semana: <b>{v['week']}</b> views · <b>{v['unique_week']}</b> únicos",
+        f"• Semana: <b>{v['week']}</b> views · <b>{v['unique_week']}</b> únicos · <b>{v.get('new_visitors_week', 0)}</b> novos",
+        f"• Total: <b>{v.get('total', 0)}</b> views · <b>{v.get('unique_total', 0)}</b> únicos",
         "",
         "🎯 <b>APOSTAS</b>",
         f"• Total geral: <b>{b['total']}</b>",
         f"• Hoje: <b>{b['today']}</b> apostas · <b>{b['bettors_today']}</b> apostadores",
         f"• Semana: <b>{b['week']}</b> apostas · <b>{b['bettors_week']}</b> apostadores",
     ]
+
+    # WhatsApp
+    w = data.get("whatsapp")
+    if w:
+        lines += [
+            "",
+            "💬 <b>WHATSAPP</b>",
+            f"• Opt-in: <b>{w['opt_in']}</b> usuários",
+            f"• Hoje: <b>{w['in_today']}</b> recebidas · <b>{w['out_today']}</b> enviadas · <b>{w['contacts_today']}</b> contatos",
+            f"• Semana: <b>{w['in_week']}</b> recebidas · <b>{w['out_week']}</b> enviadas",
+            f"• Apostas pelo bot: hoje <b>{w['bets_today']}</b> · total <b>{w['bets_total']}</b>",
+        ]
 
     # Último resultado
     lr = data.get("last_result")
@@ -248,8 +314,8 @@ def _format_text(data: dict) -> str:
     nm = data.get("next_match")
     if nm:
         try:
-            dt_match = datetime.fromisoformat(nm["match_date"])
-            match_str = dt_match.strftime("%d/%m %H:%Mh UTC")
+            dt_match = datetime.fromisoformat(nm["match_date"]) - timedelta(hours=3)
+            match_str = dt_match.strftime("%d/%m %H:%Mh (Brasília)")
         except Exception:
             match_str = nm.get("match_date", "?")
         lines += [
