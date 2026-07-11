@@ -82,7 +82,13 @@ def _bet_dict(b: Bet) -> dict:
     }
 
 
-def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranking_position: int | None = None, total_users: int | None = None) -> dict:
+def _mask_bet_dict(d: dict) -> dict:
+    """Jogo ainda aberto: mostra que a aposta existe, mas esconde o palpite."""
+    return {**d, "score_a": None, "score_b": None, "et_winner_pick": None, "hidden": True}
+
+
+def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranking_position: int | None = None, total_users: int | None = None, hidden_ids: set[int] | None = None) -> dict:
+    hidden_ids = hidden_ids or set()
     return {
         "user": {
             "id": user.id,
@@ -96,7 +102,10 @@ def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranki
         },
         "ranking_position": ranking_position,
         "total_users": total_users,
-        "bets": [_bet_dict(b) for b in bets],
+        "bets": [
+            _mask_bet_dict(_bet_dict(b)) if b.id in hidden_ids else _bet_dict(b)
+            for b in bets
+        ],
     }
 
 
@@ -271,7 +280,7 @@ def user_bets_history(
         .order_by(Bet.created_at.desc())
         .all()
     )
-    bets = [b for b in bets if _bet_visible_to(b, viewer)]
+    hidden_ids = {b.id for b in bets if not _bet_visible_to(b, viewer)}
     ranking = db.query(Ranking).filter(Ranking.user_id == user.id).first()
 
     # compute ranking position
@@ -291,7 +300,7 @@ def user_bets_history(
     total_users = len(ranked_users)
     ranking_position = next((i + 1 for i, r in enumerate(ranked_users) if r[0] == user_id), None)
 
-    return _history_payload(user, bets, ranking, ranking_position, total_users)
+    return _history_payload(user, bets, ranking, ranking_position, total_users, hidden_ids)
 
 
 @router.get("/bets/users/{user_id}/ranking-history")
@@ -345,6 +354,10 @@ def compare_users(
     def _info(b: Bet | None) -> dict | None:
         if not b:
             return None
+        # Jogo ainda aberto: mostra que apostou, mas esconde o palpite
+        if not _bet_visible_to(b, viewer):
+            return {"score_a": None, "score_b": None, "points": 0,
+                    "result": None, "hidden": True}
         return {"score_a": b.score_a, "score_b": b.score_b,
                 "points": b.points_earned or 0, "result": _bet_result(b)}
 
@@ -352,13 +365,6 @@ def compare_users(
         ba, bb = map_a.get(mid), map_b.get(mid)
         m = (ba or bb).match if (ba or bb) else None
         if not m:
-            continue
-        # Palpite de jogo ainda aberto só aparece pro próprio dono
-        if ba and not _bet_visible_to(ba, viewer):
-            ba = None
-        if bb and not _bet_visible_to(bb, viewer):
-            bb = None
-        if not ba and not bb:
             continue
         res = m.result
         pa = (ba.points_earned or 0) if ba else 0

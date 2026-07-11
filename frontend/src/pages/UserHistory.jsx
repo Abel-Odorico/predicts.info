@@ -763,10 +763,10 @@ function BetCard({ bet, idx }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
           <span style={{ fontFamily: 'var(--font-display)', fontSize: 26, lineHeight: 1, color: meta ? meta.color : 'var(--text-2)' }}>
-            {bet.score_a} – {bet.score_b}
+            {bet.hidden ? '🔒' : `${bet.score_a} – ${bet.score_b}`}
           </span>
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, letterSpacing: '0.1em', color: 'var(--text-4)', textTransform: 'uppercase' }}>
-            palpite
+            {bet.hidden ? 'aposta realizada' : 'palpite'}
           </span>
         </div>
 
@@ -1183,7 +1183,7 @@ function UpcomingBets({ bets }) {
               <div className="uh-upcoming__teams">
                 {b.team_a_flag && <img src={b.team_a_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} />}
                 <span className="uh-upcoming__code">{b.team_a_code}</span>
-                <span className="uh-upcoming__score">{b.score_a}–{b.score_b}</span>
+                <span className="uh-upcoming__score">{b.hidden ? '🔒' : `${b.score_a}–${b.score_b}`}</span>
                 <span className="uh-upcoming__code">{b.team_b_code}</span>
                 {b.team_b_flag && <img src={b.team_b_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} />}
               </div>

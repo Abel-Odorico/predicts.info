@@ -1018,7 +1018,7 @@ function BetsList({ entry }) {
           {bet.team_a_code} × {bet.team_b_code}
           {tag && <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>{tag}</span>}
         </div>
-        <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{bet.score_a}–{bet.score_b}</div>
+        <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{bet.hidden ? '🔒 apostou' : `${bet.score_a}–${bet.score_b}`}</div>
         <div style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: hasResult ? 'var(--text-3)' : 'var(--text-4)', whiteSpace: 'nowrap' }}>
           {hasResult ? `(${bet.official_score_a}–${bet.official_score_b})` : '—'}
         </div>
