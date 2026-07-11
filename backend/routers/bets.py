@@ -3,8 +3,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy import case, desc, func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
-from auth_utils import get_current_user
-from models import Bet, Match, MatchPhase, MatchStatus, Ranking, User
+from auth_utils import get_current_user, get_optional_user
+from models import Bet, Match, MatchPhase, MatchStatus, Ranking, User, UserRole
 from schemas import BetCreate, RankingRow
 from routers.audit import log_action
 
@@ -25,6 +25,17 @@ def _is_open(match: Match) -> bool:
     if deadline:
         return _match_now(deadline) < deadline
     return True
+
+
+def _bet_visible_to(bet: Bet, viewer: User | None) -> bool:
+    """Palpite alheio só fica visível depois que as apostas fecham (jogo começou).
+
+    Dono e admin sempre veem; sem match carregado, esconde por segurança."""
+    if viewer and (viewer.id == bet.user_id or viewer.role == UserRole.admin):
+        return True
+    if not bet.match:
+        return False
+    return not _is_open(bet.match)
 
 
 def _bet_result(b: Bet) -> str | None:
@@ -240,7 +251,11 @@ def my_bets(db: Session = Depends(get_db), user: User = Depends(get_current_user
 
 
 @router.get("/bets/users/{user_id}")
-def user_bets_history(user_id: int, db: Session = Depends(get_db)):
+def user_bets_history(
+    user_id: int,
+    db: Session = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
+):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -256,6 +271,7 @@ def user_bets_history(user_id: int, db: Session = Depends(get_db)):
         .order_by(Bet.created_at.desc())
         .all()
     )
+    bets = [b for b in bets if _bet_visible_to(b, viewer)]
     ranking = db.query(Ranking).filter(Ranking.user_id == user.id).first()
 
     # compute ranking position
@@ -296,7 +312,12 @@ def get_ranking_history(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/bets/compare/{user_a_id}/{user_b_id}")
-def compare_users(user_a_id: int, user_b_id: int, db: Session = Depends(get_db)):
+def compare_users(
+    user_a_id: int,
+    user_b_id: int,
+    db: Session = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
+):
     user_a = db.query(User).filter(User.id == user_a_id).first()
     user_b = db.query(User).filter(User.id == user_b_id).first()
     if not user_a or not user_b:
@@ -331,6 +352,13 @@ def compare_users(user_a_id: int, user_b_id: int, db: Session = Depends(get_db))
         ba, bb = map_a.get(mid), map_b.get(mid)
         m = (ba or bb).match if (ba or bb) else None
         if not m:
+            continue
+        # Palpite de jogo ainda aberto só aparece pro próprio dono
+        if ba and not _bet_visible_to(ba, viewer):
+            ba = None
+        if bb and not _bet_visible_to(bb, viewer):
+            bb = None
+        if not ba and not bb:
             continue
         res = m.result
         pa = (ba.points_earned or 0) if ba else 0
