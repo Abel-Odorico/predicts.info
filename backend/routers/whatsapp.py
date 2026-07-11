@@ -285,9 +285,12 @@ def _model_prediction_message(db: Session, query_norm: str) -> str:
 def _ranking_message(db: Session, user: User) -> str:
     """Top 5 + posição do usuário — mesma ordenação do GET /ranking (bets.py):
     pontos > placares exatos > nº de apostas > nome."""
-    from sqlalchemy import desc
+    from sqlalchemy import and_, desc
+    from competitions import get_competition_id
+    copa_id = get_competition_id(db)
     bet_counts = (
         db.query(Bet.user_id.label("user_id"), func.count(Bet.id).label("total_bets"))
+        .filter(Bet.competition_id == copa_id)
         .group_by(Bet.user_id).subquery()
     )
     rows = (
@@ -296,7 +299,7 @@ def _ranking_message(db: Session, user: User) -> str:
             func.coalesce(Ranking.total_points, 0).label("pts"),
             func.coalesce(Ranking.exact_scores, 0).label("exact"),
         )
-        .outerjoin(Ranking, User.id == Ranking.user_id)
+        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == copa_id))
         .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
         .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
         .order_by(
@@ -359,7 +362,10 @@ def _my_bets_message(db: Session, user: User) -> str:
             linhas.append(f"{icone} {_pt(m.team_a)} {b.score_a}x{b.score_b} {_pt(m.team_b)}{final} — +{pts} pts")
         partes.append("🏁 *Últimos avaliados:*\n" + "\n".join(linhas))
 
-    ranking = db.query(Ranking).filter(Ranking.user_id == user.id).first()
+    from competitions import get_competition_id
+    ranking = db.query(Ranking).filter(
+        Ranking.user_id == user.id, Ranking.competition_id == get_competition_id(db)
+    ).first()
     if ranking:
         partes.append(f"Total: *{ranking.total_points} pts* · predicts.info/apostas")
     else:
@@ -486,6 +492,7 @@ def _handle_inbound(db: Session, phone: str, text: str, push_name: str | None = 
             else:
                 db.add(Bet(
                     user_id=user.id, match_id=match.id,
+                    competition_id=match.competition_id,
                     score_a=session.draft_score_a, score_b=session.draft_score_b,
                     et_winner_pick=et_pick,
                 ))

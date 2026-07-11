@@ -591,12 +591,53 @@ def _run_migrations():
             )""",
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_waitlist_comp_user ON competition_waitlist (competition, user_id) WHERE user_id IS NOT NULL",
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_waitlist_comp_email ON competition_waitlist (competition, lower(email)) WHERE email IS NOT NULL AND user_id IS NULL",
+            # --- Fase 1 multi-competição (Brasileirão): fundação ---
+            """CREATE TABLE IF NOT EXISTS competitions (
+                id SERIAL PRIMARY KEY,
+                code VARCHAR(30) NOT NULL UNIQUE,
+                name VARCHAR(100) NOT NULL,
+                kind VARCHAR(20) NOT NULL DEFAULT 'cup',
+                season VARCHAR(10),
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                starts_at TIMESTAMP,
+                ends_at TIMESTAMP,
+                is_default BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
+            """INSERT INTO competitions (code, name, kind, season, status, is_default)
+               VALUES ('copa2026', 'Copa do Mundo 2026', 'cup', '2026', 'active', TRUE)
+               ON CONFLICT (code) DO NOTHING""",
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS competition_id INTEGER REFERENCES competitions(id)",
+            "ALTER TABLE matches ADD COLUMN IF NOT EXISTS competition_id INTEGER REFERENCES competitions(id)",
+            "ALTER TABLE bets ADD COLUMN IF NOT EXISTS competition_id INTEGER REFERENCES competitions(id)",
+            "ALTER TABLE rankings ADD COLUMN IF NOT EXISTS competition_id INTEGER REFERENCES competitions(id)",
+            "UPDATE teams SET competition_id = (SELECT id FROM competitions WHERE code='copa2026') WHERE competition_id IS NULL",
+            "UPDATE matches SET competition_id = (SELECT id FROM competitions WHERE code='copa2026') WHERE competition_id IS NULL",
+            "UPDATE bets SET competition_id = (SELECT id FROM competitions WHERE code='copa2026') WHERE competition_id IS NULL",
+            "UPDATE rankings SET competition_id = (SELECT id FROM competitions WHERE code='copa2026') WHERE competition_id IS NULL",
+            "CREATE INDEX IF NOT EXISTS ix_matches_competition ON matches (competition_id)",
+            "CREATE INDEX IF NOT EXISTS ix_bets_competition ON bets (competition_id)",
+            # ranking agora é por competição: unique de user_id vira (user_id, competition_id)
+            "ALTER TABLE rankings DROP CONSTRAINT IF EXISTS rankings_user_id_key",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_rankings_user_comp ON rankings (user_id, competition_id)",
         ]:
             try:
                 conn.execute(text(alter))
                 conn.commit()
             except Exception:
                 conn.rollback()
+
+        # DEFAULT dinâmico: código legado da Copa insere sem competition_id e
+        # ganha copa2026 automático. Código de competição nova (Fase 2+) DEVE
+        # setar competition_id explícito — o default é rede de segurança da Copa.
+        try:
+            cid = conn.execute(text("SELECT id FROM competitions WHERE code = 'copa2026'")).scalar()
+            if cid:
+                for tbl in ("teams", "matches", "bets", "rankings"):
+                    conn.execute(text(f"ALTER TABLE {tbl} ALTER COLUMN competition_id SET DEFAULT {int(cid)}"))
+                conn.commit()
+        except Exception:
+            conn.rollback()
 
 
 async def _activation_email_loop():

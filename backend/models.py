@@ -49,10 +49,27 @@ class GroupInviteStatus(str, enum.Enum):
     rejected = "rejected"
 
 
+class Competition(Base):
+    """Competição (copa2026, brasileirao2026...). Fundação multi-competição — Fase 1."""
+    __tablename__ = "competitions"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(30), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
+    kind = Column(String(20), nullable=False, default="cup")  # cup | league
+    season = Column(String(10))
+    status = Column(String(20), nullable=False, default="active")  # upcoming | active | finished
+    starts_at = Column(DateTime)
+    ends_at = Column(DateTime)
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+
 class Team(Base):
     __tablename__ = "teams"
 
     id = Column(Integer, primary_key=True)
+    competition_id = Column(Integer, ForeignKey("competitions.id"))
     name = Column(String(100), nullable=False)
     code = Column(String(3), nullable=False, unique=True)
     confederation = Column(Enum(Confederation), nullable=False)
@@ -99,6 +116,7 @@ class Match(Base):
     __tablename__ = "matches"
 
     id = Column(Integer, primary_key=True)
+    competition_id = Column(Integer, ForeignKey("competitions.id"))
     phase = Column(Enum(MatchPhase), nullable=False, default=MatchPhase.group)
     team_a_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
     team_b_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
@@ -260,6 +278,7 @@ class Bet(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     match_id = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    competition_id = Column(Integer, ForeignKey("competitions.id"))
     score_a = Column(Integer, nullable=False)
     score_b = Column(Integer, nullable=False)
     points_earned = Column(Integer, default=0)
@@ -301,9 +320,11 @@ class BotDecisionLog(Base):
 
 class Ranking(Base):
     __tablename__ = "rankings"
+    __table_args__ = (UniqueConstraint("user_id", "competition_id", name="ux_rankings_user_comp"),)
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    competition_id = Column(Integer, ForeignKey("competitions.id"))
     total_points = Column(Integer, default=0)
     exact_scores = Column(Integer, default=0)
     correct_results = Column(Integer, default=0)

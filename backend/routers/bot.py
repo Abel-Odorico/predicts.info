@@ -123,7 +123,10 @@ def bot_status(db: Session = Depends(get_db), _admin: User = Depends(_require_ad
     if not bot:
         return {"exists": False}
 
-    ranking = db.query(Ranking).filter(Ranking.user_id == bot.id).first()
+    from competitions import get_competition_id
+    ranking = db.query(Ranking).filter(
+        Ranking.user_id == bot.id, Ranking.competition_id == get_competition_id(db)
+    ).first()
     total_bets = db.query(func.count(Bet.id)).filter(Bet.user_id == bot.id).scalar() or 0
     evaluated = db.query(Bet).filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None)).all()
 
@@ -136,6 +139,7 @@ def bot_status(db: Session = Depends(get_db), _admin: User = Depends(_require_ad
     pos = None
     if ranking:
         pos = db.query(func.count(Ranking.user_id)).filter(
+            Ranking.competition_id == get_competition_id(db),
             Ranking.total_points > total_pts
         ).scalar()
         pos = (pos or 0) + 1
@@ -217,6 +221,7 @@ def bot_bet(
         bet = Bet(
             user_id=bot.id,
             match_id=match.id,
+            competition_id=match.competition_id,
             score_a=sa,
             score_b=sb,
             locked_at=match.match_date,
@@ -860,7 +865,7 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
                 action = "skipped"
                 decision["reason"] = (decision.get("reason") or "") + " (aposta fechada — não criada)"
             else:
-                bet = Bet(user_id=bot.id, match_id=match.id, score_a=sa, score_b=sb, locked_at=match.match_date)
+                bet = Bet(user_id=bot.id, match_id=match.id, competition_id=match.competition_id, score_a=sa, score_b=sb, locked_at=match.match_date)
                 db.add(bet)
                 db.flush()
                 action = "created"
@@ -1083,7 +1088,10 @@ def bot_public(db: Session = Depends(get_db)):
     if not bot:
         return {"exists": False}
 
-    ranking = db.query(Ranking).filter(Ranking.user_id == bot.id).first()
+    from competitions import get_competition_id
+    ranking = db.query(Ranking).filter(
+        Ranking.user_id == bot.id, Ranking.competition_id == get_competition_id(db)
+    ).first()
     total_bets = db.query(func.count(Bet.id)).filter(Bet.user_id == bot.id).scalar() or 0
     evaluated = db.query(Bet).filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None)).all()
 
@@ -1095,6 +1103,7 @@ def bot_public(db: Session = Depends(get_db)):
     pos = None
     if ranking:
         pos = db.query(func.count(Ranking.user_id)).filter(
+            Ranking.competition_id == get_competition_id(db),
             Ranking.total_points > total_pts
         ).scalar()
         pos = (pos or 0) + 1

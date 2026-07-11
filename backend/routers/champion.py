@@ -261,7 +261,10 @@ def award_champion(
 
     def _credit(picks, bonus, notif_title, notif_body):
         for p in picks:
-            r = db.query(Ranking).filter(Ranking.user_id == p.user_id).first()
+            from competitions import get_competition_id
+            r = db.query(Ranking).filter(
+                Ranking.user_id == p.user_id, Ranking.competition_id == get_competition_id(db)
+            ).first()
             if not r:
                 r = Ranking(user_id=p.user_id, total_points=0, exact_scores=0, correct_results=0)
                 db.add(r)

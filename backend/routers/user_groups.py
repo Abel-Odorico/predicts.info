@@ -5,10 +5,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, EmailStr
 from datetime import timedelta
 
-from sqlalchemy import case, desc, func, or_
+from sqlalchemy import case, desc, func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 
 from auth_utils import get_current_user
+from competitions import get_competition_id
 from database import get_db
 from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Notification, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
 from routers.audit import log_action
@@ -148,7 +149,7 @@ def list_user_groups(
                 func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
                 func.coalesce(Ranking.correct_results, 0).label("correct_results"),
             )
-            .outerjoin(Ranking, User.id == Ranking.user_id)
+            .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db)))
             .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
             .filter(User.id.in_(all_member_ids))
             .all()
@@ -480,7 +481,7 @@ def group_ranking(
             func.coalesce(Ranking.correct_results, 0).label("correct_results"),
             func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
         )
-        .outerjoin(Ranking, User.id == Ranking.user_id)
+        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db)))
         .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
         .filter(User.id.in_(member_ids))
         .all()
@@ -889,7 +890,7 @@ def group_highlights(
             func.coalesce(Ranking.total_points, 0).label("total_points"),
             func.coalesce(_bet_cnt_sub.c.cnt, 0).label("total_bets"),
         )
-        .outerjoin(Ranking, User.id == Ranking.user_id)
+        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db)))
         .outerjoin(_bet_cnt_sub, User.id == _bet_cnt_sub.c.user_id)
         .filter(User.id.in_(member_ids), _bet_cnt_sub.c.cnt >= 5)
         .all()

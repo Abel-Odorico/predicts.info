@@ -71,8 +71,10 @@ def _invalidate_match_cache(match_id: int) -> None:
 
 
 def _notify_ranking_top3(db: Session) -> None:
+    from competitions import get_competition_id
     top3 = (
         db.query(Ranking)
+        .filter(Ranking.competition_id == get_competition_id(db))
         .order_by(Ranking.total_points.desc())
         .limit(3)
         .all()
@@ -115,7 +117,10 @@ def _evaluate_bets(match: Match, result: MatchResult, db: Session) -> None:
         bet.points_earned = points
         bet.evaluated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        ranking = db.query(Ranking).filter(Ranking.user_id == bet.user_id).first()
+        from competitions import get_competition_id
+        ranking = db.query(Ranking).filter(
+            Ranking.user_id == bet.user_id, Ranking.competition_id == get_competition_id(db)
+        ).first()
         if not ranking:
             ranking = Ranking(user_id=bet.user_id, total_points=0, exact_scores=0, correct_results=0)
             db.add(ranking)
@@ -251,7 +256,10 @@ def recalculate_all_bets_v2(
 ):
     """Re-evaluate every evaluated bet using V2 scoring. Rebuilds Ranking from scratch. No new notifications."""
     # Reset all rankings
-    db.query(Ranking).update({"total_points": 0, "exact_scores": 0, "correct_results": 0})
+    from competitions import get_competition_id
+    db.query(Ranking).filter(
+        Ranking.competition_id == get_competition_id(db)
+    ).update({"total_points": 0, "exact_scores": 0, "correct_results": 0}, synchronize_session=False)
 
     evaluated_bets = (
         db.query(Bet)
@@ -273,7 +281,10 @@ def recalculate_all_bets_v2(
         )
         bet.points_earned = points
 
-        ranking = db.query(Ranking).filter(Ranking.user_id == bet.user_id).first()
+        from competitions import get_competition_id
+        ranking = db.query(Ranking).filter(
+            Ranking.user_id == bet.user_id, Ranking.competition_id == get_competition_id(db)
+        ).first()
         if not ranking:
             ranking = Ranking(user_id=bet.user_id, total_points=0, exact_scores=0, correct_results=0)
             db.add(ranking)

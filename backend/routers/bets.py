@@ -188,6 +188,7 @@ def place_bet(
     bet = Bet(
         user_id=user.id,
         match_id=payload.match_id,
+        competition_id=match.competition_id,
         score_a=payload.score_a,
         score_b=payload.score_b,
         et_winner_pick=et_winner_pick,
@@ -281,12 +282,16 @@ def user_bets_history(
         .all()
     )
     hidden_ids = {b.id for b in bets if not _bet_visible_to(b, viewer)}
-    ranking = db.query(Ranking).filter(Ranking.user_id == user.id).first()
+    from competitions import get_competition_id
+    copa_id = get_competition_id(db)
+    ranking = db.query(Ranking).filter(
+        Ranking.user_id == user.id, Ranking.competition_id == copa_id
+    ).first()
 
     # compute ranking position
     ranked_users = (
         db.query(User.id)
-        .outerjoin(Ranking, User.id == Ranking.user_id)
+        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == copa_id))
         .filter(or_(Ranking.user_id.isnot(None), User.id.in_(
             db.query(Bet.user_id).distinct()
         )))
@@ -408,12 +413,18 @@ def ranking(
     group: str | None = Query(default=None, description="Grupo A-L"),
     date_from: str | None = Query(default=None, description="YYYY-MM-DD"),
     date_to: str | None = Query(default=None, description="YYYY-MM-DD"),
+    competition: str = Query(default="copa2026", description="Código da competição"),
     db: Session = Depends(get_db),
 ):
+    from competitions import get_competition_id
+    comp_id = get_competition_id(db, competition)
+    if comp_id is None:
+        raise HTTPException(status_code=404, detail="Competição não encontrada")
+
     filtered = bool(group or date_from or date_to)
 
     if filtered:
-        match_q = db.query(Match.id)
+        match_q = db.query(Match.id).filter(Match.competition_id == comp_id)
         if group:
             match_q = match_q.filter(Match.group_name == group.upper())
         if date_from:
@@ -459,6 +470,7 @@ def ranking(
                 Bet.user_id.label("user_id"),
                 func.count(Bet.id).label("total_bets"),
             )
+            .filter(Bet.competition_id == comp_id)
             .group_by(Bet.user_id)
             .subquery()
         )
@@ -471,7 +483,7 @@ def ranking(
                 func.coalesce(Ranking.correct_results, 0).label("correct_results"),
                 func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
             )
-            .outerjoin(Ranking, User.id == Ranking.user_id)
+            .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == comp_id))
             .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
             .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
             .order_by(

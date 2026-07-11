@@ -89,7 +89,14 @@ def run_achievement_evaluation(db: Session) -> dict:
     granted_total = 0
 
     # Ranking positions
-    rankings = db.query(Ranking).order_by(Ranking.total_points.desc()).all()
+    from competitions import get_competition_id
+    copa_id = get_competition_id(db)
+    rankings = (
+        db.query(Ranking)
+        .filter(Ranking.competition_id == copa_id)
+        .order_by(Ranking.total_points.desc())
+        .all()
+    )
     rank_pos = {r.user_id: i + 1 for i, r in enumerate(rankings)}
 
     # Group stage match count
@@ -123,7 +130,9 @@ def run_achievement_evaluation(db: Session) -> dict:
             _grant(db, user.id, "first_bet", existing)
 
         # exact scores from ranking
-        ranking = db.query(Ranking).filter(Ranking.user_id == user.id).first()
+        ranking = db.query(Ranking).filter(
+            Ranking.user_id == user.id, Ranking.competition_id == copa_id
+        ).first()
         exacts = ranking.exact_scores if ranking else 0
         if exacts >= 5:  _grant(db, user.id, "exact_5",  existing)
         if exacts >= 10: _grant(db, user.id, "exact_10", existing)

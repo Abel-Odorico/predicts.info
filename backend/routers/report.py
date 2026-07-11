@@ -133,6 +133,7 @@ def _build_report(db: Session) -> dict:
         SELECT u.name, r.total_points, r.exact_scores
         FROM rankings r
         JOIN users u ON u.id = r.user_id
+        WHERE r.competition_id = (SELECT id FROM competitions WHERE code = 'copa2026')
         ORDER BY r.total_points DESC, r.exact_scores DESC
         LIMIT 10
     """)).fetchall()

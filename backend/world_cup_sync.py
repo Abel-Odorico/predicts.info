@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import joinedload, sessionmaker
 
 from config import settings
@@ -718,7 +718,13 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
 
         # Re-evaluate all existing bets against updated results.
         # Rebuild ranking from scratch based on current bets.
-        db.query(Ranking).delete()
+        # Escopo copa2026 (Fase 1 multi-competição): rankings/bets de outras
+        # competições (Brasileirão etc.) NÃO são tocados por este sync.
+        from competitions import get_competition_id
+        copa_id = get_competition_id(db)
+        db.query(Ranking).filter(
+            or_(Ranking.competition_id == copa_id, Ranking.competition_id.is_(None))
+        ).delete(synchronize_session=False)
         db.flush()
 
         ranking_totals: dict[int, dict[str, int]] = {}
@@ -726,7 +732,9 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         notif_count = 0
         wa_result_events: list[dict] = []  # DMs de resultado pós-jogo (enviadas após rebuild do ranking)
         now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-        for bet in db.query(Bet).all():
+        for bet in db.query(Bet).filter(
+            or_(Bet.competition_id == copa_id, Bet.competition_id.is_(None))
+        ).all():
             result_scores = result_by_match_id.get(bet.match_id)
             if result_scores is not None:
                 match_date = match_date_by_id.get(bet.match_id)
@@ -798,6 +806,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
             db.add(
                 Ranking(
                     user_id=user_id,
+                    competition_id=copa_id,
                     total_points=stats["total_points"],
                     exact_scores=stats["exact_scores"],
                     correct_results=stats["correct_results"],
@@ -808,6 +817,7 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         db.flush()
         top10 = (
             db.query(Ranking)
+            .filter(Ranking.competition_id == copa_id)
             .order_by(Ranking.total_points.desc())
             .limit(10)
             .all()
@@ -899,8 +909,10 @@ def _notify_bet_results_whatsapp(db, events: list[dict]) -> None:
             return  # modo silêncio: DM de resultado some (sino/push cobrem), sem log "failed"
 
         # posição pós-rebuild, mesma ordenação do site (pontos > placares exatos)
+        from competitions import get_competition_id
         rows = (
             db.query(Ranking)
+            .filter(Ranking.competition_id == get_competition_id(db))
             .order_by(Ranking.total_points.desc(), Ranking.exact_scores.desc())
             .all()
         )

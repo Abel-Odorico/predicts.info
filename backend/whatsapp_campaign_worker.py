@@ -59,7 +59,13 @@ def run():
         )
         pos_by_user = {}
         if pending:
-            rows = db.query(Ranking).order_by(Ranking.total_points.desc(), Ranking.exact_scores.desc()).all()
+            from competitions import get_competition_id
+            rows = (
+                db.query(Ranking)
+                .filter(Ranking.competition_id == get_competition_id(db))
+                .order_by(Ranking.total_points.desc(), Ranking.exact_scores.desc())
+                .all()
+            )
             pos_by_user = {r.user_id: (i + 1, r.total_points) for i, r in enumerate(rows)}
 
         for recipient in pending:
