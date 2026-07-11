@@ -10547,3 +10547,14 @@ strong.pts {
   .grp-rank-grid .grp-today-chip,
   .grp-rank-grid .grp-exact-chip { display: none; }
 }
+
+/* ── Brasileirão (Fase 3) ────────────────────────────────────────────── */
+.br-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.br-table th, .br-table td { padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.br-table th { color: var(--text-3); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.br-table tbody tr:last-child td { border-bottom: none; }
+.br-pos { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.br-row--title td:first-child { box-shadow: inset 3px 0 0 var(--win); }
+.br-row--g4 td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.br-row--z4 td:first-child { box-shadow: inset 3px 0 0 var(--lose); }
+.br-score { width: 46px; padding: 6px 4px; text-align: center; background: var(--bg-overlay); color: var(--text-1); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.9rem; }

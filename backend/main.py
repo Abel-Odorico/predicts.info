@@ -35,6 +35,7 @@ from routers import competition as competition_router
 from routers import referral as referral_router
 from routers import football_data_sync as football_data_router
 from routers import brasileirao_sync as brasileirao_router
+from routers import brasileirao as brasileirao_public_router
 from routers import news_admin as news_admin_router
 from routers import waitlist as waitlist_router
 from routers.knockout import run_knockout_sync
@@ -800,6 +801,7 @@ app.include_router(competition_router.router,   prefix="/api")
 app.include_router(referral_router.router,      prefix="/api")
 app.include_router(football_data_router.router, prefix="/api")
 app.include_router(brasileirao_router.router, prefix="/api")
+app.include_router(brasileirao_public_router.router, prefix="/api")
 app.include_router(news_admin_router.router,    prefix="/api")
 app.include_router(waitlist_router.router,      prefix="/api")
 from routers import videoupload as videoupload_router

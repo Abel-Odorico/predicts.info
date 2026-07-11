@@ -285,12 +285,70 @@ def recompute_stats(db: Session) -> dict:
     return out
 
 
+def evaluate_bets(db: Session) -> dict:
+    """Pontua bets do Brasileirão (mesma régua V2 da Copa) e reconstrói o
+    ranking da competição. Sem notificações por enquanto (Fase 3 decide a
+    comunicação — regra: nada de fan-out sem pedido). Idempotente."""
+    from models import Bet, Ranking
+    from world_cup_sync import _score_points_v2
+
+    comp_id = ensure_competition(db)
+    results = {
+        m.id: r for m, r in (
+            db.query(Match, MatchResult)
+            .join(MatchResult, MatchResult.match_id == Match.id)
+            .filter(Match.competition_id == comp_id)
+            .all()
+        )
+    }
+
+    db.query(Ranking).filter(Ranking.competition_id == comp_id).delete(synchronize_session=False)
+    totals: dict[int, dict[str, int]] = {}
+    evaluated = 0
+    now = _utcnow()
+    for bet in db.query(Bet).filter(Bet.competition_id == comp_id).all():
+        res = results.get(bet.match_id)
+        if res is None:
+            bet.points_earned = 0
+            bet.evaluated_at = None
+            continue
+        points, exact, correct = _score_points_v2(bet.score_a, bet.score_b, res.score_a, res.score_b)
+        bet.points_earned = points
+        bet.evaluated_at = now
+        evaluated += 1
+        stats = totals.setdefault(bet.user_id, {"total_points": 0, "exact_scores": 0, "correct_results": 0})
+        stats["total_points"] += points
+        if exact:
+            stats["exact_scores"] += 1
+        elif correct:
+            stats["correct_results"] += 1
+
+    for user_id, stats in totals.items():
+        db.add(Ranking(user_id=user_id, competition_id=comp_id, **stats))
+    db.commit()
+    out = {"evaluated": evaluated, "users_ranked": len(totals), "at": now.isoformat()}
+    _last_run["bets"] = out
+    return out
+
+
+def _invalidate_projection_cache() -> None:
+    try:
+        import redis as redis_lib
+        from config import settings
+        from routers.brasileirao import PROJECTION_CACHE_KEY
+        redis_lib.from_url(settings.redis_url).delete(PROJECTION_CACHE_KEY)
+    except Exception:
+        pass
+
+
 def sync_all(db: Session) -> dict:
     api_key = _api_key(db)
     teams = sync_teams(db, api_key)
     matches = sync_matches(db, api_key)
     stats = recompute_stats(db)
-    return {"teams": teams, "matches": matches, "stats": stats}
+    bets = evaluate_bets(db)
+    _invalidate_projection_cache()
+    return {"teams": teams, "matches": matches, "stats": stats, "bets": bets}
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────

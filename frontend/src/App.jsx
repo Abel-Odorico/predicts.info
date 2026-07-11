@@ -39,6 +39,7 @@ const Regras        = lazy(() => import('./pages/Regras'))
 const Changelog     = lazy(() => import('./pages/Changelog'))
 const ChampionPick  = lazy(() => import('./pages/ChampionPick'))
 const PosCopa       = lazy(() => import('./pages/PosCopa'))
+const Brasileirao   = lazy(() => import('./pages/Brasileirao'))
 const BemVindo      = lazy(() => import('./pages/BemVindo'))
 
 function RefCapture() {
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="/changelog"        element={<Changelog />} />
               <Route path="/campeao"          element={<ChampionPick />} />
               <Route path="/pos-copa"         element={<PosCopa />} />
+              <Route path="/brasileirao"      element={<Brasileirao />} />
               <Route path="/bem-vindo"        element={<BemVindo />} />
             </Routes>
           </Suspense>
