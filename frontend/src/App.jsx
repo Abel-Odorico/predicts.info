@@ -97,6 +97,7 @@ export default function App() {
               <Route path="/alterar-email"    element={<AlterarEmail />} />
               <Route path="/alterar-telefone" element={<AlterarTelefone />} />
               <Route path="/votacao"          element={<Votacao />} />
+              <Route path="/votacaobrasileirao" element={<Votacao />} />
               <Route path="/regras"           element={<Regras />} />
               <Route path="/changelog"        element={<Changelog />} />
               <Route path="/campeao"          element={<ChampionPick />} />
