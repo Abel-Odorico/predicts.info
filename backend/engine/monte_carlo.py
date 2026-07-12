@@ -145,63 +145,85 @@ def _knockout_round(
     return winners
 
 
-def simulate_final_four(team_a1: dict, team_b1: dict, team_a2: dict, team_b2: dict,
-                         n: int = 100_000, seed: int | None = None) -> dict[int, dict]:
+def simulate_knockout_bracket(teams_in_order: list[dict], n: int = 100_000,
+                               seed: int | None = None) -> dict[int, dict]:
     """
-    Simulação exata pra reta final (2 semifinais conhecidas + final entre os
-    vencedores) — usado quando o chaveamento real já eliminou o resto do
-    torneio. `simulate_tournament` reconstrói o chaveamento inteiro a partir
-    da fase de grupos e NÃO sabe quais times já foram eliminados de verdade
-    no mata-mata (r32/r16/qf) — mostrava chance de título pra seleção já fora
-    (achado 2026-07-12). Esta função simula só o que falta de fato: 2 jogos
-    de semifinal + 1 final, com os 4 times reais que restam.
+    Simulação exata de um mata-mata de eliminação simples a partir de um
+    CHAVEAMENTO REAL conhecido — teams_in_order é a lista de times na ordem
+    do bracket (pares adjacentes se enfrentam na 1a rodada, vencedores
+    avançam pra próxima). Tamanho precisa ser potência de 2 (2, 4, 8, 16, 32).
+
+    Generaliza o que era `simulate_final_four` (caso especial de 4 times/2
+    rodadas) pra qualquer tamanho — usado tanto pro estado atual (poucos
+    times restando: `simulate_tournament` reconstrói o chaveamento inteiro a
+    partir da fase de grupos e NÃO sabe quem já foi eliminado de verdade no
+    mata-mata real, mostrava chance de título pra seleção já fora, achado
+    2026-07-12) quanto pra reconstruir retroativamente a evolução de chance
+    de título em checkpoints passados — o chaveamento real de r32/r16/qf já
+    ficou gravado nas partidas (team_a_id/team_b_id), não é invenção.
+
+    Retorna {team_id: {"prob_title": pct, "prob_final": pct}}.
     """
     rng = np.random.default_rng(seed)
-    four = [team_a1, team_b1, team_a2, team_b2]
-    max_id = max(t["id"] for t in four) + 1
+    n_teams = len(teams_in_order)
+    if n_teams < 2 or (n_teams & (n_teams - 1)) != 0:
+        raise ValueError(f"simulate_knockout_bracket precisa de potência de 2 times, recebeu {n_teams}")
+
+    max_id = max(t["id"] for t in teams_in_order) + 1
     attack = np.zeros(max_id, dtype=np.float64)
     defense = np.zeros(max_id, dtype=np.float64)
-    for t in four:
+    for t in teams_in_order:
         att, dfs = _elo_attack_defense(t)
         attack[t["id"]] = att
         defense[t["id"]] = dfs
 
-    def _sim_match(ida: int, idb: int) -> np.ndarray:
-        la = np.full(n, np.clip(attack[ida] * defense[idb] / GLOBAL_AVG, 0.30, 5.0))
-        lb = np.full(n, np.clip(attack[idb] * defense[ida] / GLOBAL_AVG, 0.30, 5.0))
+    ids = np.array([t["id"] for t in teams_in_order], dtype=np.int64)
+    current = np.tile(ids, (n, 1))  # (n, n_teams) — 1 linha por simulação
+
+    num_rounds = int(np.log2(n_teams))
+    rounds_survived = {tid: np.zeros(n, dtype=np.int32) for tid in ids}
+
+    for rnd in range(num_rounds):
+        ta_ids = current[:, 0::2]
+        tb_ids = current[:, 1::2]
+
+        la = np.clip(attack[ta_ids] * defense[tb_ids] / GLOBAL_AVG, 0.30, 5.0)
+        lb = np.clip(attack[tb_ids] * defense[ta_ids] / GLOBAL_AVG, 0.30, 5.0)
         ga = rng.poisson(la)
         gb = rng.poisson(lb)
-        ga, gb = _dc_thin_knockout(ga, gb, la, lb, rng)
+
+        shape = ga.shape
+        ga_f, gb_f = _dc_thin_knockout(ga.ravel(), gb.ravel(), la.ravel(), lb.ravel(), rng)
+        ga, gb = ga_f.reshape(shape), gb_f.reshape(shape)
+
         draw = ga == gb
-        penalty_a = rng.random(n) > 0.5
+        penalty_a = rng.random(shape) > 0.5
         a_wins = (ga > gb) | (draw & penalty_a)
-        return np.where(a_wins, ida, idb)
+        winners = np.where(a_wins, ta_ids, tb_ids)  # (n, n_teams // 2)
 
-    sf1_winner = _sim_match(team_a1["id"], team_b1["id"])
-    sf2_winner = _sim_match(team_a2["id"], team_b2["id"])
+        for tid in ids:
+            still_alive = rounds_survived[tid] == rnd
+            survived_now = (winners == tid).any(axis=1)
+            rounds_survived[tid] = np.where(still_alive & survived_now, rnd + 1, rounds_survived[tid])
 
-    # Final: lambda varia por linha (identidade do vencedor muda por simulação),
-    # mesmo padrão vetorizado do _knockout_round.
-    la = np.clip(attack[sf1_winner] * defense[sf2_winner] / GLOBAL_AVG, 0.30, 5.0)
-    lb = np.clip(attack[sf2_winner] * defense[sf1_winner] / GLOBAL_AVG, 0.30, 5.0)
-    ga = rng.poisson(la)
-    gb = rng.poisson(lb)
-    ga, gb = _dc_thin_knockout(ga, gb, la, lb, rng)
-    draw = ga == gb
-    penalty_a = rng.random(n) > 0.5
-    a_wins = (ga > gb) | (draw & penalty_a)
-    final_winner = np.where(a_wins, sf1_winner, sf2_winner)
+        current = winners
+
+    champion = current[:, 0]
 
     out = {}
-    for t in four:
-        tid = t["id"]
-        reached_final = (sf1_winner == tid) | (sf2_winner == tid)
-        title = final_winner == tid
-        out[tid] = {
-            "prob_final": round(float(reached_final.mean()) * 100, 1),
-            "prob_title": round(float(title.mean()) * 100, 1),
+    for tid in ids:
+        out[int(tid)] = {
+            "prob_final": round(float((rounds_survived[tid] >= num_rounds - 1).mean()) * 100, 1),
+            "prob_title": round(float((champion == tid).mean()) * 100, 1),
         }
     return out
+
+
+def simulate_final_four(team_a1: dict, team_b1: dict, team_a2: dict, team_b2: dict,
+                         n: int = 100_000, seed: int | None = None) -> dict[int, dict]:
+    """Caso especial de simulate_knockout_bracket com 4 times (2 semis + final).
+    Mantido pra compatibilidade — chama a versão generalizada por baixo."""
+    return simulate_knockout_bracket([team_a1, team_b1, team_a2, team_b2], n=n, seed=seed)
 
 
 def simulate_tournament(

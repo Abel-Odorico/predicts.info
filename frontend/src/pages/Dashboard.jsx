@@ -13,6 +13,7 @@ import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
 import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
 import BattleHistoryCard from '../components/BattleHistoryCard'
+import TitleEvolutionChart from '../components/TitleEvolutionChart'
 
 const PHASE_LABELS = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
 
@@ -1034,6 +1035,17 @@ export default function Dashboard() {
                   </Link>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="card fade-in-3">
+            <div className="card__header">
+              <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+                📈 Evolução da Chance de Título
+              </span>
+            </div>
+            <div className="card__body" style={{ paddingTop: 'var(--s4)' }}>
+              <TitleEvolutionChart />
             </div>
           </div>
 

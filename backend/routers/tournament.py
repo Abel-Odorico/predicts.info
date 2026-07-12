@@ -116,25 +116,12 @@ def _final_four_teams(db: Session) -> list[dict] | None:
     return ordered
 
 
-@router.get("/simulate")
-def simulate(
-    n: int = Query(default=100_000, ge=10_000, le=500_000),
-    force: bool = Query(default=False),
-    db: Session = Depends(get_db),
-):
-    cache_key = f"{CACHE_KEY}:{n}"
-    # Try Redis cache
-    if not force:
-        try:
-            r = _redis()
-            cached = r.get(cache_key)
-            if cached:
-                data = json.loads(cached)
-                data["cached"] = True
-                return data
-        except Exception:
-            pass
-
+def _run_simulation_and_persist(db: Session, n: int) -> dict:
+    """Corre a simulação completa (com o fix de reta final quando aplicável),
+    grava um TournamentSimulation e devolve a response pronta pro endpoint —
+    reusado pelo endpoint /simulate e pelo loop de snapshot periódico
+    (main.py::_tournament_snapshot_loop), pra ter pontos reais e regulares
+    de evolução de chance de título, não só quando alguém acessa o site."""
     teams, groups, played_matches = _build_teams(db)
 
     start = time.time()
@@ -206,7 +193,29 @@ def simulate(
     db.add(sim_record)
     db.commit()
 
-    # Cache in Redis
+    return response
+
+
+@router.get("/simulate")
+def simulate(
+    n: int = Query(default=100_000, ge=10_000, le=500_000),
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    cache_key = f"{CACHE_KEY}:{n}"
+    if not force:
+        try:
+            r = _redis()
+            cached = r.get(cache_key)
+            if cached:
+                data = json.loads(cached)
+                data["cached"] = True
+                return data
+        except Exception:
+            pass
+
+    response = _run_simulation_and_persist(db, n)
+
     try:
         r = _redis()
         r.setex(cache_key, CACHE_TTL, json.dumps(response))
@@ -233,6 +242,32 @@ def history(limit: int = Query(default=5, le=20), db: Session = Depends(get_db))
         }
         for s in sims
     ]
+
+
+@router.get("/title-evolution")
+def title_evolution(codes: str = Query(..., description="códigos separados por vírgula, ex: ARG,ENG,ESP,FRA"),
+                     limit: int = Query(default=200, le=1000),
+                     db: Session = Depends(get_db)):
+    """Evolução de chance de título ao longo do tempo pros códigos pedidos —
+    lê o histórico real de TournamentSimulation.results (snapshots gravados
+    pelo loop periódico + os 4 checkpoints reconstruídos com o chaveamento
+    real de r32/r16/qf/sf em 2026-07-12, ver skill predicts pra detalhe)."""
+    wanted = {c.strip().upper() for c in codes.split(",") if c.strip()}
+    sims = (
+        db.query(TournamentSimulation)
+        .order_by(TournamentSimulation.computed_at.asc())
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for s in sims:
+        point = {"computed_at": s.computed_at.isoformat(), "teams": {}}
+        for v in s.results.values():
+            if v.get("code") in wanted:
+                point["teams"][v["code"]] = v.get("prob_title")
+        if point["teams"]:
+            out.append(point)
+    return out
 
 
 @router.get("/bracket")

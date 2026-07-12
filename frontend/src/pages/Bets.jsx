@@ -6,6 +6,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
+import TitleEvolutionChart from '../components/TitleEvolutionChart'
 import { PT_NAMES } from '../utils/teamNames'
 
 const PHASE_LABELS = {
@@ -275,6 +276,17 @@ export default function Bets() {
       </div>
 
       <MyChampionCard />
+
+      <div className="card mt-6">
+        <div className="card__header">
+          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+            📈 Evolução da Chance de Título
+          </span>
+        </div>
+        <div className="card__body" style={{ paddingTop: 'var(--s4)' }}>
+          <TitleEvolutionChart />
+        </div>
+      </div>
 
       {/* Bracket CTA */}
       <Link to="/torneio" style={{

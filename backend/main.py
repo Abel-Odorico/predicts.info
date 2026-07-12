@@ -726,6 +726,34 @@ async def _activation_email_loop():
         await asyncio.sleep(3600)
 
 
+async def _tournament_snapshot_loop():
+    """Grava um TournamentSimulation a cada 30min — antes só acontecia quando
+    alguém acessava /tournament/simulate com cache frio (12h de TTL), então a
+    evolução de chance de título ficava esparsa e dependente de tráfego, sem
+    pontos regulares pra gráfico. Backfill dos 4 checkpoints reais (r32/r16/
+    qf/sf, chaveamento verdadeiro) feito manualmente em 2026-07-12; daqui pra
+    frente esse loop garante ponto novo real de forma regular."""
+    from database import SessionLocal
+    from routers.tournament import _run_simulation_and_persist
+
+    await asyncio.sleep(120)
+    print("[tournament-snapshot] loop iniciado (grava a cada 30min)", flush=True)
+    while True:
+        try:
+            def _job():
+                db = SessionLocal()
+                try:
+                    _run_simulation_and_persist(db, 50_000)
+                finally:
+                    db.close()
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _job)
+            print("[tournament-snapshot] snapshot gravado", flush=True)
+        except Exception as e:
+            print(f"[tournament-snapshot] erro: {e}", flush=True)
+        await asyncio.sleep(30 * 60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _alembic_upgrade()        # migrations versionadas (Alembic) — fonte de verdade do schema
@@ -738,8 +766,9 @@ async def lifespan(app: FastAPI):
     wa_reminder_task = asyncio.create_task(_pending_bet_whatsapp_reminder_loop())
     activation_task = asyncio.create_task(_activation_email_loop())
     achievements_task = asyncio.create_task(_achievements_loop())
+    tournament_snapshot_task = asyncio.create_task(_tournament_snapshot_loop())
     yield
-    for t in (task, report_task, oracle_task, fd_task, reminder_task, wa_reminder_task, activation_task, achievements_task):
+    for t in (task, report_task, oracle_task, fd_task, reminder_task, wa_reminder_task, activation_task, achievements_task, tournament_snapshot_task):
         t.cancel()
         try:
             await t
