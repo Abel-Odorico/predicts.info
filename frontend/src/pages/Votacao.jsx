@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 
@@ -105,9 +105,11 @@ function ResultBar({ opt, total }) {
     <div className="poll-result-row">
       <div className="poll-result-label">{opt.label}</div>
       <div className="poll-result-track">
-        <div
+        <motion.div
           className="poll-result-fill"
-          style={{ width: `${opt.pct}%` }}
+          initial={{ width: 0 }}
+          animate={{ width: `${opt.pct}%` }}
+          transition={{ duration: 0.9, ease: EASE }}
         />
       </div>
       <div className="poll-result-meta">
@@ -271,52 +273,66 @@ export default function Votacao() {
           ))}
         </div>
 
-        {SISTEMAS.filter(s => s.key === sysTab).map(sys => (
-          <div key={sys.key} className="poll-sys-card">
-            <div className="poll-sys-card__header">
-              <span className="poll-sys-tag" style={{ background: sys.tagColor + '22', color: sys.tagColor }}>
-                {sys.tag}
-              </span>
-              <h3 className="poll-sys-card__name">{sys.label}</h3>
-              <p className="poll-sys-card__desc">{sys.desc}</p>
-            </div>
+        <AnimatePresence mode="wait">
+          {SISTEMAS.filter(s => s.key === sysTab).map(sys => (
+            <motion.div
+              key={sys.key}
+              className="poll-sys-card"
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.3, ease: EASE }}
+            >
+              <div className="poll-sys-card__header">
+                <span className="poll-sys-tag" style={{ background: sys.tagColor + '22', color: sys.tagColor }}>
+                  {sys.tag}
+                </span>
+                <h3 className="poll-sys-card__name">{sys.label}</h3>
+                <p className="poll-sys-card__desc">{sys.desc}</p>
+              </div>
 
-            <table className="poll-sys-table">
-              <thead>
-                <tr>
-                  <th>Situação</th>
-                  <th>Pontos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sys.rows.map((r, i) => (
-                  <tr key={i} className={r.highlight ? 'highlight' : ''}>
-                    <td>{r.resultado}</td>
-                    <td className="pts">{r.pts}</td>
+              <table className="poll-sys-table">
+                <thead>
+                  <tr>
+                    <th>Situação</th>
+                    <th>Pontos</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sys.rows.map((r, i) => (
+                    <motion.tr
+                      key={i}
+                      className={r.highlight ? 'highlight' : ''}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.05 * i, ease: EASE }}
+                    >
+                      <td>{r.resultado}</td>
+                      <td className="pts">{r.pts}</td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
 
-            {sys.bonus.length > 0 && (
-              <div className="poll-sys-bonus">
-                {sys.bonus.map((b, i) => (
-                  <div key={i} className="poll-sys-bonus-row">
-                    <span>{b.label}</span>
-                    <span className="pts">{b.pts}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {sys.formula && (
-              <div className="poll-sys-formula">
-                <span className="poll-sys-formula__label">Fórmula:</span>
-                <code>{sys.formula}</code>
-              </div>
-            )}
-          </div>
-        ))}
+              {sys.bonus.length > 0 && (
+                <div className="poll-sys-bonus">
+                  {sys.bonus.map((b, i) => (
+                    <motion.div
+                      key={i}
+                      className="poll-sys-bonus-row"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.05 * (sys.rows.length + i), ease: EASE }}
+                    >
+                      <span>{b.label}</span>
+                      <span className="pts">{b.pts}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
         {/* Tabela comparativa */}
         <details className="poll-compare-details">
