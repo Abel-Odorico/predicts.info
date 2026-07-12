@@ -1,10 +1,41 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import ProbBar from '../components/ProbBar'
 import SimAnalysisCard from '../components/SimAnalysisCard'
+
+const EASE = [0.22, 1, 0.36, 1]
+
+// Card de votação — Regra Zero: entra com coreografia, depois loop perpétuo
+// (glow respirando na borda). Só aparece se houver consulta ativa.
+function VoteCard() {
+  const [poll, setPoll] = useState(null)
+
+  useEffect(() => {
+    api.get('/poll/active').then(p => { if (p?.is_open) setPoll(p) }).catch(() => {})
+  }, [])
+
+  if (!poll) return null
+
+  return (
+    <motion.div
+      className="br-vote-card"
+      initial={{ opacity: 0, y: -16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: EASE }}
+    >
+      <span className="br-vote-card__icon">🗳️</span>
+      <div className="br-vote-card__body">
+        <strong>Consulta oficial: pontuação do Brasileirão</strong>
+        <span>Vote no bônus de clássico, zebra ou posição final — sua opinião decide.</span>
+      </div>
+      <Link to="/votacaobrasileirao" className="btn btn-sm br-vote-card__cta">Votar agora</Link>
+    </motion.div>
+  )
+}
 
 const TABS = [
   { id: 'tabela',  label: '📊 Tabela' },
@@ -33,6 +64,7 @@ export default function Brasileirao() {
       <p style={{ color: 'var(--text-3)', margin: '0 0 var(--s4)' }}>
         Tabela ao vivo, projeção do modelo (Monte Carlo) e palpites por rodada.
       </p>
+      <VoteCard />
       <div className="phase-nav" style={{ marginBottom: 'var(--s4)' }}>
         {TABS.map(t => (
           <button

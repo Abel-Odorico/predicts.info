@@ -8287,6 +8287,11 @@ button.admin-options-quick__card {
   background: rgba(46,201,128,0.12);
   color: var(--win);
   border: 1px solid rgba(46,201,128,0.3);
+  animation: poll-badge-pulse 2.4s ease-in-out infinite;
+}
+@keyframes poll-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(46,201,128,0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(46,201,128,0); }
 }
 
 .poll-status-badge.closed {
@@ -8717,7 +8722,11 @@ button.admin-options-quick__card {
   font-family: var(--font-data);
 }
 
-.poll-submit { width: 100%; }
+.poll-submit { width: 100%; animation: poll-submit-pulse 2.6s ease-in-out infinite; }
+@keyframes poll-submit-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
 
 .poll-msg {
   padding: var(--s3) var(--s4);
@@ -10623,6 +10632,22 @@ strong.pts {
 .br-h2h { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--border); }
 .br-h2h__title { font-size: 0.7rem; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.03em; }
 .br-h2h__row { font-size: 0.82rem; color: var(--text-2); margin-top: 4px; font-family: var(--font-data); }
+
+.br-vote-card {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s3) var(--s4); margin-bottom: var(--s4);
+  border-radius: var(--radius); border: 1.5px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--bg-raised)), var(--bg-raised));
+  animation: br-vote-glow 3.2s ease-in-out infinite;
+}
+@keyframes br-vote-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 25%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.br-vote-card__icon { font-size: 24px; flex-shrink: 0; }
+.br-vote-card__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 200px; }
+.br-vote-card__body span { color: var(--text-3); font-size: 0.82rem; }
+.br-vote-card__cta { background: var(--accent); color: #fff; font-weight: 700; flex-shrink: 0; }
 
 .br-match__my-bet { text-align: center; color: var(--text-3); font-size: 0.8rem; margin-top: var(--s3); }
 .br-match__my-bet strong { color: var(--text-1); font-family: var(--font-data); }

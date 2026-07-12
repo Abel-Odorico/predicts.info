@@ -1,7 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
+
+const EASE = [0.22, 1, 0.36, 1]
+const entrance = (delay = 0) => ({
+  initial: { opacity: 0, y: 22 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: '-60px' },
+  transition: { duration: 0.55, delay, ease: EASE },
+})
 
 const BASE_ROWS = [
   { resultado: 'Placar exato', pts: '25 pts', highlight: true },
@@ -192,9 +201,14 @@ export default function Votacao() {
   const canChange = isOpen && alreadyVoted
 
   return (
-    <div className="page poll-page fade-in-1">
+    <div className="page poll-page">
       {/* ── Hero ─────────────────────────────────────── */}
-      <div className="poll-hero">
+      <motion.div
+        className="poll-hero"
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: EASE }}
+      >
         <div className="poll-hero__eyebrow">Consulta Oficial — Brasileirão</div>
         <h1 className="poll-hero__title">VOTAÇÃO: PONTUAÇÃO DO BRASILEIRÃO</h1>
         <p className="poll-hero__desc">{poll.description}</p>
@@ -238,10 +252,10 @@ export default function Votacao() {
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Sistemas ─────────────────────────────────── */}
-      <section className="poll-section">
+      <motion.section className="poll-section" {...entrance(0.1)}>
         <h2 className="poll-section__title">Os Sistemas em Comparação</h2>
 
         <div className="poll-sys-tabs">
@@ -330,10 +344,10 @@ export default function Votacao() {
             </table>
           </div>
         </details>
-      </section>
+      </motion.section>
 
       {/* ── Formulário de voto ───────────────────────── */}
-      <section className="poll-section">
+      <motion.section className="poll-section" {...entrance(0.15)}>
         <h2 className="poll-section__title">
           {alreadyVoted ? 'Seu Voto' : 'Participar da Consulta'}
         </h2>
@@ -413,10 +427,10 @@ export default function Votacao() {
             )}
           </form>
         )}
-      </section>
+      </motion.section>
 
       {/* ── Resultados ──────────────────────────────── */}
-      <section className="poll-section">
+      <motion.section className="poll-section" {...entrance(0.1)}>
         <h2 className="poll-section__title">Resultados em Tempo Real</h2>
         <div className="poll-results-meta">
           <span>Abertura: {fmtDate(poll.opens_at)}</span>
@@ -456,10 +470,10 @@ export default function Votacao() {
             </p>
           </div>
         )}
-      </section>
+      </motion.section>
 
       {/* ── Transparência ───────────────────────────── */}
-      <section className="poll-section poll-transparency">
+      <motion.section className="poll-section poll-transparency" {...entrance(0.1)}>
         <h2 className="poll-section__title">Transparência</h2>
         <ul className="poll-transparency__list">
           <li>1 voto por usuário registrado</li>
@@ -472,7 +486,7 @@ export default function Votacao() {
           Veja as regras completas do bolão em{' '}
           <Link to="/regras">predicts.info/regras</Link>.
         </p>
-      </section>
+      </motion.section>
     </div>
   )
 }
