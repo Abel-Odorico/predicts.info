@@ -685,6 +685,9 @@ export default function Dashboard() {
                   </div>
                   <TeamBig team={featured.team_b} />
                 </div>
+                <div style={{ marginTop: 'var(--s4)' }}>
+                  <BattleHistoryCard teamACode={featured.team_a.code} teamBCode={featured.team_b.code} />
+                </div>
               </div>
             </div>
           )}
