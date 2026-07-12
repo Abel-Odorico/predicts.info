@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
+import VoteHeroAnim from '../components/VoteHeroAnim'
 
 const EASE = [0.22, 1, 0.36, 1]
 const entrance = (delay = 0) => ({
@@ -213,6 +214,7 @@ export default function Votacao() {
       >
         <div className="poll-hero__eyebrow">Consulta Oficial — Brasileirão</div>
         <h1 className="poll-hero__title">VOTAÇÃO: PONTUAÇÃO DO BRASILEIRÃO</h1>
+        <VoteHeroAnim />
         <p className="poll-hero__desc">{poll.description}</p>
         <div className="poll-urgency-note">
           ⚡ Se aprovada, a mudança vale a partir da próxima rodada não disputada.

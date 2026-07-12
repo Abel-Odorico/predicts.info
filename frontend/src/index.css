@@ -8263,6 +8263,9 @@ button.admin-options-quick__card {
   line-height: 1.6;
 }
 
+.vote-hero-anim { width: 100%; max-width: 720px; margin: var(--s4) auto; }
+.vote-hero-anim svg { width: 100%; height: clamp(220px, 32vw, 340px); display: block; }
+
 .poll-hero__meta {
   display: flex;
   align-items: center;
