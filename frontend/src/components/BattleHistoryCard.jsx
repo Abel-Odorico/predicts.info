@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import * as d3 from 'd3'
 
@@ -34,6 +34,13 @@ const BATTLES = {
 function BattleRecordBar({ record, teamAName, teamBName }) {
   const stageRef = useRef(null)
   const genRef = useRef(0)
+  const [tooltip, setTooltip] = useState(null)
+
+  function onHover(sg) {
+    if (!sg) { setTooltip(null); return }
+    setTooltip({ x: sg.x, color: sg.color, val: sg.targetVal, tipLabel: sg.tipLabel, pct: sg.pct })
+  }
+
 
   useEffect(() => {
     const el = stageRef.current
@@ -66,9 +73,10 @@ function BattleRecordBar({ record, teamAName, teamBName }) {
     svg.selectAll('*').remove()
     svg.attr('viewBox', `0 0 ${W} ${H}`)
 
-    const barY = 34, barH = 16
+    const barY = 30, barH = 26
     let xCursor = 0
     const xStarts = segs.map(s => { const x = xCursor; xCursor += (s.pct / 100) * W; return x })
+    const winnerIdx = segs[0].val >= segs[2].val ? 0 : 2
 
     const defs = svg.append('defs')
     segs.forEach((s, i) => {
@@ -76,78 +84,116 @@ function BattleRecordBar({ record, teamAName, teamBName }) {
         .attr('id', `battle-shimmer-${i}`)
         .attr('x1', '0%').attr('x2', '100%')
       grad.append('stop').attr('offset', '0%').attr('stop-color', '#fff').attr('stop-opacity', 0)
-      grad.append('stop').attr('offset', '50%').attr('stop-color', '#fff').attr('stop-opacity', 0.35)
+      grad.append('stop').attr('offset', '50%').attr('stop-color', '#fff').attr('stop-opacity', 0.85)
       grad.append('stop').attr('offset', '100%').attr('stop-color', '#fff').attr('stop-opacity', 0)
+
+      const glow = defs.append('filter').attr('id', `battle-glow-${i}`).attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
+      glow.append('feGaussianBlur').attr('stdDeviation', 4).attr('result', 'blur')
+      const merge = glow.append('feMerge')
+      merge.append('feMergeNode').attr('in', 'blur')
+      merge.append('feMergeNode').attr('in', 'SourceGraphic')
     })
 
-    const track = svg.append('rect')
+    svg.append('rect')
       .attr('x', 0).attr('y', barY).attr('width', W).attr('height', barH)
-      .attr('rx', 8).attr('fill', 'var(--bg-overlay, #1a1a1a)')
+      .attr('rx', 13).attr('fill', 'var(--bg-overlay, #1a1a1a)')
 
     const segGroups = segs.map((s, i) => {
       const g = svg.append('g').style('cursor', 'pointer')
       const rect = g.append('rect')
         .attr('x', xStarts[i]).attr('y', barY).attr('width', 0).attr('height', barH)
         .attr('fill', s.color)
+        .attr('filter', i === winnerIdx ? `url(#battle-glow-${i})` : null)
       const shimmer = g.append('rect')
         .attr('x', xStarts[i]).attr('y', barY).attr('width', 0).attr('height', barH)
         .attr('fill', `url(#battle-shimmer-${i})`)
       const label = svg.append('text')
         .attr('x', xStarts[i] + (s.pct / 100) * W / 2)
-        .attr('y', barY - 10)
+        .attr('y', barY - 12)
         .attr('text-anchor', 'middle')
         .attr('font-family', 'var(--font-data, monospace)')
         .attr('font-weight', 900)
-        .attr('font-size', 20)
+        .attr('font-size', 26)
         .attr('fill', 'var(--text-1, #fff)')
         .text('0')
       const sub = svg.append('text')
         .attr('x', xStarts[i] + (s.pct / 100) * W / 2)
-        .attr('y', barY + barH + 20)
+        .attr('y', barY + barH + 22)
         .attr('text-anchor', 'middle')
         .attr('font-family', 'var(--font-cond, sans-serif)')
-        .attr('font-size', 11)
+        .attr('font-size', 12)
+        .attr('font-weight', 700)
+        .attr('letter-spacing', '0.05em')
         .attr('fill', 'var(--text-3, #999)')
-        .text(s.key === 'd' ? 'empates' : 'vitórias')
+        .text((s.key === 'd' ? 'EMPATES' : 'VITÓRIAS'))
 
-      g.append('title').text(`${s.val} ${s.label.toLowerCase()} (${Math.round(s.pct)}%)`)
-      g.on('mouseenter', () => rect.transition().duration(150).attr('height', barH + 6).attr('y', barY - 3))
-      g.on('mouseleave', () => rect.transition().duration(150).attr('height', barH).attr('y', barY))
+      const tipX = xStarts[i] + (s.pct / 100) * W / 2
 
-      return { rect, shimmer, label, targetVal: s.val, targetW: (s.pct / 100) * W, x0: xStarts[i] }
+      g.on('mouseenter', function () {
+        rect.transition().duration(180).attr('height', barH + 10).attr('y', barY - 5)
+        label.transition().duration(180).attr('font-size', 32)
+        onHover({ x: tipX, color: s.color, targetVal: s.val, tipLabel: s.label, pct: s.pct })
+      })
+      g.on('mouseleave', function () {
+        rect.transition().duration(180).attr('height', barH).attr('y', barY)
+        label.transition().duration(180).attr('font-size', 26)
+        onHover(null)
+      })
+
+      return { rect, shimmer, label, targetVal: s.val, targetW: (s.pct / 100) * W, x0: xStarts[i], color: s.color, pct: s.pct, tipLabel: s.label, x: tipX }
     })
 
-    // ── entrada: barras crescem + números contam junto ──────────────────
+    // ── entrada: barras crescem com bounce + números contam em uníssono ──
     segGroups.forEach((sg, i) => {
-      sg.rect.transition().delay(150 + i * 120).duration(700).ease(d3.easeCubicOut)
+      sg.rect.transition().delay(150 + i * 130).duration(850).ease(d3.easeBackOut.overshoot(1.1))
         .attr('width', sg.targetW)
 
-      const counter = { n: 0 }
-      d3.select(counter).transition().delay(150 + i * 120).duration(700).ease(d3.easeCubicOut)
+      d3.select({}).transition().delay(150 + i * 130).duration(850).ease(d3.easeCubicOut)
         .tween('count', () => {
           const interp = d3.interpolateNumber(0, sg.targetVal)
           return t => sg.label.text(Math.round(interp(t)))
         })
     })
 
-    // ── loop perpétuo: shimmer varre cada segmento, um de cada vez, pra sempre ─
-    function loop(i) {
+    // ── loop perpétuo #1: shimmer forte varre cada segmento, sempre ──────
+    function loopShimmer(i) {
       if (myGen !== genRef.current) return
       const sg = segGroups[i % segGroups.length]
-      const shimmerW = Math.max(sg.targetW * 0.4, 30)
+      const shimmerW = Math.max(sg.targetW * 0.55, 40)
       sg.shimmer
         .attr('width', shimmerW)
         .attr('x', sg.x0 - shimmerW)
-        .transition().duration(1100).ease(d3.easeLinear)
+        .transition().duration(900).ease(d3.easeLinear)
         .attr('x', sg.x0 + sg.targetW)
-        .on('end', () => { if (myGen === genRef.current) setTimeout(() => loop(i + 1), 250) })
+        .on('end', () => { if (myGen === genRef.current) setTimeout(() => loopShimmer(i + 1), 150) })
     }
-    setTimeout(() => loop(0), 150 + segGroups.length * 120 + 750)
+    setTimeout(() => loopShimmer(0), 150 + segGroups.length * 130 + 900)
+
+    // ── loop perpétuo #2: segmento vencedor respira (glow pulsando) ───────
+    function loopPulse() {
+      if (myGen !== genRef.current) return
+      const sg = segGroups[winnerIdx]
+      sg.rect.transition().duration(900).ease(d3.easeSinInOut).attr('opacity', 0.6)
+        .transition().duration(900).ease(d3.easeSinInOut).attr('opacity', 1)
+        .on('end', () => { if (myGen === genRef.current) loopPulse() })
+    }
+    setTimeout(loopPulse, 150 + segGroups.length * 130 + 900)
   }
 
   return (
-    <div className="battle-record-bar">
+    <div className="battle-record-bar" style={{ position: 'relative' }}>
       <svg ref={stageRef} />
+      {tooltip && (
+        <motion.div
+          className="battle-record-bar__tooltip"
+          initial={{ opacity: 0, y: 6, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.15 }}
+          style={{ left: `${(tooltip.x / 1000) * 100}%`, background: tooltip.color }}
+        >
+          <strong>{tooltip.val}</strong> {tooltip.tipLabel.toLowerCase()} <span>({Math.round(tooltip.pct)}%)</span>
+        </motion.div>
+      )}
     </div>
   )
 }
