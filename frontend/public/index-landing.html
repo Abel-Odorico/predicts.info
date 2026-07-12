@@ -193,13 +193,15 @@
       --ctaBorder: rgba(15,122,120,0.18); --r: 8px;
     }
     [data-theme="dark"] {
+      /* Mesma paleta navy + dourado do app (dashboard/palpites/ranking) —
+         era roxo (#7c3aed) antes, destoava do resto do site no modo escuro. */
       color-scheme: dark;
-      --bg: #0a0a0f; --bg2: #111118; --border: #1e1e2e;
-      --accent: #7c3aed; --accent2: #a855f7;
-      --text1: #f1f0ff; --text2: #a8a7c0; --text3: #5c5b78;
-      --heroGlow: rgba(124,58,237,0.16); --navBg: rgba(10,10,15,0.95);
-      --pill: rgba(255,255,255,0.04); --ctaBg: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(168,85,247,0.08));
-      --ctaBorder: rgba(124,58,237,0.2);
+      --bg: #06101c; --bg2: #0c1a2a; --border: rgba(100,160,220,0.14);
+      --accent: #e8c44a; --accent2: #c9a23e;
+      --text1: #edf4fd; --text2: #b8d4e8; --text3: #8ab4cc;
+      --heroGlow: rgba(74,144,232,0.12); --navBg: rgba(6,16,28,0.95);
+      --pill: rgba(232,196,74,0.08); --ctaBg: linear-gradient(135deg, rgba(232,196,74,0.15), rgba(232,196,74,0.06));
+      --ctaBorder: rgba(232,196,74,0.25);
     }
     body { background: radial-gradient(circle at top, var(--heroGlow), transparent 30%), var(--bg); color: var(--text1); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; transition: background 180ms, color 180ms; }
     a { color: var(--accent2); text-decoration: none; }
