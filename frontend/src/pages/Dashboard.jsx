@@ -14,6 +14,7 @@ import { useAuth } from '../stores/authStore'
 import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
 import BattleHistoryCard from '../components/BattleHistoryCard'
 import TitleEvolutionChart from '../components/TitleEvolutionChart'
+import FourChampionsFeature from '../components/FourChampionsFeature'
 
 const PHASE_LABELS = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
 
@@ -696,6 +697,8 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          <FourChampionsFeature />
 
           <CopaFinalStretch matches={matches} />
 

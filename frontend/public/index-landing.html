@@ -463,6 +463,18 @@
     .title-evo-axis line, .title-evo-axis path { stroke: var(--border); }
     .title-evo-note { text-align: center; color: var(--text3); font-size: 0.85rem; margin-top: 0.75rem; }
 
+    /* ── 4 semifinalistas campeãs — raridade histórica ─────────────── */
+    #four-champions { text-align: center; }
+    .four-champions-badge {
+      display: inline-block; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em;
+      color: #e8c44a; background: rgba(232,196,74,0.1); border: 1px solid rgba(232,196,74,0.3);
+      border-radius: 999px; padding: 0.3rem 0.9rem; margin-bottom: 1rem;
+    }
+    #four-champions .section-title em { color: #e8c44a; font-style: normal; }
+    .champions-tl-wrap { max-width: 760px; margin: 0 auto; }
+    .champions-tl-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .champions-tl-legend { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; margin-top: 1rem; font-size: 0.85rem; font-weight: 700; }
+
     /* ── Animação: sublinhado desenhando nos títulos de seção ──────── */
     .section-title { position: relative; margin-bottom: 1rem; }
     .section-title::after {
@@ -855,6 +867,30 @@
     <p style="text-align:center; margin-top:2rem; color:var(--text3); font-size:0.9rem;">
       <span data-en>Want probabilities, not just history? See the model's live simulation for both semifinals on the </span><span data-pt>Quer probabilidade, não só história? Veja a simulação ao vivo do modelo pras duas semifinais no </span><a href="/dashboard"><span data-en>Dashboard</span><span data-pt>Dashboard</span></a>.
     </p>
+  </section>
+
+  <section class="section" id="four-champions">
+    <div class="four-champions-badge">
+      <span data-en>🏆 HISTORIC RARITY</span>
+      <span data-pt>🏆 RARIDADE HISTÓRICA</span>
+    </div>
+    <h2 class="section-title">
+      <span data-en>For the first time in <em>36 years</em>, all 4 semifinalists are former champions</span>
+      <span data-pt>Pela 1ª vez em <em>36 anos</em>, as 4 semifinalistas já foram campeãs mundiais</span>
+    </h2>
+    <p class="section-sub">
+      <span data-en>France, Spain, England and Argentina have 7 World Cup titles between them. The last time this happened was in 1990 (Argentina, Italy, West Germany, England) — only the 3rd time in tournament history.</span>
+      <span data-pt>França, Espanha, Inglaterra e Argentina somam 7 títulos de Copa do Mundo. A última vez que isso aconteceu foi em 1990 (Argentina, Itália, Alemanha Ocidental e Inglaterra) — só a 3ª vez na história do torneio.</span>
+    </p>
+    <div class="champions-tl-wrap">
+      <svg id="champions-tl-board" viewBox="0 0 1000 180" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Linha do tempo dos títulos de Copa do Mundo de Argentina, França, Espanha e Inglaterra"></svg>
+      <div class="champions-tl-legend">
+        <span style="color:#60a5fa">● <span data-en>Argentina 3×</span><span data-pt>Argentina 3×</span></span>
+        <span style="color:#1e3a8a">● <span data-en>France 2×</span><span data-pt>França 2×</span></span>
+        <span style="color:#fbbf24">● <span data-en>Spain 1×</span><span data-pt>Espanha 1×</span></span>
+        <span style="color:#ef4444">● <span data-en>England 1×</span><span data-pt>Inglaterra 1×</span></span>
+      </div>
+    </div>
   </section>
 
   <section class="section" id="title-evolution">
@@ -1251,6 +1287,65 @@
         })
       }, { threshold: 0.3 })
       dartIO.observe(svg)
+    })()
+
+    // Linha do tempo dos títulos das 4 semifinalistas — raridade histórica
+    // (verificada via pesquisa: 1990 foi a última vez, só a 3ª na história)
+    ;(function() {
+      var svg = document.getElementById('champions-tl-board')
+      if (!svg) return
+      var NS = 'http://www.w3.org/2000/svg'
+      function el(tag, attrs) {
+        var e = document.createElementNS(NS, tag)
+        for (var k in attrs) e.setAttribute(k, attrs[k])
+        return e
+      }
+      var TITLES = [
+        { year: 1966, code: 'ENG', color: '#ef4444' },
+        { year: 1978, code: 'ARG', color: '#60a5fa' },
+        { year: 1986, code: 'ARG', color: '#60a5fa' },
+        { year: 1998, code: 'FRA', color: '#1e3a8a' },
+        { year: 2010, code: 'ESP', color: '#fbbf24' },
+        { year: 2018, code: 'FRA', color: '#1e3a8a' },
+        { year: 2022, code: 'ARG', color: '#60a5fa' },
+      ]
+      var W = 1000, H = 180, L = 40, R = 40, midY = 100
+      function xPos(year) { return L + ((year - 1964) / (2024 - 1964)) * (W - L - R) }
+
+      svg.appendChild(el('line', { x1: L, x2: W - R, y1: midY, y2: midY, stroke: 'var(--border)', 'stroke-width': 2 }))
+
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+      TITLES.forEach(function(t, i) {
+        var cx = xPos(t.year)
+        var g = el('g', {})
+        g.style.transformOrigin = cx + 'px ' + midY + 'px'
+        g.style.transform = reduced ? 'scale(1)' : 'scale(0)'
+        if (!reduced) g.style.transition = 'transform 500ms cubic-bezier(0.34,1.56,0.64,1) ' + (150 + i * 130) + 'ms'
+
+        var halo = el('circle', { cx: cx, cy: midY, r: 16, fill: t.color, opacity: 0.18 })
+        var dot = el('circle', { cx: cx, cy: midY, r: 9, fill: t.color })
+        var yearLabel = el('text', { x: cx, y: midY - 22, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 800 })
+        yearLabel.style.fontFamily = 'system-ui, sans-serif'
+        yearLabel.style.fill = 'var(--text1)'
+        yearLabel.textContent = t.year
+        var codeLabel = el('text', { x: cx, y: midY + 30, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 700, fill: t.color })
+        codeLabel.style.fontFamily = 'system-ui, sans-serif'
+        codeLabel.textContent = t.code
+
+        g.appendChild(halo); g.appendChild(dot); g.appendChild(yearLabel); g.appendChild(codeLabel)
+        svg.appendChild(g)
+
+        requestAnimationFrame(function() { requestAnimationFrame(function() { g.style.transform = 'scale(1)' }) })
+
+        if (i === TITLES.length - 1 && !reduced) {
+          setTimeout(function pulse() {
+            dot.style.transition = 'r 800ms ease-in-out'
+            dot.setAttribute('r', 13)
+            setTimeout(function() { dot.setAttribute('r', 9); setTimeout(pulse, 800) }, 800)
+          }, 150 + TITLES.length * 130 + 400)
+        }
+      })
     })()
 
     // Evolução de chance de título — dado real (GET /api/tournament/title-evolution),
