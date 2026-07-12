@@ -473,7 +473,7 @@
     #four-champions .section-title em { color: #e8c44a; font-style: normal; }
     .champions-tl-wrap { max-width: 760px; margin: 0 auto; }
     .champions-tl-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
-    .champions-tl-legend { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; margin-top: 1rem; font-size: 0.85rem; font-weight: 700; }
+    .champions-tl-legend { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; margin-top: 1.25rem; font-size: 1rem; font-weight: 800; }
 
     /* ── Animação: sublinhado desenhando nos títulos de seção ──────── */
     .section-title { position: relative; margin-bottom: 1rem; }
@@ -540,6 +540,31 @@
       <span class="hero-sp-item"><i data-lucide="calendar-check" width="13" height="13"></i> <span class="hero-sp-value" id="sp-matches">—</span> <span data-en>matches played</span><span data-pt>jogos disputados</span></span>
     </div>
   </section>
+
+  <section class="section" id="four-champions">
+    <div class="four-champions-badge">
+      <span data-en>🏆 HISTORIC RARITY</span>
+      <span data-pt>🏆 RARIDADE HISTÓRICA</span>
+    </div>
+    <h2 class="section-title">
+      <span data-en>For the first time in <em>36 years</em>, all 4 semifinalists are former champions</span>
+      <span data-pt>Pela 1ª vez em <em>36 anos</em>, as 4 semifinalistas já foram campeãs mundiais</span>
+    </h2>
+    <p class="section-sub">
+      <span data-en>France, Spain, England and Argentina have 7 World Cup titles between them. The last time this happened was in 1990 (Argentina, Italy, West Germany, England) — only the 3rd time in tournament history.</span>
+      <span data-pt>França, Espanha, Inglaterra e Argentina somam 7 títulos de Copa do Mundo. A última vez que isso aconteceu foi em 1990 (Argentina, Itália, Alemanha Ocidental e Inglaterra) — só a 3ª vez na história do torneio.</span>
+    </p>
+    <div class="champions-tl-wrap">
+      <svg id="champions-tl-board" viewBox="0 0 1000 180" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Linha do tempo dos títulos de Copa do Mundo de Argentina, França, Espanha e Inglaterra"></svg>
+      <div class="champions-tl-legend">
+        <span style="color:#60a5fa">● <span data-en>Argentina 3×</span><span data-pt>Argentina 3×</span></span>
+        <span style="color:#1e3a8a">● <span data-en>France 2×</span><span data-pt>França 2×</span></span>
+        <span style="color:#fbbf24">● <span data-en>Spain 1×</span><span data-pt>Espanha 1×</span></span>
+        <span style="color:#ef4444">● <span data-en>England 1×</span><span data-pt>Inglaterra 1×</span></span>
+      </div>
+    </div>
+  </section>
+
 
   <div class="stats">
     <div class="stat">
@@ -867,30 +892,6 @@
     <p style="text-align:center; margin-top:2rem; color:var(--text3); font-size:0.9rem;">
       <span data-en>Want probabilities, not just history? See the model's live simulation for both semifinals on the </span><span data-pt>Quer probabilidade, não só história? Veja a simulação ao vivo do modelo pras duas semifinais no </span><a href="/dashboard"><span data-en>Dashboard</span><span data-pt>Dashboard</span></a>.
     </p>
-  </section>
-
-  <section class="section" id="four-champions">
-    <div class="four-champions-badge">
-      <span data-en>🏆 HISTORIC RARITY</span>
-      <span data-pt>🏆 RARIDADE HISTÓRICA</span>
-    </div>
-    <h2 class="section-title">
-      <span data-en>For the first time in <em>36 years</em>, all 4 semifinalists are former champions</span>
-      <span data-pt>Pela 1ª vez em <em>36 anos</em>, as 4 semifinalistas já foram campeãs mundiais</span>
-    </h2>
-    <p class="section-sub">
-      <span data-en>France, Spain, England and Argentina have 7 World Cup titles between them. The last time this happened was in 1990 (Argentina, Italy, West Germany, England) — only the 3rd time in tournament history.</span>
-      <span data-pt>França, Espanha, Inglaterra e Argentina somam 7 títulos de Copa do Mundo. A última vez que isso aconteceu foi em 1990 (Argentina, Itália, Alemanha Ocidental e Inglaterra) — só a 3ª vez na história do torneio.</span>
-    </p>
-    <div class="champions-tl-wrap">
-      <svg id="champions-tl-board" viewBox="0 0 1000 180" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Linha do tempo dos títulos de Copa do Mundo de Argentina, França, Espanha e Inglaterra"></svg>
-      <div class="champions-tl-legend">
-        <span style="color:#60a5fa">● <span data-en>Argentina 3×</span><span data-pt>Argentina 3×</span></span>
-        <span style="color:#1e3a8a">● <span data-en>France 2×</span><span data-pt>França 2×</span></span>
-        <span style="color:#fbbf24">● <span data-en>Spain 1×</span><span data-pt>Espanha 1×</span></span>
-        <span style="color:#ef4444">● <span data-en>England 1×</span><span data-pt>Inglaterra 1×</span></span>
-      </div>
-    </div>
   </section>
 
   <section class="section" id="title-evolution">
@@ -1323,13 +1324,13 @@
         g.style.transform = reduced ? 'scale(1)' : 'scale(0)'
         if (!reduced) g.style.transition = 'transform 500ms cubic-bezier(0.34,1.56,0.64,1) ' + (150 + i * 130) + 'ms'
 
-        var halo = el('circle', { cx: cx, cy: midY, r: 16, fill: t.color, opacity: 0.18 })
-        var dot = el('circle', { cx: cx, cy: midY, r: 9, fill: t.color })
-        var yearLabel = el('text', { x: cx, y: midY - 22, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 800 })
+        var halo = el('circle', { cx: cx, cy: midY, r: 20, fill: t.color, opacity: 0.2 })
+        var dot = el('circle', { cx: cx, cy: midY, r: 12, fill: t.color })
+        var yearLabel = el('text', { x: cx, y: midY - 28, 'text-anchor': 'middle', 'font-size': 18, 'font-weight': 800 })
         yearLabel.style.fontFamily = 'system-ui, sans-serif'
         yearLabel.style.fill = 'var(--text1)'
         yearLabel.textContent = t.year
-        var codeLabel = el('text', { x: cx, y: midY + 30, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 700, fill: t.color })
+        var codeLabel = el('text', { x: cx, y: midY + 38, 'text-anchor': 'middle', 'font-size': 15, 'font-weight': 800, fill: t.color })
         codeLabel.style.fontFamily = 'system-ui, sans-serif'
         codeLabel.textContent = t.code
 
@@ -1341,8 +1342,8 @@
         if (i === TITLES.length - 1 && !reduced) {
           setTimeout(function pulse() {
             dot.style.transition = 'r 800ms ease-in-out'
-            dot.setAttribute('r', 13)
-            setTimeout(function() { dot.setAttribute('r', 9); setTimeout(pulse, 800) }, 800)
+            dot.setAttribute('r', 17)
+            setTimeout(function() { dot.setAttribute('r', 12); setTimeout(pulse, 800) }, 800)
           }, 150 + TITLES.length * 130 + 400)
         }
       })

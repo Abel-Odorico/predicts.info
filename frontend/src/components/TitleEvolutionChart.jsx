@@ -68,11 +68,11 @@ export default function TitleEvolutionChart({ codes = ['ARG', 'ENG', 'ESP', 'FRA
     g.append('g')
       .attr('transform', `translate(0,${ih})`)
       .call(d3.axisBottom(x).ticks(data.length).tickFormat(d3.timeFormat('%d/%m')))
-      .call(s => s.selectAll('text').attr('fill', 'var(--text-4)').attr('font-size', 10))
+      .call(s => s.selectAll('text').attr('fill', 'var(--text-4)').attr('font-size', 12.5))
       .call(s => s.selectAll('line,path').attr('stroke', 'var(--border)'))
     g.append('g')
       .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d}%`))
-      .call(s => s.selectAll('text').attr('fill', 'var(--text-4)').attr('font-size', 10))
+      .call(s => s.selectAll('text').attr('fill', 'var(--text-4)').attr('font-size', 12.5))
       .call(s => s.selectAll('line,path').attr('stroke', 'var(--border)'))
 
     const line = d3.line()
@@ -110,11 +110,11 @@ export default function TitleEvolutionChart({ codes = ['ARG', 'ENG', 'ESP', 'FRA
         .attr('cx', cx).attr('cy', cy).attr('r', 0)
         .attr('fill', p.color)
       dot.transition().delay(200 + ci * 200 + 900).duration(300).ease(d3.easeBackOut.overshoot(2))
-        .attr('r', 5)
+        .attr('r', 7)
 
       g.append('text')
         .attr('x', cx + 10).attr('y', cy + 4)
-        .attr('font-family', 'var(--font-data)').attr('font-weight', 800).attr('font-size', 13)
+        .attr('font-family', 'var(--font-data)').attr('font-weight', 800).attr('font-size', 16)
         .attr('fill', p.color)
         .attr('opacity', 0)
         .text(`${p.code} ${lastVal}%`)
@@ -124,8 +124,8 @@ export default function TitleEvolutionChart({ codes = ['ARG', 'ENG', 'ESP', 'FRA
       // pulso perpétuo no ponto atual
       function pulse() {
         if (myGen !== genRef.current) return
-        dot.transition().duration(900).ease(d3.easeSinInOut).attr('r', 8).attr('opacity', 0.5)
-          .transition().duration(900).ease(d3.easeSinInOut).attr('r', 5).attr('opacity', 1)
+        dot.transition().duration(900).ease(d3.easeSinInOut).attr('r', 11).attr('opacity', 0.5)
+          .transition().duration(900).ease(d3.easeSinInOut).attr('r', 7).attr('opacity', 1)
           .on('end', () => { if (myGen === genRef.current) pulse() })
       }
       setTimeout(pulse, 200 + ci * 200 + 1300)

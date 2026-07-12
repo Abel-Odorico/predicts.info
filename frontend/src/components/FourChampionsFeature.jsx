@@ -56,16 +56,16 @@ function ChampionsTimeline() {
       .attr('transform', d => `translate(${x(d.year)},${midY}) scale(0)`)
       .style('cursor', 'pointer')
 
-    nodes.append('circle').attr('r', 16).attr('fill', d => d.color).attr('opacity', 0.18)
-    nodes.append('circle').attr('r', 9).attr('fill', d => d.color)
+    nodes.append('circle').attr('r', 20).attr('fill', d => d.color).attr('opacity', 0.2)
+    nodes.append('circle').attr('r', 12).attr('fill', d => d.color)
     nodes.append('text')
-      .attr('y', -22).attr('text-anchor', 'middle')
-      .attr('font-family', 'var(--font-data)').attr('font-weight', 800).attr('font-size', 13)
+      .attr('y', -28).attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-data)').attr('font-weight', 800).attr('font-size', 18)
       .attr('fill', 'var(--text-1)')
       .text(d => d.year)
     nodes.append('text')
-      .attr('y', 30).attr('text-anchor', 'middle')
-      .attr('font-family', 'var(--font-cond)').attr('font-weight', 700).attr('font-size', 11)
+      .attr('y', 38).attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-cond)').attr('font-weight', 800).attr('font-size', 15)
       .attr('fill', d => d.color)
       .text(d => d.code)
 
@@ -81,8 +81,8 @@ function ChampionsTimeline() {
     function pulseLast() {
       if (myGen !== genRef.current) return
       const node = nodes.filter((d, i) => i === lastIdx).select('circle:last-of-type')
-      node.transition().duration(800).ease(d3.easeSinInOut).attr('r', 13)
-        .transition().duration(800).ease(d3.easeSinInOut).attr('r', 9)
+      node.transition().duration(800).ease(d3.easeSinInOut).attr('r', 17)
+        .transition().duration(800).ease(d3.easeSinInOut).attr('r', 12)
         .on('end', () => { if (myGen === genRef.current) pulseLast() })
     }
     setTimeout(pulseLast, 150 + TITLES.length * 130 + 400)
