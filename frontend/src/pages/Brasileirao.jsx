@@ -296,7 +296,7 @@ function MatchRow({ m, bet, token, onSaved }) {
       <div className="br-match__actions">
         {open && token && (
           <button className="btn btn-sm br-match__cta" disabled={saving} onClick={save}>
-            {saving ? '...' : bet ? '✓ alterar palpite' : '🎯 apostar'}
+            {saving ? '...' : bet ? '✓ alterar palpite' : '🎯 palpitar'}
           </button>
         )}
         <button className="btn btn-ghost btn-sm br-match__sim-toggle" onClick={() => setShowSim(v => !v)}>
