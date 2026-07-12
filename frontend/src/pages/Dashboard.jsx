@@ -686,7 +686,11 @@ export default function Dashboard() {
                   <TeamBig team={featured.team_b} />
                 </div>
                 <div style={{ marginTop: 'var(--s4)' }}>
-                  <BattleHistoryCard teamACode={featured.team_a.code} teamBCode={featured.team_b.code} />
+                  <BattleHistoryCard
+                    teamACode={featured.team_a.code} teamBCode={featured.team_b.code}
+                    teamAName={PT_NAMES[featured.team_a.code] || featured.team_a.name}
+                    teamBName={PT_NAMES[featured.team_b.code] || featured.team_b.name}
+                  />
                 </div>
               </div>
             </div>
@@ -1161,7 +1165,11 @@ function CopaFinalStretchCard({ match, index }) {
       </div>
 
       <div style={{ marginTop: 'var(--s3)' }}>
-        <BattleHistoryCard teamACode={match.team_a.code} teamBCode={match.team_b.code} />
+        <BattleHistoryCard
+          teamACode={match.team_a.code} teamBCode={match.team_b.code}
+          teamAName={PT_NAMES[match.team_a.code] || match.team_a.name}
+          teamBName={PT_NAMES[match.team_b.code] || match.team_b.name}
+        />
       </div>
 
       <Link to={`/partida/${match.id}`} className="btn btn-primary btn-sm" style={{ marginTop: 'var(--s3)', width: '100%', textAlign: 'center' }}>
