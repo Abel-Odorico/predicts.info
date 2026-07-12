@@ -24,7 +24,6 @@ from models import (
     Ranking,
     SimulationCache,
     Team,
-    TournamentSimulation,
     User,
 )
 
@@ -558,7 +557,13 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
         db.query(SimulationCache).filter(
             SimulationCache.match_id.in_(copa_match_ids_all)
         ).delete(synchronize_session=False)
-        db.query(TournamentSimulation).delete()
+        # NÃO apaga TournamentSimulation aqui (achado 2026-07-12): rodava a cada
+        # 5min e zerava o histórico inteiro sem motivo — o cache real de
+        # /tournament/simulate é o Redis (tournament:latest:N, invalidado
+        # separadamente), essa tabela é só log histórico (cada chamada grava
+        # linha NOVA, nunca atualiza) usado pra reconstruir a evolução de
+        # chance de título. Apagar aqui destruía os snapshots (backfill +
+        # _tournament_snapshot_loop) sem nenhum ganho de correção.
         # Only delete group-stage results; knockout results (R32+) are preserved
         # so bets on those matches can still be evaluated in this same sync cycle.
         group_match_ids = [

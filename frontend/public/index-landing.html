@@ -453,6 +453,16 @@
     .sim-bucket-bar.leader { fill: var(--accent); }
     .sim-baseline { stroke: var(--border); stroke-width: 1; }
 
+    /* ── Evolução de chance de título (linhas reais, sem D3, SVG puro) ── */
+    .title-evo-wrap { max-width: 760px; margin: 0 auto; }
+    .title-evo-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .title-evo-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+    .title-evo-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 700; color: var(--text1); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; }
+    .title-evo-legend-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .title-evo-axis text { fill: var(--text3); font-size: 10px; font-family: system-ui, sans-serif; }
+    .title-evo-axis line, .title-evo-axis path { stroke: var(--border); }
+    .title-evo-note { text-align: center; color: var(--text3); font-size: 0.85rem; margin-top: 0.75rem; }
+
     /* ── Animação: sublinhado desenhando nos títulos de seção ──────── */
     .section-title { position: relative; margin-bottom: 1rem; }
     .section-title::after {
@@ -847,6 +857,23 @@
     </p>
   </section>
 
+  <section class="section" id="title-evolution">
+    <h2 class="section-title">
+      <span data-en>Title Chance Evolution: the Real Semifinalists</span>
+      <span data-pt>Evolução da Chance de Título: os 4 semifinalistas de verdade</span>
+    </h2>
+    <p class="section-sub">
+      <span data-en>Reconstructed from the real bracket at each stage (round of 32 → round of 16 → quarterfinals → semifinals) — not invented numbers.</span>
+      <span data-pt>Reconstruída com o chaveamento real de cada fase (16avos → oitavas → quartas → semifinais) — não é número inventado.</span>
+    </p>
+    <div class="title-evo-wrap">
+      <div id="title-evo-legend" class="title-evo-legend"></div>
+      <svg id="title-evo-board" viewBox="0 0 900 340" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Gráfico de evolução da chance de título de Argentina, Inglaterra, Espanha e França"></svg>
+      <p class="title-evo-note" data-en>📈 Argentina has been the favorite the whole way, but all four teams' chances rose as the bracket narrowed.</p>
+      <p class="title-evo-note" data-pt>📈 Argentina foi favorita o tempo todo, mas a chance dos 4 subiu à medida que a chave estreitou.</p>
+    </div>
+  </section>
+
   <section class="section">
     <h2 class="section-title">
       <span data-en>Frequently Asked Questions</span>
@@ -1224,6 +1251,138 @@
         })
       }, { threshold: 0.3 })
       dartIO.observe(svg)
+    })()
+
+    // Evolução de chance de título — dado real (GET /api/tournament/title-evolution),
+    // linhas se desenham na entrada e o ponto atual de cada seleção pulsa pra sempre
+    ;(function() {
+      var svg = document.getElementById('title-evo-board')
+      var legendEl = document.getElementById('title-evo-legend')
+      if (!svg) return
+      var NS = 'http://www.w3.org/2000/svg'
+      var COLORS = { ARG: '#60a5fa', ENG: '#ef4444', ESP: '#fbbf24', FRA: '#93a5c9' }
+      var NAMES = { ARG: { pt: 'Argentina', en: 'Argentina' }, ENG: { pt: 'Inglaterra', en: 'England' }, ESP: { pt: 'Espanha', en: 'Spain' }, FRA: { pt: 'França', en: 'France' } }
+      var lang = function() { return document.documentElement.getAttribute('data-lang') === 'en' ? 'en' : 'pt' }
+
+      function el(tag, attrs) {
+        var e = document.createElementNS(NS, tag)
+        for (var k in attrs) e.setAttribute(k, attrs[k])
+        return e
+      }
+
+      fetch('/api/tournament/title-evolution?codes=ARG,ENG,ESP,FRA')
+        .then(function(r) { return r.json() })
+        .then(function(data) {
+          if (!data || !data.length) return
+          var codes = ['ARG', 'ENG', 'ESP', 'FRA']
+
+          // legenda
+          codes.forEach(function(code) {
+            var item = document.createElement('span')
+            item.className = 'title-evo-legend-item'
+            var dot = document.createElement('span')
+            dot.className = 'dot'
+            dot.style.background = COLORS[code]
+            item.appendChild(dot)
+            var label = document.createElement('span')
+            label.setAttribute('data-en', ''); label.textContent = NAMES[code].en
+            var labelPt = document.createElement('span')
+            labelPt.setAttribute('data-pt', ''); labelPt.textContent = NAMES[code].pt
+            item.appendChild(label); item.appendChild(labelPt)
+            legendEl.appendChild(item)
+          })
+
+          var W = 900, H = 340, M = { top: 16, right: 16, bottom: 30, left: 32 }
+          var iw = W - M.left - M.right, ih = H - M.top - M.bottom
+          var dates = data.map(function(d) { return new Date(d.computed_at) })
+          var t0 = dates[0].getTime(), t1 = dates[dates.length - 1].getTime()
+          var maxVal = 0
+          data.forEach(function(d) { codes.forEach(function(c) { maxVal = Math.max(maxVal, d.teams[c] || 0) }) })
+          maxVal = maxVal * 1.15 || 40
+
+          function xPos(d) { return M.left + ((d.getTime() - t0) / (t1 - t0)) * iw }
+          function yPos(v) { return M.top + ih - (v / maxVal) * ih }
+
+          var g = el('g', {})
+          svg.appendChild(g)
+
+          // eixo Y (grid simples)
+          var axisG = el('g', { class: 'title-evo-axis' })
+          for (var gy = 0; gy <= 4; gy++) {
+            var val = Math.round((maxVal / 4) * gy)
+            var yy = yPos(val)
+            axisG.appendChild(el('line', { x1: M.left, x2: W - M.right, y1: yy, y2: yy, 'stroke-dasharray': '2,4', opacity: 0.5 }))
+            var t = el('text', { x: M.left - 6, y: yy + 3, 'text-anchor': 'end' })
+            t.textContent = val + '%'
+            axisG.appendChild(t)
+          }
+          // eixo X (datas)
+          dates.forEach(function(d, i) {
+            var t = el('text', { x: xPos(d), y: H - 8, 'text-anchor': 'middle' })
+            t.textContent = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2)
+            axisG.appendChild(t)
+          })
+          g.appendChild(axisG)
+
+          function pathFor(code) {
+            var d = ''
+            data.forEach(function(pt, i) {
+              var x = xPos(dates[i]), y = yPos(pt.teams[code] || 0)
+              d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' '
+            })
+            return d
+          }
+
+          var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+          codes.forEach(function(code, ci) {
+            var path = el('path', {
+              d: pathFor(code), fill: 'none', stroke: COLORS[code],
+              'stroke-width': 3, 'stroke-linecap': 'round',
+            })
+            g.appendChild(path)
+
+            var len = path.getTotalLength()
+            if (!reduced) {
+              path.style.strokeDasharray = len
+              path.style.strokeDashoffset = len
+              path.style.transition = 'stroke-dashoffset 900ms cubic-bezier(0.22,1,0.36,1) ' + (200 + ci * 200) + 'ms'
+              requestAnimationFrame(function() {
+                requestAnimationFrame(function() { path.style.strokeDashoffset = 0 })
+              })
+            }
+
+            var lastPt = data[data.length - 1]
+            var lastVal = lastPt.teams[code] || 0
+            var cx = xPos(dates[dates.length - 1]), cy = yPos(lastVal)
+
+            var dot = el('circle', { cx: cx, cy: cy, r: reduced ? 5 : 0, fill: COLORS[code] })
+            g.appendChild(dot)
+            var label = el('text', { x: cx + 8, y: cy + 4, 'font-size': 12, 'font-weight': 800, fill: COLORS[code] })
+            label.textContent = code + ' ' + lastVal + '%'
+            label.style.fontFamily = 'system-ui, sans-serif'
+            g.appendChild(label)
+
+            var appearDelay = 200 + ci * 200 + 900
+            if (!reduced) {
+              setTimeout(function() {
+                dot.style.transition = 'r 300ms cubic-bezier(0.34,1.56,0.64,1)'
+                dot.setAttribute('r', 5)
+                // loop perpétuo: o ponto atual pulsa pra sempre
+                function pulse() {
+                  dot.style.transition = 'r 900ms ease-in-out, opacity 900ms ease-in-out'
+                  dot.setAttribute('r', 8); dot.style.opacity = 0.5
+                  setTimeout(function() {
+                    dot.setAttribute('r', 5); dot.style.opacity = 1
+                    setTimeout(pulse, 900)
+                  }, 900)
+                }
+                setTimeout(pulse, 300)
+              }, appearDelay)
+            }
+          })
+        })
+        .catch(function() {})
     })()
 
     // Animações leves (contador, fluxo, entrada ao rolar) — desligadas se prefers-reduced-motion
