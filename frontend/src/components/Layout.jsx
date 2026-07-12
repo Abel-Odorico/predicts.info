@@ -30,6 +30,7 @@ const NAV_DRAWER = [
   { to: '/decisivos',  icon: '🔥', label: 'Decisivos',     featured: true  },
   { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos',   featured: true  },
   { to: '/grupos',     icon: '🗂',  label: 'Classificação', featured: false },
+  { to: '/brasileirao',icon: '🇧🇷', label: 'Brasileirão',   featured: false },
   { to: '/campeao',    icon: '🏅', label: 'Campeão',       featured: false },
   { to: '/votacao',    icon: '🗳',  label: 'Votação',       featured: false },
   { to: '/perfil',     icon: '👤', label: 'Meu Perfil',    featured: false },
@@ -171,6 +172,7 @@ export default function Layout() {
             { to: '/apostas',      icon: '🎯', label: 'Palpites'          },
             { to: '/ranking',      icon: '🏅', label: 'Ranking'           },
             { to: '/meus-grupos',  icon: '👥', label: 'Meus Grupos'       },
+            { to: '/brasileirao',  icon: '🇧🇷', label: 'Brasileirão'       },
           ].map(n => (
             <NavLink
               key={n.to} to={n.to} end={n.end}
