@@ -126,7 +126,20 @@ def list_matches(
         q = q.filter(Match.group_name == gn.upper())
     if status:
         q = q.filter(Match.status == status)
-    q = q.order_by(Match.match_number)
+        # `status` "pisca" (sync re-processa fonte externa e reseta pra
+        # 'scheduled' mesmo com resultado já gravado — comportamento conhecido,
+        # ver seção "Ingestão de resultados" da skill). Pedido de scheduled
+        # NUNCA pode devolver partida que já tem MatchResult, senão volta como
+        # "próxima partida" um jogo que já acabou há dias.
+        if status == "scheduled":
+            q = q.filter(~Match.result.has())
+    # status=finished + limit é usado pra "últimos resultados" — match_number é
+    # id externo (football-data), não correlaciona com data. Ordenar por data
+    # desc pra pegar os jogos mais recentes, não um corte arbitrário antigo.
+    if status == "finished" and limit:
+        q = q.order_by(Match.match_date.desc())
+    else:
+        q = q.order_by(Match.match_number)
     if limit:
         q = q.limit(limit)
     matches = q.all()
