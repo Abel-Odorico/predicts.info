@@ -182,14 +182,67 @@ function Rodada() {
   )
 }
 
-function MatchRow({ m, bet, token, onSaved }) {
-  const [sa, setSa] = useState(bet ? String(bet.score_a) : '')
-  const [sb, setSb] = useState(bet ? String(bet.score_b) : '')
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState('')
+// stepper +/- reutilizando as mesmas classes CSS do bet flow da Copa (Bets.jsx)
+function ScoreStep({ value, onChange }) {
+  return (
+    <div className="score-stepper">
+      <button type="button" className="score-stepper__btn" onClick={() => onChange(Math.max(0, value - 1))}>−</button>
+      <input
+        type="number" min="0" max="20" className="score-input"
+        value={value}
+        onChange={e => onChange(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+      />
+      <button type="button" className="score-stepper__btn score-stepper__btn--plus" onClick={() => onChange(Math.min(20, value + 1))}>+</button>
+    </div>
+  )
+}
+
+function SimPanel({ matchId }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
 
   useEffect(() => {
-    if (bet) { setSa(String(bet.score_a)); setSb(String(bet.score_b)) }
+    let alive = true
+    api.post(`/matches/${matchId}/simulate`, {})
+      .then(d => { if (alive) setData(d) })
+      .catch(e => { if (alive) setErr(e.message || 'Simulação indisponível.') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [matchId])
+
+  if (loading) return <div className="br-match__sim" style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: '0.8rem' }}>Simulando…</div>
+  if (err || !data) return <div className="br-match__sim" style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: '0.8rem' }}>{err || 'Simulação indisponível.'}</div>
+
+  return (
+    <div className="br-match__sim">
+      <div className="br-match__sim-bar">
+        <span style={{ width: `${data.prob_a}%` }} title={`Vitória ${data.team_a} ${data.prob_a}%`} />
+        <span style={{ width: `${data.prob_draw}%` }} title={`Empate ${data.prob_draw}%`} />
+        <span style={{ width: `${data.prob_b}%` }} title={`Vitória ${data.team_b} ${data.prob_b}%`} />
+      </div>
+      <div className="br-match__sim-legend">
+        <span>🟢 {data.team_a} {data.prob_a}%</span>
+        <span>⚪ Empate {data.prob_draw}%</span>
+        <span>🔴 {data.team_b} {data.prob_b}%</span>
+      </div>
+      <div className="br-match__sim-foot">
+        <span>xG: {data.xg_a.toFixed(2)} × {data.xg_b.toFixed(2)}</span>
+        <span>🔮 Palpite do modelo: <strong>{data.recommended_score.score_a} × {data.recommended_score.score_b}</strong></span>
+      </div>
+    </div>
+  )
+}
+
+function MatchRow({ m, bet, token, onSaved }) {
+  const [sa, setSa] = useState(bet?.score_a ?? 0)
+  const [sb, setSb] = useState(bet?.score_b ?? 0)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [showSim, setShowSim] = useState(false)
+
+  useEffect(() => {
+    if (bet) { setSa(bet.score_a); setSb(bet.score_b) }
   }, [bet?.id])
 
   const finished = m.status === 'finished' && m.result
@@ -198,50 +251,65 @@ function MatchRow({ m, bet, token, onSaved }) {
   const when = dt ? dt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
 
   const save = () => {
-    if (sa === '' || sb === '') return
     setSaving(true); setMsg('')
-    api.post('/bets', { match_id: m.id, score_a: Number(sa), score_b: Number(sb) }, token)
-      .then(b => { setMsg('✓ salvo'); onSaved({ ...b, match_id: m.id, score_a: Number(sa), score_b: Number(sb) }) })
+    api.post('/bets', { match_id: m.id, score_a: sa, score_b: sb }, token)
+      .then(b => { setMsg('✓ salvo'); onSaved({ ...b, match_id: m.id, score_a: sa, score_b: sb }) })
       .catch(e => setMsg(e.message || 'erro'))
       .finally(() => setSaving(false))
   }
 
   return (
-    <div className="card" style={{ marginBottom: 'var(--s2)' }}>
-      <div className="card__body" style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', flexWrap: 'wrap' }}>
-        <span style={{ color: 'var(--text-4)', fontSize: '0.78rem', minWidth: 76 }}>{when}</span>
-        <span style={{ flex: 1, minWidth: 130, display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', textAlign: 'right' }}>
-          {m.team_a.name} <Crest url={m.team_a.flag_url} name={m.team_a.name} />
-        </span>
-        {finished ? (
-          <strong style={{ minWidth: 56, textAlign: 'center' }}>{m.result.score_a} × {m.result.score_b}</strong>
-        ) : open && token ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <input className="br-score" type="number" min="0" max="20" value={sa} onChange={e => setSa(e.target.value)} />
-            ×
-            <input className="br-score" type="number" min="0" max="20" value={sb} onChange={e => setSb(e.target.value)} />
-          </span>
-        ) : (
-          <span style={{ minWidth: 56, textAlign: 'center', color: 'var(--text-4)' }}>×</span>
-        )}
-        <span style={{ flex: 1, minWidth: 130, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <Crest url={m.team_b.flag_url} name={m.team_b.name} /> {m.team_b.name}
-        </span>
-        {open && token && (
-          <button className="btn btn-sm" disabled={saving || sa === '' || sb === ''} onClick={save}>
-            {saving ? '...' : bet ? 'Alterar' : 'Apostar'}
-          </button>
-        )}
+    <div className={`br-match ${open ? 'br-match--open' : ''}`}>
+      <div className="br-match__top">
+        <span className="br-match__time">{when}</span>
         {finished && bet && (
           <span className="badge">{(bet.points_earned ?? 0) > 0 ? `+${bet.points_earned} pts` : '0 pts'}</span>
         )}
+      </div>
+
+      <div className="br-match__teams">
+        <div className="br-match__team br-match__team--a">
+          <span className="br-match__name">{m.team_a.name}</span>
+          <Crest url={m.team_a.flag_url} name={m.team_a.name} />
+        </div>
+
+        <div className="br-match__center">
+          {finished ? (
+            <strong className="br-match__score">{m.result.score_a} × {m.result.score_b}</strong>
+          ) : open && token ? (
+            <div className="br-match__stepper-row">
+              <ScoreStep value={sa} onChange={setSa} />
+              <span className="br-match__vs">×</span>
+              <ScoreStep value={sb} onChange={setSb} />
+            </div>
+          ) : (
+            <span className="br-match__vs">×</span>
+          )}
+        </div>
+
+        <div className="br-match__team br-match__team--b">
+          <Crest url={m.team_b.flag_url} name={m.team_b.name} />
+          <span className="br-match__name">{m.team_b.name}</span>
+        </div>
+      </div>
+
+      <div className="br-match__actions">
+        {open && token && (
+          <button className="btn btn-sm" disabled={saving} onClick={save}>
+            {saving ? '...' : bet ? 'Alterar palpite' : 'Apostar'}
+          </button>
+        )}
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowSim(v => !v)}>
+          {showSim ? '▲ ocultar simulação' : '🔮 simulação e estatísticas'}
+        </button>
         {msg && <span style={{ fontSize: '0.78rem', color: msg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>{msg}</span>}
       </div>
+
       {bet && !finished && (
-        <div className="card__body" style={{ paddingTop: 0, color: 'var(--text-3)', fontSize: '0.8rem' }}>
-          Seu palpite: {bet.score_a} × {bet.score_b}
-        </div>
+        <div className="br-match__my-bet">Seu palpite: {bet.score_a} × {bet.score_b}</div>
       )}
+
+      {showSim && <SimPanel matchId={m.id} />}
     </div>
   )
 }
