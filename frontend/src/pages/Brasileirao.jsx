@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import ProbBar from '../components/ProbBar'
+import SimAnalysisCard from '../components/SimAnalysisCard'
 
 const TABS = [
   { id: 'tabela',  label: '📊 Tabela' },
@@ -231,6 +232,8 @@ function FormStrip({ recent }) {
 function SimPanel({ m }) {
   const [data, setData] = useState(null)
   const [matchup, setMatchup] = useState(null)
+  const [analysis, setAnalysis] = useState(null)
+  const [showAnalysis, setShowAnalysis] = useState(false)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
 
@@ -239,11 +242,13 @@ function SimPanel({ m }) {
     Promise.allSettled([
       api.post(`/matches/${m.id}/simulate`, {}),
       api.get(`/brasileirao/matchup?a=${m.team_a.id}&b=${m.team_b.id}`),
-    ]).then(([sim, mu]) => {
+      api.get(`/matches/${m.id}/analysis`),
+    ]).then(([sim, mu, an]) => {
       if (!alive) return
       if (sim.status === 'fulfilled') setData(sim.value)
       else setErr(sim.reason?.message || 'Simulação indisponível.')
       if (mu.status === 'fulfilled') setMatchup(mu.value)
+      if (an.status === 'fulfilled' && an.value?.content) setAnalysis(an.value.content)
     }).finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [m.id])
@@ -288,6 +293,19 @@ function SimPanel({ m }) {
           ))}
         </div>
       )}
+
+      <div style={{ marginTop: 'var(--s4)' }}>
+        {analysis ? (
+          <SimAnalysisCard
+            analysis={analysis} teamA={m.team_a} teamB={m.team_b}
+            show={showAnalysis} onToggle={() => setShowAnalysis(v => !v)}
+          />
+        ) : (
+          <div style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: '0.75rem' }}>
+            🤖 Análise IA ainda não gerada pra este jogo
+          </div>
+        )}
+      </div>
     </div>
   )
 }

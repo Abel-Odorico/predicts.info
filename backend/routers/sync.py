@@ -58,17 +58,23 @@ def _append_log(message: str) -> None:
 
 
 def _auto_generate_analyses(db_url: str) -> None:
-    """Gera análises IA para partidas pendentes após cada sync. Roda em thread daemon."""
+    """Gera análises IA para partidas pendentes após cada sync. Roda em thread daemon.
+
+    Escopado em copa2026: o prompt (convocados, ELO/histórico de Copa) é
+    específico pra seleções — rodar sem filtro varria também os ~380 jogos
+    do Brasileirão com o prompt errado (achado 2026-07-11, ver auditoria)."""
     try:
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
         from routers.analysis import _get_config, _generate_all_bg
+        from competitions import get_competition_id
 
         engine = create_engine(db_url)
         Sess = sessionmaker(bind=engine)
         db = Sess()
         try:
             cfg = _get_config(db)
+            copa_id = get_competition_id(db)
         finally:
             db.close()
             engine.dispose()
@@ -77,7 +83,7 @@ def _auto_generate_analyses(db_url: str) -> None:
             print("[analysis-auto] nenhum provider configurado — pulando", flush=True)
             return
 
-        _generate_all_bg(db_url, cfg, only_pending=True, only_future=False, trigger="auto")
+        _generate_all_bg(db_url, cfg, only_pending=True, only_future=False, trigger="auto", competition_id=copa_id)
     except Exception as exc:
         print(f"[analysis-auto] erro: {exc}", flush=True)
 

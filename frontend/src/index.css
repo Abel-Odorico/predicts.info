@@ -10587,6 +10587,7 @@ strong.pts {
 /* mobile-first: times empilhados (nome nunca disputa espaço com o stepper) */
 .br-match__duel { display: flex; flex-direction: column; align-items: center; gap: var(--s3); }
 .br-match__side { display: flex; flex-direction: row; align-items: center; gap: 10px; text-align: left; min-width: 0; width: 100%; justify-content: center; flex-wrap: wrap; }
+.br-match__side img { flex-shrink: 0; }
 .br-match__name { font-weight: 700; font-size: 0.9rem; line-height: 1.2; word-break: break-word; }
 .br-match__mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 100%; }
 .br-match__vs-badge {
@@ -10598,9 +10599,9 @@ strong.pts {
 .br-match__vs-x { color: var(--text-4); font-weight: 700; font-size: 0.78rem; }
 .br-match__score { font-family: var(--font-data); font-weight: 900; font-size: 1.3rem; letter-spacing: 0.02em; }
 .br-match__score em { font-style: normal; color: var(--text-4); font-size: 0.9rem; margin: 0 4px; }
-.br-match__stepper-row { display: flex; align-items: center; gap: 6px; }
-.br-match__stepper-row .score-input { width: 58px; height: 58px; font-size: 28px; }
-.br-match__stepper-row .score-stepper__btn { width: 32px; height: 32px; font-size: 18px; }
+.br-match__stepper-row { display: flex; align-items: center; justify-content: center; gap: clamp(4px, 1.5vw, 8px); flex-wrap: wrap; max-width: 100%; }
+.br-match__stepper-row .score-input { width: clamp(46px, 15vw, 62px); height: clamp(46px, 15vw, 62px); font-size: clamp(22px, 6vw, 30px); }
+.br-match__stepper-row .score-stepper__btn { width: clamp(28px, 8.5vw, 36px); height: clamp(28px, 8.5vw, 36px); font-size: clamp(15px, 4.5vw, 20px); }
 .br-match__pos { font-size: 0.68rem; color: var(--text-4); font-weight: 600; }
 
 .br-form-strip { display: flex; gap: 4px; }
@@ -10633,11 +10634,6 @@ strong.pts {
 .br-match__sim { margin-top: var(--s4); padding-top: var(--s4); border-top: 1px dashed var(--border); }
 .br-match__sim-foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-top: var(--s2); font-size: 0.78rem; color: var(--text-3); }
 .br-match__sim-foot strong { color: var(--text-1); font-family: var(--font-data); }
-
-@media (max-width: 479px) {
-  .br-match__stepper-row .score-input { width: 64px; height: 64px; font-size: 32px; }
-  .br-match__stepper-row .score-stepper__btn { width: 36px; height: 36px; font-size: 20px; }
-}
 
 @media (min-width: 480px) {
   .br-match__duel { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s3); }

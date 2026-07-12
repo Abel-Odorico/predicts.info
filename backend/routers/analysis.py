@@ -709,7 +709,7 @@ def _push_progress(r, data: dict):
 import threading as _threading
 _bg_lock = _threading.Lock()
 
-def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_future: bool = False, trigger: str = "manual"):
+def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_future: bool = False, trigger: str = "manual", competition_id: int | None = None):
     if not _bg_lock.acquire(blocking=False):
         print("[analysis] background: já está em execução — pulando", flush=True)
         return
@@ -728,7 +728,10 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
         clauses.append("NOT EXISTS (SELECT 1 FROM match_analyses ma WHERE ma.match_id = m.id)")
     if only_future:
         clauses.append("m.match_date >= NOW()")
+    if competition_id is not None:
+        clauses.append("m.competition_id = :competition_id")
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    params = {"competition_id": competition_id} if competition_id is not None else {}
 
     try:
         pending = db.execute(
@@ -740,7 +743,8 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                 ORDER BY
                     CASE WHEN m.match_date >= NOW() THEN 0 ELSE 1 END,
                     m.match_date
-            """)
+            """),
+            params,
         ).fetchall()
 
         match_map = {row[0]: f"{row[1]} × {row[2]}" for row in pending}
@@ -975,6 +979,7 @@ def generate_one(match_id: int, db: Session = Depends(get_db), _: User = Depends
 class GenerateAllBody(BaseModel):
     only_pending: bool = True
     only_future: bool = False
+    competition: str | None = "copa2026"  # prompt é específico pra seleções — None = todas competições
 
 
 @router.post("/admin/analysis/generate-all")
@@ -988,9 +993,11 @@ def generate_all(
     if not _get_provider_chain(cfg):
         raise HTTPException(400, "Nenhum provider configurado (configure Gemini ou OpenRouter)")
     from config import settings
+    from competitions import get_competition_id
+    comp_id = get_competition_id(db, body.competition) if body.competition else None
     background_tasks.add_task(
         _generate_all_bg, settings.database_url, cfg,
-        body.only_pending, body.only_future, "manual",
+        body.only_pending, body.only_future, "manual", comp_id,
     )
     return {"ok": True, "message": "Geração iniciada em background"}
 
