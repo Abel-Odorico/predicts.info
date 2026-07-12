@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, Link } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
@@ -11,6 +12,9 @@ import LigaFlowModal from '../components/LigaFlowModal'
 import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
 import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
+import BattleHistoryCard from '../components/BattleHistoryCard'
+
+const PHASE_LABELS = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
 
 const CONV_DISMISS_KEY    = 'predicts_conv_popup_v1'
 const INSTALL_BANNER_KEY  = 'predicts_install_banner_v1'
@@ -685,6 +689,8 @@ export default function Dashboard() {
             </div>
           )}
 
+          <CopaFinalStretch matches={matches} />
+
           {liveNow.length > 0 && (
             <div className="card fade-in-2">
               <div className="card__header">
@@ -1080,6 +1086,85 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+function CopaFinalStretch({ matches }) {
+  const upcoming = [...matches]
+    .filter(m => m.status === 'scheduled')
+    .sort((a, b) => new Date(a.match_date) - new Date(b.match_date))
+
+  if (!upcoming.length) return null
+
+  return (
+    <div className="card card--accent fade-in-2">
+      <div className="card__header">
+        <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          🏆 Reta Final da Copa
+        </span>
+        <span className="badge badge-group">{upcoming.length} jogo{upcoming.length !== 1 ? 's' : ''} restante{upcoming.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+        {upcoming.map((m, i) => (
+          <CopaFinalStretchCard key={m.id} match={m} index={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CopaFinalStretchCard({ match, index }) {
+  const countdown = useCountdown(match.match_date)
+  const phaseTag = PHASE_LABELS[match.phase] || match.phase || '—'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-40px' }}
+      transition={{ duration: 0.5, delay: index * 0.12, ease: [0.22, 1, 0.36, 1] }}
+      style={{
+        border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+        padding: 'var(--s4)', background: 'var(--bg-overlay)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--s3)', flexWrap: 'wrap', gap: 8 }}>
+        <span className="badge badge-group">{phaseTag}</span>
+        {countdown && !countdown.started && (
+          <span
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
+              color: '#e8c44a', background: 'rgba(232,196,74,0.12)',
+              borderRadius: 999, padding: '3px 10px',
+              animation: 'copa-stretch-pulse 2.4s ease-in-out infinite',
+            }}
+          >
+            ⏳ {countdown.days > 0 ? `${countdown.days}d ${countdown.hours}h` : `${countdown.hours}h ${countdown.mins}m`}
+          </span>
+        )}
+      </div>
+
+      <div className="featured-teams">
+        <TeamBig team={match.team_a} />
+        <div className="featured-vs">
+          <div className="featured-vs__date">
+            {new Date(match.match_date.endsWith('Z') ? match.match_date : match.match_date + 'Z')
+              .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+          </div>
+          <div className="featured-vs__label">VS</div>
+        </div>
+        <TeamBig team={match.team_b} />
+      </div>
+
+      <div style={{ marginTop: 'var(--s3)' }}>
+        <BattleHistoryCard teamACode={match.team_a.code} teamBCode={match.team_b.code} />
+      </div>
+
+      <Link to={`/partida/${match.id}`} className="btn btn-primary btn-sm" style={{ marginTop: 'var(--s3)', width: '100%', textAlign: 'center' }}>
+        Ver simulação ▶
+      </Link>
+    </motion.div>
   )
 }
 

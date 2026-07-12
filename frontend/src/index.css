@@ -862,6 +862,99 @@ img {
   text-align: center;
 }
 
+@keyframes copa-stretch-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232,196,74,0.4); }
+  50% { box-shadow: 0 0 0 5px rgba(232,196,74,0); }
+}
+
+/* ── Batalha Histórica (H2H das semifinais) ─────────────────────────── */
+.battle-history {
+  border-radius: 14px;
+  padding: var(--s4);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 7%, var(--bg-raised)), var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+
+.battle-history__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s2); margin-bottom: var(--s3); flex-wrap: wrap;
+}
+.battle-history__trophy {
+  font-family: var(--font-cond); font-weight: 700; font-size: 13px;
+  color: #e8c44a;
+}
+.battle-history__vs-label {
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-4);
+}
+
+.battle-history__bar {
+  display: flex; height: 10px; border-radius: 6px; overflow: hidden;
+  background: var(--bg-overlay); margin-bottom: 4px;
+}
+.battle-history__bar-a { background: var(--accent); }
+.battle-history__bar-d { background: var(--text-4); }
+.battle-history__bar-b { background: #4a90e8; }
+.battle-history__bar-legend {
+  display: flex; justify-content: space-between; font-size: 11px;
+  color: var(--text-3); font-family: var(--font-data); margin-bottom: var(--s3);
+}
+
+.battle-history__recent {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; margin-bottom: var(--s3);
+  background: var(--bg-overlay); border-radius: 10px;
+  border-left: 3px solid var(--accent);
+}
+.battle-history__recent-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-4); font-weight: 700;
+}
+.battle-history__recent strong {
+  font-family: var(--font-data); font-size: 14px; color: var(--text-1);
+}
+.battle-history__recent-context {
+  font-size: 12px; color: var(--text-3);
+}
+
+.battle-history__timeline {
+  display: flex; flex-direction: column; gap: var(--s3);
+  position: relative;
+  padding-left: 4px;
+}
+.battle-history__timeline-item {
+  display: flex; gap: 12px; position: relative;
+}
+.battle-history__timeline-item:not(:last-child)::after {
+  content: '';
+  position: absolute; left: 5px; top: 16px; bottom: -12px;
+  width: 2px; background: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.battle-history__timeline-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0; margin-top: 3px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.battle-history__timeline-body { flex: 1; min-width: 0; }
+.battle-history__timeline-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.battle-history__timeline-year {
+  font-family: var(--font-data); font-weight: 900; font-size: 15px;
+  color: var(--accent);
+}
+.battle-history__timeline-tag {
+  font-size: 11px; color: var(--text-4); text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.battle-history__timeline-result {
+  font-family: var(--font-data); font-weight: 700; font-size: 13.5px;
+  color: var(--text-1); margin-top: 2px;
+}
+.battle-history__timeline-note {
+  font-size: 12.5px; color: var(--text-3); line-height: 1.45; margin: 3px 0 0;
+}
+
 .featured-vs__date {
   font-family: var(--font-data);
   font-size: 13px;
