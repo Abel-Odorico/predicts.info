@@ -134,6 +134,7 @@ function Rodada() {
   const { token, user } = useAuth()
   const [data, setData] = useState(null)
   const [myBets, setMyBets] = useState({})
+  const [posByTeam, setPosByTeam] = useState({})
   const [loading, setLoading] = useState(true)
   const [n, setN] = useState(null)
 
@@ -146,6 +147,14 @@ function Rodada() {
   }
 
   useEffect(() => { load(null) }, [])
+
+  useEffect(() => {
+    api.get('/brasileirao/standings').then(d => {
+      const m = {}
+      for (const r of d?.table || []) m[r.team_id] = r.pos
+      setPosByTeam(m)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!token) { setMyBets({}); return }
@@ -177,8 +186,11 @@ function Rodada() {
         </div>
       )}
       {data.matches.map(m => (
-        <MatchRow key={m.id} m={m} bet={myBets[m.id]} token={token}
-          onSaved={b => setMyBets(prev => ({ ...prev, [m.id]: b }))} />
+        <MatchRow
+          key={m.id} m={m} bet={myBets[m.id]} token={token} rodada={n}
+          posA={posByTeam[m.team_a.id]} posB={posByTeam[m.team_b.id]}
+          onSaved={b => setMyBets(prev => ({ ...prev, [m.id]: b }))}
+        />
       ))}
     </div>
   )
@@ -199,17 +211,40 @@ function ScoreStep({ value, onChange }) {
   )
 }
 
+function FormStrip({ recent }) {
+  if (!recent?.length) return <span style={{ color: 'var(--text-4)', fontSize: '0.72rem' }}>sem jogos recentes</span>
+  return (
+    <div className="br-form-strip">
+      {recent.map((g, i) => (
+        <span
+          key={i}
+          className={`br-form-chip br-form-chip--${g.result}`}
+          title={`${g.home ? 'x' : '@'} ${g.opponent}: ${g.score_for}-${g.score_against}`}
+        >
+          {g.result}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function SimPanel({ m }) {
   const [data, setData] = useState(null)
+  const [matchup, setMatchup] = useState(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
 
   useEffect(() => {
     let alive = true
-    api.post(`/matches/${m.id}/simulate`, {})
-      .then(d => { if (alive) setData(d) })
-      .catch(e => { if (alive) setErr(e.message || 'Simulação indisponível.') })
-      .finally(() => { if (alive) setLoading(false) })
+    Promise.allSettled([
+      api.post(`/matches/${m.id}/simulate`, {}),
+      api.get(`/brasileirao/matchup?a=${m.team_a.id}&b=${m.team_b.id}`),
+    ]).then(([sim, mu]) => {
+      if (!alive) return
+      if (sim.status === 'fulfilled') setData(sim.value)
+      else setErr(sim.reason?.message || 'Simulação indisponível.')
+      if (mu.status === 'fulfilled') setMatchup(mu.value)
+    }).finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [m.id])
 
@@ -223,11 +258,35 @@ function SimPanel({ m }) {
         <span>Simulações: {data.simulations.toLocaleString('pt-BR')}</span>
         <span>🔮 Palpite do modelo: <strong>{data.recommended_score.score.replace('x', ' × ')}</strong> ({data.recommended_score.prob.toFixed(1)}%)</span>
       </div>
+
+      {matchup && (
+        <div className="br-form">
+          <div className="br-form__col">
+            <span className="br-form__team">{matchup.team_a.code}</span>
+            <FormStrip recent={matchup.team_a.recent} />
+          </div>
+          <div className="br-form__col">
+            <span className="br-form__team">{matchup.team_b.code}</span>
+            <FormStrip recent={matchup.team_b.recent} />
+          </div>
+        </div>
+      )}
+
+      {matchup?.h2h_season?.length > 0 && (
+        <div className="br-h2h">
+          <span className="br-h2h__title">Confronto direto nesta temporada</span>
+          {matchup.h2h_season.map((g, i) => (
+            <div key={i} className="br-h2h__row">
+              <span>{g.home} {g.score_home} × {g.score_away} {g.away}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-function MatchRow({ m, bet, token, onSaved }) {
+function MatchRow({ m, bet, token, onSaved, rodada, posA, posB }) {
   const [sa, setSa] = useState(bet?.score_a ?? 0)
   const [sb, setSb] = useState(bet?.score_b ?? 0)
   const [saving, setSaving] = useState(false)
@@ -254,7 +313,7 @@ function MatchRow({ m, bet, token, onSaved }) {
   return (
     <div className={`br-match ${open ? 'br-match--open' : ''} ${finished ? 'br-match--finished' : ''}`}>
       <div className="br-match__top">
-        <span className="br-match__time">📅 {when}</span>
+        <span className="br-match__time">📅 {when}{rodada ? ` · rodada ${rodada}` : ''}</span>
         {finished && bet && (
           <span className={`badge ${(bet.points_earned ?? 0) > 0 ? 'badge--win' : ''}`}>
             {(bet.points_earned ?? 0) > 0 ? `+${bet.points_earned} pts` : '0 pts'}
@@ -267,6 +326,7 @@ function MatchRow({ m, bet, token, onSaved }) {
         <div className="br-match__side">
           <Crest url={m.team_a.flag_url} name={m.team_a.name} big />
           <span className="br-match__name">{m.team_a.name}</span>
+          {posA && <span className="br-match__pos">{posA}º na tabela</span>}
         </div>
 
         <div className="br-match__mid">
@@ -286,6 +346,7 @@ function MatchRow({ m, bet, token, onSaved }) {
         <div className="br-match__side">
           <Crest url={m.team_b.flag_url} name={m.team_b.name} big />
           <span className="br-match__name">{m.team_b.name}</span>
+          {posB && <span className="br-match__pos">{posB}º na tabela</span>}
         </div>
       </div>
 

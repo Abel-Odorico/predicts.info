@@ -30,6 +30,7 @@ from database import get_db
 from models import Match, MatchStatus, Team
 from routers.brasileirao_sync import COMP_CODE
 from competitions import get_competition_id
+from fastapi import HTTPException
 
 router = APIRouter(prefix="/brasileirao", tags=["brasileirao"])
 
@@ -222,6 +223,66 @@ def compute_projection(db: Session, n_sims: int = N_SIMS) -> dict:
         })
     out.sort(key=lambda r: r["avg_pos"])
     return {"clubs": out, "n_sims": n_sims, "remaining_matches": len(remaining)}
+
+
+def _recent_form(matches: list[Match], team_id: int, limit: int = 5) -> list[dict]:
+    played = [m for m in matches if m.result and (m.team_a_id == team_id or m.team_b_id == team_id)]
+    played.sort(key=lambda m: m.match_date or 0, reverse=True)
+    out = []
+    for m in played[:limit]:
+        is_home = m.team_a_id == team_id
+        opp = m.team_b if is_home else m.team_a
+        gf = m.result.score_a if is_home else m.result.score_b
+        ga = m.result.score_b if is_home else m.result.score_a
+        result = "V" if gf > ga else ("D" if gf < ga else "E")
+        out.append({
+            "opponent": opp.name, "opponent_code": opp.code,
+            "score_for": gf, "score_against": ga, "result": result,
+            "home": is_home,
+            "match_date": m.match_date.isoformat() if m.match_date else None,
+        })
+    return out
+
+
+@router.get("/matchup")
+def matchup(a: int = Query(...), b: int = Query(...), db: Session = Depends(get_db)):
+    """Forma recente (últimos 5) de cada time + confronto direto NESTA temporada
+    (só temos dados sincronizados de 2026 — sem histórico multi-temporada)."""
+    comp_id = _comp_id(db)
+    if not comp_id:
+        raise HTTPException(404, "Competição Brasileirão não encontrada")
+
+    clubs = {c.id: c for c in db.query(Team).filter(Team.competition_id == comp_id).all()}
+    if a not in clubs or b not in clubs:
+        raise HTTPException(404, "Time não encontrado nesta competição")
+
+    matches = _load_matches(db, comp_id)
+    table = _build_table(list(clubs.values()), matches)
+    rows = []
+    for cid, r in table.items():
+        rows.append({"team_id": cid, "name": clubs[cid].name, **r})
+    rows.sort(key=lambda r: (-r["pts"], -r["v"], -(r["gp"] - r["gc"]), -r["gp"], r["name"]))
+    pos_by_id = {r["team_id"]: i for i, r in enumerate(rows, start=1)}
+
+    h2h_season = [
+        {
+            "match_date": m.match_date.isoformat() if m.match_date else None,
+            "home": clubs[m.team_a_id].code, "away": clubs[m.team_b_id].code,
+            "score_home": m.result.score_a, "score_away": m.result.score_b,
+        }
+        for m in matches
+        if m.result and {m.team_a_id, m.team_b_id} == {a, b}
+    ]
+
+    def _team_block(team_id: int) -> dict:
+        c = clubs[team_id]
+        return {
+            "team_id": team_id, "code": c.code, "name": c.name,
+            "position": pos_by_id.get(team_id),
+            "recent": _recent_form(matches, team_id),
+        }
+
+    return {"team_a": _team_block(a), "team_b": _team_block(b), "h2h_season": h2h_season}
 
 
 @router.get("/projection")
