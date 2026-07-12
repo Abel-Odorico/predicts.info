@@ -577,6 +577,194 @@ def _build_prompt(match_row, team_a: Team, team_b: Team, players_a, players_b, r
     )
 
 
+# ─── Prompt builder — Brasileirão (futebol de clube) ─────────────────────────
+#
+# Variante do prompt pra competições de clube (Brasileirão): sem "convocados"
+# (Player só existe pra seleções via convocação da Copa — clubes não têm essa
+# tabela populada), sem ELO/histórico de Copa. Em vez disso: posição na tabela
+# desta temporada, títulos históricos do clube, forma V/E/D e confronto direto
+# nesta temporada. key_players vem do conhecimento real da IA sobre o elenco
+# atual do clube (sem lista de convocados pra ancorar) — instrução explícita
+# pra não inventar lesão/suspensão que não temos como confirmar.
+
+BR_PROMPT_TEMPLATE = (
+    "Você é um jornalista esportivo sênior especializado em futebol brasileiro, "
+    "com profundo conhecimento tático do Campeonato Brasileiro Série A.\n"
+    "Analise a partida {team_a_name} × {team_b_name}, válida pela rodada {rodada} "
+    "do Brasileirão {season}, com rigor técnico e paixão futebolística.\n\n"
+    "REGRAS OBRIGATÓRIAS:\n"
+    "- Escreva em PORTUGUÊS BRASILEIRO fluente, estilo ESPN/Globo Esporte\n"
+    "- Use os DADOS FORNECIDOS (posição, pontos, forma, elo) como base factual; "
+    "enriqueça com conhecimento tático real de cada clube\n"
+    "- key_players: cite os 3 jogadores mais relevantes de cada elenco pelo seu conhecimento real do "
+    "futebol brasileiro atual — NÃO temos lista de convocados nem boletim médico, então NÃO afirme "
+    "lesão/suspensão específica; se não tiver certeza de quem está em campo hoje, fale em termos de "
+    "'peça-chave do sistema' em vez de cravar titularidade\n"
+    "- Mencione sistemas táticos concretos (4-3-3, 4-2-3-1, 3-5-2, etc.) com base no estilo reconhecido do técnico/clube\n"
+    "- Contextualize na tabela: briga por título, G4/Libertadores, meio de tabela ou risco de rebaixamento\n"
+    "- Seja CIRÚRGICO em predições: placar, quem marca, em que fase do jogo\n\n"
+    "## DADOS DA PARTIDA\n"
+    "Rodada {rodada} de 38 | Data: {match_date}\n\n"
+    "## {team_a_name} ({team_a_code})\n"
+    "Posição: {team_a_pos}º lugar | {team_a_pts} pts (V{team_a_v} E{team_a_e} D{team_a_d}) | Saldo de gols: {team_a_sg}\n"
+    "Elo (replay da temporada): {team_a_elo}\n"
+    "Ataque: {team_a_avg_gf} gols/jogo | Defesa: {team_a_avg_ga} sofridos/jogo\n"
+    "Forma — últimos 5 jogos: {team_a_form_str}\n"
+    "Títulos do Brasileirão: {team_a_titles}\n"
+    "Últimos resultados:\n{team_a_results}\n\n"
+    "## {team_b_name} ({team_b_code})\n"
+    "Posição: {team_b_pos}º lugar | {team_b_pts} pts (V{team_b_v} E{team_b_e} D{team_b_d}) | Saldo de gols: {team_b_sg}\n"
+    "Elo (replay da temporada): {team_b_elo}\n"
+    "Ataque: {team_b_avg_gf} gols/jogo | Defesa: {team_b_avg_ga} sofridos/jogo\n"
+    "Forma — últimos 5 jogos: {team_b_form_str}\n"
+    "Títulos do Brasileirão: {team_b_titles}\n"
+    "Últimos resultados:\n{team_b_results}\n"
+    "{mc_probs}\n"
+    "## Confronto direto nesta temporada\n{h2h_season}\n\n"
+    "## Fatos verificados (não são opinião — números reais, use como base do campo \"hook\")\n"
+    "{team_a_code}: {team_a_fatos}\n"
+    "{team_b_code}: {team_b_fatos}\n\n"
+    "## SAÍDA — JSON PURO (sem markdown, sem ```):\n"
+    '{{\n'
+    '  "hook": "UMA frase curta e impactante pra ABRIR a análise, tipo manchete de jornal esportivo. '
+    'Use SOMENTE números da seção Fatos Verificados acima (sequência sem vencer, jogos seguidos sofrendo gol) '
+    'ou dados de posição/pontos/forma já fornecidos. PROIBIDO inventar número, lesão ou estatística que não '
+    'esteja nos dados acima.",\n'
+    '  "overview": "3 parágrafos: (1) contexto na tabela — o que está em jogo pros dois lados (título, G4, Z4); '
+    '(2) retrospecto do confronto direto nesta temporada, se houver; '
+    '(3) momento atual de cada clube — quem vem melhor, quem precisa reagir",\n'
+    '  "team_a": {{\n'
+    '    "tactical": "Sistema tático específico (ex: 4-3-3 de pressão alta), como se organiza defensiva e ofensivamente",\n'
+    '    "key_players": ["Jogador 1 (posição) — papel no time", "Jogador 2 (posição) — ...", "Jogador 3 (posição) — ..."],\n'
+    '    "form": "Desempenho recente na temporada: pontos conquistados, consistência, tendência (subindo/caindo na tabela)",\n'
+    '    "strengths": "3-4 qualidades concretas no contexto deste confronto",\n'
+    '    "weaknesses": "2-3 vulnerabilidades reais que {team_b_name} pode explorar hoje"\n'
+    '  }},\n'
+    '  "team_b": {{\n'
+    '    "tactical": "...", "key_players": ["...", "...", "..."], "form": "...", "strengths": "...",\n'
+    '    "weaknesses": "2-3 vulnerabilidades que {team_a_name} pode explorar"\n'
+    '  }},\n'
+    '  "matchup": "2 parágrafos: (1) batalha tática principal — onde o jogo será decidido; '
+    '(2) fator X — o que pode mudar o jogo (banco de reservas, mando de campo, pressão da posição na tabela)",\n'
+    '  "prediction": "2 parágrafos: (1) como o jogo deve se desenvolver; '
+    '(2) cite o placar mais provável do modelo (primeiro da lista de placares acima) e os xG esperados, '
+    'justifique taticamente, diga quem tende a marcar e em que período",\n'
+    '  "verdict": "Uma frase direta e opinativa sobre quem leva vantagem, ou se é jogo equilibrado"\n'
+    '}}'
+)
+
+
+def _build_prompt_br(match_row, team_a: Team, team_b: Team, ctx_a: dict, ctx_b: dict,
+                      recent_a, recent_b, mc_prob, h2h_season: list, custom_template: str = "") -> str:
+    def fmt_results(results):
+        if not results:
+            return "  Sem dados disponíveis nesta temporada"
+        return "\n".join(
+            f"  {r['date']}: {r['team_a']} {r['score_a']}–{r['score_b']} {r['team_b']}"
+            for r in results[:5]
+        )
+
+    def fmt_form(recent, code):
+        if not recent:
+            return "N/D"
+        out = []
+        for r in recent[:5]:
+            gf, ga = (r["score_a"], r["score_b"]) if r["team_a"] == code else (r["score_b"], r["score_a"])
+            out.append("V" if gf > ga else ("D" if gf < ga else "E"))
+        return "-".join(out)
+
+    mc_probs = ""
+    if mc_prob:
+        top_sc = mc_prob.get("top_scores", [])[:5]
+        scores_str = "  |  ".join(f"{s['score']} ({s['prob']:.1f}%)" for s in top_sc) if top_sc else "N/D"
+        mc_probs = (
+            f"## Probabilidades Dixon-Coles + Monte Carlo\n"
+            f"  Vitória {team_a.name}: {mc_prob.get('prob_a', 0):.1f}% | "
+            f"Empate: {mc_prob.get('prob_draw', 0):.1f}% | "
+            f"Vitória {team_b.name}: {mc_prob.get('prob_b', 0):.1f}%\n"
+            f"  xG esperado: {team_a.name} {mc_prob.get('lambda_a', 0):.2f} gols × "
+            f"{team_b.name} {mc_prob.get('lambda_b', 0):.2f} gols\n"
+            f"  Placares mais prováveis: {scores_str}\n"
+        )
+
+    if h2h_season:
+        h2h_str = "\n".join(
+            f"  {g['home']} {g['score_home']} × {g['score_away']} {g['away']}" for g in h2h_season
+        )
+    else:
+        h2h_str = "  Times ainda não se enfrentaram nesta temporada"
+
+    team_a_fatos = _fatos_verificados(recent_a, team_a.code)
+    team_b_fatos = _fatos_verificados(recent_b, team_b.code)
+
+    template = custom_template.strip() if custom_template else BR_PROMPT_TEMPLATE
+    return template.format(
+        team_a_fatos=team_a_fatos, team_b_fatos=team_b_fatos,
+        team_a_name=team_a.name, team_a_code=team_a.code,
+        team_a_pos=ctx_a["pos"], team_a_pts=ctx_a["pts"],
+        team_a_v=ctx_a["v"], team_a_e=ctx_a["e"], team_a_d=ctx_a["d"],
+        team_a_sg=ctx_a["sg"], team_a_titles=ctx_a["titles"],
+        team_a_elo=team_a.elo_rating or "N/D",
+        team_a_avg_gf=team_a.avg_goals_for or "N/D",
+        team_a_avg_ga=team_a.avg_goals_against or "N/D",
+        team_a_form_str=fmt_form(recent_a, team_a.code),
+        team_a_results=fmt_results(recent_a),
+        team_b_name=team_b.name, team_b_code=team_b.code,
+        team_b_pos=ctx_b["pos"], team_b_pts=ctx_b["pts"],
+        team_b_v=ctx_b["v"], team_b_e=ctx_b["e"], team_b_d=ctx_b["d"],
+        team_b_sg=ctx_b["sg"], team_b_titles=ctx_b["titles"],
+        team_b_elo=team_b.elo_rating or "N/D",
+        team_b_avg_gf=team_b.avg_goals_for or "N/D",
+        team_b_avg_ga=team_b.avg_goals_against or "N/D",
+        team_b_form_str=fmt_form(recent_b, team_b.code),
+        team_b_results=fmt_results(recent_b),
+        rodada=match_row.get("match_number") or "?",
+        season=match_row.get("season", 2026),
+        match_date=str(match_row.get("match_date", ""))[:10],
+        mc_probs=mc_probs,
+        h2h_season=h2h_str,
+    )
+
+
+def _get_br_context(db: Session, comp_id: int, team_a_id: int, team_b_id: int) -> tuple[dict, dict, list]:
+    """Posição/pts/V-E-D/SG (tabela desta temporada) + confronto direto desta
+    temporada, pros dois times. Reusa a lógica de tabela de routers/brasileirao.py
+    (import local pra evitar ciclo — brasileirao.py não importa analysis.py)."""
+    from routers.brasileirao import _load_matches, _build_table, BR_TITLES
+    from models import Team as _Team
+
+    clubs = db.query(_Team).filter(_Team.competition_id == comp_id).all()
+    matches = _load_matches(db, comp_id)
+    table = _build_table(clubs, matches)
+    club_by_id = {c.id: c for c in clubs}
+
+    rows = []
+    for cid, r in table.items():
+        c = club_by_id[cid]
+        rows.append({"team_id": cid, "name": c.name, **r})
+    rows.sort(key=lambda r: (-r["pts"], -r["v"], -(r["gp"] - r["gc"]), -r["gp"], r["name"]))
+    pos_by_id = {r["team_id"]: i for i, r in enumerate(rows, start=1)}
+
+    def ctx(team_id: int) -> dict:
+        r = table.get(team_id, {"pts": 0, "v": 0, "e": 0, "d": 0, "gp": 0, "gc": 0})
+        code = club_by_id[team_id].code
+        return {
+            "pos": pos_by_id.get(team_id, "?"), "pts": r["pts"],
+            "v": r["v"], "e": r["e"], "d": r["d"], "sg": r["gp"] - r["gc"],
+            "titles": BR_TITLES.get(code, 0),
+        }
+
+    h2h_season = [
+        {
+            "home": club_by_id[m.team_a_id].code, "away": club_by_id[m.team_b_id].code,
+            "score_home": m.result.score_a, "score_away": m.result.score_b,
+        }
+        for m in matches
+        if m.result and {m.team_a_id, m.team_b_id} == {team_a_id, team_b_id}
+    ]
+    return ctx(team_a_id), ctx(team_b_id), h2h_season
+
+
 # ─── Core generator ───────────────────────────────────────────────────────────
 
 def _get_recent_results(db: Session, team_code: str, limit: int = 5) -> list:
@@ -627,10 +815,12 @@ def _generate_one(
     import time
     row = db.execute(
         text("""
-            SELECT m.id, ta.id, tb.id, m.match_date, m.phase, ta.group_name
+            SELECT m.id, ta.id, tb.id, m.match_date, m.phase, ta.group_name,
+                   m.competition_id, m.match_number, c.code AS comp_code
             FROM matches m
             JOIN teams ta ON ta.id = m.team_a_id
             JOIN teams tb ON tb.id = m.team_b_id
+            LEFT JOIN competitions c ON c.id = m.competition_id
             WHERE m.id = :mid
         """),
         {"mid": match_id},
@@ -638,19 +828,32 @@ def _generate_one(
     if not row:
         raise HTTPException(404, "Partida não encontrada")
 
-    match_row = {"match_date": row[3], "phase": row[4], "group_name": row[5]}
+    match_row = {
+        "match_date": row[3], "phase": row[4], "group_name": row[5],
+        "match_number": row[7],
+    }
     team_a = db.query(Team).get(row[1])
     team_b = db.query(Team).get(row[2])
+    comp_code = row[8]
 
-    from models import Player
-    players_a = db.query(Player).filter_by(team_id=row[1]).all()
-    players_b = db.query(Player).filter_by(team_id=row[2]).all()
+    if comp_code == "brasileirao2026":
+        ctx_a, ctx_b, h2h_season = _get_br_context(db, row[6], row[1], row[2])
+        prompt = _build_prompt_br(match_row, team_a, team_b, ctx_a, ctx_b,
+                                   _get_recent_results(db, team_a.code),
+                                   _get_recent_results(db, team_b.code),
+                                   _get_mc_prob(db, match_id),
+                                   h2h_season,
+                                   cfg.get("prompt_template_br", ""))
+    else:
+        from models import Player
+        players_a = db.query(Player).filter_by(team_id=row[1]).all()
+        players_b = db.query(Player).filter_by(team_id=row[2]).all()
 
-    prompt = _build_prompt(match_row, team_a, team_b, players_a, players_b,
-                           _get_recent_results(db, team_a.code),
-                           _get_recent_results(db, team_b.code),
-                           _get_mc_prob(db, match_id),
-                           cfg.get("prompt_template", ""))
+        prompt = _build_prompt(match_row, team_a, team_b, players_a, players_b,
+                               _get_recent_results(db, team_a.code),
+                               _get_recent_results(db, team_b.code),
+                               _get_mc_prob(db, match_id),
+                               cfg.get("prompt_template", ""))
 
     t0 = time.time()
     content, model_tag, usage = _call_llm(cfg, prompt, provider_state)

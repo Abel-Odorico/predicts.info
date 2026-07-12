@@ -10632,6 +10632,9 @@ strong.pts {
 .br-match__sim-toggle { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); color: var(--accent); }
 
 .br-match__sim { margin-top: var(--s4); padding-top: var(--s4); border-top: 1px dashed var(--border); }
+/* escudos de clube são quadrados — a duel-bar do ProbBar foi feita pra bandeira
+   retangular (36x26, object-fit:cover corta o topo/base do escudo) */
+.br-match__sim .duel-bar__flag { width: 34px; height: 34px; object-fit: contain; border: none; background: var(--bg-overlay); border-radius: 6px; }
 .br-match__sim-foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-top: var(--s2); font-size: 0.78rem; color: var(--text-3); }
 .br-match__sim-foot strong { color: var(--text-1); font-family: var(--font-data); }
 
