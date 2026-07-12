@@ -225,6 +225,19 @@ def compute_projection(db: Session, n_sims: int = N_SIMS) -> dict:
     return {"clubs": out, "n_sims": n_sims, "remaining_matches": len(remaining)}
 
 
+# Títulos do Brasileirão Série A por clube (1971–2025, 70 edições) — dado
+# histórico estático, não sincronizado (só temos matches da temporada 2026).
+# Fonte: Wikipédia "Lista de campeões do Campeonato Brasileiro de Futebol"
+# (cruzado com campeoesdofutebol.com.br), verificado 2026-07-11.
+BR_TITLES: dict[str, int] = {
+    "PAL": 12, "SAN": 8, "FLA": 8, "COR": 7, "PAU": 6,
+    "CRU": 4, "FLU": 4, "VAS": 4,
+    "CAM": 3, "SCI": 3, "BOT": 3,
+    "BAH": 2, "FBP": 2,
+    "CAP": 1, "CTB": 1,
+}
+
+
 def _recent_form(matches: list[Match], team_id: int, limit: int = 5) -> list[dict]:
     played = [m for m in matches if m.result and (m.team_a_id == team_id or m.team_b_id == team_id)]
     played.sort(key=lambda m: m.match_date or 0, reverse=True)
@@ -280,6 +293,7 @@ def matchup(a: int = Query(...), b: int = Query(...), db: Session = Depends(get_
             "team_id": team_id, "code": c.code, "name": c.name,
             "position": pos_by_id.get(team_id),
             "recent": _recent_form(matches, team_id),
+            "titles": BR_TITLES.get(c.code, 0),
         }
 
     return {"team_a": _team_block(a), "team_b": _team_block(b), "h2h_season": h2h_season}

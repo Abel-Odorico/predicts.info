@@ -262,11 +262,17 @@ function SimPanel({ m }) {
       {matchup && (
         <div className="br-form">
           <div className="br-form__col">
-            <span className="br-form__team">{matchup.team_a.code}</span>
+            <span className="br-form__team">
+              {matchup.team_a.code}
+              {matchup.team_a.titles > 0 && <span className="br-form__titles"> 🏆×{matchup.team_a.titles}</span>}
+            </span>
             <FormStrip recent={matchup.team_a.recent} />
           </div>
           <div className="br-form__col">
-            <span className="br-form__team">{matchup.team_b.code}</span>
+            <span className="br-form__team">
+              {matchup.team_b.code}
+              {matchup.team_b.titles > 0 && <span className="br-form__titles"> 🏆×{matchup.team_b.titles}</span>}
+            </span>
             <FormStrip recent={matchup.team_b.recent} />
           </div>
         </div>

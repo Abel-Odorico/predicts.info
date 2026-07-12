@@ -10617,6 +10617,7 @@ strong.pts {
 .br-form { display: flex; justify-content: space-between; gap: var(--s4); margin-top: var(--s3); flex-wrap: wrap; }
 .br-form__col { display: flex; flex-direction: column; gap: 4px; }
 .br-form__team { font-size: 0.7rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.03em; }
+.br-form__titles { color: #d4a017; font-weight: 700; text-transform: none; letter-spacing: 0; }
 
 .br-h2h { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--border); }
 .br-h2h__title { font-size: 0.7rem; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.03em; }
