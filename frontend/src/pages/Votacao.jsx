@@ -3,67 +3,63 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 
+const BASE_ROWS = [
+  { resultado: 'Placar exato', pts: '25 pts', highlight: true },
+  { resultado: 'Vencedor + gols do vencedor', pts: '18 pts', highlight: false },
+  { resultado: 'Vencedor + saldo de gols', pts: '15 pts', highlight: false },
+  { resultado: 'Vencedor + gols do perdedor', pts: '12 pts', highlight: false },
+  { resultado: 'Apenas resultado certo', pts: '10 pts', highlight: false },
+  { resultado: 'Nenhum acerto', pts: '0 pts', highlight: false },
+]
+
+const POSICAO_BONUS = [
+  { label: 'Campeão certo (fim de temporada)', pts: '+150 pts' },
+  { label: 'Vice certo (fim de temporada)', pts: '+75 pts' },
+  { label: 'Cada time do G4 certo (até 4)', pts: '+25 pts cada' },
+]
+
 const SISTEMAS = [
   {
-    key: 'atual',
-    label: 'Sistema Atual',
-    tag: 'VIGENTE',
-    tagColor: 'var(--text-3)',
-    desc: 'Simples e direto. Apenas 2 níveis de pontuação.',
-    rows: [
-      { resultado: 'Placar exato', pts: '3 pts', highlight: true },
-      { resultado: 'Vencedor / empate certo', pts: '1 pt', highlight: false },
-      { resultado: 'Nenhum acerto', pts: '0 pts', highlight: false },
-    ],
-    bonus: [],
-  },
-  {
-    key: 'precisao',
-    label: 'Pontuação por Precisão',
-    tag: 'PROPOSTO',
+    key: 'posicao',
+    label: 'Precisão + Posição Final',
+    tag: 'OPÇÃO 1',
     tagColor: 'var(--accent)',
-    desc: 'Recompensa quem acerta mais detalhes. 5 níveis de pontuação.',
-    rows: [
-      { resultado: 'Placar exato', pts: '25 pts', highlight: true },
-      { resultado: 'Vencedor + gols do vencedor', pts: '18 pts', highlight: false },
-      { resultado: 'Vencedor + saldo de gols', pts: '15 pts', highlight: false },
-      { resultado: 'Vencedor + gols do perdedor', pts: '12 pts', highlight: false },
-      { resultado: 'Apenas resultado certo', pts: '10 pts', highlight: false },
-      { resultado: 'Nenhum acerto', pts: '0 pts', highlight: false },
-    ],
+    desc: 'A pontuação por jogo de sempre, mais um palpite único de campeão/vice/G4 no fim da temporada.',
+    rows: BASE_ROWS,
+    bonus: POSICAO_BONUS,
+  },
+  {
+    key: 'classico',
+    label: 'Precisão + Clássico + Posição Final',
+    tag: 'OPÇÃO 2',
+    tagColor: '#9b5de8',
+    desc: 'Mesma pontuação por jogo — em clássicos regionais (Fla-Flu, Grenal, Choque-Rei etc.) e na rodada que decide título/G4/rebaixamento, todos os pontos valem em dobro.',
+    rows: BASE_ROWS,
     bonus: [
-      { label: 'Bônus campeão', pts: '+100 pts' },
-      { label: 'Bônus vice-campeão', pts: '+50 pts' },
+      { label: '🔥 Clássico ou rodada decisiva — todos os pontos do jogo em DOBRO', pts: '×2' },
+      ...POSICAO_BONUS,
     ],
   },
   {
-    key: 'proximidade',
-    label: 'Proximidade Inteligente',
-    tag: 'SUGERIDO',
-    tagColor: '#9b5de8',
-    desc: 'Pontuação contínua pela distância do placar. Quanto mais perto, mais pontos.',
-    rows: [
-      { resultado: 'Placar exato', pts: '25 pts', highlight: true },
-      { resultado: 'Resultado certo, dist. 1 gol', pts: '23 pts', highlight: false },
-      { resultado: 'Resultado certo, dist. 2 gols', pts: '21 pts', highlight: false },
-      { resultado: 'Resultado certo, dist. 3+ gols', pts: '10–19 pts', highlight: false },
-      { resultado: 'Resultado errado', pts: '0 pts', highlight: false },
-    ],
+    key: 'zebra',
+    label: 'Precisão + Zebra + Posição Final',
+    tag: 'OPÇÃO 3',
+    tagColor: '#e8935b',
+    desc: 'Mesma pontuação por jogo — mais bônus quando você acerta o resultado com o time em desvantagem na tabela ou no Elo.',
+    rows: BASE_ROWS,
     bonus: [
-      { label: 'Bônus campeão', pts: '+100 pts' },
-      { label: 'Bônus vice-campeão', pts: '+50 pts' },
+      { label: '🐴 Zebra — acertou com o time em desvantagem na tabela/Elo', pts: '+15 pts' },
+      ...POSICAO_BONUS,
     ],
-    formula: 'Pts = 10 (resultado) + max(0, 15 − distância × 2) + 5 (exato)',
   },
 ]
 
 const EXEMPLO = [
-  { palpite: '2 × 1', atual: '3 pts', precisao: '25 pts', proximidade: '25 pts', label: 'Exato' },
-  { palpite: '2 × 0', atual: '1 pt', precisao: '18 pts', proximidade: '23 pts', label: 'Venc. + gols do venc.' },
-  { palpite: '3 × 1', atual: '1 pt', precisao: '15 pts', proximidade: '23 pts', label: 'Venc. + saldo' },
-  { palpite: '3 × 2', atual: '1 pt', precisao: '12 pts', proximidade: '21 pts', label: 'Venc. + gols do perd.' },
-  { palpite: '1 × 0', atual: '1 pt', precisao: '10 pts', proximidade: '21 pts', label: 'Só resultado' },
-  { palpite: '0 × 1', atual: '0 pts', precisao: '0 pts', proximidade: '0 pts', label: 'Errou tudo' },
+  { cenario: 'Fla-Flu — cravou o placar exato', posicao: '25 pts', classico: '50 pts', zebra: '25 pts' },
+  { cenario: 'Fla-Flu — só acertou o vencedor', posicao: '10 pts', classico: '20 pts', zebra: '10 pts' },
+  { cenario: 'Lanterna bate o líder — cravou o placar exato', posicao: '25 pts', classico: '25 pts', zebra: '40 pts' },
+  { cenario: 'Lanterna bate o líder — só acertou o vencedor', posicao: '10 pts', classico: '10 pts', zebra: '25 pts' },
+  { cenario: 'Campeão certo no palpite de fim de temporada', posicao: '+150 pts', classico: '+150 pts', zebra: '+150 pts' },
 ]
 
 function Countdown({ closesAt }) {
@@ -122,7 +118,7 @@ export default function Votacao() {
   const [suggestion, setSuggestion] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [msg, setMsg] = useState('')
-  const [sysTab, setSysTab] = useState('precisao')
+  const [sysTab, setSysTab] = useState('posicao')
 
   const load = useCallback(() => {
     const reqs = [api.get('/poll/active')]
@@ -199,13 +195,13 @@ export default function Votacao() {
     <div className="page poll-page fade-in-1">
       {/* ── Hero ─────────────────────────────────────── */}
       <div className="poll-hero">
-        <div className="poll-hero__eyebrow">Consulta Oficial — Copa 2026</div>
-        <h1 className="poll-hero__title">VOTAÇÃO: SISTEMA DE PONTUAÇÃO</h1>
+        <div className="poll-hero__eyebrow">Consulta Oficial — Brasileirão</div>
+        <h1 className="poll-hero__title">VOTAÇÃO: PONTUAÇÃO DO BRASILEIRÃO</h1>
         <p className="poll-hero__desc">{poll.description}</p>
         <div className="poll-urgency-note">
-          ⚡ Se aprovada, a mudança vale para as partidas ainda não realizadas deste campeonato.
-          Palpites já feitos serão avaliados pelo novo sistema a partir da implementação.
-          Partidas já encerradas <strong>não serão recalculadas</strong>.
+          ⚡ Se aprovada, a mudança vale a partir da próxima rodada não disputada.
+          Rodadas já encerradas <strong>não serão recalculadas</strong>. O bônus de posição final
+          (campeão/vice/G4) vale nas 3 opções e é um palpite único — trava antes da próxima rodada.
         </div>
 
         <div className="poll-hero__meta">
@@ -310,26 +306,24 @@ export default function Votacao() {
 
         {/* Tabela comparativa */}
         <details className="poll-compare-details">
-          <summary>Ver tabela comparativa (resultado: Brasil 2 × 1 Argentina)</summary>
+          <summary>Ver tabela comparativa (cenários de exemplo)</summary>
           <div className="poll-compare-wrap">
             <table className="poll-compare-table">
               <thead>
                 <tr>
-                  <th>Palpite</th>
-                  <th>Situação</th>
-                  <th>Atual</th>
-                  <th>Precisão</th>
-                  <th>Proximidade</th>
+                  <th>Cenário</th>
+                  <th>Opção 1 — Posição</th>
+                  <th>Opção 2 — Clássico</th>
+                  <th>Opção 3 — Zebra</th>
                 </tr>
               </thead>
               <tbody>
                 {EXEMPLO.map((ex, i) => (
                   <tr key={i} className={i === 0 ? 'highlight' : ''}>
-                    <td><code>{ex.palpite}</code></td>
-                    <td className="ex-label">{ex.label}</td>
-                    <td>{ex.atual}</td>
-                    <td>{ex.precisao}</td>
-                    <td>{ex.proximidade}</td>
+                    <td className="ex-label">{ex.cenario}</td>
+                    <td>{ex.posicao}</td>
+                    <td>{ex.classico}</td>
+                    <td>{ex.zebra}</td>
                   </tr>
                 ))}
               </tbody>
