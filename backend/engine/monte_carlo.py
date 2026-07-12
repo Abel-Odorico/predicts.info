@@ -145,6 +145,65 @@ def _knockout_round(
     return winners
 
 
+def simulate_final_four(team_a1: dict, team_b1: dict, team_a2: dict, team_b2: dict,
+                         n: int = 100_000, seed: int | None = None) -> dict[int, dict]:
+    """
+    Simulação exata pra reta final (2 semifinais conhecidas + final entre os
+    vencedores) — usado quando o chaveamento real já eliminou o resto do
+    torneio. `simulate_tournament` reconstrói o chaveamento inteiro a partir
+    da fase de grupos e NÃO sabe quais times já foram eliminados de verdade
+    no mata-mata (r32/r16/qf) — mostrava chance de título pra seleção já fora
+    (achado 2026-07-12). Esta função simula só o que falta de fato: 2 jogos
+    de semifinal + 1 final, com os 4 times reais que restam.
+    """
+    rng = np.random.default_rng(seed)
+    four = [team_a1, team_b1, team_a2, team_b2]
+    max_id = max(t["id"] for t in four) + 1
+    attack = np.zeros(max_id, dtype=np.float64)
+    defense = np.zeros(max_id, dtype=np.float64)
+    for t in four:
+        att, dfs = _elo_attack_defense(t)
+        attack[t["id"]] = att
+        defense[t["id"]] = dfs
+
+    def _sim_match(ida: int, idb: int) -> np.ndarray:
+        la = np.full(n, np.clip(attack[ida] * defense[idb] / GLOBAL_AVG, 0.30, 5.0))
+        lb = np.full(n, np.clip(attack[idb] * defense[ida] / GLOBAL_AVG, 0.30, 5.0))
+        ga = rng.poisson(la)
+        gb = rng.poisson(lb)
+        ga, gb = _dc_thin_knockout(ga, gb, la, lb, rng)
+        draw = ga == gb
+        penalty_a = rng.random(n) > 0.5
+        a_wins = (ga > gb) | (draw & penalty_a)
+        return np.where(a_wins, ida, idb)
+
+    sf1_winner = _sim_match(team_a1["id"], team_b1["id"])
+    sf2_winner = _sim_match(team_a2["id"], team_b2["id"])
+
+    # Final: lambda varia por linha (identidade do vencedor muda por simulação),
+    # mesmo padrão vetorizado do _knockout_round.
+    la = np.clip(attack[sf1_winner] * defense[sf2_winner] / GLOBAL_AVG, 0.30, 5.0)
+    lb = np.clip(attack[sf2_winner] * defense[sf1_winner] / GLOBAL_AVG, 0.30, 5.0)
+    ga = rng.poisson(la)
+    gb = rng.poisson(lb)
+    ga, gb = _dc_thin_knockout(ga, gb, la, lb, rng)
+    draw = ga == gb
+    penalty_a = rng.random(n) > 0.5
+    a_wins = (ga > gb) | (draw & penalty_a)
+    final_winner = np.where(a_wins, sf1_winner, sf2_winner)
+
+    out = {}
+    for t in four:
+        tid = t["id"]
+        reached_final = (sf1_winner == tid) | (sf2_winner == tid)
+        title = final_winner == tid
+        out[tid] = {
+            "prob_final": round(float(reached_final.mean()) * 100, 1),
+            "prob_title": round(float(title.mean()) * 100, 1),
+        }
+    return out
+
+
 def simulate_tournament(
     teams: list[dict],
     groups: dict[str, list[int]],

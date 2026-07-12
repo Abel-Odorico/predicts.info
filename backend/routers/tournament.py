@@ -13,7 +13,7 @@ import redis as redis_lib
 from database import get_db
 from config import settings
 from models import Match, MatchPhase, Team, TournamentSimulation
-from engine.monte_carlo import simulate_tournament
+from engine.monte_carlo import simulate_tournament, simulate_final_four
 from world_cup_official import candidate_thirds, compute_group_tables, fetch_official_knockout_schedule, resolve_slot
 
 router = APIRouter(prefix="/tournament", tags=["tournament"])
@@ -65,6 +65,55 @@ def _build_teams(db: Session) -> tuple[list[dict], dict[str, list[int]], list[di
             }
         )
     return teams, groups, played_matches
+
+
+def _final_four_teams(db: Session) -> list[dict] | None:
+    """
+    Detecta chaveamento reduzido às 2 semifinais reais (sem jogo de 'final'
+    ainda criado) — nesse estágio só 4 seleções podem de fato ser campeãs.
+    `simulate_tournament` reconstrói o chaveamento inteiro a partir da fase
+    de grupos e não sabe quem já foi eliminado no mata-mata real (r32/r16/
+    qf) — mostrava chance de título pra seleção já fora da Copa (achado
+    2026-07-12). Retorna [team_a1, team_b1, team_a2, team_b2] (dicts no
+    formato de `_build_teams`) se o estágio bater, senão None (mantém o
+    comportamento antigo pra fases anteriores).
+    """
+    from competitions import get_competition_id
+    comp_id = get_competition_id(db)
+    sf_matches = (
+        db.query(Match)
+        .filter(Match.competition_id == comp_id, Match.phase == MatchPhase.sf)
+        .all()
+    )
+    has_final = (
+        db.query(Match)
+        .filter(Match.competition_id == comp_id, Match.phase == MatchPhase.final)
+        .first()
+    )
+    if len(sf_matches) != 2 or has_final:
+        return None
+
+    team_ids = []
+    for m in sf_matches:
+        team_ids.extend([m.team_a_id, m.team_b_id])
+    if len(set(team_ids)) != 4:
+        return None
+
+    teams_by_id = {
+        t.id: {
+            "id": t.id, "code": t.code, "name": t.name,
+            "elo_rating": float(t.elo_rating),
+            "avg_goals_for": float(t.avg_goals_for),
+            "avg_goals_against": float(t.avg_goals_against),
+            "flag_url": t.flag_url or "",
+        }
+        for t in db.query(Team).filter(Team.id.in_(team_ids)).all()
+    }
+    ordered = []
+    for m in sf_matches:
+        ordered.append(teams_by_id[m.team_a_id])
+        ordered.append(teams_by_id[m.team_b_id])
+    return ordered
 
 
 @router.get("/simulate")
@@ -119,6 +168,20 @@ def simulate(
                 "flag_url": t.get("flag_url", ""),
             })
         return {"teams": teams_info, "prob": entry["prob"]}
+
+    # Reta final (só 2 semis reais restando, sem 'final' criada ainda):
+    # zera o título de quem já foi eliminado de verdade e substitui a
+    # probabilidade dos 4 que restam pelo cálculo exato do chaveamento real.
+    final_four = _final_four_teams(db)
+    if final_four:
+        exact = simulate_final_four(final_four[0], final_four[1], final_four[2], final_four[3], n=n)
+        for tid, r in results.items():
+            if tid in exact:
+                r["prob_final"] = exact[tid]["prob_final"]
+                r["prob_title"] = exact[tid]["prob_title"]
+            else:
+                r["prob_final"] = 0.0
+                r["prob_title"] = 0.0
 
     # Sort by title probability descending
     sorted_teams = sorted(results.values(), key=lambda x: -x["prob_title"])
