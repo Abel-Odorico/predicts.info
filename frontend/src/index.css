@@ -840,6 +840,239 @@ img {
   text-transform: uppercase;
 }
 
+/* ── Página História (semifinalistas) ─────────────────────────────────── */
+.historia-teams {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s16);
+}
+
+.historia-team {
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  overflow: hidden;
+  background: var(--bg-raised, var(--bg-overlay));
+}
+
+.historia-team__hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 21 / 9;
+  background: var(--bg-overlay);
+  overflow: hidden;
+}
+
+.historia-team__hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  display: block;
+}
+
+.historia-team__hero-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: var(--s6) var(--s6) var(--s5);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.35) 55%, transparent 100%);
+}
+
+.historia-team__name {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 4vw, 40px);
+  color: #fff;
+  margin-top: var(--s2);
+}
+
+.historia-card__credit {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 3px var(--s2);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-top-left-radius: var(--r2);
+}
+
+.historia-team__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) 1.6fr;
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 760px) {
+  .historia-team__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .historia-stat--wide {
+    grid-column: 1 / -1;
+  }
+}
+
+.historia-stat {
+  background: var(--bg-overlay);
+  padding: var(--s4) var(--s3);
+  text-align: center;
+}
+
+.historia-stat--wide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.historia-stat__num {
+  font-family: var(--font-data);
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1;
+  color: var(--accent);
+}
+
+.historia-stat__label {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
+.historia-stat__label--top {
+  margin-top: 0;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.historia-team__body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--s8);
+  padding: var(--s6);
+}
+
+@media (max-width: 900px) {
+  .historia-team__body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.historia-team__lede {
+  font-size: 16.5px;
+  color: var(--text-1);
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.historia-subhead {
+  font-family: var(--font-cond);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: var(--s6) 0 var(--s3);
+}
+
+.historia-moment {
+  margin: var(--s6) 0 0;
+  padding: var(--s5) var(--s5) var(--s5) var(--s6);
+  border-left: 3px solid var(--accent);
+  background: var(--bg-overlay);
+  border-radius: 0 var(--r2) var(--r2) 0;
+}
+
+.historia-moment__tag {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: var(--s2);
+}
+
+.historia-moment p {
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--text-1);
+  font-style: italic;
+}
+
+.historia-team__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+}
+
+.historia-protagonist {
+  padding: 0;
+  overflow: hidden;
+}
+
+.historia-protagonist__photo {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-overlay);
+  overflow: hidden;
+}
+
+.historia-protagonist__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.historia-protagonist__name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  margin-top: var(--s2);
+}
+
+.historia-protagonist__role {
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+.historia-curiosities__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.historia-curiosities__list li {
+  position: relative;
+  padding-left: var(--s5);
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.historia-curiosities__list li::before {
+  content: '⚽';
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 11px;
+}
+
+.historia-page__footnote {
+  margin-top: var(--s8);
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+}
+
 .info-page-links a:hover {
   color: var(--text-1);
 }

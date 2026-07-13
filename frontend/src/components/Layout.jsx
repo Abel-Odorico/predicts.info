@@ -35,6 +35,7 @@ const NAV_DRAWER = [
   { to: '/votacao',    icon: '🗳',  label: 'Votação',       featured: false },
   { to: '/perfil',     icon: '👤', label: 'Meu Perfil',    featured: false },
   { to: '/regras',     icon: '📜', label: 'Regras',        featured: false },
+  { to: '/historia',   icon: '📖', label: 'História',      featured: false },
 ]
 
 const ADMIN_NAV = [

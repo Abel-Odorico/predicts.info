@@ -40,6 +40,11 @@ const ROUTES = {
     description:
       'Conheça o Predicts.info: simulador estatístico da Copa 2026 com ratings Elo, modelo de Poisson e Monte Carlo, além de bolão gratuito com palpites de placar.',
   },
+  historia: {
+    title: 'A História das 4 Semifinalistas da Copa 2026 — Argentina, Inglaterra, França e Espanha',
+    description:
+      'Argentina, Inglaterra, França e Espanha somam 7 títulos mundiais entre si. Relembre os momentos que marcaram a história de cada seleção antes das semifinais da Copa 2026.',
+  },
 }
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')

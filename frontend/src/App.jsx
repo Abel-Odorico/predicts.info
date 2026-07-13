@@ -41,6 +41,7 @@ const ChampionPick  = lazy(() => import('./pages/ChampionPick'))
 const PosCopa       = lazy(() => import('./pages/PosCopa'))
 const Brasileirao   = lazy(() => import('./pages/Brasileirao'))
 const BemVindo      = lazy(() => import('./pages/BemVindo'))
+const Historia      = lazy(() => import('./pages/Historia'))
 
 function RefCapture() {
   useEffect(() => {
@@ -99,6 +100,7 @@ export default function App() {
               <Route path="/votacao"          element={<Votacao />} />
               <Route path="/votacaobrasileirao" element={<Votacao />} />
               <Route path="/regras"           element={<Regras />} />
+              <Route path="/historia"         element={<Historia />} />
               <Route path="/changelog"        element={<Changelog />} />
               <Route path="/campeao"          element={<ChampionPick />} />
               <Route path="/pos-copa"         element={<PosCopa />} />
