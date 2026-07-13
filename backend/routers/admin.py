@@ -20,12 +20,15 @@ from auth_utils import require_admin
 from models import (
     Match, MatchResult, MatchStatus, Team, Player,
     Bet, Ranking, TournamentSimulation, User, UserRole, Notification, PageView,
-    UserGroup, UserGroupMember, UserGroupInvite, GroupInviteStatus, AuditLog
+    UserGroup, UserGroupMember, UserGroupInvite, GroupInviteStatus, AuditLog,
+    Competition, Poll, PollVote,
 )
 from schemas import ResultCreate, InjuryUpdate, AdminUserUpdate, AdminAccountEmail
 from engine.elo import update_ratings
 from routers.notifications import create_notification
 from routers.audit import log_action
+import whatsapp_client as wa
+import os
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -1341,4 +1344,114 @@ def security_summary(
             }
             for r in recent
         ],
+    }
+
+
+CRON_LOG_PATH = "/var/log/predicts-cron.log"
+
+SCHEMA_TABLES = [
+    ("teams", "Torneio"), ("matches", "Torneio"), ("match_results", "Torneio"), ("players", "Torneio"),
+    ("bets", "Apostas & Ranking"), ("rankings", "Apostas & Ranking"), ("ranking_snapshots", "Apostas & Ranking"),
+    ("tournament_simulations", "Apostas & Ranking"), ("simulations_cache", "Apostas & Ranking"),
+    ("users", "Usuários"), ("push_subscriptions", "Usuários"), ("account_action_tokens", "Usuários"),
+    ("user_groups", "Grupos"), ("user_group_members", "Grupos"), ("user_group_invites", "Grupos"), ("group_messages", "Grupos"),
+    ("whatsapp_messages", "WhatsApp"), ("whatsapp_campaigns", "WhatsApp"), ("whatsapp_campaign_recipients", "WhatsApp"),
+    ("whatsapp_bet_sessions", "WhatsApp"), ("whatsapp_group_posts", "WhatsApp"),
+    ("match_analyses", "IA & Análise"), ("team_head_to_head", "IA & Análise"), ("match_projections", "IA & Análise"),
+    ("bot_decision_logs", "IA & Análise"), ("analysis_logs", "IA & Análise"),
+    ("competitions", "Competição & Votação"), ("phase_competitions", "Competição & Votação"),
+    ("competition_waitlist", "Competição & Votação"), ("polls", "Competição & Votação"), ("poll_votes", "Competição & Votação"),
+    ("app_versions", "Competição & Votação"), ("champion_picks", "Competição & Votação"),
+    ("audit_logs", "Sistema"), ("page_views", "Sistema"), ("notifications", "Sistema"), ("match_comments", "Sistema"),
+]
+
+
+@router.get("/system/status")
+def system_status(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
+    """Status ao vivo do sistema — banco, redis, competições, WhatsApp, cron, votação.
+    Suporta a aba 'Sistema' do admin (visão de arquitetura/funcionamento)."""
+    db_status = "ok"
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = f"error: {e}"
+
+    redis_status = "ok"
+    try:
+        _redis().ping()
+    except Exception as e:
+        redis_status = f"error: {e}"
+
+    comps = db.query(Competition).order_by(Competition.id).all()
+    comp_rows = []
+    for c in comps:
+        counts = db.execute(text("""
+            SELECT
+              (SELECT COUNT(*) FROM teams WHERE competition_id = :c)   AS teams,
+              (SELECT COUNT(*) FROM matches WHERE competition_id = :c) AS matches,
+              (SELECT COUNT(*) FROM matches m JOIN match_results r ON r.match_id = m.id
+                WHERE m.competition_id = :c)                           AS results,
+              (SELECT COUNT(*) FROM bets b JOIN matches m ON m.id = b.match_id
+                WHERE m.competition_id = :c)                           AS bets,
+              (SELECT COUNT(*) FROM rankings WHERE competition_id = :c) AS ranked_users
+        """), {"c": c.id}).fetchone()
+        comp_rows.append({
+            "id": c.id, "code": c.code, "name": c.name, "kind": c.kind,
+            "status": c.status, "is_default": c.is_default,
+            "teams": counts.teams, "matches": counts.matches,
+            "results": counts.results, "bets": counts.bets,
+            "ranked_users": counts.ranked_users,
+        })
+
+    total_users = int(db.query(func.count(User.id)).scalar() or 0)
+    active_users = int(db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0)  # noqa: E712
+    wa_optin = int(db.query(func.count(User.id)).filter(User.whatsapp_opt_in == True).scalar() or 0)  # noqa: E712
+    total_bets = int(db.query(func.count(Bet.id)).scalar() or 0)
+
+    wa_cfg_row = db.execute(text("SELECT value FROM site_config WHERE key = 'whatsapp_enabled'")).fetchone()
+    wa_enabled = (wa_cfg_row and wa_cfg_row.value == "true")
+    wa_state = None
+    if wa_enabled:
+        try:
+            st = wa.instance_status(db)
+            wa_state = (st or {}).get("instance", {}).get("state") or (st or {}).get("state")
+        except Exception:
+            wa_state = "error"
+
+    poll = db.query(Poll).filter(Poll.status == "active").order_by(Poll.id.desc()).first()
+    poll_info = None
+    if poll:
+        votes = int(db.query(func.count(PollVote.id)).filter(PollVote.poll_id == poll.id).scalar() or 0)
+        poll_info = {"id": poll.id, "title": poll.title, "status": poll.status, "votes": votes, "closes_at": poll.closes_at}
+
+    cron_tail = []
+    cron_updated_at = None
+    try:
+        stat = os.stat(CRON_LOG_PATH)
+        cron_updated_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        with open(CRON_LOG_PATH, "r", errors="ignore") as f:
+            lines = f.readlines()
+            cron_tail = [ln.rstrip("\n") for ln in lines[-15:]]
+    except OSError:
+        pass
+
+    union_sql = " UNION ALL ".join(
+        f"SELECT '{t}' AS tbl_name, COUNT(*) AS row_count FROM {t}" for t, _ in SCHEMA_TABLES
+    )
+    counts_by_table = {r[0]: r[1] for r in db.execute(text(union_sql)).fetchall()}
+    tables = [
+        {"table": t, "domain": domain, "rows": counts_by_table.get(t, 0)}
+        for t, domain in SCHEMA_TABLES
+    ]
+
+    return {
+        "db": db_status,
+        "redis": redis_status,
+        "competitions": comp_rows,
+        "users": {"total": total_users, "active": active_users, "whatsapp_opt_in": wa_optin},
+        "bets_total": total_bets,
+        "whatsapp": {"enabled": wa_enabled, "state": wa_state},
+        "poll": poll_info,
+        "cron": {"log_updated_at": cron_updated_at, "tail": cron_tail},
+        "tables": tables,
     }

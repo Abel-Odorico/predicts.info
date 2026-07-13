@@ -1211,6 +1211,7 @@ export default function Admin() {
           <a href="/admin/analytics" className="btn btn-ghost btn-sm">📊 Analytics</a>
           <a href="/admin/analytics?tab=audit" className="btn btn-ghost btn-sm">🔐 Auditoria</a>
           <a href="/admin/options"   className="btn btn-ghost btn-sm">⚙️ Config</a>
+          <a href="/admin/sistema"   className="btn btn-ghost btn-sm">🧬 Sistema</a>
         </div>
       </div>
 

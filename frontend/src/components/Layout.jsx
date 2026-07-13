@@ -46,6 +46,7 @@ const NAV_DRAWER = [
 const ADMIN_NAV = [
   { to: '/admin',           icon: <IconLayoutDashboard />, label: 'Painel Admin'   },
   { to: '/admin/whatsapp',  icon: <WaIcon />,               label: 'WhatsApp'      },
+  { to: '/admin/sistema',   icon: '🧬',                     label: 'Sistema'       },
   { to: '/admin/analytics', icon: <IconBarChart />,         label: 'Analytics'     },
   { to: '/admin/options',   icon: <IconSettings />,         label: 'Configurações' },
 ]
