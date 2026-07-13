@@ -248,6 +248,9 @@ def render(news, trends, generated_at):
   <p>As últimas manchetes do futebol brasileiro e da Copa do Mundo 2026, mais os assuntos em alta agora no Brasil — tudo num só lugar.</p>
   <span class="news-hero__badge">Atualizado em {esc(updated_label)} (Brasília) · a cada 4h</span>
 </div>
+<div class="news-cta-inline"><div><strong>📖 A história das 4 semifinalistas</strong>
+<div style="color:var(--text3);font-size:.85rem;margin-top:2px">Argentina, Inglaterra, França e Espanha: títulos, momentos decisivos e curiosidades antes de 14 e 15 de julho.</div></div>
+<a class="btn" href="/historia">Ler a matéria →</a></div>
 <h2>🔥 Em alta no Brasil agora</h2>
 <div class="trend-marquee"><div class="trend-track">{trends_html}<span aria-hidden="true" style="display:contents">{trends_html}</span></div></div>
 <h2>Notícias de futebol</h2>
