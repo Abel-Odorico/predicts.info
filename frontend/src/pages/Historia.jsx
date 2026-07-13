@@ -12,7 +12,7 @@ const TEAMS = [
       alt: 'Diego Maradona ergue a taça da Copa do Mundo de 1986, no Azteca',
       credit: 'El Gráfico, 1986 · Domínio público',
     },
-    intro: 'Nenhuma seleção sul-americana disputou tantas finais de Copa do Mundo quanto a Argentina: seis, com três taças erguidas em quase meio século de intervalo entre a primeira e a última.',
+    intro: 'A Argentina é a seleção sul-americana com a segunda maior quantidade de finais de Copa do Mundo disputadas, atrás apenas do Brasil: seis, com três taças erguidas em quase meio século de intervalo entre a primeira e a última.',
     paragraphs: [
       'A história começou já na primeira Copa da história, em 1930, no Uruguai, quando a Argentina chegou à final e perdeu para o anfitrião. Precisou de 48 anos para reverter o roteiro: em 1978, jogando em casa, sob um clima político tenso da ditadura militar, a seleção de César Luis Menotti venceu a Holanda por 3 a 1 na prorrogação. Mario Kempes foi artilheiro e melhor jogador do torneio; Daniel Passarella, aos 25 anos, ergueu a taça como o capitão mais jovem da história a fazer isso.',
       'Oito anos depois, no México, veio a campanha mais lembrada do país: Diego Maradona jogou praticamente sozinho contra o mundo, participando direta ou indiretamente de 10 dos 14 gols argentinos no torneio. A Alemanha Ocidental foi batida por 3 a 2 na final, mas o jogo que entrou para a lenda foi antes, nas quartas — contra a própria Inglaterra, adversária desta semifinal de 2026.',
@@ -20,7 +20,12 @@ const TEAMS = [
     ],
     momento: {
       ano: '22 de junho de 1986 · Quartas de final vs. Inglaterra',
-      texto: '"Um pouco com a cabeça de Maradona, um pouco com a mão de Deus." Em menos de cinco minutos, Diego Maradona marcou dois gols que resumem sozinhos o que é o futebol argentino: o primeiro, ilegal, com a mão, sem que o árbitro visse — a "Mão de Deus". O segundo, quatro minutos depois, driblando cinco ingleses da linha de meio-campo até o gol — o "Gol do Século". A Argentina venceu por 2 a 1 e seguiu rumo ao título.',
+      photo: {
+        src: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Maradona_shilton_mano_dios.jpg',
+        alt: 'Maradona salta com o punho fechado por cima do goleiro Peter Shilton, no lance do gol de mão contra a Inglaterra em 1986',
+        credit: 'El Gráfico, 22 de junho de 1986 · Domínio público',
+      },
+      texto: '"Um pouco com a cabeça de Maradona, um pouco com a mão de Deus." Maradona resolveu o jogo em menos de cinco minutos, com dois gols de outro planeta. No primeiro, subiu mais que o goleiro inglês Peter Shilton e desviou a bola de punho fechado — o árbitro tunisiano Ali Bin Nasser não viu nada, e o gol ficou de pé. Hoje bastaria meio minuto de VAR pra anular o lance; em 1986 essa tecnologia nem existia no papel, e a irregularidade entrou pra história em vez do banco de vídeo. Quatro minutos depois veio a resposta: Maradona catou a bola ainda no meio-campo, driblou cinco ingleses em sequência e bateu no canto — o "Gol do Século". Argentina venceu por 2 a 1 e seguiu rumo ao título.',
     },
     protagonist: {
       nome: 'Maradona & Messi',
@@ -34,8 +39,8 @@ const TEAMS = [
     },
     curiosidades: [
       'Maradona e Messi dividem o posto de maiores ídolos do país com 36 anos de intervalo entre seus títulos mundiais.',
-      'A Argentina é a seleção sul-americana com mais finais de Copa disputadas: 6, vencendo 3.',
-      'Nenhuma seleção não europeia venceu mais Copas do Mundo fora do continente americano do que... nenhuma: todos os títulos da Argentina, aliás, vieram fora da Europa (1978 em casa, 1986 no México, 2022 no Catar).',
+      'A Argentina é a seleção sul-americana com a segunda maior quantidade de finais de Copa disputadas, atrás do Brasil: 6, vencendo 3.',
+      'Argentina e Brasil são as únicas seleções sul-americanas a já ter vencido uma Copa fora das Américas — a Argentina no Catar (2022), o Brasil no Japão/Coreia do Sul (2002).',
     ],
   },
   {
@@ -49,15 +54,15 @@ const TEAMS = [
       alt: 'Lance da final de 1966 entre Inglaterra e Alemanha Ocidental em Wembley',
       credit: 'El Gráfico, 1966 · Domínio público',
     },
-    intro: 'A Inglaterra inventou o futebol moderno mas demorou 96 anos depois da fundação da sua federação para ganhar uma Copa — e só ganhou uma. Ainda assim, é uma das histórias mais estudadas do esporte.',
+    intro: 'A Inglaterra inventou o futebol moderno mas levou 103 anos — contados da fundação da própria federação, em 1863 — pra ganhar uma Copa. E só ganhou essa uma. Ainda assim, é uma das histórias mais estudadas do esporte.',
     paragraphs: [
-      'O único título inglês veio em 1966, jogando em casa. Sob o comando do técnico Alf Ramsey — que prometera publicamente a taça antes mesmo do torneio começar — a Inglaterra chegou à final contra a Alemanha Ocidental em Wembley. O jogo terminou 4 a 2 depois da prorrogação, decidido pelo único hat-trick já feito numa final de Copa do Mundo, marcado por Geoff Hurst. O terceiro gol de Hurst é discutido até hoje: câmeras da época não conseguiram provar com certeza se a bola cruzou inteira a linha do gol.',
+      'O único título inglês veio em 1966, jogando em casa. Sob o comando do técnico Alf Ramsey — que prometera publicamente a taça antes mesmo do torneio começar — a Inglaterra chegou à final contra a Alemanha Ocidental em Wembley. O jogo terminou 4 a 2 depois da prorrogação, decidido por um hat-trick histórico de Geoff Hurst: até hoje o único marcado numa final que terminou em título (Mbappé repetiria a proeza em 2022, mas perdendo). O terceiro gol de Hurst é discutido até hoje: câmeras da época não conseguiram provar com certeza se a bola cruzou inteira a linha do gol.',
       'Depois de 1966, a Inglaterra viveu décadas de frustração — eliminações precoces, brigas internas, e uma ausência total de duas Copas seguidas nos anos 1970 por não conseguir se classificar. A reaproximação de um resultado histórico só veio em 1990, na Itália, com uma geração liderada por Gary Lineker e Paul Gascoigne, parando nas semifinais contra a Alemanha Ocidental nos pênaltis — partida que ficou marcada pelas lágrimas de "Gazza" ao levar o segundo cartão amarelo do torneio.',
       'A história recente trouxe mais duas semifinais: em 2018, na Rússia, com Harry Kane artilheiro, parando diante da Croácia; e a atual, em 2026, contra a própria Argentina — reencontro de duas seleções cuja rivalidade nasceu muito antes de qualquer uma pisar num gramado de Copa, na Guerra das Malvinas de 1982.',
     ],
     momento: {
       ano: '30 de julho de 1966 · Final vs. Alemanha Ocidental',
-      texto: 'Aos 120 minutos, com o placar em 3 a 2, Geoff Hurst recebeu lançamento, bateu de primeira e viu a bola bater no travessão, quicar e voltar ao campo. O árbitro suíço Gottfried Dienst, em dúvida, consultou o bandeirinha soviético Tofiq Bahramov — que confirmou o gol. Nos acréscimos, Hurst ainda fechou o hat-trick. Bobby Moore ergueu a taça Jules Rimet como capitão, limpando as mãos sujas de grama antes de cumprimentar a Rainha Elizabeth II.',
+      texto: 'Aos 101 minutos de prorrogação, com o placar em 2 a 2, Geoff Hurst bateu de primeira e viu a bola quicar no travessão, cair perto da linha e voltar pro campo. O árbitro suíço Gottfried Dienst ficou em dúvida e foi consultar o bandeirinha soviético Tofiq Bahramov — que confirmou: gol, 3 a 2. Se a bola cruzou a linha inteira é discutido até hoje; reconstituições feitas décadas depois com tecnologia moderna dão razão à Alemanha. Nos minutos finais, já com torcedores invadindo o campo por engano, Hurst bateu de novo e fechou o hat-trick — o gol da narração mais famosa da TV inglesa, "they think it\'s all over... it is now". Bobby Moore ergueu a taça Jules Rimet como capitão, limpando as mãos sujas de grama antes de cumprimentar a Rainha Elizabeth II.',
     },
     protagonist: {
       nome: 'Bobby Moore & Geoff Hurst',
@@ -67,12 +72,12 @@ const TEAMS = [
         alt: 'Bobby Moore lidera a seleção inglesa em campo na final de 1966',
         credit: 'El Gráfico, 1966 · Domínio público',
       },
-      bio: 'Bobby Moore, zagueiro e capitão, é até hoje tratado como um dos maiores líderes que o futebol já teve — Pelé o descreveu como o melhor marcador contra quem já jogou. Geoff Hurst, atacante do West Ham, entrou no time titular pouco antes do Mundial no lugar de um companheiro machucado e saiu da Copa como o único homem da história a marcar três gols numa final.',
+      bio: 'Bobby Moore, zagueiro e capitão, é até hoje tratado como um dos maiores líderes que o futebol já teve — Pelé o descreveu como o melhor marcador contra quem já jogou. Geoff Hurst, atacante do West Ham, nem era titular absoluto: entrou no time durante o próprio Mundial, no lugar de Jimmy Greaves, machucado na fase de grupos, e saiu da Copa como o primeiro homem da história a marcar três gols numa final — proeza que só teria companhia 56 anos depois, com Mbappé em 2022, embora a França daquela vez tenha perdido.',
     },
     curiosidades: [
-      'O único hat-trick da história em uma final de Copa do Mundo é de um inglês: Geoff Hurst, em 1966.',
-      'Dias antes do início do torneio de 1966, a taça Jules Rimet foi roubada de uma exposição em Londres — e recuperada por um cão chamado Pickles, farejando um embrulho de jornal numa rua.',
-      'Entre 1966 e 2018, a Inglaterra passou 52 anos sem repetir uma semifinal de Copa do Mundo.',
+      'Geoff Hurst é o único jogador da história a marcar hat-trick numa final de Copa do Mundo e sair campeão com ela, em 1966. Mbappé repetiria o feito em 2022 — mas perdendo.',
+      'Meses antes do início do torneio de 1966, a taça Jules Rimet foi roubada de uma exposição em Londres — recuperada dias depois por um cão chamado Pickles, que farejou um embrulho de jornal jogado numa rua.',
+      'A Inglaterra levou 24 anos entre suas duas primeiras semifinais de Copa (1966 e 1990) e mais 28 até a terceira, em 2018.',
     ],
   },
   {
@@ -80,7 +85,7 @@ const TEAMS = [
     name: 'França',
     flag: '🇫🇷',
     chave: 'Chave 1 — enfrenta a Espanha em 14/07',
-    stats: { titulos: 2, aparicoes: 16, jogos: 60, vitorias: 36, semifinais: '4 finais em 28 anos (1998–2026)' },
+    stats: { titulos: 2, aparicoes: 17, jogos: 60, vitorias: 36, semifinais: '4 finais em 28 anos (1998–2026)' },
     photo: {
       src: 'https://upload.wikimedia.org/wikipedia/commons/9/97/France_champion_of_the_Football_World_Cup_Russia_2018_%28cropped%29.jpg',
       alt: 'Seleção francesa celebra o título da Copa do Mundo de 2018',
@@ -88,7 +93,7 @@ const TEAMS = [
     },
     intro: 'Depois de décadas como seleção respeitada mas sem taças, a França se tornou, em 20 anos, a equipe europeia mais presente em finais de Copa do Mundo do século 21: quatro decisões entre 1998 e 2022.',
     paragraphs: [
-      'O primeiro título veio em casa, em 1998, encerrando uma espera de sete décadas desde a fundação da federação francesa. Contra o Brasil, bicampeão e favorito, a França venceu por 3 a 0 com dois gols de cabeça de Zinedine Zidane e um de Emmanuel Petit nos acréscimos — resultado que abriu uma década de ouro para o futebol do país, incluindo o título da Eurocopa dois anos depois.',
+      'O primeiro título veio em casa, em 1998, encerrando quase oito décadas de espera desde a fundação da federação francesa, em 1919. Contra o Brasil, bicampeão e favorito, a França venceu por 3 a 0 com dois gols de cabeça de Zinedine Zidane e um de Emmanuel Petit nos acréscimos — resultado que abriu uma década de ouro para o futebol do país, incluindo o título da Eurocopa dois anos depois.',
       'Zidane também protagonizou a maior frustração francesa: em 2006, na sua última partida como jogador, foi expulso na prorrogação da final contra a Itália por dar uma cabeçada no italiano Marco Materazzi, depois de uma provocação. A França perdeu nos pênaltis, encerrando a carreira do maior ídolo francês da geração com essa imagem em vez de uma taça.',
       'A segunda estrela veio em 2018, na Rússia, com Kylian Mbappé, então com 19 anos, se tornando o primeiro adolescente a marcar numa final de Copa desde Pelé, em 1958. A vitória por 4 a 2 sobre a Croácia também tornou Didier Deschamps — capitão campeão em 1998 e técnico campeão em 2018 — apenas o terceiro homem da história a vencer a Copa como jogador e como treinador. Em 2022, a França voltou à final, perdeu nos pênaltis para a Argentina, mas viu Mbappé repetir um feito que não acontecia desde Geoff Hurst em 1966: marcar três gols numa final.',
     ],
@@ -104,7 +109,7 @@ const TEAMS = [
         alt: 'Zinedine Zidane',
         credit: 'hywell, CC BY 2.0',
       },
-      bio: 'Nascido em Marselha, filho de imigrantes argelinos, Zidane é a figura que melhor resume a seleção francesa multicultural que venceu em 1998 — apelidada de "Black-Blanc-Beur" pela imprensa da época. Duas vezes eleito o melhor jogador do mundo, encerrou a carreira de jogador exatamente na final de 2006, com a expulsão mais discutida da história das Copas.',
+      bio: 'Nascido em Marselha, filho de imigrantes argelinos, Zidane é a figura que melhor resume a seleção francesa multicultural que venceu em 1998 — apelidada de "Black-Blanc-Beur" pela imprensa da época. Eleito três vezes o Melhor do Mundo pela FIFA (1998, 2000 e 2003), encerrou a carreira de jogador exatamente na final de 2006, com a expulsão mais discutida da história das Copas.',
     },
     curiosidades: [
       'Zidane é o único jogador expulso numa final de Copa depois de já ter sido campeão na mesma competição.',
@@ -125,9 +130,9 @@ const TEAMS = [
     },
     intro: 'A Espanha é a seleção mais recente a ganhar sua primeira Copa do Mundo — e fez isso no meio do único tricampeonato consecutivo de torneios internacionais (Euro-Mundial-Euro) da história do futebol masculino.',
     paragraphs: [
-      'Antes de 2010, o melhor resultado espanhol era um distante 4º lugar em 1950, no Brasil. A "fúria espanhola" tinha fama de decepcionar nas grandes competições apesar de sempre ter bons jogadores — até que a geração de Xavi Hernández, Andrés Iniesta, Iker Casillas e Carles Puyol, formada majoritariamente no Barcelona, mudou a história.',
+      'Antes de 2010, o melhor resultado espanhol era um distante 4º lugar em 1950, no Brasil. A "fúria espanhola" tinha fama de decepcionar nas grandes competições apesar de sempre ter bons jogadores — até que a geração de Xavi Hernández, Andrés Iniesta e Carles Puyol — formada na cantera do Barcelona — ao lado de Iker Casillas, criado nas categorias de base do Real Madrid, mudou a história.',
       'Essa geração venceu a Eurocopa de 2008, depois a Copa do Mundo de 2010, e fechou o ciclo com outra Eurocopa em 2012 — o único tricampeonato seguido de torneios continentais e mundiais já visto no futebol masculino. O estilo ficou conhecido como tiki-taka: posse de bola extrema, passes curtos, paciência para desmontar qualquer defesa.',
-      'A final de 2010, na África do Sul, contra a Holanda, foi um jogo duro — sete cartões amarelos, poucas chances claras — decidido só nos minutos finais da prorrogação. A Espanha venceu o torneio inteiro marcando apenas oito gols em sete partidas, a maioria delas por 1 a 0, um retrato perfeito de como aquele time jogava: controlava o jogo até o adversário se cansar.',
+      'A final de 2010, na África do Sul, contra a Holanda, foi um jogo duríssimo — 14 cartões amarelos, recorde de uma final de Copa até hoje, poucas chances claras — decidido só nos minutos finais da prorrogação. A Espanha venceu o torneio inteiro marcando apenas oito gols em sete partidas, a maioria delas por 1 a 0, um retrato perfeito de como aquele time jogava: controlava o jogo até o adversário se cansar.',
     ],
     momento: {
       ano: '11 de julho de 2010 · Final vs. Holanda',
@@ -218,6 +223,12 @@ export default function Historia() {
 
                 <blockquote className="historia-moment">
                   <div className="historia-moment__tag">{team.momento.ano}</div>
+                  {team.momento.photo && (
+                    <div className="historia-moment__photo">
+                      <img src={team.momento.photo.src} alt={team.momento.photo.alt} loading="lazy" />
+                      <span className="historia-card__credit">{team.momento.photo.credit}</span>
+                    </div>
+                  )}
                   <p>{team.momento.texto}</p>
                 </blockquote>
               </div>
