@@ -11,7 +11,7 @@ import LiveFloating from './LiveFloating'
 import {
   IconClipboardList, IconTrophy, IconTable, IconFlame, IconTarget, IconPodium,
   IconUsers, IconCrown, IconBallot, IconCircleUser, IconFileText, IconBookOpen,
-  IconNewspaper, IconLayoutDashboard, IconBarChart, IconSettings,
+  IconNewspaper, IconLayoutDashboard, IconBarChart, IconSettings, IconHistory,
 } from './icons'
 
 function WaIcon({ size = 16 }) {
@@ -418,7 +418,7 @@ export default function Layout() {
         </NavLink>
 
         <NavLink to="/apostas" className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}>
-          <span className="mobile-dock__icon">🎯</span>
+          <span className="mobile-dock__icon"><IconTarget size={20} /></span>
           <span className="mobile-dock__label">Palpites</span>
         </NavLink>
 
@@ -434,7 +434,7 @@ export default function Layout() {
         </div>
 
         <NavLink to="/ranking" className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}>
-          <span className="mobile-dock__icon">🏅</span>
+          <span className="mobile-dock__icon"><IconPodium size={20} /></span>
           <span className="mobile-dock__label">Ranking</span>
         </NavLink>
 
@@ -442,7 +442,7 @@ export default function Layout() {
           to={user ? `/usuarios/${user.id}/historico` : '/login'}
           className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}
         >
-          <span className="mobile-dock__icon">📜</span>
+          <span className="mobile-dock__icon"><IconHistory size={20} /></span>
           <span className="mobile-dock__label">Histórico</span>
         </NavLink>
       </nav>
