@@ -8,6 +8,11 @@ import ShareModal from './ShareModal'
 import AppPopups, { InstallAppPopup } from './AppPopups'
 import NotificationBell from './NotificationBell'
 import LiveFloating from './LiveFloating'
+import {
+  IconClipboardList, IconTrophy, IconTable, IconFlame, IconTarget, IconPodium,
+  IconUsers, IconCrown, IconBallot, IconCircleUser, IconFileText, IconBookOpen,
+  IconNewspaper, IconLayoutDashboard, IconBarChart, IconSettings,
+} from './icons'
 
 function WaIcon({ size = 16 }) {
   return (
@@ -25,24 +30,24 @@ const THEME_META = {
 }
 
 const NAV_DRAWER = [
-  { to: '/resultados', icon: '📋', label: 'Resultados',    featured: true  },
-  { to: '/torneio',    icon: '🏆', label: 'Torneio',       featured: true  },
-  { to: '/decisivos',  icon: '🔥', label: 'Decisivos',     featured: true  },
-  { to: '/meus-grupos',icon: '👥', label: 'Meus Grupos',   featured: true  },
-  { to: '/grupos',     icon: '🗂',  label: 'Classificação', featured: false },
-  { to: '/brasileirao',icon: '🇧🇷', label: 'Brasileirão',   featured: false },
-  { to: '/campeao',    icon: '🏅', label: 'Campeão',       featured: false },
-  { to: '/votacao',    icon: '🗳',  label: 'Votação',       featured: false },
-  { to: '/perfil',     icon: '👤', label: 'Meu Perfil',    featured: false },
-  { to: '/regras',     icon: '📜', label: 'Regras',        featured: false },
-  { to: '/historia',   icon: '📖', label: 'História',      featured: false },
+  { to: '/resultados', icon: <IconClipboardList />, label: 'Resultados',    featured: true  },
+  { to: '/torneio',    icon: <IconTrophy />,         label: 'Torneio',       featured: true  },
+  { to: '/decisivos',  icon: <IconFlame />,          label: 'Decisivos',     featured: true  },
+  { to: '/meus-grupos',icon: <IconUsers />,          label: 'Meus Grupos',   featured: true  },
+  { to: '/grupos',     icon: <IconTable />,          label: 'Classificação', featured: false },
+  { to: '/brasileirao',icon: '🇧🇷',                   label: 'Brasileirão',   featured: false },
+  { to: '/campeao',    icon: <IconCrown />,          label: 'Campeão',       featured: false },
+  { to: '/votacao',    icon: <IconBallot />,         label: 'Votação',       featured: false },
+  { to: '/perfil',     icon: <IconCircleUser />,     label: 'Meu Perfil',    featured: false },
+  { to: '/regras',     icon: <IconFileText />,       label: 'Regras',        featured: false },
+  { to: '/historia',   icon: <IconBookOpen />,       label: 'História',      featured: false },
 ]
 
 const ADMIN_NAV = [
-  { to: '/admin',           icon: '🛠',  label: 'Painel Admin'   },
-  { to: '/admin/whatsapp',  icon: <WaIcon />, label: 'WhatsApp'  },
-  { to: '/admin/analytics', icon: '📊', label: 'Analytics'      },
-  { to: '/admin/options',   icon: '⚙️', label: 'Configurações'  },
+  { to: '/admin',           icon: <IconLayoutDashboard />, label: 'Painel Admin'   },
+  { to: '/admin/whatsapp',  icon: <WaIcon />,               label: 'WhatsApp'      },
+  { to: '/admin/analytics', icon: <IconBarChart />,         label: 'Analytics'     },
+  { to: '/admin/options',   icon: <IconSettings />,         label: 'Configurações' },
 ]
 
 const LEGAL_NAV = [
@@ -165,15 +170,15 @@ export default function Layout() {
 
         <div className="sidebar__nav">
           {[
-            { to: '/',             icon: '⚽', label: 'Dashboard',    end: true },
-            { to: '/resultados',   icon: '📋', label: 'Resultados'        },
-            { to: '/torneio',      icon: '🏆', label: 'Torneio'           },
-            { to: '/grupos',       icon: '🗂',  label: 'Classificação'     },
-            { to: '/decisivos',    icon: '🔥', label: 'Decisivos'         },
-            { to: '/apostas',      icon: '🎯', label: 'Palpites'          },
-            { to: '/ranking',      icon: '🏅', label: 'Ranking'           },
-            { to: '/meus-grupos',  icon: '👥', label: 'Meus Grupos'       },
-            { to: '/brasileirao',  icon: '🇧🇷', label: 'Brasileirão'       },
+            { to: '/',             icon: '⚽',                  label: 'Dashboard',    end: true },
+            { to: '/resultados',   icon: <IconClipboardList />, label: 'Resultados'        },
+            { to: '/torneio',      icon: <IconTrophy />,        label: 'Torneio'           },
+            { to: '/grupos',       icon: <IconTable />,         label: 'Classificação'     },
+            { to: '/decisivos',    icon: <IconFlame />,         label: 'Decisivos'         },
+            { to: '/apostas',      icon: <IconTarget />,        label: 'Palpites'          },
+            { to: '/ranking',      icon: <IconPodium />,        label: 'Ranking'           },
+            { to: '/meus-grupos',  icon: <IconUsers />,         label: 'Meus Grupos'       },
+            { to: '/brasileirao',  icon: '🇧🇷',                  label: 'Brasileirão'       },
           ].map(n => (
             <NavLink
               key={n.to} to={n.to} end={n.end}
@@ -190,7 +195,7 @@ export default function Layout() {
           ))}
           {/* Página estática (fora do SPA) — <a> normal, recarrega a página */}
           <a href="/noticias" className="nav-item">
-            <span className="nav-item__icon">📰</span>
+            <span className="nav-item__icon"><IconNewspaper /></span>
             <span style={{ flex: 1 }}>Notícias</span>
           </a>
           {user?.role === 'admin' && (
