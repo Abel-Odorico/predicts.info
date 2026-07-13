@@ -37,21 +37,21 @@ function BrasileiraoTeaser({ navigate }) {
       onClick={() => navigate('/pos-copa#avise-me')}
       style={{
         width: '100%', margin: '12px 0', padding: '14px 16px',
-        background: 'linear-gradient(135deg, #0b4d1f 0%, #063616 100%)',
-        border: '1.5px solid rgba(46,204,113,0.55)', borderRadius: 12,
+        background: 'linear-gradient(135deg, var(--win-dim), var(--bg-card) 70%)',
+        border: '1.5px solid var(--win)', borderRadius: 12,
         display: 'flex', alignItems: 'center', gap: 12,
         cursor: 'pointer', textAlign: 'left', position: 'relative',
       }}
     >
       <span style={{ fontSize: 28, flexShrink: 0 }}>🇧🇷</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#2ecc71', letterSpacing: '0.08em' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--win)', letterSpacing: '0.08em' }}>
           EM BREVE
         </div>
-        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: '#fff', marginTop: 2 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', marginTop: 2 }}>
           Brasileirão no Predicts
         </div>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
           Palpites por rodada, projeção de título, G4 e rebaixamento. Entra na lista →
         </div>
       </div>
@@ -61,7 +61,7 @@ function BrasileiraoTeaser({ navigate }) {
         aria-label="Dispensar"
         style={{
           position: 'absolute', top: 6, right: 10, fontSize: 16,
-          color: 'rgba(255,255,255,0.55)', padding: 4, lineHeight: 1,
+          color: 'var(--text-4)', padding: 4, lineHeight: 1,
         }}
       >
         ×

@@ -45,8 +45,12 @@ function scrollToSection(id, opts) {
 
 // Waitlist do Brasileirão — único bloco da página que grava dado REAL
 // (POST /waitlist). Logado entra com 1 clique; anônimo deixa e-mail.
+// É também o CTA mais importante da página — usa a cor da própria
+// competição (getCompColor) pra se destacar das seções 100% mockadas
+// ao redor, em vez de se misturar com elas.
 function WaitlistCard() {
   const { user, token } = useAuth()
+  const compColor = getCompColor('brasileirao')
   const [email, setEmail] = useState('')
   const [state, setState] = useState('idle') // idle | loading | done | already | error
   const [errMsg, setErrMsg] = useState('')
@@ -78,7 +82,8 @@ function WaitlistCard() {
   const joined = state === 'done' || state === 'already'
 
   return (
-    <div className="pc-waitlist">
+    <div className="pc-waitlist" style={{ '--comp-color': compColor }}>
+      <span className="pc-waitlist__badge">🇧🇷 Brasileirão · em breve</span>
       <div className="pc-waitlist__icon">🔔</div>
       <h2 className="pc-waitlist__title">Quero ser avisado quando o Brasileirão chegar</h2>
       <p className="pc-waitlist__sub">
@@ -297,7 +302,7 @@ export default function PosCopa() {
 
       {/* ---------- 10. enquete + beta ---------- */}
       <section id="beta" className="pc-section">
-        <PollCard options={pollOptions} />
+        <PollCard options={pollOptions} onWantBeta={() => scrollToSection('avise-me', { behavior: 'smooth' })} />
       </section>
 
       {/* ---------- nota de desenvolvimento (só nesta página beta) ---------- */}

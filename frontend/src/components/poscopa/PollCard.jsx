@@ -2,9 +2,14 @@ import { useState } from 'react'
 
 // Enquete só visual — sem persistência ainda.
 // Integração futura: POST /polls/pos-copa/vote { option } (tabela a definir)
-export default function PollCard({ options }) {
+//
+// O bloco "fase beta" NÃO tem CTA própria de cadastro — o card de waitlist
+// (seção #avise-me, que grava de verdade em `competition_waitlist`) já cobre
+// essa intenção. Duas caixas de "me avisa"/"quero entrar" lado a lado, uma
+// real e uma que só fingia sucesso local, confundia e passava informação
+// falsa pro usuário — por isso este CTA rola até a waitlist real.
+export default function PollCard({ options, onWantBeta }) {
   const [picked, setPicked] = useState(null)
-  const [betaSent, setBetaSent] = useState(false)
 
   return (
     <div className="pc-poll">
@@ -28,8 +33,8 @@ export default function PollCard({ options }) {
       <div className="pc-poll__beta">
         <h3>Quer participar da fase beta?</h3>
         <p>Seja um dos primeiros a testar Brasileirão, Libertadores e Copa do Brasil no Predicts.</p>
-        <button type="button" className="pc-btn pc-btn--primary" disabled={betaSent} onClick={() => setBetaSent(true)}>
-          {betaSent ? 'Inscrição registrada ✓' : 'Quero testar primeiro'}
+        <button type="button" className="pc-btn pc-btn--primary" onClick={onWantBeta}>
+          Entrar na lista de espera
         </button>
       </div>
     </div>

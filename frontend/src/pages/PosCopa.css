@@ -208,7 +208,16 @@
 
 .pc-grid { display: grid; gap: var(--s5); }
 .pc-grid--3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-.pc-grid--4 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+/* --4 tem sempre 4 competições fixas (não é lista dinâmica como --3) — usa
+   breakpoints explícitos em vez de auto-fit pra nunca sobrar 1 card sozinho
+   numa linha com metade da largura vazia do lado (acontecia em ~768-900px). */
+.pc-grid--4 { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 1024px) {
+  .pc-grid--4 { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 640px) {
+  .pc-grid--4 { grid-template-columns: 1fr; }
+}
 
 /* ---------- competition card ---------- */
 .pc-comp-card {
@@ -409,7 +418,14 @@
 .pc-score-card__bonus-note { font-size: 0.8rem; color: var(--text-3); }
 
 /* ---------- simulators ---------- */
-.pc-sim-grid { display: grid; gap: var(--s5); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+/* 4 competições fixas — mesma lógica do .pc-grid--4, evita 1 coluna órfã */
+.pc-sim-grid { display: grid; gap: var(--s5); grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 1024px) {
+  .pc-sim-grid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 640px) {
+  .pc-sim-grid { grid-template-columns: 1fr; }
+}
 .pc-sim-col {
   border: 1px solid var(--border);
   border-radius: var(--r3);
@@ -492,20 +508,40 @@
   .pc-lb__row-hits, .pc-lb__row-evo { display: none; }
 }
 
-/* ── waitlist (dado real) ─────────────────────────────────────────────── */
+/* ── waitlist (dado real) ─────────────────────────────────────────────────
+   Único CTA da página que grava algo de verdade (POST /waitlist) — por isso
+   recebe tratamento visual de destaque (cor da própria competição + glow),
+   em vez de se misturar com as seções mockadas ao redor. */
 .pc-waitlist {
-  border: 1px solid var(--pc-glass-border);
-  background: var(--pc-glass-bg);
-  border-radius: var(--radius);
-  padding: var(--s10) var(--s6);
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--comp-color, var(--accent)) 45%, var(--pc-glass-border));
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--comp-color, var(--accent)) 16%, transparent), transparent 60%),
+    var(--pc-glass-bg);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border-radius: var(--r4, var(--radius));
+  padding: var(--s12) var(--s6);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--s3);
+  box-shadow: 0 0 56px color-mix(in srgb, var(--comp-color, var(--accent)) 20%, transparent), var(--shadow-soft, 0 18px 40px rgba(0,0,0,0.18));
+}
+.pc-waitlist__badge {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px var(--s3);
+  border-radius: 999px;
+  color: var(--comp-color, var(--accent));
+  background: color-mix(in srgb, var(--comp-color, var(--accent)) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--comp-color, var(--accent)) 40%, transparent);
 }
 .pc-waitlist__icon {
-  font-size: 34px;
+  font-size: 40px;
   animation: pc-waitlist-ring 2.8s ease-in-out infinite;
 }
 @keyframes pc-waitlist-ring {
@@ -543,10 +579,18 @@
   font-size: 14px;
   min-width: 240px;
 }
-.pc-waitlist__input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.pc-waitlist__input:focus { outline: 2px solid var(--comp-color, var(--accent)); border-color: transparent; }
 .pc-waitlist__done { color: var(--win); font-weight: 700; margin: var(--s2) 0 0; }
 .pc-waitlist__error { color: var(--lose); font-size: 13px; margin: 0; }
 .pc-waitlist__hint { color: var(--text-4); font-size: 12px; margin: 0; }
+.pc-waitlist .pc-btn--primary {
+  background: var(--comp-color, var(--accent));
+  color: #06101c;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--comp-color, var(--accent)) 45%, transparent), 0 2px 8px rgba(0,0,0,0.3);
+}
+.pc-waitlist .pc-btn--primary:hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--comp-color, var(--accent)) 35%, transparent), 0 8px 24px color-mix(in srgb, var(--comp-color, var(--accent)) 35%, transparent);
+}
 .pc-waitlist__hint a { color: var(--accent); }
 @media (max-width: 640px) {
   .pc-waitlist__form { flex-direction: column; width: 100%; }
