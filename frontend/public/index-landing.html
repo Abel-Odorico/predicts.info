@@ -535,6 +535,18 @@
     .sim-bucket-bar.leader { fill: var(--accent); }
     .sim-baseline { stroke: var(--border); stroke-width: 1; }
 
+    /* ── Metáfora animada: escudo do Brasileirão (hub-and-spoke) ────── */
+    .br-hub-wrap { max-width: 460px; margin: 0 auto; }
+    .br-hub-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .br-hub-line { stroke-width: 2; stroke-dasharray: 5,5; opacity: 0; transition: opacity 500ms 300ms; }
+    .br-hub-line.in { opacity: 0.5; }
+    .br-hub-center { transform-box: fill-box; transform-origin: center; transform: scale(0); transition: transform 600ms cubic-bezier(0.34,1.56,0.64,1); }
+    .br-hub-center.in { transform: scale(1); }
+    .br-hub-sat { transform-box: fill-box; transform-origin: center; transform: scale(0); transition: transform 500ms cubic-bezier(0.34,1.56,0.64,1); }
+    .br-hub-sat.in { transform: scale(1); }
+    .br-hub-sat-label { font-size: 14px; font-weight: 800; text-anchor: middle; font-family: system-ui, sans-serif; fill: var(--text2); }
+    .br-hub-particle { filter: drop-shadow(0 0 3px var(--heroGlow)); }
+
     /* ── Evolução de chance de título (linhas reais, sem D3, SVG puro) ── */
     .title-evo-wrap { max-width: 760px; margin: 0 auto; }
     .title-evo-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
@@ -1016,6 +1028,20 @@
     </a>
   </div>
 
+  <section class="section" id="br-hero">
+    <h2 class="section-title">
+      <span data-en lang="en">Brasileirão: title, Libertadores or relegation</span>
+      <span data-pt lang="pt">Brasileirão: título, Libertadores ou rebaixamento</span>
+    </h2>
+    <p class="section-sub">
+      <span data-en lang="en">Every round moves the table. Track G4, mid-table or the drop zone with a live Monte Carlo projection.</span>
+      <span data-pt lang="pt">Toda rodada mexe na tabela. Acompanhe G4, meio de tabela ou Z4 com projeção Monte Carlo ao vivo.</span>
+    </p>
+    <div class="br-hub-wrap">
+      <svg id="br-hub-board" viewBox="0 0 520 420" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Escudo do Brasileirão no centro, ligado às zonas G4, meio de tabela e Z4"></svg>
+    </div>
+  </section>
+
   <div class="section" style="padding-top: 1rem;">
     <h2 class="section-title">
       <span data-en lang="en">How your points are scored</span>
@@ -1432,7 +1458,7 @@
       var TARGETS = {
         exact:   { x: CX, y: CY },
         correct: { x: CX + 40, y: CY - 15 },
-        miss:    { x: CX + 118, y: CY - 55 },
+        miss:    { x: CX + 80, y: CY - 60 },
       }
 
       var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1514,6 +1540,120 @@
         })
       }, { threshold: 0.3 })
       dartIO.observe(svg)
+    })()
+
+    // Metáfora animada: escudo do Brasileirão (hub-and-spoke, técnica /mira-animator —
+    // Regra Zero: entrada coreografada + loop interno perpétuo). Bolinha viaja de cada
+    // satélite (G4 / Meio de Tabela / Z4) até o centro, uma de cada vez, pra sempre.
+    ;(function() {
+      var svg = document.getElementById('br-hub-board')
+      if (!svg) return
+      var NS = 'http://www.w3.org/2000/svg'
+      var CX = 260, CY = 225, R = 145
+      function el(tag, attrs) {
+        var e = document.createElementNS(NS, tag)
+        for (var k in attrs) e.setAttribute(k, attrs[k])
+        return e
+      }
+
+      var SATS = [
+        { angle: -90, emoji: '🏆', color: '#2ec980', pt: 'G4 / Libertadores', en: 'G4 / Libertadores' },
+        { angle: 30,  emoji: '⚖️', color: '#4a90e8', pt: 'Meio de Tabela',    en: 'Mid-table' },
+        { angle: 150, emoji: '🔻', color: '#e5484d', pt: 'Z4 / Rebaixamento', en: 'Relegation zone' },
+      ].map(function(s) {
+        var rad = s.angle * Math.PI / 180
+        s.x = CX + R * Math.cos(rad)
+        s.y = CY + R * Math.sin(rad)
+        return s
+      })
+
+      SATS.forEach(function(s) {
+        var line = el('line', { x1: CX, y1: CY, x2: s.x, y2: s.y, class: 'br-hub-line' })
+        line.style.stroke = s.color
+        svg.appendChild(line)
+        s.lineEl = line
+      })
+
+      var center = el('g', { class: 'br-hub-center' })
+      var centerBase = el('circle', { cx: CX, cy: CY, r: 46, class: 'br-hub-center-circle' })
+      centerBase.style.fill = 'var(--accent)'
+      center.appendChild(centerBase)
+      var centerIcon = el('text', { x: CX, y: CY + 10, 'text-anchor': 'middle', 'font-size': 34 })
+      centerIcon.textContent = '🏟️'
+      center.appendChild(centerIcon)
+      svg.appendChild(center)
+
+      SATS.forEach(function(s, i) {
+        var g = el('g', { class: 'br-hub-sat' })
+        g.style.transitionDelay = (250 + i * 150) + 'ms'
+        var outer = el('circle', { cx: s.x, cy: s.y, r: 42 })
+        outer.style.fill = s.color; outer.style.opacity = 0.16
+        var inner = el('circle', { cx: s.x, cy: s.y, r: 32 })
+        inner.style.fill = s.color; inner.style.opacity = 0.9
+        var icon = el('text', { x: s.x, y: s.y + 9, 'text-anchor': 'middle', 'font-size': 26 })
+        icon.textContent = s.emoji
+        var labelPt = el('text', { x: s.x, y: s.y + 60, class: 'br-hub-sat-label', 'data-pt': '' })
+        labelPt.textContent = s.pt
+        var labelEn = el('text', { x: s.x, y: s.y + 60, class: 'br-hub-sat-label', 'data-en': '' })
+        labelEn.textContent = s.en
+        g.appendChild(outer); g.appendChild(inner); g.appendChild(icon); g.appendChild(labelPt); g.appendChild(labelEn)
+        svg.appendChild(g)
+        s.groupEl = g
+      })
+
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+      function pulseCenter() {
+        centerBase.style.transition = 'transform 150ms ease'
+        centerBase.style.transformBox = 'fill-box'
+        centerBase.style.transformOrigin = 'center'
+        centerBase.style.transform = 'scale(1.08)'
+        setTimeout(function() { centerBase.style.transform = 'scale(1)' }, 150)
+      }
+
+      function fireParticle(sat) {
+        var p = el('circle', { cx: sat.x, cy: sat.y, r: 7, class: 'br-hub-particle' })
+        p.style.fill = sat.color
+        svg.appendChild(p)
+        var dur = 900, t0 = null
+        function frame(ts) {
+          if (!t0) t0 = ts
+          var t = Math.min(1, (ts - t0) / dur)
+          var ease = 1 - Math.pow(1 - t, 3)
+          p.setAttribute('cx', sat.x + (CX - sat.x) * ease)
+          p.setAttribute('cy', sat.y + (CY - sat.y) * ease)
+          p.setAttribute('r', 7 - 3 * ease)
+          if (t < 1) { requestAnimationFrame(frame); return }
+          if (p.parentNode) svg.removeChild(p)
+          pulseCenter()
+        }
+        requestAnimationFrame(frame)
+      }
+
+      var loopStarted = false
+      function loop(i) {
+        fireParticle(SATS[i % SATS.length])
+        setTimeout(function() { loop(i + 1) }, 700)
+      }
+
+      function start() {
+        if (loopStarted) return
+        loopStarted = true
+        if (reduced) {
+          SATS.forEach(function(s) { s.lineEl.classList.add('in'); s.groupEl.classList.add('in') })
+          center.classList.add('in')
+          return
+        }
+        SATS.forEach(function(s) { s.lineEl.classList.add('in') })
+        center.classList.add('in')
+        SATS.forEach(function(s) { s.groupEl.classList.add('in') })
+        setTimeout(function() { loop(0) }, 250 + SATS.length * 150 + 500)
+      }
+
+      var hubIO = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) { if (entry.isIntersecting) start() })
+      }, { threshold: 0.3 })
+      hubIO.observe(svg)
     })()
 
     // Linha do tempo dos títulos das 2 finalistas (Espanha x Argentina, final 19/07/2026)
