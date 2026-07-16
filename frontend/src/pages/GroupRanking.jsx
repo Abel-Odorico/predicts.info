@@ -132,6 +132,9 @@ export default function GroupRanking() {
   // ── Atividade do grupo (semana/mês/mais ativos/última rodada) ──
   const [activityTab, setActivityTab] = useState('semana')
 
+  // ── Guia de página: Ranking (pódio+tabela) vs Estatísticas (engajamento) ──
+  const [showStats, setShowStats] = useState(false)
+
   // ── Champion pick ───────────────────────────────────────────
   const [championPicks, setChampionPicks] = useState([])
   const [showChampionPicker, setShowChampionPicker] = useState(false)
@@ -256,6 +259,7 @@ export default function GroupRanking() {
   // Aba de fases só existe na Copa — trocar de competição sem resetar deixava o
   // ranking de fase antigo (ex: Semi) preso e exibido por baixo do pano na aba nova.
   useEffect(() => { setActivePhase('all') }, [comp])
+  useEffect(() => { if (comp === 'geral') setShowStats(false) }, [comp])
 
   // ── Phase ranking ───────────────────────────────────────────
   useEffect(() => {
@@ -389,6 +393,7 @@ export default function GroupRanking() {
   const xpPct = Math.min(100, Math.round((groupXp % 500) / 5))
   const topBets = highlights?.top_bets ?? []
   const weeklyRanking = highlights?.weekly_ranking ?? []
+  const monthlyRanking = highlights?.monthly_ranking ?? []
   const bestApproval = highlights?.best_approval ?? null
   const weekLeader = weeklyRanking[0] ?? null
   const memberRecentBets = highlights?.member_recent_bets ?? {}
@@ -524,6 +529,16 @@ export default function GroupRanking() {
         </p>
       )}
 
+      {/* ── Guia de página: Ranking vs Estatísticas ── */}
+      {comp !== 'geral' && (
+        <div className="phase-nav fade-in-1" style={{ margin: 'var(--s3) 0 0' }}>
+          <button type="button" className={`phase-nav__tab ${!showStats ? 'active' : ''}`} onClick={() => setShowStats(false)}>🏆 Ranking</button>
+          <button type="button" className={`phase-nav__tab ${showStats ? 'active' : ''}`} onClick={() => setShowStats(true)}>📊 Estatísticas</button>
+        </div>
+      )}
+
+      {!showStats && (
+      <>
       {/* ── Nível XP do grupo ── */}
       {groupXp > 0 && (
         <div className="card mt-4 fade-in-1 group-xp-bar">
@@ -1017,9 +1032,13 @@ export default function GroupRanking() {
           <DuelCard me={myEntry} them={duelMember} />
         </div>
       )}
+      </>
+      )}
 
+      {showStats && (
+      <>
       {/* ── Gráfico de evolução ── */}
-      {comp === 'copa2026' && evolution?.series?.length > 0 && (
+      {comp !== 'geral' && evolution?.series?.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📈 Evolução de Posições</span>
@@ -1037,7 +1056,7 @@ export default function GroupRanking() {
       )}
 
       {/* ── Apostas reveladas ── */}
-      {comp === 'copa2026' && recentMatches.length > 0 && (
+      {comp !== 'geral' && recentMatches.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🔍 Apostas Reveladas</span>
@@ -1090,7 +1109,7 @@ export default function GroupRanking() {
       )}
 
       {/* ── Highlights ── */}
-      {comp === 'copa2026' && highlights?.streaks?.length > 0 && (
+      {comp !== 'geral' && highlights?.streaks?.length > 0 && (
         <div className="card mt-4 fade-in-3" style={{ padding: 'var(--s4) var(--s5)' }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0fa896', marginBottom: 8 }}>🔗 Maior Sequência de Exatos</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text-1)', lineHeight: 1 }}>{highlights.streaks[0].streak}</div>
@@ -1100,7 +1119,7 @@ export default function GroupRanking() {
       )}
 
       {/* ── Mural de provocações ── */}
-      {comp === 'copa2026' && topBets.length > 0 && (
+      {comp !== 'geral' && topBets.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🎲 Mural de Provocações</span>
@@ -1119,7 +1138,7 @@ export default function GroupRanking() {
       )}
 
       {/* ── Atividade do Grupo ── */}
-      {comp === 'copa2026' && (weeklyRanking.length > 0 || mostActiveRanking.length > 0 || lastFinishedMatch) && (
+      {comp !== 'geral' && (weeklyRanking.length > 0 || monthlyRanking.length > 0 || mostActiveRanking.length > 0 || lastFinishedMatch) && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📊 Atividade do Grupo</span>
@@ -1127,6 +1146,7 @@ export default function GroupRanking() {
           <div style={{ display: 'flex', gap: 4, padding: '0 var(--s4) var(--s3)', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingTop: 'var(--s3)' }}>
             {[
               ['semana', '📅 Semana'],
+              ['mes', '🗓️ Mês'],
               ['ativos', '🔥 Mais Ativos'],
               ...(lastFinishedMatch ? [['rodada', '⚽ Última Rodada']] : []),
             ].map(([key, label]) => (
@@ -1150,6 +1170,22 @@ export default function GroupRanking() {
               </div>
             ) : (
               <div style={{ padding: 'var(--s4)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>Ninguém pontuou nos últimos 7 dias ainda.</div>
+            )
+          )}
+
+          {activityTab === 'mes' && (
+            monthlyRanking.length > 0 ? (
+              <div className="weekly-ranking">
+                {monthlyRanking.slice(0, 8).map((r, i) => (
+                  <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
+                    <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                    <span className="weekly-ranking__name">{r.name}</span>
+                    <span className="weekly-ranking__pts">+{r.pts_month}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: 'var(--s4)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>Ninguém pontuou este mês ainda.</div>
             )
           )}
 
@@ -1201,6 +1237,8 @@ export default function GroupRanking() {
             </div>
           )}
         </div>
+      )}
+      </>
       )}
 
       {/* ── Link de convite + QR ── */}

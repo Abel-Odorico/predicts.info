@@ -893,6 +893,26 @@ def group_highlights(
         for r in weekly_rows
     ]
 
+    # Monthly ranking (mês calendário atual)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthly_rows = (
+        db.query(Bet.user_id, func.sum(Bet.points_earned).label("pts_month"))
+        .join(Match, Bet.match_id == Match.id)
+        .filter(
+            Bet.user_id.in_(member_ids),
+            Match.status == MatchStatus.finished,
+            Match.match_date >= month_start,
+            Match.competition_id == comp_id,
+        )
+        .group_by(Bet.user_id)
+        .order_by(desc(func.sum(Bet.points_earned)))
+        .all()
+    )
+    monthly_ranking = [
+        {"user_id": r.user_id, "name": members_with_names.get(r.user_id, ""), "pts_month": int(r.pts_month or 0)}
+        for r in monthly_rows
+    ]
+
     # Top 3 most audacious bets (highest combined score)
     top_bets_rows = (
         db.query(
@@ -1010,6 +1030,7 @@ def group_highlights(
         "streaks": streak_list,
         "recent_form": recent_form,
         "weekly_ranking": weekly_ranking,
+        "monthly_ranking": monthly_ranking,
         "group_xp": group_xp,
         "group_level": group_level,
         "next_level_xp": next_level_xp,
