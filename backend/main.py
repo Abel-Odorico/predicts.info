@@ -38,6 +38,7 @@ from routers import brasileirao_sync as brasileirao_router
 from routers import brasileirao as brasileirao_public_router
 from routers import news_admin as news_admin_router
 from routers import waitlist as waitlist_router
+from routers import client_diag as client_diag_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -809,6 +810,8 @@ app.include_router(sync.router,        prefix="/api")
 app.include_router(live.router,        prefix="/api")
 app.include_router(config_router.router,    prefix="/api")
 app.include_router(analytics_router.router, prefix="/api")
+app.include_router(client_diag_router.router, prefix="/api")
+app.include_router(client_diag_router.admin_router, prefix="/api")
 app.include_router(user_groups_router.router, prefix="/api")
 app.include_router(audit_router.router,       prefix="/api")
 app.include_router(poll_router.router,        prefix="/api")

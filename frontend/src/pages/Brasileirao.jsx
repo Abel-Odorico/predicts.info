@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { api } from '../api'
@@ -7,6 +7,7 @@ import Spinner from '../components/Spinner'
 import ProbBar from '../components/ProbBar'
 import SimAnalysisCard from '../components/SimAnalysisCard'
 import BrTitleEvolutionChart from '../components/BrTitleEvolutionChart'
+import { checkpoint } from '../diag'
 
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -60,6 +61,7 @@ function Crest({ url, name, big }) {
 
 export default function Brasileirao() {
   const [tab, setTab] = useState('tabela')
+  useEffect(() => { checkpoint('brasileirao_page_mount', { tab }) }, [])
   return (
     <div className="page br-page">
       <h1 className="section-title">🇧🇷 Brasileirão Série A 2026</h1>
@@ -109,12 +111,18 @@ export function Tabela() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    checkpoint('brasileirao_tabela_mount')
     Promise.allSettled([
       api.get('/brasileirao/standings'),
       api.get('/brasileirao/projection'),
     ]).then(([s, p]) => {
       if (s.status === 'fulfilled') setStandings(s.value)
       if (p.status === 'fulfilled') setProjection(p.value)
+      checkpoint('brasileirao_tabela_data_loaded', {
+        standings_ok: s.status === 'fulfilled',
+        projection_ok: p.status === 'fulfilled',
+        rows: s.status === 'fulfilled' ? (s.value?.table?.length ?? 0) : null,
+      })
     }).finally(() => setLoading(false))
   }, [])
 
@@ -123,6 +131,11 @@ export function Tabela() {
     for (const c of projection?.clubs || []) m[c.team_id] = c
     return m
   }, [projection])
+
+  const renderedOnce = useRef(false)
+  useEffect(() => {
+    if (!loading && !renderedOnce.current) { renderedOnce.current = true; checkpoint('brasileirao_tabela_rendered') }
+  })
 
   if (loading) return <Spinner text="Carregando tabela..." />
   const rows = standings?.table || []

@@ -10,6 +10,7 @@ import TitleEvolutionChart from '../components/TitleEvolutionChart'
 import BrTitleEvolutionChart from '../components/BrTitleEvolutionChart'
 import { PT_NAMES } from '../utils/teamNames'
 import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
+import { checkpoint } from '../diag'
 
 const PHASE_LABELS = {
   r32:   'Round of 32',
@@ -188,10 +189,17 @@ export default function Bets() {
   const [shareMsg, setShareMsg] = useState('')
   const [now, setNow]         = useState(Date.now())
   const [pendingOpenId, setPendingOpenId] = useState(null)
+  const [visibleCount, setVisibleCount]   = useState(30)
   const matchRefs = useRef({})
+
+  // Brasileirão sozinho já devolve ~200 partidas agendadas — montar 200 cards
+  // animados de uma vez (+ re-render de todos a cada tick do relógio) trava
+  // Safari mobile (memória mais curta que desktop). Pagina + reseta ao trocar aba.
+  useEffect(() => { setVisibleCount(30) }, [comp])
 
   const load = useCallback(() => {
     setLoad(true)
+    checkpoint('bets_load_start', { comp })
     const reqs = [
       api.get(`/matches?status=scheduled&competition=${comp}&limit=200`),
       api.get(`/matches?status=finished&competition=${comp}&limit=100`),
@@ -203,11 +211,18 @@ export default function Bets() {
         if (mRes.status === 'fulfilled') setMatches(mRes.value)
         if (fRes.status === 'fulfilled') setFinished(Array.isArray(fRes.value) ? fRes.value : [])
         if (token && bRes?.status === 'fulfilled' && bRes.value) setBets(bRes.value)
+        checkpoint('bets_data_loaded', {
+          comp,
+          matches: mRes.status === 'fulfilled' ? mRes.value?.length ?? 0 : null,
+          matches_ok: mRes.status === 'fulfilled',
+          finished_ok: fRes.status === 'fulfilled',
+        })
       })
       .finally(() => setLoad(false))
   }, [token, comp])
 
 
+  useEffect(() => { checkpoint('bets_page_mount') }, [])
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
@@ -253,6 +268,15 @@ export default function Bets() {
   const openMatches = [...matches.filter(m => isMatchOpen(m, now))]
     .sort((a, b) => new Date(a.match_date) - new Date(b.match_date))
   const betsByMatchId = Object.fromEntries(bets.map(b => [b.match_id, b]))
+
+  const renderedFor = useRef(null)
+  useEffect(() => {
+    if (loading) return
+    const key = `${comp}:${tab}`
+    if (renderedFor.current === key) return
+    renderedFor.current = key
+    checkpoint('bets_list_rendered', { comp, tab, open_count: openMatches.length, visible_count: Math.min(visibleCount, openMatches.length) })
+  })
 
   function matchLocalDate(dateStr) {
     return new Date(dateStr).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -361,9 +385,9 @@ export default function Bets() {
             </div>
           ) : (
             <div className="bets-list mt-6">
-              {openMatches.map((m, i) => {
+              {openMatches.slice(0, visibleCount).map((m, i, visible) => {
                 const curDate  = matchLocalDate(m.match_date)
-                const prevDate = i > 0 ? matchLocalDate(openMatches[i - 1].match_date) : null
+                const prevDate = i > 0 ? matchLocalDate(visible[i - 1].match_date) : null
                 const showSep  = curDate !== prevDate
                 const { weekday, date } = formatDateSep(m.match_date)
                 return (
@@ -387,7 +411,7 @@ export default function Bets() {
                         index={i}
                         onBetPlaced={onBetPlaced}
                         onOpenSimulation={() => navigate(`/partida/${m.id}`)}
-                        nextMatch={openMatches[i + 1] || null}
+                        nextMatch={visible[i + 1] || null}
                         onGoToNextMatch={goToNextMatch}
                         autoOpen={pendingOpenId === m.id}
                         onAutoOpenDone={() => setPendingOpenId(null)}
@@ -397,6 +421,16 @@ export default function Bets() {
                   </Fragment>
                 )
               })}
+              {openMatches.length > visibleCount && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm mt-4"
+                  style={{ width: '100%' }}
+                  onClick={() => setVisibleCount(v => v + 30)}
+                >
+                  Carregar mais ({openMatches.length - visibleCount} restantes)
+                </button>
+              )}
             </div>
           )}
         </div>
