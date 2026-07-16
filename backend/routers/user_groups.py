@@ -782,6 +782,7 @@ def cancel_invite(
 @router.get("/{group_id}/highlights")
 def group_highlights(
     group_id: int,
+    competition: str = Query(default="copa2026", description="Código da competição — evita misturar dado entre Copa e Brasileirão"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -796,6 +797,10 @@ def group_highlights(
     if user.id not in member_ids:
         raise HTTPException(403, "Você não faz parte deste grupo")
 
+    comp_id = get_competition_id(db, competition)
+    if comp_id is None:
+        raise HTTPException(404, "Competição não encontrada")
+
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     week_ago = now - timedelta(days=7)
@@ -805,11 +810,11 @@ def group_highlights(
         r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
     }
 
-    # Próximo jogo aberto
+    # Próximo jogo aberto (só desta competição)
     next_match = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b))
-        .filter(Match.status == MatchStatus.scheduled, Match.match_date > now)
+        .filter(Match.status == MatchStatus.scheduled, Match.match_date > now, Match.competition_id == comp_id)
         .order_by(Match.match_date.asc())
         .first()
     )
@@ -837,7 +842,7 @@ def group_highlights(
     all_bets_data = (
         db.query(Bet.user_id, Bet.points_earned, Match.match_date)
         .join(Match, Bet.match_id == Match.id)
-        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished, Match.competition_id == comp_id)
         .order_by(Bet.user_id, Match.match_date.asc())
         .all()
     )
@@ -877,6 +882,7 @@ def group_highlights(
             Bet.user_id.in_(member_ids),
             Match.status == MatchStatus.finished,
             Match.match_date >= week_ago,
+            Match.competition_id == comp_id,
         )
         .group_by(Bet.user_id)
         .order_by(desc(func.sum(Bet.points_earned)))
@@ -896,7 +902,7 @@ def group_highlights(
         )
         .join(User, Bet.user_id == User.id)
         .join(Match, Bet.match_id == Match.id)
-        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished, Match.competition_id == comp_id)
         .order_by(desc(Bet.score_a + Bet.score_b), desc(Bet.score_a))
         .limit(3)
         .all()
@@ -912,7 +918,8 @@ def group_highlights(
             func.count(Bet.id).label("total_bets"),
             func.sum(case((Bet.points_earned == 25, 1), else_=0)).label("total_exacts"),
         )
-        .filter(Bet.user_id.in_(member_ids))
+        .join(Match, Bet.match_id == Match.id)
+        .filter(Bet.user_id.in_(member_ids), Match.competition_id == comp_id)
         .first()
     )
     total_bets_all = int(xp_row.total_bets or 0) if xp_row else 0
@@ -924,7 +931,8 @@ def group_highlights(
     # Best approval in group (min 5 bets, V2 max = 25 pts/bet)
     _bet_cnt_sub = (
         db.query(Bet.user_id, func.count(Bet.id).label("cnt"))
-        .filter(Bet.user_id.in_(member_ids))
+        .join(Match, Bet.match_id == Match.id)
+        .filter(Bet.user_id.in_(member_ids), Match.competition_id == comp_id)
         .group_by(Bet.user_id)
         .subquery()
     )
@@ -935,7 +943,7 @@ def group_highlights(
             func.coalesce(Ranking.total_points, 0).label("total_points"),
             func.coalesce(_bet_cnt_sub.c.cnt, 0).label("total_bets"),
         )
-        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db)))
+        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == comp_id))
         .outerjoin(_bet_cnt_sub, User.id == _bet_cnt_sub.c.user_id)
         .filter(User.id.in_(member_ids), _bet_cnt_sub.c.cnt >= 5)
         .all()
@@ -966,7 +974,7 @@ def group_highlights(
         )
         .join(Match, Bet.match_id == Match.id)
         .outerjoin(MatchResult, MatchResult.match_id == Match.id)
-        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished)
+        .filter(Bet.user_id.in_(member_ids), Match.status == MatchStatus.finished, Match.competition_id == comp_id)
         .order_by(Bet.user_id, Match.match_date.desc())
         .all()
     )
@@ -1059,6 +1067,7 @@ def group_match_bets(
 def group_recent_matches(
     group_id: int,
     limit: int = Query(default=5, le=20),
+    competition: str = Query(default="copa2026", description="Código da competição — evita misturar dado entre Copa e Brasileirão"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -1071,10 +1080,13 @@ def group_recent_matches(
     ]
     if user.id not in member_ids:
         raise HTTPException(403, "Você não faz parte deste grupo")
+    comp_id = get_competition_id(db, competition)
+    if comp_id is None:
+        raise HTTPException(404, "Competição não encontrada")
     matches = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
-        .filter(Match.status == MatchStatus.finished)
+        .filter(Match.status == MatchStatus.finished, Match.competition_id == comp_id)
         .order_by(desc(Match.match_date))
         .limit(limit)
         .all()
@@ -1230,6 +1242,7 @@ def post_message(
 @router.get("/{group_id}/evolution")
 def group_evolution(
     group_id: int,
+    competition: str = Query(default="copa2026", description="Código da competição — evita misturar dado entre Copa e Brasileirão"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -1243,14 +1256,18 @@ def group_evolution(
     if user.id not in member_ids:
         raise HTTPException(403, "Você não faz parte deste grupo")
 
+    comp_id = get_competition_id(db, competition)
+    if comp_id is None:
+        raise HTTPException(404, "Competição não encontrada")
+
     members_names = {
         r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
     }
 
-    # All finished matches ordered by date
+    # All finished matches ordered by date (só desta competição)
     finished_matches = (
         db.query(Match.id, Match.match_date)
-        .filter(Match.status == MatchStatus.finished)
+        .filter(Match.status == MatchStatus.finished, Match.competition_id == comp_id)
         .order_by(Match.match_date.asc())
         .all()
     )

@@ -207,11 +207,19 @@ export default function GroupRanking() {
       savePositions(groupId, comp, groupData.ranking ?? [])
     }).finally(() => setLoading(false))
 
-    // Secondary fetches (non-blocking) — highlights independente do load principal
-    api.get(`/user-groups/${groupId}/highlights`, token).catch(() => null).then(setHighlights)
+    // Secondary fetches (non-blocking) — highlights independente do load principal.
+    // highlights/recent-matches/evolution só existem por competição real (Copa/Brasileirão) —
+    // "geral" é soma bruta sem endpoint próprio, então nem dispara a chamada (evita 404 garantido).
+    if (comp !== 'geral') {
+      api.get(`/user-groups/${groupId}/highlights?competition=${comp}`, token).catch(() => null).then(setHighlights)
+      api.get(`/user-groups/${groupId}/recent-matches?competition=${comp}`, token).catch(() => []).then(setRecentMatches)
+      api.get(`/user-groups/${groupId}/evolution?competition=${comp}`, token).catch(() => null).then(setEvolution)
+    } else {
+      setHighlights(null)
+      setRecentMatches([])
+      setEvolution(null)
+    }
     api.get(`/user-groups/${groupId}/champion`, token).catch(() => []).then(setChampionPicks)
-    api.get(`/user-groups/${groupId}/recent-matches`, token).catch(() => []).then(setRecentMatches)
-    api.get(`/user-groups/${groupId}/evolution`, token).catch(() => null).then(setEvolution)
     api.get(`/user-groups/${groupId}/messages`, token).catch(() => []).then(setMessages)
   }, [groupId, token, today, comp])
 
@@ -1010,7 +1018,7 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Gráfico de evolução (Copa — endpoint ainda não é por competição) ── */}
+      {/* ── Gráfico de evolução ── */}
       {comp === 'copa2026' && evolution?.series?.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
@@ -1028,7 +1036,7 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Apostas reveladas (Copa — endpoint ainda não é por competição) ── */}
+      {/* ── Apostas reveladas ── */}
       {comp === 'copa2026' && recentMatches.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
@@ -1081,7 +1089,7 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Highlights (Copa — endpoint ainda não é por competição) ── */}
+      {/* ── Highlights ── */}
       {comp === 'copa2026' && highlights?.streaks?.length > 0 && (
         <div className="card mt-4 fade-in-3" style={{ padding: 'var(--s4) var(--s5)' }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0fa896', marginBottom: 8 }}>🔗 Maior Sequência de Exatos</div>
@@ -1091,7 +1099,7 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Mural de provocações (Copa — endpoint ainda não é por competição) ── */}
+      {/* ── Mural de provocações ── */}
       {comp === 'copa2026' && topBets.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
@@ -1110,7 +1118,7 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Atividade do Grupo (Copa — endpoint ainda não é por competição) ── */}
+      {/* ── Atividade do Grupo ── */}
       {comp === 'copa2026' && (weeklyRanking.length > 0 || mostActiveRanking.length > 0 || lastFinishedMatch) && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
