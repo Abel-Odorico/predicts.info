@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "loop": "melhorar-paginas-grupos",
+  "status": "ready",
+  "iteration": 0,
+  "max_iterations": 5,
+  "baseline": null,
+  "last_check": null,
+  "accepted_changes": [],
+  "attempts": [],
+  "approved_criteria": {
+    "Groups.jsx": [],
+    "UserGroups.jsx": [],
+    "GroupRanking.jsx": []
+  },
+  "last_gestor_notes": null,
+  "terminal_reason": null
+}
