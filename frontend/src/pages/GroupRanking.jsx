@@ -127,6 +127,9 @@ export default function GroupRanking() {
   const [matchBets, setMatchBets] = useState([])
   const [matchBetsLoading, setMatchBetsLoading] = useState(false)
 
+  // ── Atividade do grupo (semana/mês/mais ativos/última rodada) ──
+  const [activityTab, setActivityTab] = useState('semana')
+
   // ── Champion pick ───────────────────────────────────────────
   const [championPicks, setChampionPicks] = useState([])
   const [showChampionPicker, setShowChampionPicker] = useState(false)
@@ -358,6 +361,22 @@ export default function GroupRanking() {
   const bestApproval = highlights?.best_approval ?? null
   const weekLeader = weeklyRanking[0] ?? null
   const memberRecentBets = highlights?.member_recent_bets ?? {}
+
+  // Mais ativos — quem mais apostou no total (dado já presente em `ranking`)
+  const mostActiveRanking = [...ranking].filter(r => (r.total_bets ?? 0) > 0).sort((a, b) => (b.total_bets ?? 0) - (a.total_bets ?? 0))
+
+  // Última rodada — cruza a partida finalizada mais recente (recentMatches[0]) com
+  // as apostas recentes de cada membro pra saber quem apostou e quem não apostou nela.
+  const lastFinishedMatch = recentMatches[0] ?? null
+  const lastRoundBetUserIds = lastFinishedMatch
+    ? new Set(ranking.filter(r => (memberRecentBets[String(r.user_id)] ?? []).some(b =>
+        b.match_date === lastFinishedMatch.match_date &&
+        b.team_a?.code === lastFinishedMatch.team_a?.code &&
+        b.team_b?.code === lastFinishedMatch.team_b?.code
+      )).map(r => r.user_id))
+    : new Set()
+  const lastRoundBet = lastFinishedMatch ? ranking.filter(r => lastRoundBetUserIds.has(r.user_id)) : []
+  const lastRoundNotBet = lastFinishedMatch ? ranking.filter(r => !lastRoundBetUserIds.has(r.user_id)) : []
   const leaderPtsTotal = ranking[0]?.total_points ?? 0
   const padTime = n => String(n).padStart(2, '0')
   const myChampionPick = championPicks.find(p => p.is_me)
@@ -1023,22 +1042,88 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Ranking semanal (Copa — endpoint ainda não é por competição) ── */}
-      {comp === 'copa2026' && weeklyRanking.length > 0 && (
+      {/* ── Atividade do Grupo (Copa — endpoint ainda não é por competição) ── */}
+      {comp === 'copa2026' && (weeklyRanking.length > 0 || mostActiveRanking.length > 0 || lastFinishedMatch) && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
-            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📅 Ranking da Semana</span>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>últimos 7 dias</span>
+            <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📊 Atividade do Grupo</span>
           </div>
-          <div className="weekly-ranking">
-            {weeklyRanking.slice(0, 5).map((r, i) => (
-              <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
-                <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
-                <span className="weekly-ranking__name">{r.name}</span>
-                <span className="weekly-ranking__pts">+{r.pts_week}</span>
-              </div>
+          <div style={{ display: 'flex', gap: 4, padding: '0 var(--s4) var(--s3)', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingTop: 'var(--s3)' }}>
+            {[
+              ['semana', '📅 Semana'],
+              ['ativos', '🔥 Mais Ativos'],
+              ...(lastFinishedMatch ? [['rodada', '⚽ Última Rodada']] : []),
+            ].map(([key, label]) => (
+              <button key={key} onClick={() => setActivityTab(key)}
+                style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, border: activityTab === key ? 'none' : '1px solid var(--border)', background: activityTab === key ? 'var(--accent)' : 'var(--bg-raised)', color: activityTab === key ? '#fff' : 'var(--text-2)', cursor: 'pointer', transition: 'all .15s' }}>
+                {label}
+              </button>
             ))}
           </div>
+
+          {activityTab === 'semana' && (
+            weeklyRanking.length > 0 ? (
+              <div className="weekly-ranking">
+                {weeklyRanking.slice(0, 8).map((r, i) => (
+                  <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
+                    <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                    <span className="weekly-ranking__name">{r.name}</span>
+                    <span className="weekly-ranking__pts">+{r.pts_week}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: 'var(--s4)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>Ninguém pontuou nos últimos 7 dias ainda.</div>
+            )
+          )}
+
+          {activityTab === 'ativos' && (
+            mostActiveRanking.length > 0 ? (
+              <div className="weekly-ranking">
+                {mostActiveRanking.slice(0, 8).map((r, i) => (
+                  <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
+                    <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                    <span className="weekly-ranking__name">{r.name}</span>
+                    <span className="weekly-ranking__pts">{r.total_bets}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: 'var(--s4)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>Ninguém apostou ainda.</div>
+            )
+          )}
+
+          {activityTab === 'rodada' && lastFinishedMatch && (
+            <div style={{ padding: 'var(--s3) var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                {lastFinishedMatch.team_a?.code} {lastFinishedMatch.result?.score_a}–{lastFinishedMatch.result?.score_b} {lastFinishedMatch.team_b?.code}
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--s4)', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--win)', marginBottom: 5 }}>
+                    ✓ Apostaram ({lastRoundBet.length})
+                  </div>
+                  {lastRoundBet.length === 0
+                    ? <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>Ninguém.</div>
+                    : lastRoundBet.map(m => (
+                      <div key={m.user_id} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)', padding: '2px 0' }}>{m.name}</div>
+                    ))}
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--lose)', marginBottom: 5 }}>
+                    ⚠ Faltaram apostar ({lastRoundNotBet.length})
+                  </div>
+                  {lastRoundNotBet.length === 0
+                    ? <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--win)' }}>Todo mundo apostou! 🎉</div>
+                    : lastRoundNotBet.map(m => (
+                      <div key={m.user_id} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1)', fontWeight: 700, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ color: 'var(--lose)' }}>!</span> {m.name}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
