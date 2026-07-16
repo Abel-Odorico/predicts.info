@@ -2,7 +2,7 @@
   "schema_version": 1,
   "loop": "melhorar-paginas-grupos",
   "status": "running",
-  "iteration": 2,
+  "iteration": 3,
   "max_iterations": 5,
   "baseline": "commit 7891d7b (working tree limpo antes da volta 1)",
   "incident": {
@@ -12,11 +12,17 @@
     "correcao": "rodado `npm run build` completo (restaura seo/copa/jogos/noticias) — confirmado 200 em /, /dashboard, /grupos. Spec do loop corrigida (commit ac96472): regra de regressão agora exige `npm run build` completo, nunca `npx vite build` isolado.",
     "status": "resolvido"
   },
+  "debito_tecnico_backend": {
+    "achado_na": "round 3",
+    "descricao": "backend/routers/user_groups.py: query de weekly_ranking (linhas ~872-887) e o endpoint /recent-matches (linhas ~1058-1090) não filtram por competition_id. Hoje não se manifesta (só Copa 2026 tem jogos finalizados), mas assim que o Brasileirão tiver rodadas encerradas, vai contaminar a aba 'Semana' e 'Última Rodada' do GroupRanking.jsx com dados cruzados entre competições.",
+    "escopo": "fora do loop (loop é frontend-only por decisão do Abel) — precisa de mudança no backend (adicionar filtro competition_id nessas 2 queries) quando ele quiser tratar",
+    "status": "reportado, não corrigido"
+  },
   "last_check": {
-    "round": 2,
-    "build": "npm run build (completo) — OK, seo/copa/jogos/noticias regeneradas",
-    "gestor": "aprovado, 'verdadeiramente bom' explícito — 5/5 em todos os 6 critérios em Groups.jsx e GroupRanking.jsx",
-    "code_review": "nenhum problema encontrado (fork de correção dedicado + confirmação do gestor)"
+    "round": 3,
+    "build": "npm run build (completo) — OK",
+    "gestor": "aprovado, 'verdadeiramente bom' explícito — 5/5 quase tudo (retenção 4/5, perda aceitável da aba Mês removida)",
+    "code_review": "fork de correção dedicado achou 2 problemas reais antes do commit final (ver attempts round 3)"
   },
   "accepted_changes": [
     {
@@ -30,6 +36,12 @@
       "commit": "4e7cfd5",
       "criterio": "retenção/motivação (ressalvas da volta 1)",
       "descricao": "Groups.jsx: percentil real (/bets/mine + /ranking) com guard anti-truncamento e anti-framing-negativo. GroupRanking.jsx: diferenciação do card 'Sua posição' → 'Seu desempenho' (sem remover dado)"
+    },
+    {
+      "round": 3,
+      "commit": "4d887a3",
+      "criterio": "features de engajamento (pedido explícito do Abel: mais ativos, quem apostou/não apostou, tabela de participação)",
+      "descricao": "GroupRanking.jsx: seção 'Atividade do Grupo' com abas Semana/Mais Ativos/Última Rodada. Aba 'Mês' tentada e removida por dado incorreto (ver attempts)"
     }
   ],
   "attempts": [
@@ -50,6 +62,18 @@
       "tentativa": 1,
       "resultado": "aprovado",
       "motivo": "atacou as 2 ressalvas não-bloqueantes da volta 1 (comparação social + duplicação de posição); 1 ajuste preventivo aplicado antes do painel (guard rows.length >= 100 pra não gerar percentil enganoso se a base crescer)"
+    },
+    {
+      "round": 3,
+      "tentativa": 1,
+      "resultado": "reprovado",
+      "motivo": "aba 'Mês' calculava pontos dos últimos 30 dias a partir de member_recent_bets (capado em 20 apostas mais recentes por membro no backend); com o ritmo quase diário de jogos da Copa, membros ativos estouram esse cap e o ranking do mês saía sub-contado com pódio invertido (provado com dado real de produção pelo gestor)"
+    },
+    {
+      "round": 3,
+      "tentativa": 2,
+      "resultado": "aprovado",
+      "motivo": "aba 'Mês' removida por completo (não implementável corretamente só no frontend — precisaria de query agregada nova no backend, fora do escopo). Mantidas Semana/Mais Ativos/Última Rodada, todas usando dado agregado sem cap, validadas. Nenhum código morto deixado pra trás"
     }
   ],
   "approved_criteria": {
@@ -57,6 +81,6 @@
     "UserGroups.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"],
     "GroupRanking.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"]
   },
-  "last_gestor_notes": "Volta 2 'verdadeiramente bom' explícito, 5/5 em tudo nas 2 páginas atacadas. Única nota de manutenção (não-bloqueante): comentário no código de Groups.jsx menciona '49 usuários no total' mas o dado real de usuários ativos em copa2026 é 34 — comentário impreciso, cálculo em si correto (usa rows.length dinâmico, não hardcoded). UserGroups.jsx não foi tocado na volta 2 (não tinha ressalva pendente).",
+  "last_gestor_notes": "Volta 3 'verdadeiramente bom'. Retenção 4/5 em GroupRanking.jsx só por causa da lacuna deixada pela remoção da aba Mês — considerado aceitável pelo gestor porque a alternativa era manter dado errado. UserGroups.jsx e Groups.jsx não foram tocados nesta volta.",
   "terminal_reason": null
 }
