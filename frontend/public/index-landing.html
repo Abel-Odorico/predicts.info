@@ -1843,7 +1843,12 @@
         })
         .catch(function(){})
 
-      // Live widgets: favoritos ao título + próximos jogos
+      // Live widgets: favoritos ao título + próximos jogos.
+      // Painel já é progressive-enhancement (fica display:none até os dados
+      // chegarem) — adiar pra window.load+idle tira 3 fetches + render de
+      // main thread da janela crítica de FCP/TTI, sem mudar nada visível
+      // (usuário já não via nada aqui antes dos dados chegarem mesmo).
+      function loadLiveWidgets() {
       function showWidgets() {
         document.getElementById('live-widgets').style.display = 'grid'
       }
@@ -1932,6 +1937,14 @@
           showWidgets()
         })
         .catch(function(){})
+      }
+      window.addEventListener('load', function () {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(loadLiveWidgets, { timeout: 3000 })
+        } else {
+          setTimeout(loadLiveWidgets, 1500)
+        }
+      })
 
       // Load AdSense if enabled
       fetch('/api/site-config/public')
