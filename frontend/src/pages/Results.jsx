@@ -3,17 +3,24 @@ import { Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
+import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
 
-const TOTAL_MATCHES = 104
+// Resultados não tem aba "Geral" (busca é sempre numa competição específica).
+const COMPETITIONS = ALL_COMPETITIONS.filter(c => c.id !== 'geral').map(c => ({ id: c.id, label: `${c.emoji} ${c.label}` }))
 
-const PHASE_MARKS = [
-  { label: 'Fase de Grupos (48)', pct: (48 / 104) * 100, color: '#6366f1' },
-  { label: 'R32 (16)',            pct: (64 / 104) * 100, color: '#8b5cf6' },
-  { label: 'Oitavas (8)',         pct: (72 / 104) * 100, color: '#a855f7' },
-  { label: 'Quartas (4)',         pct: (76 / 104) * 100, color: '#c084fc' },
-  { label: 'Semi (2)',            pct: (78 / 104) * 100, color: '#d8b4fe' },
-  { label: 'Final (1)',           pct: (103 / 104) * 100, color: '#f59e0b' },
-]
+const TOTAL_MATCHES = { copa2026: 104, brasileirao2026: 380 }
+
+const PHASE_MARKS = {
+  copa2026: [
+    { label: 'Fase de Grupos (48)', pct: (48 / 104) * 100, color: '#6366f1' },
+    { label: 'R32 (16)',            pct: (64 / 104) * 100, color: '#8b5cf6' },
+    { label: 'Oitavas (8)',         pct: (72 / 104) * 100, color: '#a855f7' },
+    { label: 'Quartas (4)',         pct: (76 / 104) * 100, color: '#c084fc' },
+    { label: 'Semi (2)',            pct: (78 / 104) * 100, color: '#d8b4fe' },
+    { label: 'Final (1)',           pct: (103 / 104) * 100, color: '#f59e0b' },
+  ],
+  brasileirao2026: [],
+}
 
 const norm = s => (s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
@@ -27,6 +34,7 @@ const PHASE_LABELS = {
 }
 
 export default function Results() {
+  const [comp, setComp] = useState('copa2026')
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [groupFilter, setGroupFilter] = useState('')
@@ -34,16 +42,23 @@ export default function Results() {
   const [dateFilter, setDateFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('finished')
 
+  const isBR = comp === 'brasileirao2026'
+
   useEffect(() => {
-    api.get('/matches?limit=300')
+    setLoading(true)
+    setGroupFilter('')
+    api.get(`/matches?competition=${comp}&limit=${isBR ? 400 : 300}`)
       .then(d => setMatches(d.sort((a, b) => new Date(b.match_date) - new Date(a.match_date))))
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }, [comp])
 
+  const totalMatches = TOTAL_MATCHES[comp] || matches.length
   const finishedCount = useMemo(() => matches.filter(m => m.status === 'finished' || m.result).length, [matches])
 
+  // Copa: grupos (letra A-H). Brasileirão: sem grupo, usa rodada (match_number) no lugar.
   const groups = useMemo(() => [...new Set(matches.map(m => m.group_name).filter(Boolean))].sort(), [matches])
+  const rodadas = useMemo(() => [...new Set(matches.map(m => m.match_number).filter(Boolean))].sort((a, b) => a - b), [matches])
 
   // Datas disponíveis (desc) para o seletor
   const dates = useMemo(
@@ -58,7 +73,7 @@ export default function Results() {
       const isFinished = m.status === 'finished' || !!m.result
       if (statusFilter === 'finished' && !isFinished && !isLive) return false
       if (statusFilter === 'scheduled' && (isFinished || isLive)) return false
-      if (groupFilter && m.group_name !== groupFilter) return false
+      if (groupFilter && (isBR ? String(m.match_number) !== groupFilter : m.group_name !== groupFilter)) return false
       if (dateFilter && (m.match_date?.slice(0, 10) !== dateFilter)) return false
       if (q) {
         const fields = [
@@ -70,7 +85,7 @@ export default function Results() {
       }
       return true
     })
-  }, [matches, groupFilter, search, dateFilter, statusFilter])
+  }, [matches, groupFilter, search, dateFilter, statusFilter, isBR])
 
   const hasFilter = !!(groupFilter || search || dateFilter || statusFilter !== 'finished')
 
@@ -85,24 +100,37 @@ export default function Results() {
     return [...map.entries()]
   }, [filtered])
 
-  if (loading) return <Spinner text="Carregando resultados..." />
-
   return (
     <div className="page">
       <div className="fade-in-1">
         <h1 className="page-title">RESULTADOS</h1>
-        <p className="page-subtitle">{finishedCount} de {TOTAL_MATCHES} jogos finalizados</p>
+        <p className="page-subtitle">{loading ? 'Carregando…' : `${finishedCount} de ${totalMatches} jogos finalizados`}</p>
       </div>
 
+      <div className="phase-nav fade-in-1" style={{ marginBottom: 'var(--s4)' }}>
+        {COMPETITIONS.map(c => (
+          <button
+            key={c.id}
+            type="button"
+            className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`}
+            onClick={() => setComp(c.id)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? <Spinner text="Carregando resultados..." /> : (
+      <>
       {/* Progress bar */}
       <div className="copa-progress fade-in-1">
         <div className="copa-progress__bar-track" style={{ position: 'relative' }}>
           <div
             className="copa-progress__bar-fill"
-            style={{ width: `${(finishedCount / TOTAL_MATCHES) * 100}%` }}
+            style={{ width: `${(finishedCount / totalMatches) * 100}%` }}
           />
-          {/* Phase markers */}
-          {PHASE_MARKS.map(p => (
+          {/* Phase markers (só Copa — Brasileirão é pontos corridos, sem fases) */}
+          {(PHASE_MARKS[comp] || []).map(p => (
             <div key={p.label} style={{
               position: 'absolute',
               left: `${p.pct}%`,
@@ -116,17 +144,19 @@ export default function Results() {
         </div>
         <div className="copa-progress__labels">
           <span><strong>{finishedCount}</strong> jogos</span>
-          <span>{Math.round((finishedCount / TOTAL_MATCHES) * 100)}% da Copa</span>
-          <span>{TOTAL_MATCHES - finishedCount} restantes</span>
+          <span>{Math.round((finishedCount / totalMatches) * 100)}% {isBR ? 'da temporada' : 'da Copa'}</span>
+          <span>{totalMatches - finishedCount} restantes</span>
         </div>
-        <div className="copa-progress__phases">
-          {PHASE_MARKS.map(p => (
-            <span key={p.label} className="copa-progress__phase-mark">
-              <span className="copa-progress__phase-dot" style={{ background: p.color }} />
-              {p.label}
-            </span>
-          ))}
-        </div>
+        {(PHASE_MARKS[comp] || []).length > 0 && (
+          <div className="copa-progress__phases">
+            {PHASE_MARKS[comp].map(p => (
+              <span key={p.label} className="copa-progress__phase-mark">
+                <span className="copa-progress__phase-dot" style={{ background: p.color }} />
+                {p.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Filtros */}
@@ -139,7 +169,7 @@ export default function Results() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar seleção (ex: Brasil, ARG)…"
+              placeholder={isBR ? 'Buscar clube (ex: Palmeiras, FLA)…' : 'Buscar seleção (ex: Brasil, ARG)…'}
               autoComplete="off"
               style={{
                 width: '100%', padding: '10px 12px 10px 34px', borderRadius: 10,
@@ -187,33 +217,61 @@ export default function Results() {
           ))}
         </div>
 
-        {/* Chips de grupo */}
-        <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button
-            onClick={() => setGroupFilter('')}
-            className={`btn btn-sm ${groupFilter === '' ? 'btn-primary' : 'btn-ghost'}`}
-          >
-            Todos
-          </button>
-          {groups.map(g => (
-            <button
-              key={g}
-              onClick={() => setGroupFilter(g === groupFilter ? '' : g)}
-              className={`btn btn-sm ${groupFilter === g ? 'btn-primary' : 'btn-ghost'}`}
+        {/* Grupo (Copa) ou Rodada (Brasileirão) */}
+        {isBR ? (
+          <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', alignItems: 'center' }}>
+            <select
+              value={groupFilter}
+              onChange={e => setGroupFilter(e.target.value)}
+              style={{
+                padding: '8px 12px', borderRadius: 10,
+                border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                color: groupFilter ? 'var(--text-1)' : 'var(--text-3)', fontFamily: 'var(--font-cond)', fontSize: 13, cursor: 'pointer', outline: 'none',
+              }}
             >
-              G{g}
-            </button>
-          ))}
-          {hasFilter && (
+              <option value="">🔄 Todas as rodadas</option>
+              {rodadas.map(r => (
+                <option key={r} value={r}>Rodada {r}</option>
+              ))}
+            </select>
+            {hasFilter && (
+              <button
+                onClick={() => { setGroupFilter(''); setSearch(''); setDateFilter(''); setStatusFilter('finished') }}
+                className="btn btn-sm btn-ghost"
+                style={{ marginLeft: 'auto', color: 'var(--lose)' }}
+              >
+                ✕ Limpar filtros
+              </button>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
-              onClick={() => { setGroupFilter(''); setSearch(''); setDateFilter(''); setStatusFilter('finished') }}
-              className="btn btn-sm btn-ghost"
-              style={{ marginLeft: 'auto', color: 'var(--lose)' }}
+              onClick={() => setGroupFilter('')}
+              className={`btn btn-sm ${groupFilter === '' ? 'btn-primary' : 'btn-ghost'}`}
             >
-              ✕ Limpar filtros
+              Todos
             </button>
-          )}
-        </div>
+            {groups.map(g => (
+              <button
+                key={g}
+                onClick={() => setGroupFilter(g === groupFilter ? '' : g)}
+                className={`btn btn-sm ${groupFilter === g ? 'btn-primary' : 'btn-ghost'}`}
+              >
+                G{g}
+              </button>
+            ))}
+            {hasFilter && (
+              <button
+                onClick={() => { setGroupFilter(''); setSearch(''); setDateFilter(''); setStatusFilter('finished') }}
+                className="btn btn-sm btn-ghost"
+                style={{ marginLeft: 'auto', color: 'var(--lose)' }}
+              >
+                ✕ Limpar filtros
+              </button>
+            )}
+          </div>
+        )}
 
         {hasFilter && (
           <p style={{ marginTop: 'var(--s3)', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
@@ -241,6 +299,8 @@ export default function Results() {
           </p>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }
@@ -255,15 +315,19 @@ function ResultCard({ match }) {
   const ta = match.team_a
   const tb = match.team_b
   const isKnockout = match.phase && match.phase !== 'group'
-  const phaseLabel = isKnockout ? (PHASE_LABELS[match.phase] || match.phase) : `G${match.group_name || '?'}`
+  const phaseLabel = isKnockout
+    ? (PHASE_LABELS[match.phase] || match.phase)
+    : match.group_name ? `G${match.group_name}` : match.match_number ? `Rodada ${match.match_number}` : '—'
 
   return (
     <Link to={`/partida/${match.id}`} className="result-card">
       <div className="result-card__meta">
         <span className={`badge ${isKnockout ? 'badge-knockout' : 'badge-group'}`}>{phaseLabel}</span>
-        <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>
-          #{match.match_number} · {match.city}
-        </span>
+        {match.city && (
+          <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>
+            #{match.match_number} · {match.city}
+          </span>
+        )}
         <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)', marginLeft: 'auto' }}>
           {formatTime(match.match_date)}
         </span>

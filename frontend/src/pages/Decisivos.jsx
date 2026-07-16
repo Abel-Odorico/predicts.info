@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { api } from '../api'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
+import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
+
+const COMPETITIONS = ALL_COMPETITIONS.filter(c => c.id !== 'geral').map(c => ({ id: c.id, label: `${c.emoji} ${c.label}` }))
 
 const POLL_MS = 10000
 
@@ -14,12 +17,53 @@ const C_LIVE  = 'var(--lose, #e85252)'
 const statusColor = s => (s === 'top2' ? C_TOP2 : s === 'third' ? C_THIRD : C_OUT)
 const ptName = t => PT_NAMES[t.code] || t.name || t.code
 
+function CompNav({ comp, setComp }) {
+  return (
+    <div className="phase-nav fade-in-1" style={{ marginBottom: 'var(--s4)' }}>
+      {COMPETITIONS.map(c => (
+        <button
+          key={c.id}
+          type="button"
+          className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`}
+          onClick={() => setComp(c.id)}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Brasileirão é pontos corridos — não tem fase de grupos/classificação pra
+// mata-mata. O equivalente (zona de título/G4/Z4 + projeção) já existe em
+// /brasileirao (Tabela), então aqui só redireciona em vez de duplicar lógica.
+function BrasileiraoRedirect({ comp, setComp }) {
+  return (
+    <div className="page">
+      <div className="fade-in-1">
+        <h1 className="page-title">JOGOS DECISIVOS</h1>
+        <p className="page-subtitle">Quem classifica · projeção em tempo real</p>
+      </div>
+      <CompNav comp={comp} setComp={setComp} />
+      <div className="card mt-4 fade-in-2" style={{ padding: 'var(--s6) var(--s5)', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', marginBottom: 'var(--s4)' }}>
+          🇧🇷 Brasileirão é disputado em pontos corridos, sem fase de grupos — a projeção de título, G4 e
+          rebaixamento já está na tabela ao vivo.
+        </p>
+        <Link to="/brasileirao" className="btn btn-primary btn-sm">Ver Tabela do Brasileirão</Link>
+      </div>
+    </div>
+  )
+}
+
 export default function Decisivos() {
+  const [comp, setComp]   = useState('copa2026')
   const [data, setData]   = useState(null)
   const [loading, setLoad] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (comp !== 'copa2026') return
     let alive = true
     const load = () =>
       api.get('/live/classification')
@@ -29,7 +73,9 @@ export default function Decisivos() {
     load()
     const id = window.setInterval(load, POLL_MS)
     return () => { alive = false; window.clearInterval(id) }
-  }, [])
+  }, [comp])
+
+  if (comp !== 'copa2026') return <BrasileiraoRedirect comp={comp} setComp={setComp} />
 
   if (loading) return <Spinner text="Carregando jogos decisivos..." />
   if (!data)   return <div className="page"><p className="page-subtitle">Falha ao carregar.</p></div>
@@ -45,6 +91,8 @@ export default function Decisivos() {
         <h1 className="page-title">JOGOS DECISIVOS</h1>
         <p className="page-subtitle">Quem classifica · projeção em tempo real (top 2 + 8 melhores 3ºs)</p>
       </div>
+
+      <CompNav comp={comp} setComp={setComp} />
 
       {/* Banner ao vivo */}
       {has_live ? (

@@ -1,8 +1,50 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { api, CONF_HEX, heatClass } from '../api'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
+import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
+
+const COMPETITIONS = ALL_COMPETITIONS.filter(c => c.id !== 'geral').map(c => ({ id: c.id, label: `${c.emoji} ${c.label}` }))
+
+function CompNav({ comp, setComp }) {
+  return (
+    <div className="phase-nav mt-4" style={{ marginBottom: 0 }}>
+      {COMPETITIONS.map(c => (
+        <button
+          key={c.id}
+          type="button"
+          className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`}
+          onClick={() => setComp(c.id)}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Brasileirão é pontos corridos, sem chaveamento mata-mata — não tem
+// equivalente aqui. Redireciona pra tabela/projeção em /brasileirao em vez
+// de fingir um bracket que não existe.
+function BrasileiraoRedirect({ comp, setComp }) {
+  return (
+    <div className="page">
+      <div className="fade-in-1">
+        <h1 className="page-title">CHAVEAMENTO</h1>
+        <p className="page-subtitle">Fase eliminatória</p>
+      </div>
+      <CompNav comp={comp} setComp={setComp} />
+      <div className="card mt-6 fade-in-2" style={{ padding: 'var(--s6) var(--s5)', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', marginBottom: 'var(--s4)' }}>
+          🇧🇷 Brasileirão é disputado em pontos corridos — não tem mata-mata nem chaveamento.
+          Título, G4 e rebaixamento são decididos pela tabela.
+        </p>
+        <Link to="/brasileirao" className="btn btn-primary btn-sm">Ver Tabela do Brasileirão</Link>
+      </div>
+    </div>
+  )
+}
 
 const PHASES = [
   { key: 'prob_title',  label: 'Título' },
@@ -24,6 +66,7 @@ const SIM_OPTIONS = [
 const CONF_ORDER = ['UEFA', 'CONMEBOL', 'CAF', 'AFC', 'CONCACAF', 'OFC']
 
 export default function Tournament() {
+  const [comp, setComp]       = useState('copa2026')
   const [data, setData]       = useState(null)
   const [bracket, setBracket] = useState(null)
   const [loading, setLoad]    = useState(true)
@@ -39,6 +82,7 @@ export default function Tournament() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (comp !== 'copa2026') { setLoad(false); return }
     Promise.allSettled([
       api.get(`/tournament/simulate?n=${simN}`),
       api.get('/tournament/official-bracket'),
@@ -50,7 +94,7 @@ export default function Tournament() {
       if (grR.status === 'fulfilled') setGroups(grR.value.groups || {})
       if (phR.status === 'fulfilled') setPhases(phR.value)
     }).finally(() => setLoad(false))
-  }, [])
+  }, [comp])
 
   async function runSim(n) {
     setSimLoad(true)
@@ -100,6 +144,8 @@ export default function Tournament() {
 
   const [pageTab, setPageTab] = useState('bracket')
 
+  if (comp !== 'copa2026') return <BrasileiraoRedirect comp={comp} setComp={setComp} />
+
   if (loading) return <Spinner text="Carregando chaveamento..." />
 
   return (
@@ -108,6 +154,8 @@ export default function Tournament() {
         <h1 className="page-title">COPA DO MUNDO 2026</h1>
         <p className="page-subtitle">Fase eliminatória · {data?.simulations?.toLocaleString('pt-BR')} simulações</p>
       </div>
+
+      <CompNav comp={comp} setComp={setComp} />
 
       {/* Page-level tabs */}
       <div className="phase-nav mt-4" style={{ marginBottom: 0 }}>
