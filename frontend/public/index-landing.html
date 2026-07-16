@@ -52,7 +52,29 @@
 
   <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin />
   <meta name="google-adsense-account" content="ca-pub-3734794914488669" />
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3734794914488669" crossorigin="anonymous"></script>
+  <!-- adsbygoogle.js carregado só depois de window.load + idle: o script (e o
+       Auto Ads que ele dispara ao executar) não compete mais com LCP/TBT do
+       carregamento inicial. Anúncio aparece ~1-2s depois, não é removido. -->
+  <script>
+    (function () {
+      function loadAdsense() {
+        if (window.__adsenseLoaded) return
+        window.__adsenseLoaded = true
+        var s = document.createElement('script')
+        s.async = true
+        s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3734794914488669'
+        s.crossOrigin = 'anonymous'
+        document.head.appendChild(s)
+      }
+      window.addEventListener('load', function () {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(loadAdsense, { timeout: 3000 })
+        } else {
+          setTimeout(loadAdsense, 1500)
+        }
+      })
+    })()
+  </script>
 
   <!-- Tipografia do app (Bebas Neue/Barlow Condensed/JetBrains Mono) — landing usava system-ui genérico, agora fala a mesma língua visual do produto -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
