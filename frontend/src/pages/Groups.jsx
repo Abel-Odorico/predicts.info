@@ -48,8 +48,8 @@ export default function Groups() {
           : null)
       })
       .catch(() => {})
-    // Ranking completo da competição (49 usuários no total — /ranking?limit=100 cobre 100%,
-    // não é amostra) só pra calcular um percentil real, sem inventar população.
+    // Ranking dos jogadores ativos na competição (bem abaixo do teto do limit=100 —
+    // guard abaixo confirma isso em runtime) só pra calcular um percentil real, sem inventar população.
     api.get('/ranking?competition=copa2026&limit=100')
       .then(rows => {
         // rows.length === 100 (o teto do limit) significa que a lista pode ter sido
