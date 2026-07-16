@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS, COMPETITION_LABEL } from '../utils/competitions'
+import { aproveitamento, getBadges } from '../utils/groupBadges'
 
 function useCountdownStr(targetDateStr) {
   const [str, setStr] = useState('')
@@ -51,6 +52,7 @@ export default function UserGroups() {
     return Number.isFinite(v) && v > 0 ? v : null
   })
   const [comp, setComp] = useState('geral')
+  const [todayRanking, setTodayRanking] = useState([])
 
   async function loadGroups() {
     if (!token) return
@@ -71,6 +73,18 @@ export default function UserGroups() {
   }
 
   useEffect(() => { loadGroups() }, [token, comp])
+
+  // "Em Alta hoje" — mesma fonte que GroupRanking.jsx usa (ranking global do dia,
+  // filtrado por membro em cada card), pra badge nunca divergir entre as duas telas.
+  useEffect(() => {
+    if (!token) return
+    const now = new Date()
+    const p = n => String(n).padStart(2, '0')
+    const today = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+    api.get(`/ranking?date_from=${today}&date_to=${today}&limit=100`, token)
+      .then(setTodayRanking)
+      .catch(() => setTodayRanking([]))
+  }, [token])
 
   async function createGroup(e) {
     e.preventDefault()
@@ -275,6 +289,7 @@ export default function UserGroups() {
                 nextMatch={nextMatch}
                 myBetNext={myBetNext}
                 comp={comp}
+                todayRanking={todayRanking}
               />
             )}
           </section>
@@ -284,25 +299,7 @@ export default function UserGroups() {
   )
 }
 
-function aproveitamento(m) {
-  if (!m.total_bets) return null
-  return Math.round(m.total_points / (m.total_bets * 25) * 100)
-}
-
-function getBadges(r, position, effectiveTotal) {
-  const badges = []
-  if (position === 0) badges.push({ icon: '🏆', label: 'Líder', color: '#e8a030' })
-  if (r.total_bets >= 5 && r.exact_scores / r.total_bets >= 0.28)
-    badges.push({ icon: '🎯', label: 'Sniper', color: '#e85252' })
-  if (effectiveTotal > 0 && r.total_bets >= effectiveTotal * 0.85)
-    badges.push({ icon: '⚡', label: 'Maratonista', color: '#9b5de8' })
-  const aprv = aproveitamento(r)
-  if (r.total_bets >= 10 && aprv !== null && aprv >= 60)
-    badges.push({ icon: '🔮', label: 'Preciso', color: '#4a90e8' })
-  return badges
-}
-
-function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 }, nextMatch = null, myBetNext = false, comp = 'geral' }) {
+function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 }, nextMatch = null, myBetNext = false, comp = 'geral', todayRanking = [] }) {
   const isOwner = group.owner_user_id === currentUser?.id
   const myEntry = (group.members ?? []).find(m => m.user_id === currentUser?.id)
   const myPoints = myEntry?.total_points ?? 0
@@ -336,6 +333,25 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
 
   const [shared, setShared] = useState('')
 
+  // Badges/highlights: mesma fonte canônica do GroupRanking.jsx (detalhe do grupo) —
+  // evita o card mostrar líder/streak/destaque diferente do que a página de detalhe mostra
+  // pro mesmo grupo. `highlightsData` vem do backend (streaks reais, mural); `todayTop`
+  // vem do ranking global do dia (mesma chamada que GroupRanking faz), filtrado aos membros.
+  const [highlightsData, setHighlightsData] = useState(null)
+  useEffect(() => {
+    if (!token || comp === 'geral') { setHighlightsData(null); return }
+    api.get(`/user-groups/${group.id}/highlights?competition=${comp}`, token)
+      .then(setHighlightsData)
+      .catch(() => setHighlightsData(null))
+  }, [group.id, token, comp])
+
+  const memberIds = new Set(sortedMembers.map(m => m.user_id))
+  const groupToday = todayRanking.filter(r => memberIds.has(r.user_id)).sort((a, b) => b.total_points - a.total_points)
+  const todayTop = groupToday[0] || null
+  const streakMap = Object.fromEntries((highlightsData?.streaks ?? []).map(s => [s.user_id, s.streak]))
+  const muralHeroName = highlightsData?.top_bets?.[0]?.user_name
+  const topBet = highlightsData?.top_bets?.[0]
+
   // Raio-X do grupo (tudo derivado dos membros — sem chamada extra à API)
   const gStats = (() => {
     const sum = k => sortedMembers.reduce((a, m) => a + (m[k] || 0), 0)
@@ -352,30 +368,31 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     }
   })()
 
+  const cardEffectiveTotal = Math.max(matchStats.finished, ...sortedMembers.map(m => m.total_bets || 0), 1)
+  const memberBadges = sortedMembers.map((m, i) => getBadges(
+    m, i + 1, cardEffectiveTotal,
+    todayTop?.user_id === m.user_id, streakMap[m.user_id] || 0, muralHeroName === m.name,
+  ))
+  const holderOf = icon => {
+    const i = memberBadges.findIndex(bs => bs.some(b => b.icon === icon))
+    return i === -1 ? null : sortedMembers[i]
+  }
   const highlights = (() => {
-    const pool = sortedMembers.filter(m => (m.total_bets || 0) > 0)
-    if (!pool.length) return []
     const out = []
-    const lead = sortedMembers[0]
-    if (lead && lead.total_points > 0) out.push({ icon: '👑', label: 'Líder', m: lead, val: `${lead.total_points} pts`, color: '#e8a030' })
-    const snipers = pool.filter(m => m.total_bets >= 3 && m.exact_scores > 0)
-    if (snipers.length) {
-      const s = snipers.reduce((b, m) => (m.exact_scores / m.total_bets > b.exact_scores / b.total_bets ? m : b))
-      out.push({ icon: '🎯', label: 'Sniper', m: s, val: `${Math.round((s.exact_scores / s.total_bets) * 100)}% exatos`, color: '#e85252' })
-    }
-    const mara = pool.reduce((b, m) => (m.total_bets > b.total_bets ? m : b))
-    if (mara.total_bets > 0) out.push({ icon: '⚡', label: 'Maratonista', m: mara, val: `${mara.total_bets} palpites`, color: '#9b5de8' })
-    const effPool = pool.filter(m => (m.total_bets || 0) >= 5)
-    if (effPool.length) {
-      const best = effPool.reduce((b, m) => ((aproveitamento(m) ?? 0) > (aproveitamento(b) ?? 0) ? m : b))
-      const pct = aproveitamento(best)
-      if (pct !== null) out.push({ icon: '📊', label: 'Melhor Aproveito', m: best, val: `${pct}% eficiência`, color: '#23b26d' })
-    }
-    const hot = m => (m.recent_form || []).reduce((a, f) => a + (f === 'E' ? 2 : f === 'C' ? 1 : 0), 0)
-    const hotPool = pool.filter(m => (m.recent_form || []).length >= 3 && hot(m) > 0)
-    if (hotPool.length) {
-      const h = hotPool.reduce((b, m) => (hot(m) > hot(b) ? m : b))
-      out.push({ icon: '🔥', label: 'Em Alta', m: h, val: 'na melhor forma', color: 'var(--win)' })
+    const lead = holderOf('🏆')
+    if (lead) out.push({ icon: '🏆', label: 'Líder', m: lead, val: `${lead.total_points} pts`, color: '#e8a030' })
+    const sniper = holderOf('🎯')
+    if (sniper) out.push({ icon: '🎯', label: 'Sniper', m: sniper, val: `${Math.round((sniper.exact_scores / sniper.total_bets) * 100)}% exatos`, color: '#e85252' })
+    const mara = holderOf('⚡')
+    if (mara) out.push({ icon: '⚡', label: 'Maratonista', m: mara, val: `${mara.total_bets} palpites`, color: '#9b5de8' })
+    const preciso = holderOf('🔮')
+    if (preciso) out.push({ icon: '🔮', label: 'Preciso', m: preciso, val: `${aproveitamento(preciso)}% eficiência`, color: '#4a90e8' })
+    if (todayTop) out.push({ icon: '🔥', label: 'Em Alta', m: todayTop, val: `+${todayTop.total_points} pts hoje`, color: 'var(--win)' })
+    const streaker = holderOf('🔗')
+    if (streaker) out.push({ icon: '🔗', label: 'Sequência', m: streaker, val: `${streakMap[streaker.user_id]} seguidos`, color: '#0fa896' })
+    if (topBet) {
+      const bold = sortedMembers.find(m => m.name === topBet.user_name)
+      if (bold) out.push({ icon: '🎲', label: 'Ousado', m: bold, val: `${topBet.score_a}–${topBet.score_b}`, color: '#e8a030' })
     }
     return out
   })()
@@ -693,9 +710,9 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
           </div>
           <div className="group-member-preview">
             {visibleMembers.map((member, i) => {
-              const effectiveTotal = Math.max(matchStats.finished, ...sortedMembers.map(m => m.total_bets || 0), 1)
+              const effectiveTotal = cardEffectiveTotal
               const coveragePct = effectiveTotal > 0 ? Math.min(100, Math.round((member.total_bets || 0) / effectiveTotal * 100)) : 0
-              const badges = getBadges(member, i, effectiveTotal)
+              const badges = memberBadges[i]
               const aprv = aproveitamento(member)
               const isExpanded = expandedMemberId === member.user_id
               const leaderPts = sortedMembers[0]?.total_points ?? 0

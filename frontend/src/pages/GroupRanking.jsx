@@ -5,6 +5,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS } from '../utils/competitions'
+import { aproveitamento, getBadges } from '../utils/groupBadges'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -18,27 +19,6 @@ function todayStr() {
   const now = new Date()
   const p = n => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
-}
-function aproveitamento(r) {
-  if (!r.total_bets) return null
-  return Math.round(r.total_points / (r.total_bets * 25) * 100)
-}
-function getBadges(r, position, effectiveTotal, isHotToday, topStreak, isMuralHero) {
-  const badges = []
-  if (position === 1) badges.push({ icon: '🏆', label: 'Líder', color: '#e8a030' })
-  if (position === 2) badges.push({ icon: '🥈', label: 'Vice', color: '#a0a0a0' })
-  if (r.total_bets >= 5 && r.exact_scores / r.total_bets >= 0.28)
-    badges.push({ icon: '🎯', label: 'Sniper', color: '#e85252' })
-  if (effectiveTotal >= 5 && r.total_bets >= effectiveTotal)
-    badges.push({ icon: '💯', label: 'Cem%', color: '#0fa896' })
-  if (effectiveTotal > 0 && r.total_bets >= effectiveTotal * 0.85)
-    badges.push({ icon: '⚡', label: 'Maratonista', color: '#9b5de8' })
-  if (r.total_bets >= 10 && aproveitamento(r) >= 60)
-    badges.push({ icon: '🔮', label: 'Preciso', color: '#4a90e8' })
-  if (isHotToday) badges.push({ icon: '🔥', label: 'Em Alta', color: 'var(--win)' })
-  if (topStreak && topStreak >= 3) badges.push({ icon: '🔗', label: `${topStreak} seguidos`, color: '#0fa896' })
-  if (isMuralHero) badges.push({ icon: '🎲', label: 'Ousado', color: '#e8a030' })
-  return badges
 }
 function buildShareText(groupName, ranking, finished, total, inviteLink) {
   const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
