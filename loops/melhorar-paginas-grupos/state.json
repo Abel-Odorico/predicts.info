@@ -14,9 +14,11 @@
   },
   "debito_tecnico_backend": {
     "achado_na": "round 3",
-    "descricao": "backend/routers/user_groups.py: query de weekly_ranking (linhas ~872-887) e o endpoint /recent-matches (linhas ~1058-1090) não filtram por competition_id. Hoje não se manifesta (só Copa 2026 tem jogos finalizados), mas assim que o Brasileirão tiver rodadas encerradas, vai contaminar a aba 'Semana' e 'Última Rodada' do GroupRanking.jsx com dados cruzados entre competições.",
-    "escopo": "fora do loop (loop é frontend-only por decisão do Abel) — precisa de mudança no backend (adicionar filtro competition_id nessas 2 queries) quando ele quiser tratar",
-    "status": "reportado, não corrigido"
+    "descricao": "backend/routers/user_groups.py: /highlights, /recent-matches e /evolution (achado extra durante a correção) não filtravam por competition_id — misturavam dado de Copa 2026 e Brasileirão.",
+    "escopo": "inicialmente fora do loop (frontend-only); Abel autorizou expandir escopo pro backend explicitamente após o loop terminar",
+    "status": "resolvido",
+    "commit": "488a1e2",
+    "correcao": "parâmetro competition (default copa2026, mesmo padrão de /ranking) adicionado nos 3 endpoints, comp_id propagado por todas as queries que tocam Match (2 delas — xp_row e _bet_cnt_sub do best_approval — não tinham join com Match e ganharam um). Frontend passa ?competition=${comp} explicitamente, só disparando a chamada quando comp !== 'geral' (esse modo nunca teve endpoint próprio, sempre bateria 404). Testado contra backend real (Copa vs Brasileirão retornam dado diferente e correto) + smoke test completo em produção. Container predicts_api rebuildado e reiniciado."
   },
   "nota_operacional": "outro loop (predicts-seo) rodando em paralelo no mesmo repo durante toda a sessão, mexendo em frontend/public/index-landing.html e loops/predicts-seo/state.json — confirmado a cada commit (git reset explícito) que nenhum desses arquivos entrou nos commits deste loop.",
   "last_check": {
