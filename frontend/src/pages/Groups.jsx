@@ -6,12 +6,13 @@ import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
 
 export default function Groups() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [groups, setGroups]     = useState({})
   const [qualified, setQual]    = useState({ winners: [], runners_up: [], best_thirds: [] })
   const [bracket, setBracket]   = useState([])
   const [loading, setLoad]      = useState(true)
   const [myGroupStageBets, setMyGroupStageBets] = useState(null)
+  const [betterThanPct, setBetterThanPct] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -33,10 +34,10 @@ export default function Groups() {
       .finally(() => setLoad(false))
   }, [])
 
-  // Aproveitamento pessoal na fase de grupos — dado real, só quando logado.
+  // Aproveitamento pessoal na fase de grupos + comparação social — dado real, só quando logado.
   // Efeito separado: não deve reexecutar o fetch de /groups a cada rehidratação do token.
   useEffect(() => {
-    if (!token) { setMyGroupStageBets(null); return }
+    if (!token) { setMyGroupStageBets(null); setBetterThanPct(null); return }
     let mounted = true
     api.get('/bets/mine?competition=copa2026', token)
       .then(bets => {
@@ -47,8 +48,21 @@ export default function Groups() {
           : null)
       })
       .catch(() => {})
+    // Ranking completo da competição (49 usuários no total — /ranking?limit=100 cobre 100%,
+    // não é amostra) só pra calcular um percentil real, sem inventar população.
+    api.get('/ranking?competition=copa2026&limit=100')
+      .then(rows => {
+        // rows.length === 100 (o teto do limit) significa que a lista pode ter sido
+        // truncada — sem saber o total real de usuários, não dá pra calcular percentil honesto.
+        if (!mounted || !Array.isArray(rows) || rows.length < 2 || rows.length >= 100 || !user) return
+        const myIndex = rows.findIndex(r => r.user_id === user.id)
+        if (myIndex === -1 || (rows[myIndex].total_bets ?? 0) === 0) return
+        const pct = Math.round(((rows.length - 1 - myIndex) / (rows.length - 1)) * 100)
+        if (pct >= 50) setBetterThanPct(pct)
+      })
+      .catch(() => {})
     return () => { mounted = false }
-  }, [token])
+  }, [token, user])
 
   if (loading) return <Spinner text="Carregando grupos..." />
 
@@ -87,6 +101,7 @@ export default function Groups() {
               {stageOver
                 ? 'Encerrada · tabelas finais dos 12 grupos'
                 : '12 grupos · 48 seleções · top 2 + 8 melhores 3ºs avançam'}
+              {betterThanPct != null && <> · <span style={{ color: 'var(--win)', fontWeight: 700 }}>🔥 melhor que {betterThanPct}% dos jogadores</span></>}
             </p>
           </div>
         </div>

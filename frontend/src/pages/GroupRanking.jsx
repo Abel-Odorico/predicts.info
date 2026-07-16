@@ -654,14 +654,12 @@ export default function GroupRanking() {
               </div>
             )}
 
-            {/* Minha posição */}
+            {/* Meu desempenho detalhado — posição/pontos já aparecem no cabeçalho; aqui é o detalhamento (exatos/certos/apostas/forma) */}
             {myEntry && (
               <div className="group-ranking-hero fade-in-2">
-                <div className="group-ranking-hero__pos">
-                  {myEntry.position === 1 ? '🥇' : myEntry.position === 2 ? '🥈' : myEntry.position === 3 ? '🥉' : `${myEntry.position}º`}
-                </div>
+                <div className="group-ranking-hero__pos" aria-hidden="true">📊</div>
                 <div className="group-ranking-hero__info">
-                  <div className="group-ranking-hero__label">Sua posição</div>
+                  <div className="group-ranking-hero__label">Seu desempenho</div>
                   <div className="group-ranking-hero__name">{myEntry.name}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                     <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)' }}>
