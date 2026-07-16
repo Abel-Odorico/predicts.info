@@ -1,14 +1,10 @@
 """
-Log de erros/checkpoints client-side. Nasceu caçando o crash "problema
-ocorreu repetidamente" só em Safari iOS em /apostas e /brasileirao (sem
-ErrorBoundary/telemetria no front, um crash nativo do WebKit mata a aba
-antes de qualquer JS conseguir reportar o erro em si — checkpoints de
-progresso mostram onde morreu mesmo sem log do aparelho) — virou página
-permanente em /admin (pedido do Abel), já que o site não tinha NENHUM
-error tracking client-side antes disso.
+Log de erros client-side. Site não tinha nenhum error tracking client-side —
+window.onerror/unhandledrejection do front (frontend/src/diag.js) manda pra
+cá via sendBeacon, sobrevive a unload/fechamento de aba.
 
-POST /checkpoint e /error são públicos (precisam funcionar até deslogado).
-GET /admin/client-diag é admin-only, lê o mesmo arquivo.
+POST /diag/error é público (precisa funcionar até deslogado).
+GET /admin/client-diag é admin-only, lê o mesmo arquivo — página /admin/logs.
 Sem tabela — arquivo de log simples com rotação por tamanho (evita crescer
 sem limite com tráfego real).
 """
@@ -39,10 +35,12 @@ def _rotate_if_needed():
         pass
 
 
-def _append(kind: str, body: dict, request: Request):
+@router.post("/diag/error", status_code=204)
+async def client_error(request: Request):
+    body = await request.json()
     line = {
         "at": datetime.now(timezone.utc).isoformat(),
-        "kind": kind,
+        "kind": "error",
         "ua": request.headers.get("user-agent", ""),
         **body,
     }
@@ -55,21 +53,8 @@ def _append(kind: str, body: dict, request: Request):
     print(f"[client_diag] {json.dumps(line, ensure_ascii=False)}", flush=True)
 
 
-@router.post("/diag/checkpoint", status_code=204)
-async def checkpoint(request: Request):
-    body = await request.json()
-    _append("checkpoint", body, request)
-
-
-@router.post("/diag/error", status_code=204)
-async def client_error(request: Request):
-    body = await request.json()
-    _append("error", body, request)
-
-
 @admin_router.get("/client-diag")
 def list_client_diag(
-    kind: str | None = Query(None, description="'error' | 'checkpoint' — sem filtro traz os dois"),
     limit: int = Query(200, le=1000),
     _: User = Depends(require_admin),
 ):
@@ -78,12 +63,9 @@ def list_client_diag(
     rows = []
     for raw in reversed(LOG_PATH.read_text().splitlines()):
         try:
-            row = json.loads(raw)
+            rows.append(json.loads(raw))
         except Exception:
             continue
-        if kind and row.get("kind") != kind:
-            continue
-        rows.append(row)
         if len(rows) >= limit:
             break
     return rows

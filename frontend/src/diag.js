@@ -1,10 +1,6 @@
-// Diagnóstico temporário — caça ao crash "problema ocorreu repetidamente" só
-// em Safari iOS em /apostas e /brasileirao (ver skill predicts, seção do dia
-// 2026-07-16). Um crash nativo do WebKit mata a aba sem chance de reportar o
-// erro em si, então em vez de tentar capturar o erro, mandamos CHECKPOINTS de
-// progresso em tempo real — o último que chegar no servidor é onde morreu.
-// sendBeacon não bloqueia unload e sobrevive à navegação/fechamento da aba.
-// Remover este arquivo + import + endpoint /api/diag/* quando o bug for achado.
+// Captura global de erro JS + promise rejeitada, reportado pro admin em
+// /admin/logs. sendBeacon não bloqueia unload e sobrevive à navegação/
+// fechamento da aba.
 
 function send(path, body) {
   try {
@@ -15,10 +11,6 @@ function send(path, body) {
       fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(() => {})
     }
   } catch { /* diagnóstico não pode quebrar a página */ }
-}
-
-export function checkpoint(event, extra = {}) {
-  send('/diag/checkpoint', { event, ...extra })
 }
 
 window.addEventListener('error', (e) => {

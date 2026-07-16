@@ -10,7 +10,6 @@ import TitleEvolutionChart from '../components/TitleEvolutionChart'
 import BrTitleEvolutionChart from '../components/BrTitleEvolutionChart'
 import { PT_NAMES } from '../utils/teamNames'
 import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
-import { checkpoint } from '../diag'
 
 const PHASE_LABELS = {
   r32:   'Round of 32',
@@ -199,7 +198,6 @@ export default function Bets() {
 
   const load = useCallback(() => {
     setLoad(true)
-    checkpoint('bets_load_start', { comp })
     const reqs = [
       api.get(`/matches?status=scheduled&competition=${comp}&limit=200`),
       api.get(`/matches?status=finished&competition=${comp}&limit=100`),
@@ -211,18 +209,11 @@ export default function Bets() {
         if (mRes.status === 'fulfilled') setMatches(mRes.value)
         if (fRes.status === 'fulfilled') setFinished(Array.isArray(fRes.value) ? fRes.value : [])
         if (token && bRes?.status === 'fulfilled' && bRes.value) setBets(bRes.value)
-        checkpoint('bets_data_loaded', {
-          comp,
-          matches: mRes.status === 'fulfilled' ? mRes.value?.length ?? 0 : null,
-          matches_ok: mRes.status === 'fulfilled',
-          finished_ok: fRes.status === 'fulfilled',
-        })
       })
       .finally(() => setLoad(false))
   }, [token, comp])
 
 
-  useEffect(() => { checkpoint('bets_page_mount') }, [])
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
@@ -268,15 +259,6 @@ export default function Bets() {
   const openMatches = [...matches.filter(m => isMatchOpen(m, now))]
     .sort((a, b) => new Date(a.match_date) - new Date(b.match_date))
   const betsByMatchId = Object.fromEntries(bets.map(b => [b.match_id, b]))
-
-  const renderedFor = useRef(null)
-  useEffect(() => {
-    if (loading) return
-    const key = `${comp}:${tab}`
-    if (renderedFor.current === key) return
-    renderedFor.current = key
-    checkpoint('bets_list_rendered', { comp, tab, open_count: openMatches.length, visible_count: Math.min(visibleCount, openMatches.length) })
-  })
 
   function matchLocalDate(dateStr) {
     return new Date(dateStr).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
