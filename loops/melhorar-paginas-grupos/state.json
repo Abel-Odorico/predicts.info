@@ -1,18 +1,43 @@
 {
   "schema_version": 1,
   "loop": "melhorar-paginas-grupos",
-  "status": "ready",
-  "iteration": 0,
+  "status": "running",
+  "iteration": 1,
   "max_iterations": 5,
-  "baseline": null,
-  "last_check": null,
-  "accepted_changes": [],
-  "attempts": [],
-  "approved_criteria": {
-    "Groups.jsx": [],
-    "UserGroups.jsx": [],
-    "GroupRanking.jsx": []
+  "baseline": "commit 7891d7b (working tree limpo antes da volta 1)",
+  "last_check": {
+    "round": 1,
+    "build": "npx vite build — OK",
+    "gestor": "aprovado — Groups.jsx 4/5/5/5/4/5 (fix pessoal aplicado), UserGroups.jsx e GroupRanking.jsx 5/5 ou 4/5 em todos os itens, 'verdadeiramente bom' explícito nessas duas",
+    "code_review": "nenhum problema encontrado (2 passes: diff original + diff do fix de Groups.jsx)"
   },
-  "last_gestor_notes": null,
+  "accepted_changes": [
+    {
+      "round": 1,
+      "commit": "b1fcb13",
+      "criterio": "cabeçalho",
+      "descricao": "componente .page-hero (ícone + posição/progresso real em destaque) nas 3 páginas"
+    }
+  ],
+  "attempts": [
+    {
+      "round": 1,
+      "tentativa": 1,
+      "resultado": "reprovado_parcial",
+      "motivo": "Groups.jsx 3/5 em motivação real e retenção — stat do cabeçalho era só reestilização de dado global (totalQualified/32), sem contexto pessoal"
+    },
+    {
+      "round": 1,
+      "tentativa": 2,
+      "resultado": "aprovado",
+      "motivo": "adicionado stat pessoal real (acertos do usuário na fase de grupos via /bets/mine) como fallback do stat global; 2 bugs de estado corrigidos (useEffect combinado refazia fetch de /groups a cada rehidratação do token; stat pessoal não resetava no logout) após review de correção"
+    }
+  ],
+  "approved_criteria": {
+    "Groups.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"],
+    "UserGroups.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"],
+    "GroupRanking.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"]
+  },
+  "last_gestor_notes": "Todos os itens ≥4 nas 3 páginas na volta 1 (após fix). Groups.jsx: retenção 4/5 — sugestão de melhoria futura (não bloqueante): comparação social (ex: 'melhor que X% dos jogadores') reforçaria ainda mais. GroupRanking.jsx: informação de posição agora duplicada (cabeçalho + card 'Sua posição' mais abaixo) — não é bug, mas vale diferenciar melhor numa iteração futura.",
   "terminal_reason": null
 }
