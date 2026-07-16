@@ -35,12 +35,20 @@ export default function BrTitleEvolutionChart() {
     if (!data || !stageRef.current) return
     const el = stageRef.current
     const io = new IntersectionObserver(
-      entries => entries.forEach(e => { if (e.isIntersecting) draw() }),
+      entries => entries.forEach(e => {
+        if (e.isIntersecting) draw()
+        else { genRef.current += 1; if (timerRef.current) timerRef.current.stop(); if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current) }
+      }),
       { threshold: 0.3 }
     )
     io.observe(el)
+    function onVisibility() {
+      if (document.hidden) { genRef.current += 1; if (timerRef.current) timerRef.current.stop(); if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current) }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       io.disconnect()
+      document.removeEventListener('visibilitychange', onVisibility)
       genRef.current += 1
       if (timerRef.current) timerRef.current.stop()
       if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current)

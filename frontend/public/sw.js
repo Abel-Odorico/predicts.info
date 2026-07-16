@@ -1,4 +1,4 @@
-const CACHE = 'predicts-v137'
+const CACHE = 'predicts-v142'
 const ICON  = '/icon-192.png'
 const BADGE = '/favicon-32x32.png'
 
@@ -25,7 +25,8 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k).catch(() => {}))))
+      .catch(() => {})
       .then(() => self.clients.claim())
       .then(() => self.clients.matchAll({ type: 'window' })
         .then(all => all.forEach(c => c.postMessage({ type: 'SW_ACTIVATED', cache: CACHE })))
@@ -60,7 +61,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(request)
         .then(res => {
-          caches.open(CACHE).then(c => c.put(request, res.clone()))
+          caches.open(CACHE).then(c => c.put(request, res.clone())).catch(() => {})
           return res
         })
         .catch(async () => {
@@ -82,8 +83,10 @@ async function networkFirst(req) {
     const res = await fetch(req)
     // só cacheia respostas ok (2xx) — erros 4xx/5xx não devem ser servidos offline
     if (res.ok) {
-      const cache = await caches.open(CACHE)
-      cache.put(req, res.clone())
+      try {
+        const cache = await caches.open(CACHE)
+        await cache.put(req, res.clone())
+      } catch { /* quota/cota estourada (comum no Safari iOS) — não derruba a resposta real */ }
     }
     return res
   } catch {
@@ -100,8 +103,10 @@ async function cacheFirst(req) {
   if (cached) return cached
   try {
     const res = await fetch(req)
-    const cache = await caches.open(CACHE)
-    cache.put(req, res.clone())
+    try {
+      const cache = await caches.open(CACHE)
+      await cache.put(req, res.clone())
+    } catch { /* quota/cota estourada (comum no Safari iOS) — serve a resposta mesmo sem cachear */ }
     return res
   } catch {
     return new Response('Not available offline', { status: 503 })

@@ -28,11 +28,20 @@ export default function TitleEvolutionChart({ codes = ['ARG', 'ENG', 'ESP', 'FRA
     if (!data || !stageRef.current) return
     const el = stageRef.current
     const io = new IntersectionObserver(
-      entries => entries.forEach(e => { if (e.isIntersecting) draw() }),
+      entries => entries.forEach(e => {
+        if (e.isIntersecting) draw()
+        else genRef.current += 1
+      }),
       { threshold: 0.3 }
     )
     io.observe(el)
-    return () => io.disconnect()
+    function onVisibility() { if (document.hidden) genRef.current += 1 }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      io.disconnect()
+      document.removeEventListener('visibilitychange', onVisibility)
+      genRef.current += 1
+    }
   }, [data, hidden])
 
   function toggle(code) {
