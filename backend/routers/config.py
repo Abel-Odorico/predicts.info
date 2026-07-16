@@ -29,9 +29,9 @@ DEFAULTS: dict[str, str] = {
     "user_notice_button":       "Atualizar perfil",
     "user_notice_url":          "/perfil",
     "user_notice_profile_only": "true",
-    "meta_title":        "Predicts.info — World Cup 2026 Statistical Simulator",
-    "meta_description":  "AI-powered World Cup 2026 predictions. Poisson + Elo + Monte Carlo simulations. Live scores, group standings, bracket projections and betting.",
-    "meta_keywords":     "world cup 2026 predictions, FIFA 2026 simulator, football predictions, copa 2026",
+    "meta_title":        "Predicts.info: Simulador de Futebol, Copa 2026 e Brasileirão",
+    "meta_description":  "Simulador com 1 milhão de simulações Monte Carlo. Palpites, análise de IA e aposta pelo WhatsApp. Copa do Mundo 2026 e Brasileirão ao vivo. 100% gratuito.",
+    "meta_keywords":     "simulador de futebol, bolão brasileirão, palpites brasileirão, simulador copa do mundo 2026, bolão copa 2026, world cup 2026 predictions, brasileirao serie a predictions",
     "footer_text":       "Statistical predictions powered by Monte Carlo simulation.",
     "developer_credit":  "PeepConnect - By Abel Odorico",
     # Institutional pages
