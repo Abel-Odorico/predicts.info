@@ -1,12 +1,53 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
+import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
+
+const COMPETITIONS = ALL_COMPETITIONS.filter(c => c.id !== 'geral').map(c => ({ id: c.id, label: `${c.emoji} ${c.label}` }))
+
+function CompNav({ comp, setComp }) {
+  return (
+    <div className="phase-nav fade-in-1" style={{ marginBottom: 0 }}>
+      {COMPETITIONS.map(c => (
+        <button
+          key={c.id}
+          type="button"
+          className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`}
+          onClick={() => setComp(c.id)}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Brasileirão é pontos corridos, sem fase de grupos — não tem equivalente
+// aqui. Redireciona pra tabela real em /brasileirao em vez de duplicar.
+function BrasileiraoRedirect({ comp, setComp }) {
+  return (
+    <div className="page">
+      <div className="fade-in-1">
+        <h1 className="page-title">FASE DE GRUPOS</h1>
+      </div>
+      <CompNav comp={comp} setComp={setComp} />
+      <div className="card mt-6 fade-in-2" style={{ padding: 'var(--s6) var(--s5)', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', marginBottom: 'var(--s4)' }}>
+          🇧🇷 Brasileirão é disputado em pontos corridos — não tem fase de grupos.
+          20 clubes, todos contra todos, título/G4/Z4 decididos pela tabela.
+        </p>
+        <Link to="/brasileirao" className="btn btn-primary btn-sm">Ver Tabela do Brasileirão</Link>
+      </div>
+    </div>
+  )
+}
 
 export default function Groups() {
   const { token, user } = useAuth()
+  const [comp, setComp]         = useState('copa2026')
   const [groups, setGroups]     = useState({})
   const [qualified, setQual]    = useState({ winners: [], runners_up: [], best_thirds: [] })
   const [bracket, setBracket]   = useState([])
@@ -16,6 +57,7 @@ export default function Groups() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (comp !== 'copa2026') { setLoad(false); return }
     Promise.all([
       api.get('/groups'),
       api.get('/tournament/official-bracket'),
@@ -32,12 +74,12 @@ export default function Groups() {
       })
       .catch(console.error)
       .finally(() => setLoad(false))
-  }, [])
+  }, [comp])
 
   // Aproveitamento pessoal na fase de grupos + comparação social — dado real, só quando logado.
   // Efeito separado: não deve reexecutar o fetch de /groups a cada rehidratação do token.
   useEffect(() => {
-    if (!token) { setMyGroupStageBets(null); setBetterThanPct(null); return }
+    if (comp !== 'copa2026' || !token) { setMyGroupStageBets(null); setBetterThanPct(null); return }
     let mounted = true
     api.get('/bets/mine?competition=copa2026', token)
       .then(bets => {
@@ -62,7 +104,9 @@ export default function Groups() {
       })
       .catch(() => {})
     return () => { mounted = false }
-  }, [token, user])
+  }, [comp, token, user])
+
+  if (comp !== 'copa2026') return <BrasileiraoRedirect comp={comp} setComp={setComp} />
 
   if (loading) return <Spinner text="Carregando grupos..." />
 
@@ -118,6 +162,10 @@ export default function Groups() {
             </>
           )}
         </div>
+      </div>
+
+      <div className="mt-4" style={{ marginBottom: 'var(--s4)' }}>
+        <CompNav comp={comp} setComp={setComp} />
       </div>
 
       {/* ── Legenda ──────────────────────────────────────────────────── */}
