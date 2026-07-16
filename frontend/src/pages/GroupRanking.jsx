@@ -6,7 +6,9 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS } from '../utils/competitions'
 
-const POSITION_STORE_KEY = id => `predicts_group_positions_${id}`
+// Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
+// lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
+const POSITION_STORE_KEY = (id, comp) => `predicts_group_positions_${id}_${comp}`
 const PHASE_LABELS = {
   all: 'Geral', group: 'Fase de Grupos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semifinal', final: 'Final', '3rd': '3º Lugar',
 }
@@ -46,17 +48,17 @@ function buildShareText(groupName, ranking, finished, total, inviteLink) {
   const link = inviteLink || 'https://predicts.info'
   return `🏆 *${groupName} — Ranking do Bolão*\n\n${rows}\n\n⚽ ${finished}/${total} jogos realizados\n\n🎯 Entre no grupo: ${link}`
 }
-function loadSavedPositions(groupId) {
+function loadSavedPositions(groupId, comp) {
   try {
-    const raw = localStorage.getItem(POSITION_STORE_KEY(groupId))
+    const raw = localStorage.getItem(POSITION_STORE_KEY(groupId, comp))
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
-function savePositions(groupId, ranking) {
+function savePositions(groupId, comp, ranking) {
   try {
     const map = {}
     ranking.forEach((r, i) => { map[r.user_id] = i + 1 })
-    localStorage.setItem(POSITION_STORE_KEY(groupId), JSON.stringify({ date: todayStr(), positions: map }))
+    localStorage.setItem(POSITION_STORE_KEY(groupId, comp), JSON.stringify({ date: todayStr(), positions: map }))
   } catch {}
 }
 
@@ -151,6 +153,11 @@ export default function GroupRanking() {
   const chatEndRef = useRef(null)
   const chatOpenedRef = useRef(false)
   const chatPollRef = useRef(null)
+  // Garante que o snapshot de posições anteriores só é lido UMA VEZ por grupo nesta
+  // visita — sem isso, uma segunda chamada de load() (ex: token rehidratando de forma
+  // assíncrona do zustand persist) relia o localStorage DEPOIS que a 1ª chamada já
+  // tinha sobrescrito com a posição atual, zerando sempre o delta de progresso.
+  const positionsReadRef = useRef(null)
 
   const today = todayStr()
 
@@ -158,8 +165,12 @@ export default function GroupRanking() {
   const load = useCallback(() => {
     if (!token) return
     setLoading(true)
-    const saved = loadSavedPositions(groupId)
-    if (saved) setPrevPos(saved.positions)
+    const positionsKey = `${groupId}:${comp}`
+    if (positionsReadRef.current !== positionsKey) {
+      const saved = loadSavedPositions(groupId, comp)
+      setPrevPos(saved ? saved.positions : null)
+      positionsReadRef.current = positionsKey
+    }
 
     // allSettled: falha parcial não cancela os outros dados
     Promise.allSettled([
@@ -193,7 +204,7 @@ export default function GroupRanking() {
         setTodayTop(groupToday[0] || null)
         setTodayPts(Object.fromEntries(groupToday.map(r => [r.user_id, r.total_points])))
       }
-      savePositions(groupId, groupData.ranking ?? [])
+      savePositions(groupId, comp, groupData.ranking ?? [])
     }).finally(() => setLoading(false))
 
     // Secondary fetches (non-blocking) — highlights independente do load principal
@@ -343,6 +354,18 @@ export default function GroupRanking() {
   const ranking = data?.ranking ?? []
   const amOwner = data?.is_owner === true
   const myEntry = ranking.find(r => r.is_me)
+
+  // Notificação de progresso pessoal — dado real já salvo (prevPositions, localStorage,
+  // atualizado a cada load em `savePositions`): compara a posição desta visita com a anterior.
+  const myPrevPos = myEntry ? prevPositions?.[myEntry.user_id] : null
+  const myPosDelta = (myPrevPos && myPrevPos !== myEntry?.position) ? myPrevPos - myEntry.position : 0
+  const passedMeBy = myEntry ? ranking.filter((r, i) => {
+    if (r.user_id === myEntry.user_id) return false
+    const rPrevPos = prevPositions?.[r.user_id]
+    if (!rPrevPos || !myPrevPos) return false
+    const rCurPos = i + 1
+    return rPrevPos > myPrevPos && rCurPos < myEntry.position
+  }) : []
   const champion = data?.champion ?? null
   const championBonusPts = data?.champion_bonus_pts ?? 0
   const leaderPts = ranking[0]?.effective_points ?? ranking[0]?.total_points ?? 1
@@ -452,6 +475,34 @@ export default function GroupRanking() {
           </div>
         </div>
       </div>
+
+      {/* ── Notificação de progresso pessoal (desde a última visita) ── */}
+      {comp === 'copa2026' && myEntry && (myPosDelta !== 0 || passedMeBy.length > 0) && (
+        <div
+          className="card mt-4 fade-in-1"
+          style={{
+            padding: 'var(--s3) var(--s4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap',
+            borderLeft: `3px solid ${myPosDelta > 0 ? 'var(--win)' : 'var(--lose)'}`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 20 }}>{myPosDelta > 0 ? '🔥' : '⚠️'}</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+              {myPosDelta > 0 && `Você subiu ${myPosDelta} posiç${myPosDelta === 1 ? 'ão' : 'ões'} desde sua última visita!`}
+              {myPosDelta <= 0 && passedMeBy.length > 0 && (
+                `${passedMeBy.slice(0, 2).map(m => m.name).join(' e ')}${passedMeBy.length > 2 ? ` e mais ${passedMeBy.length - 2}` : ''} te ultrapassa${passedMeBy.length === 1 ? 'ou' : 'ram'} desde sua última visita`
+              )}
+              {myPosDelta < 0 && passedMeBy.length === 0 && `Você caiu ${Math.abs(myPosDelta)} posiç${Math.abs(myPosDelta) === 1 ? 'ão' : 'ões'} desde sua última visita`}
+            </span>
+          </div>
+          {myPosDelta <= 0 && (
+            <Link to="/apostas" className="btn btn-sm" style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700, flexShrink: 0 }}>
+              Apostar e recuperar →
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* ── Aba de competição ── */}
       <div className="phase-nav fade-in-1" style={{ margin: 'var(--s4) 0 0' }}>
