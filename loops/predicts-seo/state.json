@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "loop": "predicts-seo",
+  "status": "blocked",
+  "iteration": 3,
+  "max_iterations": 5,
+  "baseline": {
+    "source": "reauditoria seo-mestre 2026-07-16 + Lighthouse real medido antes da volta 1 (substitui a estimativa informal de PageSpeed usada na reauditoria anterior)",
+    "nota_geral": 75,
+    "agents": {
+      "01_technical_seo": 92,
+      "02_pagespeed_cwv": 57,
+      "03_semantic_accessibility": 65,
+      "04_ia_intent": 80,
+      "05_content_aeo": 80,
+      "06_geo_aio": 55,
+      "07_llm_crawlers_robots": 85,
+      "08_schema_trust": 88,
+      "09_local": null,
+      "10_wordpress": null,
+      "11_commerce_conversion": 75,
+      "12_quality_gate": "reprovado"
+    },
+    "lighthouse_raw": {
+      "performance": 56,
+      "seo": 100,
+      "accessibility": 95,
+      "best_practices": 77,
+      "lcp": "9.4s",
+      "cls": 0,
+      "tbt": "130ms",
+      "speed_index": "7.7s"
+    },
+    "achado_central_pre_volta1": "vendor/lucide.js (409KB) carregado via <script src> síncrono na landing, bloqueando render — maior alavanca de LCP identificada"
+  },
+  "last_check": {
+    "iteration": 1,
+    "metodologia": "3 rodadas Lighthouse (não 1) — nota de agent02 usa a mediana, não uma corrida isolada, pra não ficar refém de variância de terceiros",
+    "nota_geral": 73.51,
+    "agents": {
+      "01_technical_seo": 94,
+      "02_pagespeed_cwv": 44,
+      "03_semantic_accessibility": 65,
+      "06_geo_aio": 55,
+      "07_llm_crawlers_robots": 85,
+      "08_schema_trust": 88
+    },
+    "lighthouse_raw_3_rodadas": {
+      "performance": [42, 42, 56],
+      "lcp": ["3.8s", "7.5s", "9.0s"],
+      "cls": [0.182, 0, 0],
+      "tbt_ms": [2230, 1010, 210]
+    },
+    "smoke_test": "6/6 OK",
+    "commit": "0596696"
+  },
+  "accepted_changes": [
+    "volta 1: lucide.js defer (confirmado fora do render-blocking em 3/3 rodadas) + title/description dentro do limite ideal"
+  ],
+  "attempts": [
+    {
+      "iteration": 1,
+      "achado": "lucide.js (400KB) síncrono bloqueando LCP",
+      "mudanca": "frontend/public/index-landing.html: <script src=\"/vendor/lucide.js\"> -> <script defer src=...>",
+      "build": "npm run build completo, OK",
+      "smoke_test": "200 em /dashboard /brasileirao /admin /partida/880 /meus-grupos/5 /usuarios/1/historico",
+      "resultado": "ACEITO (avaliador independente) — diff correto e confirmado, zero regressão. nota_geral 74.98->73.51 (caiu) por ruído não causado pelo diff: Google Ads/Doubleclick variando 210-2230ms de TBT entre rodadas idênticas + Google Fonts CSS ainda render-blocking. Vira alvo da volta 2.",
+      "nota_antes": 74.98,
+      "nota_depois": 73.51
+    },
+    {
+      "iteration": 2,
+      "achado": "Google Fonts CSS render-blocking (~1,4s em 3/3 rodadas da volta 1)",
+      "mudanca": "frontend/public/index-landing.html: link stylesheet da fonte -> padrão preload + media=print/onload=all + noscript fallback",
+      "build": "npm run build completo, OK",
+      "smoke_test": "200 em /dashboard /brasileirao /admin /partida/880 /meus-grupos/5 /usuarios/1/historico",
+      "resultado": "ACEITO com ressalva — nota_geral 73.51->74.31. Achado alvo resolvido (render-blocking-insight vazio 3/3, TBT -82%). Regressão real introduzida: CLS 0->0.128 (faixa 'precisa melhorar', não dispara penalidade >0.25 da rubrica) por reflow do .hero-glow-orb no font-swap (confirmado via cls-culprits-insight, não é ruído de terceiros). Fica pendente como follow-up, não tratado como resolvido.",
+      "nota_antes": 73.51,
+      "nota_depois": 74.31,
+      "commit": "cd59add",
+      "pendencia_aberta": "CLS 0.128 introduzido pelo font-swap do hero-glow-orb — corrigir sem reverter a técnica (ex: font-metric-override ou reservar dimensão do elemento)"
+    },
+    {
+      "iteration": 3,
+      "achado": "adsbygoogle.js estático/síncrono no <head>, competindo com LCP/TBT",
+      "autorizacao": "Abel autorizou explicitamente mexer em timing de Ads (decisão de monetização) — opção escolhida: atrasar carregamento, não remover",
+      "mudanca": "frontend/public/index-landing.html: script adsbygoogle.js sai do <head> estático, passa a ser injetado via window.addEventListener('load') + requestIdleCallback (fallback setTimeout 1500ms)",
+      "build": "npm run build completo, OK",
+      "smoke_test": "200 em /dashboard /brasileirao /admin /partida/880 /meus-grupos/5 /usuarios/1/historico",
+      "resultado": "ACEITO com ressalva — nota_geral 74.31->75.64. LCP 8.8s->3.9s (mediana 3 rodadas, cruzou abaixo do limite de penalidade >4s da rubrica), performance score Lighthouse 54->66, Ads confirmado funcional (só tardio). Regressão NOVA (distinta da pendência de CLS): TBT mediana 180ms->832ms — bootup-time dos scripts de Ads cai dentro da janela FCP->TTI mesmo carregando pós-load, porque o TTI real do site é ~9s por outros motivos não relacionados a ads.",
+      "nota_antes": 74.31,
+      "nota_depois": 75.64,
+      "commit": "4c3548e",
+      "pendencia_aberta": "TBT 832ms (novo) — cogitar IntersectionObserver no slot de ads em vez de timer, pra sair de vez da janela de cálculo do TBT"
+    }
+  ],
+  "teto_matematico_descoberto": {
+    "iteration": 3,
+    "achado": "95 é INATINGÍVEL dentro do escopo deste loop. Agentes fora de escopo (04 IA/intent=80, 05 content/AEO=80, 11 commerce/conversion=75) ficam congelados na nota da última auditoria completa — este loop só mexe em SEO técnico/performance (01,02,03,06,07,08).",
+    "teto_absoluto_best_case": "93.56 — mesmo que 01/02/03/06/07/08 chegassem TODOS a 100/100, o teto matemático é (100x12+100x12+100x8+80x10+80x14+100x12+100x8+100x10+75x4)/90 = 93.56",
+    "teto_realista_curto_prazo": "80-85, priorizando agente 06 (GEO/AIO, peso 12, ainda em 55 — maior alavanca restante) e fechando as pendências de CLS+TBT do agente 02",
+    "opcoes": [
+      "expandir escopo do loop pra tocar 04/05/11 (mudança de conteúdo/produto, não é fix técnico puro)",
+      "aceitar teto ~85-93 e continuar só no escopo técnico atual",
+      "parar aqui e decidir com o Abel"
+    ]
+  },
+  "terminal_reason": "bloqueado: teto matemático — 95 não é atingível no escopo atual (ver teto_matematico_descoberto). Reportado ao Abel antes de continuar; não vou fingir que 95 é possível sem mudar o escopo."
+}
