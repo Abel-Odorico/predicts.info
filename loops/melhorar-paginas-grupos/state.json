@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "loop": "melhorar-paginas-grupos",
-  "status": "running",
-  "iteration": 3,
+  "status": "success",
+  "iteration": 4,
   "max_iterations": 5,
   "baseline": "commit 7891d7b (working tree limpo antes da volta 1)",
   "incident": {
@@ -18,11 +18,12 @@
     "escopo": "fora do loop (loop é frontend-only por decisão do Abel) — precisa de mudança no backend (adicionar filtro competition_id nessas 2 queries) quando ele quiser tratar",
     "status": "reportado, não corrigido"
   },
+  "nota_operacional": "outro loop (predicts-seo) rodando em paralelo no mesmo repo, mexendo em frontend/public/index-landing.html — confirmado que os commits desta volta não tocaram nesses arquivos (git reset explícito antes de cada commit para excluí-los do stage).",
   "last_check": {
-    "round": 3,
+    "round": 4,
     "build": "npm run build (completo) — OK",
-    "gestor": "aprovado, 'verdadeiramente bom' explícito — 5/5 quase tudo (retenção 4/5, perda aceitável da aba Mês removida)",
-    "code_review": "fork de correção dedicado achou 2 problemas reais antes do commit final (ver attempts round 3)"
+    "gestor": "aprovado, 'verdadeiramente bom' explícito — sem achado pendente",
+    "code_review": "fork de correção dedicado achou 2 problemas reais (dessincronia de filtro de fase + badge Vice ausente da legenda), ambos corrigidos antes do commit final"
   },
   "accepted_changes": [
     {
@@ -42,6 +43,12 @@
       "commit": "4d887a3",
       "criterio": "features de engajamento (pedido explícito do Abel: mais ativos, quem apostou/não apostou, tabela de participação)",
       "descricao": "GroupRanking.jsx: seção 'Atividade do Grupo' com abas Semana/Mais Ativos/Última Rodada. Aba 'Mês' tentada e removida por dado incorreto (ver attempts)"
+    },
+    {
+      "round": 4,
+      "commit": "9a89b53",
+      "criterio": "conquistas mais visíveis (pedido explícito do Abel: unlock, animação) + polimento de espaçamento",
+      "descricao": "GroupRanking.jsx: painel de Conquistas personalizado (✓ + contagem social + animação de unlock), 2 bugs corrigidos (dessincronia com filtro de fase, badge Vice ausente). UserGroups.jsx: respiro de espaçamento no mini-pódio (reportado pelo Abel ao vivo)"
     }
   ],
   "attempts": [
@@ -74,6 +81,18 @@
       "tentativa": 2,
       "resultado": "aprovado",
       "motivo": "aba 'Mês' removida por completo (não implementável corretamente só no frontend — precisaria de query agregada nova no backend, fora do escopo). Mantidas Semana/Mais Ativos/Última Rodada, todas usando dado agregado sem cap, validadas. Nenhum código morto deixado pra trás"
+    },
+    {
+      "round": 4,
+      "tentativa": 1,
+      "resultado": "reprovado_parcial",
+      "motivo": "gestor apontou faltar animação/popup (pedido literal do Abel) — 'passou no limite' não 'verdadeiramente bom'. Revisor de correção achou 2 bugs reais: allMemberBadges usava displayRanking (afetado por filtro de fase) em vez de ranking, causando zerar incorretamente o painel ao trocar de aba; badge Vice existia em getBadges mas não tinha card na legenda"
+    },
+    {
+      "round": 4,
+      "tentativa": 2,
+      "resultado": "aprovado",
+      "motivo": "corrigidos os 2 bugs (ranking em vez de displayRanking; Vice adicionado à legenda) + animação de unlock (scale+opacity, sem cor hardcoded) adicionada. Testado ao vivo: contador estável trocando de aba de fase. Abel reportou espaçamento apertado no mini-pódio de UserGroups.jsx (fora do escopo desta página específica mas mesmo tema de 'página mais bonita') — corrigido junto (padding-top 0→var(--s4), gap s2→s3)"
     }
   ],
   "approved_criteria": {
@@ -81,6 +100,6 @@
     "UserGroups.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"],
     "GroupRanking.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"]
   },
-  "last_gestor_notes": "Volta 3 'verdadeiramente bom'. Retenção 4/5 em GroupRanking.jsx só por causa da lacuna deixada pela remoção da aba Mês — considerado aceitável pelo gestor porque a alternativa era manter dado errado. UserGroups.jsx e Groups.jsx não foram tocados nesta volta.",
-  "terminal_reason": null
+  "last_gestor_notes": "Volta 4 final: 'verdadeiramente bom', sem achado pendente. As 3 páginas, no estado acumulado após 4 voltas, atendem aos 6 critérios da rubrica sem ressalva bloqueante.",
+  "terminal_reason": "sucesso: todos os pedidos explícitos do Abel (cabeçalho mais bonito, retenção/motivação real, mostrar mais ativos/quem apostou, conquistas visíveis com unlock/animação) foram implementados e aprovados 'verdadeiramente bom' pelo painel, sem ressalva pendente nas 3 páginas. 4 de 5 voltas usadas — parado por atingir a condição de sucesso, não por esgotamento de teto."
 }
