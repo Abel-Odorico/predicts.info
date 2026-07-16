@@ -1173,9 +1173,11 @@
     </p>
   </footer>
 
-  <script src="/vendor/lucide.js"></script>
+  <script defer src="/vendor/lucide.js"></script>
   <script>
     // Update button text after DOM ready (lang already set in <head>)
+    // lucide.js é `defer`: sempre executa e define window.lucide ANTES do
+    // DOMContentLoaded disparar, então createIcons() abaixo é seguro.
     document.addEventListener('DOMContentLoaded', function() {
       if (window.lucide) lucide.createIcons()
       var lang = document.documentElement.getAttribute('data-lang')
