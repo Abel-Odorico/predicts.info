@@ -374,21 +374,37 @@ export default function GroupRanking() {
       {/* ── Cabeçalho ── */}
       <div className="fade-in-1">
         <Link to="/meus-grupos" className="match-breadcrumb__link">‹ Meus Grupos</Link>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--s3)', flexWrap: 'wrap', marginTop: 'var(--s4)' }}>
-          <div>
-            {renaming ? (
-              <form onSubmit={saveRename} style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input type="text" className="form-input" value={newName} autoFocus maxLength={120} onChange={e => setNewName(e.target.value)} style={{ minWidth: 180 }} />
-                <button type="submit" className="btn btn-primary btn-sm" disabled={savingName}>{savingName ? '...' : 'Salvar'}</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRenaming(false); setRenameMsg('') }}>Cancelar</button>
-                {renameMsg && <span style={{ fontSize: 12, color: 'var(--lose)' }}>{renameMsg}</span>}
-              </form>
-            ) : (
-              <h1 className="page-title">{data?.group_name}</h1>
-            )}
-            <p className="page-subtitle">{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</p>
+        <div className="page-hero" style={{ marginTop: 'var(--s4)' }}>
+          <div className="page-hero__main">
+            <div className="page-hero__icon">
+              {myEntry?.position === 1 ? '🥇' : myEntry?.position === 2 ? '🥈' : myEntry?.position === 3 ? '🥉' : '🏆'}
+            </div>
+            <div className="page-hero__text">
+              {renaming ? (
+                <form onSubmit={saveRename} style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="text" className="form-input" value={newName} autoFocus maxLength={120} onChange={e => setNewName(e.target.value)} style={{ minWidth: 180 }} />
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={savingName}>{savingName ? '...' : 'Salvar'}</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRenaming(false); setRenameMsg('') }}>Cancelar</button>
+                  {renameMsg && <span style={{ fontSize: 12, color: 'var(--lose)' }}>{renameMsg}</span>}
+                </form>
+              ) : (
+                <h1 className="page-hero__title">{data?.group_name}</h1>
+              )}
+              <div className="page-hero__subtitle">
+                <span>{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</span>
+                {groupXp > 0 && <span>· ⚡ Nível {groupLevel}</span>}
+              </div>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap' }}>
+          <div className="page-hero__actions">
+            {myEntry && (
+              <div className="page-hero__stat">
+                <div className="page-hero__stat-value">
+                  {myEntry.position === 1 ? '🥇' : myEntry.position === 2 ? '🥈' : myEntry.position === 3 ? '🥉' : `${myEntry.position}º`}
+                </div>
+                <div className="page-hero__stat-label">{myEntry.effective_points ?? myEntry.total_points} pts</div>
+              </div>
+            )}
             <button type="button" className="btn btn-sm" style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }} onClick={() => setShareOpen(o => !o)}>
               📤 Ranking
             </button>

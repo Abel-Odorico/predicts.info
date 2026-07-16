@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, CONF_HEX } from '../api'
+import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
 
 export default function Groups() {
+  const { token } = useAuth()
   const [groups, setGroups]     = useState({})
   const [qualified, setQual]    = useState({ winners: [], runners_up: [], best_thirds: [] })
   const [bracket, setBracket]   = useState([])
   const [loading, setLoad]      = useState(true)
+  const [myGroupStageBets, setMyGroupStageBets] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -29,6 +32,23 @@ export default function Groups() {
       .catch(console.error)
       .finally(() => setLoad(false))
   }, [])
+
+  // Aproveitamento pessoal na fase de grupos — dado real, só quando logado.
+  // Efeito separado: não deve reexecutar o fetch de /groups a cada rehidratação do token.
+  useEffect(() => {
+    if (!token) { setMyGroupStageBets(null); return }
+    let mounted = true
+    api.get('/bets/mine?competition=copa2026', token)
+      .then(bets => {
+        if (!mounted) return
+        const evaluated = (bets || []).filter(b => b.group_name && b.result)
+        setMyGroupStageBets(evaluated.length > 0
+          ? { hits: evaluated.filter(b => b.result === 'exact' || b.result === 'correct').length, total: evaluated.length }
+          : null)
+      })
+      .catch(() => {})
+    return () => { mounted = false }
+  }, [token])
 
   if (loading) return <Spinner text="Carregando grupos..." />
 
@@ -58,13 +78,31 @@ export default function Groups() {
 
   return (
     <div className="page">
-      <div className="fade-in-1">
-        <h1 className="page-title">FASE DE GRUPOS</h1>
-        <p className="page-subtitle">
-          {stageOver
-            ? 'Encerrada · Tabelas finais dos 12 grupos · 32 seleções classificadas'
-            : '12 Grupos · 48 Seleções · Top 2 + 8 melhores 3ºs avançam'}
-        </p>
+      <div className="page-hero fade-in-1">
+        <div className="page-hero__main">
+          <div className="page-hero__icon">⚽</div>
+          <div className="page-hero__text">
+            <h1 className="page-hero__title">Fase de Grupos</h1>
+            <p className="page-hero__subtitle">
+              {stageOver
+                ? 'Encerrada · tabelas finais dos 12 grupos'
+                : '12 grupos · 48 seleções · top 2 + 8 melhores 3ºs avançam'}
+            </p>
+          </div>
+        </div>
+        <div className="page-hero__stat">
+          {myGroupStageBets ? (
+            <>
+              <div className="page-hero__stat-value">{myGroupStageBets.hits}/{myGroupStageBets.total}</div>
+              <div className="page-hero__stat-label">Seus acertos aqui</div>
+            </>
+          ) : (
+            <>
+              <div className="page-hero__stat-value">{totalQualified}/32</div>
+              <div className="page-hero__stat-label">{stageOver ? 'Classificados' : 'Definidos'}</div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Legenda ──────────────────────────────────────────────────── */}

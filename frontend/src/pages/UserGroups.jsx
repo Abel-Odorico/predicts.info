@@ -124,25 +124,45 @@ export default function UserGroups() {
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null
   const selectGroup = id => { setActiveGroupId(id); localStorage.setItem('ug_active', String(id)) }
 
+  // Melhor posição real do usuário entre os bolões que participa (dado da API, não decorativo)
+  const myBestRank = groups.reduce((best, g) => {
+    const sorted = [...(g.members ?? [])].sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0))
+    const pos = sorted.findIndex(m => m.user_id === user?.id) + 1
+    if (pos > 0 && (best === null || pos < best)) return pos
+    return best
+  }, null)
+  const bestRankMedal = myBestRank === 1 ? '🥇' : myBestRank === 2 ? '🥈' : myBestRank === 3 ? '🥉' : null
+
   return (
     <div className="page">
-      <div className="groups-topbar fade-in-1">
-        <div className="groups-topbar__left">
-          <h1 className="page-title" style={{ margin: 0 }}>MEUS GRUPOS</h1>
-          <div className="groups-topbar__pills">
-            <span className="groups-pill">{groups.length} bolão{groups.length !== 1 ? 'es' : ''}</span>
-            <span className="groups-pill">{totalMembers} membro{totalMembers !== 1 ? 's' : ''}</span>
-            {totalConvites > 0 && <span className="groups-pill groups-pill--alert">{totalConvites} convite{totalConvites !== 1 ? 's' : ''}</span>}
+      <div className="page-hero fade-in-1">
+        <div className="page-hero__main">
+          <div className="page-hero__icon">🏆</div>
+          <div className="page-hero__text">
+            <h1 className="page-hero__title">Meus Grupos</h1>
+            <div className="page-hero__subtitle">
+              <span className="groups-pill">{groups.length} bolão{groups.length !== 1 ? 'es' : ''}</span>
+              <span className="groups-pill">{totalMembers} membro{totalMembers !== 1 ? 's' : ''}</span>
+              {totalConvites > 0 && <span className="groups-pill groups-pill--alert">{totalConvites} convite{totalConvites !== 1 ? 's' : ''}</span>}
+            </div>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm groups-create-toggle"
-          onClick={() => { setShowCreateForm(v => !v); setCreateMsg('') }}
-          aria-expanded={showCreateForm}
-        >
-          {showCreateForm ? '✕ Cancelar' : '+ Criar bolão'}
-        </button>
+        <div className="page-hero__actions">
+          {myBestRank && (
+            <div className="page-hero__stat">
+              <div className="page-hero__stat-value">{bestRankMedal || `${myBestRank}º`}</div>
+              <div className="page-hero__stat-label">Melhor posição</div>
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm groups-create-toggle"
+            onClick={() => { setShowCreateForm(v => !v); setCreateMsg('') }}
+            aria-expanded={showCreateForm}
+          >
+            {showCreateForm ? '✕ Cancelar' : '+ Criar bolão'}
+          </button>
+        </div>
       </div>
 
       <div className="phase-nav fade-in-1" style={{ margin: 'var(--s3) 0 0' }}>
