@@ -4,6 +4,7 @@ import QRCode from 'qrcode'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
+import { COMPETITIONS } from '../utils/competitions'
 
 const POSITION_STORE_KEY = id => `predicts_group_positions_${id}`
 const PHASE_LABELS = {
@@ -95,6 +96,9 @@ export default function GroupRanking() {
   const [error, setError] = useState('')
   const [teams, setTeams] = useState([])
 
+  // ── Competição: Geral (soma bruta, curiosidade) / Copa / Brasileirão (pódio real) ──
+  const [comp, setComp] = useState('geral')
+
   // ── Invite & share ─────────────────────────────────────────
   const [inviteLink, setInviteLink] = useState('')
   const [linkLoading, setLinkLoading] = useState(false)
@@ -156,7 +160,7 @@ export default function GroupRanking() {
 
     // allSettled: falha parcial não cancela os outros dados
     Promise.allSettled([
-      api.get(`/user-groups/${groupId}/ranking`, token),
+      api.get(`/user-groups/${groupId}/ranking?competition=${comp}`, token),
       api.get('/matches'),
       api.get(`/ranking?date_from=${today}&date_to=${today}&limit=100`),
     ]).then(([rankRes, matchRes, todayRes]) => {
@@ -195,7 +199,7 @@ export default function GroupRanking() {
     api.get(`/user-groups/${groupId}/recent-matches`, token).catch(() => []).then(setRecentMatches)
     api.get(`/user-groups/${groupId}/evolution`, token).catch(() => null).then(setEvolution)
     api.get(`/user-groups/${groupId}/messages`, token).catch(() => []).then(setMessages)
-  }, [groupId, token, today])
+  }, [groupId, token, today, comp])
 
   useEffect(() => { load() }, [load])
 
@@ -226,6 +230,10 @@ export default function GroupRanking() {
     QRCode.toDataURL(inviteLink, { width: 200, margin: 1, color: { dark: '#0c1a2a', light: '#f5f7fb' } })
       .then(setQrDataUrl).catch(() => {})
   }, [inviteLink])
+
+  // Aba de fases só existe na Copa — trocar de competição sem resetar deixava o
+  // ranking de fase antigo (ex: Semi) preso e exibido por baixo do pano na aba nova.
+  useEffect(() => { setActivePhase('all') }, [comp])
 
   // ── Phase ranking ───────────────────────────────────────────
   useEffect(() => {
@@ -393,6 +401,18 @@ export default function GroupRanking() {
         </div>
       </div>
 
+      {/* ── Aba de competição ── */}
+      <div className="phase-nav fade-in-1" style={{ margin: 'var(--s4) 0 0' }}>
+        {COMPETITIONS.map(c => (
+          <button key={c.id} type="button" className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`} onClick={() => setComp(c.id)}>{c.emoji} {c.label}</button>
+        ))}
+      </div>
+      {comp === 'geral' && (
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', margin: 'var(--s2) 0 0' }}>
+          Soma bruta dos pontos entre competições — só curiosidade, sem pódio oficial. O pódio de verdade fica dentro de cada competição.
+        </p>
+      )}
+
       {/* ── Nível XP do grupo ── */}
       {groupXp > 0 && (
         <div className="card mt-4 fade-in-1 group-xp-bar">
@@ -451,8 +471,8 @@ export default function GroupRanking() {
         )}
       </div>
 
-      {/* ── Próximo jogo + countdown ── */}
-      {highlights?.next_match && (
+      {/* ── Próximo jogo + countdown (Copa) ── */}
+      {comp === 'copa2026' && highlights?.next_match && (
         <div className="card mt-4 fade-in-2">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>⏰ Próximo Jogo</span>
@@ -514,8 +534,8 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Pick do Campeão ── */}
-      <div className="card mt-4 fade-in-2">
+      {/* ── Pick do Campeão (só Copa — Brasileirão não tem esse jogo) ── */}
+      {comp === 'copa2026' && <div className="card mt-4 fade-in-2">
         <div className="card__header">
           <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🏆 Palpite do Campeão</span>
           <button className="btn btn-sm" style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }}
@@ -562,22 +582,22 @@ export default function GroupRanking() {
         ) : (
           <div style={{ padding: 'var(--s4)', color: 'var(--text-2)', fontFamily: 'var(--font-cond)', fontSize: 12 }}>Nenhum membro escolheu o campeão ainda.</div>
         )}
-      </div>
+      </div>}
 
-      {/* ── Ranking por fase (tabs) ── */}
+      {/* ── Ranking por fase (tabs — só faz sentido pra Copa, fases de mata-mata) ── */}
       <div className="card mt-4 fade-in-2">
         <div className="card__header">
           <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>Classificação do Grupo</span>
         </div>
         {/* Phase tabs */}
-        <div style={{ display: 'flex', gap: 4, padding: '0 var(--s4) var(--s3)', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingTop: 'var(--s3)' }}>
+        {comp === 'copa2026' && <div style={{ display: 'flex', gap: 4, padding: '0 var(--s4) var(--s3)', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingTop: 'var(--s3)' }}>
           {availablePhases.map(ph => (
             <button key={ph} onClick={() => setActivePhase(ph)}
               style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, border: activePhase === ph ? 'none' : '1px solid var(--border)', background: activePhase === ph ? 'var(--accent)' : 'var(--bg-raised)', color: activePhase === ph ? '#fff' : 'var(--text-2)', cursor: 'pointer', transition: 'all .15s' }}>
               {PHASE_LABELS[ph]}
             </button>
           ))}
-        </div>
+        </div>}
 
         {phaseLoading ? (
           <div style={{ padding: 'var(--s8)', textAlign: 'center', color: 'var(--text-2)' }}>Carregando...</div>
@@ -598,8 +618,8 @@ export default function GroupRanking() {
               </div>
             )}
 
-            {/* Pódio top-3 */}
-            {top3.length >= 1 && (
+            {/* Pódio top-3 (só nas abas por competição — Geral é só curiosidade) */}
+            {comp !== 'geral' && top3.length >= 1 && (
               <div className="group-podium">
                 {top3.map((r, i) => (
                   <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
@@ -889,8 +909,8 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Gráfico de evolução ── */}
-      {evolution?.series?.length > 0 && (
+      {/* ── Gráfico de evolução (Copa — endpoint ainda não é por competição) ── */}
+      {comp === 'copa2026' && evolution?.series?.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📈 Evolução de Posições</span>
@@ -907,8 +927,8 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Apostas reveladas ── */}
-      {recentMatches.length > 0 && (
+      {/* ── Apostas reveladas (Copa — endpoint ainda não é por competição) ── */}
+      {comp === 'copa2026' && recentMatches.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🔍 Apostas Reveladas</span>
@@ -960,8 +980,8 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Highlights ── */}
-      {highlights?.streaks?.length > 0 && (
+      {/* ── Highlights (Copa — endpoint ainda não é por competição) ── */}
+      {comp === 'copa2026' && highlights?.streaks?.length > 0 && (
         <div className="card mt-4 fade-in-3" style={{ padding: 'var(--s4) var(--s5)' }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0fa896', marginBottom: 8 }}>🔗 Maior Sequência de Exatos</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text-1)', lineHeight: 1 }}>{highlights.streaks[0].streak}</div>
@@ -970,8 +990,8 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Mural de provocações ── */}
-      {topBets.length > 0 && (
+      {/* ── Mural de provocações (Copa — endpoint ainda não é por competição) ── */}
+      {comp === 'copa2026' && topBets.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>🎲 Mural de Provocações</span>
@@ -989,8 +1009,8 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Ranking semanal ── */}
-      {weeklyRanking.length > 0 && (
+      {/* ── Ranking semanal (Copa — endpoint ainda não é por competição) ── */}
+      {comp === 'copa2026' && weeklyRanking.length > 0 && (
         <div className="card mt-4 fade-in-3">
           <div className="card__header">
             <span className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>📅 Ranking da Semana</span>

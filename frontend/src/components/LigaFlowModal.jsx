@@ -81,10 +81,10 @@ export default function LigaFlowModal({ token, onClose }) {
   const leadName = group?.members?.[0]?.name?.split(' ')[0] || ''
   const memberCount = group?.members?.length ?? 0
   const waMsg = inviteLink
-    ? `🏆 *Bolão Copa 2026 — ${group?.name || 'Liga Privada'}*\n\nVem disputar comigo no Predicts! Faça seus palpites e dispute o ranking.\n\n👉 ${inviteLink}`
+    ? `🏆 *Bolão ${group?.name || 'Liga Privada'} — Predicts*\n\nVem disputar comigo! Copa 2026 e Brasileirão, mesmos palpites e ranking.\n\n👉 ${inviteLink}`
     : ''
   const waHref  = `https://wa.me/?text=${encodeURIComponent(waMsg)}`
-  const tgHref  = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(`🏆 ${group?.name || 'Liga Copa 2026'} — venha disputar no Predicts!`)}`
+  const tgHref  = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(`🏆 ${group?.name || 'Bolão Predicts'} — venha disputar comigo!`)}`
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'

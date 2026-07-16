@@ -110,11 +110,13 @@ def _ensure_group_owner(group: UserGroup, user: User) -> None:
 
 @router.get("")
 def list_user_groups(
+    competition: str = Query("geral"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    is_general = competition == "geral"
 
     memberships = (
         db.query(UserGroupMember)
@@ -135,38 +137,54 @@ def list_user_groups(
     recent_form_map: dict = {}
 
     if all_member_ids:
-        bet_counts = (
-            db.query(Bet.user_id, func.count(Bet.id).label("total_bets"))
-            .filter(Bet.user_id.in_(all_member_ids))
-            .group_by(Bet.user_id)
-            .subquery()
-        )
-        ranking_rows = (
-            db.query(
-                User.id.label("user_id"),
-                func.coalesce(Ranking.total_points, 0).label("total_points"),
-                func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
-                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
-                func.coalesce(Ranking.correct_results, 0).label("correct_results"),
+        bet_counts_q = db.query(Bet.user_id, func.count(Bet.id).label("total_bets")).filter(Bet.user_id.in_(all_member_ids))
+        if not is_general:
+            bet_counts_q = bet_counts_q.filter(Bet.competition_id == get_competition_id(db, competition))
+        bet_counts = bet_counts_q.group_by(Bet.user_id).subquery()
+
+        if is_general:
+            ranking_rows = (
+                db.query(
+                    User.id.label("user_id"),
+                    func.coalesce(func.sum(Ranking.total_points), 0).label("total_points"),
+                    func.coalesce(func.sum(Ranking.exact_scores), 0).label("exact_scores"),
+                    func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+                    func.coalesce(func.sum(Ranking.correct_results), 0).label("correct_results"),
+                )
+                .outerjoin(Ranking, User.id == Ranking.user_id)
+                .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+                .filter(User.id.in_(all_member_ids))
+                .group_by(User.id, bet_counts.c.total_bets)
+                .all()
             )
-            .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db)))
-            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
-            .filter(User.id.in_(all_member_ids))
-            .all()
-        )
+        else:
+            ranking_rows = (
+                db.query(
+                    User.id.label("user_id"),
+                    func.coalesce(Ranking.total_points, 0).label("total_points"),
+                    func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
+                    func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+                    func.coalesce(Ranking.correct_results, 0).label("correct_results"),
+                )
+                .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db, competition)))
+                .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+                .filter(User.id.in_(all_member_ids))
+                .all()
+            )
         ranking_map = {
             r.user_id: (r.total_points or 0, r.exact_scores or 0, r.total_bets or 0, r.correct_results or 0)
             for r in ranking_rows
         }
 
         # Recent form (last 5 finished bets per user)
-        recent_bets_raw = (
+        recent_bets_raw_q = (
             db.query(Bet.user_id, Bet.points_earned)
             .join(Match, Bet.match_id == Match.id)
             .filter(Bet.user_id.in_(all_member_ids), Match.status == MatchStatus.finished)
-            .order_by(Bet.user_id, Match.match_date.asc())
-            .all()
         )
+        if not is_general:
+            recent_bets_raw_q = recent_bets_raw_q.filter(Bet.competition_id == get_competition_id(db, competition))
+        recent_bets_raw = recent_bets_raw_q.order_by(Bet.user_id, Match.match_date.asc()).all()
         user_bets_asc: dict[int, list[int]] = {}
         for b in recent_bets_raw:
             user_bets_asc.setdefault(b.user_id, []).append(b.points_earned)
@@ -181,13 +199,14 @@ def list_user_groups(
     groups = [_group_payload(member.group, ranking_map, recent_form_map) for member in memberships if member.group]
 
     # Next scheduled match + whether current user has bet on it
-    next_match_db = (
-        db.query(Match)
-        .options(joinedload(Match.team_a), joinedload(Match.team_b))
-        .filter(Match.status == MatchStatus.scheduled, Match.match_date > now)
-        .order_by(Match.match_date.asc())
-        .first()
+    # "geral" mostra o próximo jogo entre as competições; senão escopa na competição da aba
+    # (senão o Brasileirão, que joga quase todo dia, aparece como "próximo jogo" na aba Copa).
+    next_match_q = db.query(Match).options(joinedload(Match.team_a), joinedload(Match.team_b)).filter(
+        Match.status == MatchStatus.scheduled, Match.match_date > now
     )
+    if not is_general:
+        next_match_q = next_match_q.filter(Match.competition_id == get_competition_id(db, competition))
+    next_match_db = next_match_q.order_by(Match.match_date.asc()).first()
     next_match_out = None
     my_bet_next = False
     if next_match_db:
@@ -227,7 +246,7 @@ def list_user_groups(
         }
         for invite in invites
     ]
-    return {"groups": groups, "pending_invites": pending_invites, "next_match": next_match_out, "my_bet_next": my_bet_next}
+    return {"groups": groups, "pending_invites": pending_invites, "next_match": next_match_out, "my_bet_next": my_bet_next, "competition": competition}
 
 
 @router.post("", status_code=201)
@@ -429,6 +448,7 @@ def reject_group_invite(
 @router.get("/{group_id}/ranking")
 def group_ranking(
     group_id: int,
+    competition: str = Query("copa2026"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -441,51 +461,74 @@ def group_ranking(
     if user.id not in member_ids:
         raise HTTPException(403, "Você não faz parte deste grupo")
 
-    # ── Champion bonus ────────────────────────────────────────
-    final_match = (
-        db.query(Match)
-        .options(joinedload(Match.result))
-        .filter(Match.phase == MatchPhase.final, Match.status == MatchStatus.finished)
-        .first()
-    )
+    is_general = competition == "geral"
+
+    # ── Champion bonus (só existe no palpite de campeão da Copa) ──
     champion_team_id = None
     champion_team = None
-    if final_match and final_match.result:
-        if final_match.result.result == "a":
-            champion_team_id = final_match.team_a_id
-        elif final_match.result.result == "b":
-            champion_team_id = final_match.team_b_id
-        if champion_team_id:
-            champion_team = db.query(Team).filter(Team.id == champion_team_id).first()
+    correct_pickers = set()
+    champion_bonus_pts = 0
+    if competition == "copa2026":
+        final_match = (
+            db.query(Match)
+            .options(joinedload(Match.result))
+            .filter(Match.phase == MatchPhase.final, Match.status == MatchStatus.finished)
+            .first()
+        )
+        if final_match and final_match.result:
+            if final_match.result.result == "a":
+                champion_team_id = final_match.team_a_id
+            elif final_match.result.result == "b":
+                champion_team_id = final_match.team_b_id
+            if champion_team_id:
+                champion_team = db.query(Team).filter(Team.id == champion_team_id).first()
 
-    picks_map = {m.user_id: m.champion_pick_team_id for m in members}
-    correct_pickers = {uid for uid, pick in picks_map.items() if pick == champion_team_id} if champion_team_id else set()
-    count_correct = len(correct_pickers)
-    total_members = len(member_ids)
-    # Proportional: fewer correct pickers → bigger bonus. Floor 10, inverse scale.
-    champion_bonus_pts = min(100, round(10 * total_members / count_correct)) if count_correct > 0 else 0
+        picks_map = {m.user_id: m.champion_pick_team_id for m in members}
+        correct_pickers = {uid for uid, pick in picks_map.items() if pick == champion_team_id} if champion_team_id else set()
+        count_correct = len(correct_pickers)
+        total_members = len(member_ids)
+        # Proportional: fewer correct pickers → bigger bonus. Floor 10, inverse scale.
+        champion_bonus_pts = min(100, round(10 * total_members / count_correct)) if count_correct > 0 else 0
 
     # ── Ranking query ─────────────────────────────────────────
-    bet_counts = (
-        db.query(Bet.user_id, func.count(Bet.id).label("total_bets"))
-        .filter(Bet.user_id.in_(member_ids))
-        .group_by(Bet.user_id)
-        .subquery()
-    )
-    rows = (
-        db.query(
-            User.id.label("user_id"),
-            User.name.label("name"),
-            func.coalesce(Ranking.total_points, 0).label("total_points"),
-            func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
-            func.coalesce(Ranking.correct_results, 0).label("correct_results"),
-            func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+    bet_counts_q = db.query(Bet.user_id, func.count(Bet.id).label("total_bets")).filter(Bet.user_id.in_(member_ids))
+    if not is_general:
+        bet_counts_q = bet_counts_q.filter(Bet.competition_id == get_competition_id(db, competition))
+    bet_counts = bet_counts_q.group_by(Bet.user_id).subquery()
+
+    if is_general:
+        # "Geral" = soma bruta entre competições, só curiosidade — sem bônus de campeão,
+        # sem pretensão de pódio "oficial" (cada competição tem regra de pontuação própria).
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                User.name.label("name"),
+                func.coalesce(func.sum(Ranking.total_points), 0).label("total_points"),
+                func.coalesce(func.sum(Ranking.exact_scores), 0).label("exact_scores"),
+                func.coalesce(func.sum(Ranking.correct_results), 0).label("correct_results"),
+                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+            )
+            .outerjoin(Ranking, User.id == Ranking.user_id)
+            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+            .filter(User.id.in_(member_ids))
+            .group_by(User.id, User.name, bet_counts.c.total_bets)
+            .all()
         )
-        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db)))
-        .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
-        .filter(User.id.in_(member_ids))
-        .all()
-    )
+    else:
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                User.name.label("name"),
+                func.coalesce(Ranking.total_points, 0).label("total_points"),
+                func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
+                func.coalesce(Ranking.correct_results, 0).label("correct_results"),
+                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+            )
+            .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == get_competition_id(db, competition)))
+            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+            .filter(User.id.in_(member_ids))
+            .all()
+        )
 
     def effective_pts(r):
         bonus = champion_bonus_pts if r.user_id in correct_pickers else 0
@@ -497,6 +540,8 @@ def group_ranking(
         "group_id": group.id,
         "group_name": group.name,
         "is_owner": group.owner_user_id == user.id,
+        "competition": competition,
+        "is_general": is_general,
         "champion": {
             "team_id": champion_team_id,
             "name": champion_team.name if champion_team else None,

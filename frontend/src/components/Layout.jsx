@@ -35,7 +35,7 @@ const NAV_DRAWER = [
   { to: '/decisivos',  icon: <IconFlame />,          label: 'Decisivos',     featured: true  },
   { to: '/meus-grupos',icon: <IconUsers />,          label: 'Meus Grupos',   featured: true  },
   { to: '/grupos',     icon: <IconTable />,          label: 'Classificação', featured: false },
-  { to: '/brasileirao',icon: '🇧🇷',                   label: 'Brasileirão',   featured: false },
+  { to: '/brasileirao',icon: '🇧🇷',                   label: 'Brasileirão',   featured: true  },
   { to: '/campeao',    icon: <IconCrown />,          label: 'Campeão',       featured: false },
   { to: '/votacao',    icon: <IconBallot />,         label: 'Votação',       featured: false },
   { to: '/perfil',     icon: <IconCircleUser />,     label: 'Meu Perfil',    featured: false },

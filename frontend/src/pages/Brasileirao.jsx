@@ -6,6 +6,7 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import ProbBar from '../components/ProbBar'
 import SimAnalysisCard from '../components/SimAnalysisCard'
+import BrTitleEvolutionChart from '../components/BrTitleEvolutionChart'
 
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -38,9 +39,10 @@ function VoteCard() {
 }
 
 const TABS = [
-  { id: 'tabela',  label: '📊 Tabela' },
-  { id: 'rodada',  label: '⚽ Rodada' },
-  { id: 'ranking', label: '🏆 Ranking' },
+  { id: 'tabela',   label: '📊 Tabela' },
+  { id: 'rodada',   label: '⚽ Rodada' },
+  { id: 'ranking',  label: '🏆 Ranking' },
+  { id: 'evolucao', label: '📈 Evolução' },
 ]
 
 function pctColor(pct) {
@@ -51,7 +53,7 @@ function pctColor(pct) {
 }
 
 function Crest({ url, name, big }) {
-  const size = big ? 44 : 20
+  const size = big ? 52 : 20
   if (!url) return <span style={{ width: size, height: size, display: 'inline-block' }} />
   return <img src={url} alt={name} style={{ width: size, height: size, objectFit: 'contain' }} loading="lazy" />
 }
@@ -59,7 +61,7 @@ function Crest({ url, name, big }) {
 export default function Brasileirao() {
   const [tab, setTab] = useState('tabela')
   return (
-    <div className="page">
+    <div className="page br-page">
       <h1 className="section-title">🇧🇷 Brasileirão Série A 2026</h1>
       <p style={{ color: 'var(--text-3)', margin: '0 0 var(--s4)' }}>
         Tabela ao vivo, projeção do modelo (Monte Carlo) e palpites por rodada.
@@ -76,16 +78,32 @@ export default function Brasileirao() {
           </button>
         ))}
       </div>
-      {tab === 'tabela'  && <Tabela />}
-      {tab === 'rodada'  && <Rodada />}
-      {tab === 'ranking' && <RankingBR />}
+      {tab === 'tabela'   && <Tabela />}
+      {tab === 'rodada'   && <Rodada />}
+      {tab === 'ranking'  && <RankingBR />}
+      {tab === 'evolucao' && <Evolucao />}
+    </div>
+  )
+}
+
+export function Evolucao() {
+  return (
+    <div className="card">
+      <div className="card__header">
+        <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+          📈 Evolução da Chance de Título
+        </span>
+      </div>
+      <div className="card__body" style={{ paddingTop: 'var(--s4)' }}>
+        <BrTitleEvolutionChart />
+      </div>
     </div>
   )
 }
 
 /* ── Tabela + projeção ──────────────────────────────────────────────────── */
 
-function Tabela() {
+export function Tabela() {
   const [standings, setStandings] = useState(null)
   const [projection, setProjection] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -163,7 +181,7 @@ function Tabela() {
 
 /* ── Rodada + palpites ──────────────────────────────────────────────────── */
 
-function Rodada() {
+export function Rodada() {
   const { token, user } = useAuth()
   const [data, setData] = useState(null)
   const [myBets, setMyBets] = useState({})
@@ -379,10 +397,20 @@ function MatchRow({ m, bet, token, onSaved, rodada, posA, posB }) {
       </div>
 
       <div className="br-match__duel">
-        <div className="br-match__side">
-          <Crest url={m.team_a.flag_url} name={m.team_a.name} big />
-          <span className="br-match__name">{m.team_a.name}</span>
-          {posA && <span className="br-match__pos">{posA}º na tabela</span>}
+        <div className="br-match__teams">
+          <div className="br-match__side">
+            <Crest url={m.team_a.flag_url} name={m.team_a.name} big />
+            <span className="br-match__name">{m.team_a.name}</span>
+            {posA && <span className="br-match__pos">{posA}º na tabela</span>}
+          </div>
+
+          <span className="br-match__teams-x">×</span>
+
+          <div className="br-match__side">
+            <Crest url={m.team_b.flag_url} name={m.team_b.name} big />
+            <span className="br-match__name">{m.team_b.name}</span>
+            {posB && <span className="br-match__pos">{posB}º na tabela</span>}
+          </div>
         </div>
 
         <div className="br-match__mid">
@@ -397,12 +425,6 @@ function MatchRow({ m, bet, token, onSaved, rodada, posA, posB }) {
           ) : (
             <span className="br-match__vs-badge">×</span>
           )}
-        </div>
-
-        <div className="br-match__side">
-          <Crest url={m.team_b.flag_url} name={m.team_b.name} big />
-          <span className="br-match__name">{m.team_b.name}</span>
-          {posB && <span className="br-match__pos">{posB}º na tabela</span>}
         </div>
       </div>
 
@@ -429,7 +451,7 @@ function MatchRow({ m, bet, token, onSaved, rodada, posA, posB }) {
 
 /* ── Ranking BR ─────────────────────────────────────────────────────────── */
 
-function RankingBR() {
+export function RankingBR() {
   const [rows, setRows] = useState(null)
 
   useEffect(() => {

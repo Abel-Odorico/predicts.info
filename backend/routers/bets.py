@@ -63,9 +63,11 @@ def _bet_dict(b: Bet) -> dict:
         "created_at": b.created_at,
         "locked_at": b.locked_at,
         "group_name": match.group_name if match else None,
+        "match_number": match.match_number if match else None,
         "match_phase": match.phase.value if match and match.phase else None,
         "match_status": match.status.value if match and match.status else None,
         "match_date": match.match_date if match else None,
+        "competition_id": match.competition_id if match else None,
         "team_a_code": match.team_a.code if match and match.team_a else None,
         "team_b_code": match.team_b.code if match and match.team_b else None,
         "team_a_name": match.team_a.name if match and match.team_a else None,
@@ -248,15 +250,22 @@ def update_bet(
 
 
 @router.get("/bets/mine")
-def my_bets(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    bets = (
+def my_bets(
+    competition: str | None = Query(None, description="filtra por competição, ex: brasileirao2026. Sem filtro = todas."),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    q = (
         db.query(Bet)
         .options(joinedload(Bet.match).joinedload(Match.team_a),
                  joinedload(Bet.match).joinedload(Match.team_b))
         .filter(Bet.user_id == user.id)
-        .order_by(Bet.created_at.desc())
-        .all()
     )
+    if competition:
+        from competitions import get_competition_id
+        comp_id = get_competition_id(db, competition)
+        q = q.join(Match, Bet.match_id == Match.id).filter(Match.competition_id == comp_id)
+    bets = q.order_by(Bet.created_at.desc()).all()
     return [_bet_dict(b) for b in bets]
 
 

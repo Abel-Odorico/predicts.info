@@ -20,7 +20,7 @@ export default function Regras() {
       <section className="regras-section">
         <h2 className="regras-section__title">1. Sistema de Pontuação</h2>
         <p className="regras-section__desc">
-          Sistema de Precisão — aprovado em consulta pública e vigente para todas as partidas da Copa 2026.
+          Sistema de Precisão — aprovado em consulta pública e vigente para todas as partidas, tanto da Copa 2026 quanto do Brasileirão Série A.
           Quanto mais detalhes você acertar, mais pontos você ganha.
         </p>
 
@@ -74,9 +74,9 @@ export default function Regras() {
 
       {/* ── Palpite de Campeão e Vice ────────────────── */}
       <section className="regras-section">
-        <h2 className="regras-section__title">2. Campeão e Vice-Campeão</h2>
+        <h2 className="regras-section__title">2. Campeão e Vice-Campeão (só Copa do Mundo)</h2>
         <ul className="regras-list">
-          <li>Cada participante pode indicar um palpite de campeão da Copa 2026.</li>
+          <li>Exclusivo da Copa 2026 — o Brasileirão ainda não tem palpite de campeão/vice. Cada participante pode indicar um palpite de campeão da Copa 2026.</li>
           <li>
             <strong>Prazo:</strong> palpites encerram em <strong>26/06/2026 às 09h (horário de Brasília)</strong>,
             antes do início da fase mata-mata.

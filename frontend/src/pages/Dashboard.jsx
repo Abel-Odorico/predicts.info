@@ -15,6 +15,8 @@ import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
 import BattleHistoryCard from '../components/BattleHistoryCard'
 import TitleEvolutionChart from '../components/TitleEvolutionChart'
 import FourChampionsFeature from '../components/FourChampionsFeature'
+import { Tabela as BrTabela, Rodada as BrRodada, RankingBR as BrRankingBR, Evolucao as BrEvolucao } from './Brasileirao'
+import { COMPETITIONS } from '../utils/competitions'
 
 const PHASE_LABELS = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
 
@@ -24,55 +26,168 @@ const INSTALL_BANNER_KEY  = 'predicts_install_banner_v1'
 const INSTALL_BANNER_DAYS = 30   // reaparece a cada 30 dias
 const INSTALL_BANNER_X    = 60   // dismiss manual → 60 dias
 
-// Teaser do Brasileirão → /brasileirao (página real, ainda não é a guia principal). Dismiss persiste em localStorage.
-const BR_TEASER_KEY = 'predicts_br_teaser_v1'
+// Aba Brasileirão embutida no Dashboard — reusa os mesmos componentes reais
+// da página /brasileirao (Tabela/Rodada/RankingBR/Evolucao), não é resumo
+// nem link externo: troca de conteúdo de verdade, igual Palpites/Ranking.
+const BR_DASH_TABS = [
+  { id: 'tabela',   label: '📊 Tabela' },
+  { id: 'rodada',   label: '⚽ Rodada' },
+  { id: 'ranking',  label: '🏆 Ranking' },
+  { id: 'evolucao', label: '📈 Evolução' },
+]
 
-function BrasileiraoTeaser({ navigate }) {
-  const [hidden, setHidden] = useState(() => localStorage.getItem(BR_TEASER_KEY) === '1')
-  if (hidden) return null
+const COMP_BADGE = Object.fromEntries(COMPETITIONS.map(c => [c.id, `${c.emoji} ${c.label}`]))
 
-  function dismiss(e) {
-    e.stopPropagation()
-    localStorage.setItem(BR_TEASER_KEY, '1')
-    setHidden(true)
-  }
+// Card genérico do topo do Dashboard: mostra o próximo jogo entre TODAS as
+// competições (não filtra por aba selecionada) — quem estiver mais perto
+// no tempo, seja Copa ou Brasileirão, vence.
+function NextMatchAnyComp() {
+  const [featured, setFeatured] = useState(null)
+
+  useEffect(() => {
+    const _mdTime = m => m.match_date
+      ? new Date(m.match_date.endsWith('Z') ? m.match_date : m.match_date + 'Z').getTime()
+      : Infinity
+    const _now = Date.now()
+    Promise.allSettled([
+      api.get('/matches?status=scheduled&competition=copa2026&limit=50'),
+      api.get('/matches?status=scheduled&competition=brasileirao2026&limit=50'),
+    ]).then(([copaR, brR]) => {
+      const copaList = (copaR.status === 'fulfilled' ? copaR.value : []) || []
+      const brList = (brR.status === 'fulfilled' ? brR.value : []) || []
+      const all = [
+        ...copaList.map(m => ({ ...m, _comp: 'copa2026' })),
+        ...brList.map(m => ({ ...m, _comp: 'brasileirao2026' })),
+      ]
+      const next = all
+        .filter(m => _mdTime(m) >= _now)
+        .sort((a, b) => _mdTime(a) - _mdTime(b))[0]
+      setFeatured(next || null)
+    })
+  }, [])
+
+  if (!featured) return null
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate('/brasileirao')}
-      style={{
-        width: '100%', margin: '12px 0', padding: '14px 16px',
-        background: 'linear-gradient(135deg, #0b4d1f 0%, #063616 100%)',
-        border: '1.5px solid rgba(46,204,113,0.55)', borderRadius: 12,
-        display: 'flex', alignItems: 'center', gap: 12,
-        cursor: 'pointer', textAlign: 'left', position: 'relative',
-      }}
-    >
-      <span style={{ fontSize: 28, flexShrink: 0 }}>🇧🇷</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#2ecc71', letterSpacing: '0.08em' }}>
-          NOVO
+    <div className="card card--accent fade-in-2">
+      <div className="card__header">
+        <div className="row-wrap">
+          <span className="badge badge-group">{COMP_BADGE[featured._comp] || 'Próximo jogo'}</span>
+          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+            Próxima Partida em Destaque
+          </span>
         </div>
-        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: '#fff', marginTop: 2 }}>
-          Brasileirão no Predicts
+        <Link to={`/partida/${featured.id}`} className="btn btn-primary btn-sm">
+          Simular ▶
+        </Link>
+      </div>
+      <div className="card__body">
+        <div className="featured-teams">
+          <TeamBig team={featured.team_a} comp={featured._comp} />
+          <div className="featured-vs">
+            <div className="featured-vs__date">
+              {featured.match_date
+                ? new Date(featured.match_date.endsWith('Z') ? featured.match_date : featured.match_date + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                : '—'}
+            </div>
+            <div className="featured-vs__label">VS</div>
+          </div>
+          <TeamBig team={featured.team_b} comp={featured._comp} />
         </div>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
-          Tabela, projeção de título/G4/rebaixamento e palpite por rodada. Confere →
+        <div style={{ marginTop: 'var(--s4)' }}>
+          <BattleHistoryCard
+            teamACode={featured.team_a.code} teamBCode={featured.team_b.code}
+            teamAName={PT_NAMES[featured.team_a.code] || featured.team_a.name}
+            teamBName={PT_NAMES[featured.team_b.code] || featured.team_b.name}
+          />
         </div>
       </div>
-      <span
-        onClick={dismiss}
-        role="button"
-        aria-label="Dispensar"
-        style={{
-          position: 'absolute', top: 6, right: 10, fontSize: 16,
-          color: 'rgba(255,255,255,0.55)', padding: 4, lineHeight: 1,
-        }}
-      >
-        ×
-      </span>
-    </button>
+    </div>
+  )
+}
+
+function BrFeaturedMatch() {
+  const [featured, setFeatured] = useState(null)
+
+  useEffect(() => {
+    api.get('/matches?status=scheduled&competition=brasileirao2026&limit=50')
+      .then(list => {
+        const _mdTime = m => m.match_date
+          ? new Date(m.match_date.endsWith('Z') ? m.match_date : m.match_date + 'Z').getTime()
+          : Infinity
+        const _now = Date.now()
+        const next = [...(list || [])]
+          .filter(m => _mdTime(m) >= _now)
+          .sort((a, b) => _mdTime(a) - _mdTime(b))[0]
+        setFeatured(next || null)
+      })
+      .catch(() => setFeatured(null))
+  }, [])
+
+  if (!featured) return null
+
+  return (
+    <div className="card card--accent fade-in-2">
+      <div className="card__header">
+        <div className="row-wrap">
+          <span className="badge badge-group">Rodada {featured.match_number || '?'}</span>
+          <span className="section-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
+            Próxima Partida em Destaque
+          </span>
+        </div>
+        <Link to={`/partida/${featured.id}`} className="btn btn-primary btn-sm">
+          Simular ▶
+        </Link>
+      </div>
+      <div className="card__body">
+        <div className="featured-teams">
+          <TeamBig team={featured.team_a} comp="brasileirao2026" />
+          <div className="featured-vs">
+            <div className="featured-vs__date">
+              {featured.match_date
+                ? new Date(featured.match_date.endsWith('Z') ? featured.match_date : featured.match_date + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                : '—'}
+            </div>
+            <div className="featured-vs__label">VS</div>
+          </div>
+          <TeamBig team={featured.team_b} comp="brasileirao2026" />
+        </div>
+        <div style={{ marginTop: 'var(--s4)' }}>
+          <BattleHistoryCard
+            teamACode={featured.team_a.code} teamBCode={featured.team_b.code}
+            teamAName={PT_NAMES[featured.team_a.code] || featured.team_a.name}
+            teamBName={PT_NAMES[featured.team_b.code] || featured.team_b.name}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BrasileiraoDashboardSection() {
+  const [brTab, setBrTab] = useState('tabela')
+  return (
+    <div className="fade-in-1">
+      <div className="phase-nav" style={{ marginBottom: 'var(--s4)' }}>
+        {BR_DASH_TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            className={`phase-nav__tab ${brTab === t.id ? 'active' : ''}`}
+            onClick={() => setBrTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ marginBottom: 'var(--s6)' }}>
+        <BrFeaturedMatch />
+      </div>
+      {brTab === 'tabela'   && <BrTabela />}
+      {brTab === 'rodada'   && <BrRodada />}
+      {brTab === 'ranking'  && <BrRankingBR />}
+      {brTab === 'evolucao' && <BrEvolucao />}
+    </div>
   )
 }
 
@@ -284,6 +399,7 @@ export default function Dashboard() {
   const [showLigaModal,  setShowLigaModal]  = useState(false)
   const [showCompPopup,  setShowCompPopup]  = useState(false)
   const [goalFlash, setGoalFlash] = useState({})
+  const [comp, setComp] = useState('geral')
   const prevScoresRef = useRef({})
   const navigate = useNavigate()
   const compCountdown = useCountdown(competition?.start_date)
@@ -489,13 +605,13 @@ export default function Dashboard() {
           borderRadius: 14, padding: '20px 22px', marginBottom: 'var(--s5)',
         }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.1em', marginBottom: 6 }}>
-            🏆 COPA DO MUNDO 2026 · SIMULADOR + BOLÃO ONLINE
+            📊 ESTATÍSTICAS & PALPITES · COPA 2026 + BRASILEIRÃO
           </div>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: '#ffffff', margin: '0 0 6px', letterSpacing: '0.03em', lineHeight: 1.2 }}>
-            Faça palpites · Entre no bolão · Acompanhe a Copa
+            Faça palpites · Entre no bolão · Acompanhe o futebol
           </h2>
           <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '0 0 14px', lineHeight: 1.5 }}>
-            Palpite no placar dos jogos, escolha seu campeão e vice, veja o caminho de cada seleção até a final e compita com amigos no bolão gratuito.
+            Palpite no placar dos jogos, escolha seu campeão e vice, e compita com amigos no bolão gratuito. Reta final da Copa 2026 e Brasileirão Série A, na mesma conta.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Link to="/login?tab=register" style={{
@@ -509,7 +625,14 @@ export default function Dashboard() {
               textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
               border: '1px solid rgba(255,255,255,0.35)',
             }}>
-              📅 Ver confrontos
+              📅 Copa: confrontos
+            </Link>
+            <Link to="/brasileirao" style={{
+              padding: '9px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.18)', color: '#fff',
+              textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
+              border: '1px solid rgba(255,255,255,0.35)',
+            }}>
+              🇧🇷 Brasileirão
             </Link>
             <Link to="/login" style={{
               padding: '9px 18px', borderRadius: 8, background: 'transparent', color: 'rgba(255,255,255,0.75)',
@@ -524,7 +647,7 @@ export default function Dashboard() {
       <div className="fade-in-1">
         <div className="dash-header">
           <div>
-            <h1 className="page-title">COPA DO MUNDO 2026</h1>
+            <h1 className="page-title">PREDICTS</h1>
             <p className="page-subtitle">
               Elo · xG · Poisson · Dixon-Coles · Monte Carlo
               {appVersion?.version && (
@@ -560,13 +683,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <MyChampionCard compact />
+      <div className="phase-nav fade-in-1" style={{ margin: '0 0 var(--s4)' }}>
+        {COMPETITIONS.map(c => (
+          <button key={c.id} type="button" className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`} onClick={() => setComp(c.id)}>{c.emoji} {c.label}</button>
+        ))}
+      </div>
 
       <InstallBanner />
 
-      <BrasileiraoTeaser navigate={navigate} />
-
-      {/* ── Competição de Fase ── */}
+      {/* Anúncio de fase + CTA de liga privada — independentes da aba selecionada
+          (antes ficavam presos dentro da aba Copa; usuário na aba padrão 'geral'
+          nunca via o popup de nova fase nem o convite pra criar bolão). */}
       {competition && (() => {
         const isFuture = compCountdown && !compCountdown.started
         return (
@@ -636,6 +763,72 @@ export default function Dashboard() {
         </button>
       )}
 
+      {comp === 'geral' && <>
+
+      <div style={{ marginBottom: 'var(--s6)' }}>
+        <NextMatchAnyComp />
+      </div>
+
+      <div className="row-wrap" style={{ gap: 'var(--s3)', marginBottom: 'var(--s6)' }}>
+        <button type="button" className="btn btn-ghost" style={{ flex: 1, minWidth: 200 }} onClick={() => setComp('copa2026')}>
+          🏆 Ver painel completo da Copa 2026 →
+        </button>
+        <button type="button" className="btn btn-ghost" style={{ flex: 1, minWidth: 200 }} onClick={() => setComp('brasileirao2026')}>
+          🇧🇷 Ver painel completo do Brasileirão →
+        </button>
+      </div>
+
+      </>}
+
+      {comp === 'brasileirao2026' && <BrasileiraoDashboardSection />}
+
+      {comp === 'copa2026' && <>
+
+      <MyChampionCard compact />
+
+      {featured && (
+        <div className="card card--accent fade-in-2">
+          <div className="card__header">
+            <div className="row-wrap">
+              <span className="badge badge-group">
+                {featured.group_name ? `Grupo ${featured.group_name}` : (PHASE_LABELS[featured.phase] || featured.phase)}
+              </span>
+              <span
+                className="section-title"
+                style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}
+              >
+                🏆 Copa do Mundo — Próxima Partida
+              </span>
+            </div>
+            <Link to={`/partida/${featured.id}`} className="btn btn-primary btn-sm">
+              Simular ▶
+            </Link>
+          </div>
+
+          <div className="card__body">
+            <div className="featured-teams">
+              <TeamBig team={featured.team_a} />
+              <div className="featured-vs">
+                <div className="featured-vs__date">
+                  {featured.match_date
+                    ? new Date(featured.match_date.endsWith('Z') ? featured.match_date : featured.match_date + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                    : '—'}
+                </div>
+                <div className="featured-vs__label">VS</div>
+              </div>
+              <TeamBig team={featured.team_b} />
+            </div>
+            <div style={{ marginTop: 'var(--s4)' }}>
+              <BattleHistoryCard
+                teamACode={featured.team_a.code} teamBCode={featured.team_b.code}
+                teamAName={PT_NAMES[featured.team_a.code] || featured.team_a.name}
+                teamBName={PT_NAMES[featured.team_b.code] || featured.team_b.name}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <LiveClassificationCard />
 
       <div className="card fade-in-1 mt-6">
@@ -657,47 +850,6 @@ export default function Dashboard() {
 
       <div className="dashboard-grid mt-8">
         <div className="stack gap-6">
-          {featured && (
-            <div className="card card--accent fade-in-2">
-              <div className="card__header">
-                <div className="row-wrap">
-                  <span className="badge badge-group">Grupo {featured.group_name}</span>
-                  <span
-                    className="section-title"
-                    style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}
-                  >
-                    Próxima Partida em Destaque
-                  </span>
-                </div>
-                <Link to={`/partida/${featured.id}`} className="btn btn-primary btn-sm">
-                  Simular ▶
-                </Link>
-              </div>
-
-              <div className="card__body">
-                <div className="featured-teams">
-                  <TeamBig team={featured.team_a} />
-                  <div className="featured-vs">
-                    <div className="featured-vs__date">
-                      {featured.match_date
-                        ? new Date(featured.match_date.endsWith('Z') ? featured.match_date : featured.match_date + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-                        : '—'}
-                    </div>
-                    <div className="featured-vs__label">VS</div>
-                  </div>
-                  <TeamBig team={featured.team_b} />
-                </div>
-                <div style={{ marginTop: 'var(--s4)' }}>
-                  <BattleHistoryCard
-                    teamACode={featured.team_a.code} teamBCode={featured.team_b.code}
-                    teamAName={PT_NAMES[featured.team_a.code] || featured.team_a.name}
-                    teamBName={PT_NAMES[featured.team_b.code] || featured.team_b.name}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
           <FourChampionsFeature />
 
           <CopaFinalStretch matches={matches} />
@@ -1107,6 +1259,7 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      </>}
     </div>
   )
 }
@@ -1194,9 +1347,9 @@ function CopaFinalStretchCard({ match, index }) {
   )
 }
 
-function TeamBig({ team }) {
+function TeamBig({ team, comp }) {
   return (
-    <div className="team-big">
+    <div className={`team-big${comp === 'brasileirao2026' ? ' team-big--br' : ''}`}>
       {team.flag_url && (
         <img src={team.flag_url} alt={team.code} className="team-big__flag" />
       )}

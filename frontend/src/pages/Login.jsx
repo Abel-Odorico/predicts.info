@@ -100,11 +100,6 @@ export default function Login({ initialMode = 'login' }) {
   const [loading, setLoad]  = useState(false)
   const refId = typeof window !== 'undefined' ? localStorage.getItem('predicts_ref') : null
 
-  if (user) {
-    navigate('/')
-    return null
-  }
-
   const normalizedUsername = username.trim().toLowerCase().replace(/^@+/, '')
   const usernameUnavailable = mode === 'register' && usernameStatus && usernameStatus.available === false
   const usernameInvalid = mode === 'register' && normalizedUsername.length > 0 && normalizedUsername.length < 3
@@ -138,6 +133,17 @@ export default function Login({ initialMode = 'login' }) {
       window.clearTimeout(timeoutId)
     }
   }, [mode, normalizedUsername])
+
+  // Redireciona pós-login num effect, não no corpo do render — chamar navigate()
+  // direto no render (fora de effect) violava a regra de hooks: esse early-return
+  // ficava ANTES do useEffect do username, então rodava menos hooks nesse render
+  // que no anterior assim que `user` virava truthy (React error #300, intermitente
+  // logo após o login, "carrega e apaga").
+  useEffect(() => {
+    if (user) navigate('/')
+  }, [user, navigate])
+
+  if (user) return null
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -208,7 +214,7 @@ export default function Login({ initialMode = 'login' }) {
             ))}
           </div>
           <div className="login-hero-brand__line" />
-          <div className="login-hero-brand__sub">Simulador Estatístico · Copa 2026</div>
+          <div className="login-hero-brand__sub">Simulador Estatístico · Copa 2026 + Brasileirão</div>
         </div>
         <StatsTicker />
       </div>

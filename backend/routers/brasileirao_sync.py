@@ -335,8 +335,11 @@ def _invalidate_projection_cache() -> None:
     try:
         import redis as redis_lib
         from config import settings
-        from routers.brasileirao import PROJECTION_CACHE_KEY
-        redis_lib.from_url(settings.redis_url).delete(PROJECTION_CACHE_KEY)
+        from routers.brasileirao import PROJECTION_CACHE_KEY, TITLE_EVOLUTION_CACHE_KEY
+        rc = redis_lib.from_url(settings.redis_url)
+        rc.delete(PROJECTION_CACHE_KEY)
+        for key in rc.scan_iter(match=f"{TITLE_EVOLUTION_CACHE_KEY}:*"):
+            rc.delete(key)
     except Exception:
         pass
 

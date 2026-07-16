@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
+import { COMPETITIONS, COMPETITION_LABEL } from '../utils/competitions'
 
 function useCountdownStr(targetDateStr) {
   const [str, setStr] = useState('')
@@ -49,13 +50,14 @@ export default function UserGroups() {
     const v = Number(localStorage.getItem('ug_active'))
     return Number.isFinite(v) && v > 0 ? v : null
   })
+  const [comp, setComp] = useState('geral')
 
   async function loadGroups() {
     if (!token) return
     setLoading(true)
     try {
       const [response, matches] = await Promise.all([
-        api.get('/user-groups', token),
+        api.get(`/user-groups?competition=${comp}`, token),
         api.get('/matches'),
       ])
       setData(response)
@@ -68,7 +70,7 @@ export default function UserGroups() {
     }
   }
 
-  useEffect(() => { loadGroups() }, [token])
+  useEffect(() => { loadGroups() }, [token, comp])
 
   async function createGroup(e) {
     e.preventDefault()
@@ -142,6 +144,17 @@ export default function UserGroups() {
           {showCreateForm ? '✕ Cancelar' : '+ Criar bolão'}
         </button>
       </div>
+
+      <div className="phase-nav fade-in-1" style={{ margin: 'var(--s3) 0 0' }}>
+        {COMPETITIONS.map(c => (
+          <button key={c.id} type="button" className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`} onClick={() => setComp(c.id)}>{c.emoji} {c.label}</button>
+        ))}
+      </div>
+      {comp === 'geral' && (
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', margin: 'var(--s2) 0 0' }}>
+          Soma bruta dos pontos entre competições — só curiosidade, sem pódio oficial de nenhuma delas.
+        </p>
+      )}
 
       {showCreateForm && (
         <form onSubmit={createGroup} className="groups-create-panel fade-in-1" aria-label="Criar novo grupo">
@@ -241,6 +254,7 @@ export default function UserGroups() {
                 matchStats={matchStats}
                 nextMatch={nextMatch}
                 myBetNext={myBetNext}
+                comp={comp}
               />
             )}
           </section>
@@ -268,7 +282,7 @@ function getBadges(r, position, effectiveTotal) {
   return badges
 }
 
-function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 }, nextMatch = null, myBetNext = false }) {
+function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 }, nextMatch = null, myBetNext = false, comp = 'geral' }) {
   const isOwner = group.owner_user_id === currentUser?.id
   const myEntry = (group.members ?? []).find(m => m.user_id === currentUser?.id)
   const myPoints = myEntry?.total_points ?? 0
@@ -349,7 +363,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   async function shareGroup() {
     const lead = sortedMembers[0]
     const text = [
-      `🏆 ${group.name} — Bolão Copa 2026`,
+      `🏆 ${group.name} — Bolão ${COMPETITION_LABEL[comp] ?? 'Predicts'}`,
       lead ? `👑 Líder: ${lead.name} (${lead.total_points} pts)` : '',
       `👥 ${gStats.members} membros · 🎯 ${gStats.exacts} placares exatos · 📊 ${gStats.bets} palpites`,
       `⭐ ${gStats.points} pts no total · aproveitamento ${gStats.efficiency}%`,
@@ -584,8 +598,8 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
         </div>
       )}
 
-      {/* Alerta próximo jogo */}
-      {nextMatch && !myBetNext && (
+      {/* Alerta próximo jogo — backend já escopa nextMatch pela competição selecionada */}
+      {comp !== 'geral' && nextMatch && !myBetNext && (
         <div className="no-bet-alert">
           <span style={{ fontSize: 14 }}>⚠️</span>
           <span className="no-bet-alert__text">
@@ -600,8 +614,8 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       {/* ── StatPills ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 'var(--s3)', padding: 'var(--s3) var(--s4)' }}>
         <StatPill icon="👥" label="Participantes" value={sortedMembers.length} />
-        <StatPill icon="⚽" label="Realizados" value={`${matchStats.finished}/${matchStats.total}`} />
-        <StatPill icon="⏳" label="Pendentes" value={matchStats.total - matchStats.finished} />
+        {comp === 'copa2026' && <StatPill icon="⚽" label="Realizados" value={`${matchStats.finished}/${matchStats.total}`} />}
+        {comp === 'copa2026' && <StatPill icon="⏳" label="Pendentes" value={matchStats.total - matchStats.finished} />}
         <StatPill icon="📈" label="Eficiência" value={`${gStats.efficiency}%`} sub={`${gStats.bets} palpites no total`} />
         <StatPill icon="🎯" label="Exatos" value={gStats.exacts} sub={`${gStats.exactRate}% taxa`} />
         <StatPill icon="🧮" label="Média/membro" value={`${gStats.avgPoints} pts`} />
@@ -794,7 +808,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
                 <a
-                  href={`https://wa.me/?text=${encodeURIComponent(`🏆 *${group.name} — Bolão Copa 2026*\n\nVem disputar comigo no Predicts!\n\n👉 ${inviteLink}`)}`}
+                  href={`https://wa.me/?text=${encodeURIComponent(`🏆 *${group.name} — Bolão ${COMPETITION_LABEL[comp] ?? 'Predicts'}*\n\nVem disputar comigo no Predicts!\n\n👉 ${inviteLink}`)}`}
                   target="_blank" rel="noopener noreferrer"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,

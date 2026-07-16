@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 import redis as redis_lib
 from database import get_db
 from config import settings
-from models import Match, MatchPhase, Team, TournamentSimulation
-from engine.monte_carlo import simulate_tournament, simulate_final_four
+from models import Match, MatchPhase, MatchStatus, Team, TournamentSimulation
+from engine.monte_carlo import simulate_tournament, simulate_knockout_bracket
 from world_cup_official import candidate_thirds, compute_group_tables, fetch_official_knockout_schedule, resolve_slot
 
 router = APIRouter(prefix="/tournament", tags=["tournament"])
@@ -67,30 +67,73 @@ def _build_teams(db: Session) -> tuple[list[dict], dict[str, list[int]], list[di
     return teams, groups, played_matches
 
 
+def _teams_by_id(db: Session, ids: list[int]) -> dict[int, dict]:
+    return {
+        t.id: {
+            "id": t.id, "code": t.code, "name": t.name,
+            "elo_rating": float(t.elo_rating),
+            "avg_goals_for": float(t.avg_goals_for),
+            "avg_goals_against": float(t.avg_goals_against),
+            "flag_url": t.flag_url or "",
+        }
+        for t in db.query(Team).filter(Team.id.in_(ids)).all()
+    }
+
+
+def _final_decided(db: Session) -> tuple[int, int] | None:
+    """Se a final da Copa já terminou (existe MatchResult), devolve (winner_id, loser_id).
+    Sem isso, `_final_four_teams` mantinha a final "viva" pro Monte Carlo pra sempre —
+    depois do jogo real acontecer, /tournament/simulate e o snapshot periódico
+    continuariam mostrando odds tipo 55%/45% em vez de 100%/0%."""
+    from competitions import get_competition_id
+    comp_id = get_competition_id(db)
+    final_match = (
+        db.query(Match)
+        .filter(Match.competition_id == comp_id, Match.phase == MatchPhase.final)
+        .first()
+    )
+    if not final_match or final_match.status != MatchStatus.finished or not final_match.result:
+        return None
+    if final_match.result.result == "a":
+        return final_match.team_a_id, final_match.team_b_id
+    if final_match.result.result == "b":
+        return final_match.team_b_id, final_match.team_a_id
+    return None  # empate não deveria existir numa final (decide nos pênaltis), mas não trava se vier
+
+
 def _final_four_teams(db: Session) -> list[dict] | None:
     """
-    Detecta chaveamento reduzido às 2 semifinais reais (sem jogo de 'final'
-    ainda criado) — nesse estágio só 4 seleções podem de fato ser campeãs.
+    Detecta o chaveamento REAL restante (final já criada = só 2 seguem vivas;
+    senão 2 semis reais sem final ainda = 4 seguem vivas) — nesses estágios
     `simulate_tournament` reconstrói o chaveamento inteiro a partir da fase
-    de grupos e não sabe quem já foi eliminado no mata-mata real (r32/r16/
-    qf) — mostrava chance de título pra seleção já fora da Copa (achado
-    2026-07-12). Retorna [team_a1, team_b1, team_a2, team_b2] (dicts no
-    formato de `_build_teams`) se o estágio bater, senão None (mantém o
-    comportamento antigo pra fases anteriores).
+    de grupos e não sabe quem já foi eliminado de verdade no mata-mata real
+    (r32/r16/qf/sf) — mostrava chance de título pra seleção já fora da Copa
+    (achado 2026-07-12, reincidiu 2026-07-15 quando a final foi criada e o
+    branch de 4 times parou de disparar por causa do `has_final` guard —
+    agora os dois estágios são cobertos). Retorna a lista de times na ordem
+    do bracket (potência de 2 — 2 ou 4) no formato de `_build_teams`, ou None
+    se nenhum dos dois estágios bater (mantém comportamento antigo).
     """
     from competitions import get_competition_id
     comp_id = get_competition_id(db)
+
+    final_match = (
+        db.query(Match)
+        .filter(Match.competition_id == comp_id, Match.phase == MatchPhase.final)
+        .first()
+    )
+    if final_match and final_match.team_a_id and final_match.team_b_id:
+        teams_by_id = _teams_by_id(db, [final_match.team_a_id, final_match.team_b_id])
+        if len(teams_by_id) == 2:
+            return [teams_by_id[final_match.team_a_id], teams_by_id[final_match.team_b_id]]
+        return None
+
     sf_matches = (
         db.query(Match)
         .filter(Match.competition_id == comp_id, Match.phase == MatchPhase.sf)
         .all()
     )
-    has_final = (
-        db.query(Match)
-        .filter(Match.competition_id == comp_id, Match.phase == MatchPhase.final)
-        .first()
-    )
-    if len(sf_matches) != 2 or has_final:
+    if len(sf_matches) != 2:
         return None
 
     team_ids = []
@@ -99,16 +142,7 @@ def _final_four_teams(db: Session) -> list[dict] | None:
     if len(set(team_ids)) != 4:
         return None
 
-    teams_by_id = {
-        t.id: {
-            "id": t.id, "code": t.code, "name": t.name,
-            "elo_rating": float(t.elo_rating),
-            "avg_goals_for": float(t.avg_goals_for),
-            "avg_goals_against": float(t.avg_goals_against),
-            "flag_url": t.flag_url or "",
-        }
-        for t in db.query(Team).filter(Team.id.in_(team_ids)).all()
-    }
+    teams_by_id = _teams_by_id(db, team_ids)
     ordered = []
     for m in sf_matches:
         ordered.append(teams_by_id[m.team_a_id])
@@ -156,19 +190,36 @@ def _run_simulation_and_persist(db: Session, n: int) -> dict:
             })
         return {"teams": teams_info, "prob": entry["prob"]}
 
-    # Reta final (só 2 semis reais restando, sem 'final' criada ainda):
-    # zera o título de quem já foi eliminado de verdade e substitui a
-    # probabilidade dos 4 que restam pelo cálculo exato do chaveamento real.
-    final_four = _final_four_teams(db)
-    if final_four:
-        exact = simulate_final_four(final_four[0], final_four[1], final_four[2], final_four[3], n=n)
+    # Final já jogada e com resultado real: título 100%/0% pros 2 finalistas,
+    # 0% pra todo mundo — sem isso o Monte Carlo continuava "simulando" a final
+    # pra sempre, mostrando odds tipo 55%/45% depois do jogo já ter acontecido.
+    final_decided = _final_decided(db)
+    if final_decided:
+        winner_id, loser_id = final_decided
         for tid, r in results.items():
-            if tid in exact:
-                r["prob_final"] = exact[tid]["prob_final"]
-                r["prob_title"] = exact[tid]["prob_title"]
+            if tid == winner_id:
+                r["prob_final"] = 100.0
+                r["prob_title"] = 100.0
+            elif tid == loser_id:
+                r["prob_final"] = 100.0
+                r["prob_title"] = 0.0
             else:
                 r["prob_final"] = 0.0
                 r["prob_title"] = 0.0
+    else:
+        # Reta final (só 2 ou 4 seleções reais restando, jogo ainda não decidido):
+        # zera o título de quem já foi eliminado de verdade e substitui a
+        # probabilidade das que restam pelo cálculo exato do chaveamento real.
+        remaining_bracket = _final_four_teams(db)
+        if remaining_bracket:
+            exact = simulate_knockout_bracket(remaining_bracket, n=n)
+            for tid, r in results.items():
+                if tid in exact:
+                    r["prob_final"] = exact[tid]["prob_final"]
+                    r["prob_title"] = exact[tid]["prob_title"]
+                else:
+                    r["prob_final"] = 0.0
+                    r["prob_title"] = 0.0
 
     # Sort by title probability descending
     sorted_teams = sorted(results.values(), key=lambda x: -x["prob_title"])
@@ -253,12 +304,12 @@ def title_evolution(codes: str = Query(..., description="códigos separados por 
     pelo loop periódico + os 4 checkpoints reconstruídos com o chaveamento
     real de r32/r16/qf/sf em 2026-07-12, ver skill predicts pra detalhe)."""
     wanted = {c.strip().upper() for c in codes.split(",") if c.strip()}
-    sims = (
+    sims = list(reversed(
         db.query(TournamentSimulation)
-        .order_by(TournamentSimulation.computed_at.asc())
+        .order_by(TournamentSimulation.computed_at.desc())
         .limit(limit)
         .all()
-    )
+    ))
     out = []
     for s in sims:
         point = {"computed_at": s.computed_at.isoformat(), "teams": {}}

@@ -1,7 +1,7 @@
 {
   "name": "Predicts.info",
   "short_name": "Predicts",
-  "description": "Simulador Estatístico de Futebol — Copa do Mundo 2026",
+  "description": "Simulador Estatístico de Futebol — Copa do Mundo e Brasileirão",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

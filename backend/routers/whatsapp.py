@@ -23,7 +23,7 @@ from competitions import get_competition_id
 from database import get_db, SessionLocal
 from auth_utils import require_admin
 from models import (
-    User, UserRole, Match, MatchStatus, MatchPhase, Bet, WhatsappMessage, WhatsappBetSession,
+    User, UserRole, Match, MatchStatus, MatchPhase, Bet, Team, WhatsappMessage, WhatsappBetSession,
     WhatsappCampaign, WhatsappCampaignRecipient, SiteConfig, AuditLog, Ranking, MatchResult,
 )
 from routers.bets import _is_open
@@ -91,6 +91,7 @@ def _help_message(nome: str | None = None) -> str:
         "Eu confirmo e você responde *SIM* pra valer.\n\n"
         "*ranking* mostra o top 5 e sua posição · *palpites* mostra seus palpites e pontos.\n"
         "*palpite* + time (ex: *palpite Espanha*) mostra a projeção do modelo pro jogo.\n"
+        "*campeão* + seleção (ex: *campeão Brasil*) escolhe seu campeão · *vice* + seleção escolhe o vice.\n"
         "Pra desligar os avisos, manda *parar*.\n\n"
         "🏆 predicts.info"
     )
@@ -101,7 +102,8 @@ _MENU_TEXT_FALLBACK = (
     "2️⃣ Manda *ranking* — top 5 + sua posição\n"
     "3️⃣ Manda *ajuda* — como apostar por aqui\n"
     "4️⃣ Manda *palpites* — seus palpites e pontos\n"
-    "5️⃣ Manda *palpite* + time — projeção do modelo (ex: *palpite Espanha*)\n\n"
+    "5️⃣ Manda *palpite* + time — projeção do modelo (ex: *palpite Espanha*)\n"
+    "6️⃣ Manda *campeão* + seleção — escolhe seu campeão (ex: *campeão Brasil*); *vice* + seleção escolhe o vice\n\n"
     "Pra apostar: escolhe o número da lista + placar (*1 2x1*), ou já manda direto o nome do time (*Brasil 2x1 Argentina*)."
 )
 
@@ -112,6 +114,7 @@ _MENU_SECTIONS = [{
         {"title": "🏆 Ranking", "description": "Top 5 + sua posição e pontos", "rowId": "ranking"},
         {"title": "📊 Meus palpites", "description": "Seus palpites e pontos", "rowId": "palpites"},
         {"title": "🔮 Palpite do modelo", "description": "Projeção do próximo jogo (ou manda: palpite + time)", "rowId": "palpite"},
+        {"title": "🥇 Campeão e vice", "description": "Ex: campeão Brasil vice Argentina", "rowId": "campeao"},
         {"title": "❓ Ajuda", "description": "Como apostar pelo WhatsApp", "rowId": "ajuda"},
     ],
 }]
@@ -574,6 +577,12 @@ def _handle_inbound(db: Session, phone: str, text: str, push_name: str | None = 
             "ou ativa no seu perfil em predicts.info"
         )
 
+    # "6" solto = resposta ao menu numerado (opção campeão) — mesmo golpe do "1/2/3/4"
+    # abaixo: _champion_command só reconhece "campeao"/"vice" por extenso, nunca o dígito.
+    champion_reply = _champion_command(db, user, "campeao" if norm == "6" else norm)
+    if champion_reply is not None:
+        return champion_reply
+
     # "1/2/3/4" solto = resposta ao menu numerado da boas-vindas/_MENU_TEXT_FALLBACK
     # (caso real: usuários responderam "1" e ficavam sem resposta nenhuma)
     if norm in _RANKING_WORDS or norm == "2":
@@ -626,6 +635,135 @@ def _handle_inbound(db: Session, phone: str, text: str, push_name: str | None = 
 
     score_a, score_b = score
     return _start_bet_session(db, phone, match, score_a, score_b)
+
+
+def _champion_candidates(db: Session, comp_id: int) -> list[Team]:
+    """Seleções ainda vivas na Copa: times da fase eliminatória mais próxima que ainda
+    não jogou (status 'scheduled'). Hoje = semifinal (4 times); avança sozinho pra final
+    quando a semi terminar e sync marcar os jogos de sf como finished."""
+    row = db.execute(text(
+        "SELECT phase FROM matches WHERE competition_id = :c AND status = 'scheduled' "
+        "AND phase IN ('r16','qf','sf','final') ORDER BY match_date LIMIT 1"
+    ), {"c": comp_id}).fetchone()
+    if not row:
+        return []
+    matches = (
+        db.query(Match)
+        .filter(Match.competition_id == comp_id, Match.phase == row[0])
+        .order_by(Match.match_date)
+        .all()
+    )
+    seen, out = set(), []
+    for m in matches:
+        for t in (m.team_a, m.team_b):
+            if t.id not in seen:
+                seen.add(t.id)
+                out.append(t)
+    return out
+
+
+def _champion_candidates_message(candidates: list[Team]) -> str:
+    linhas = "\n".join(f"{i}. {_pt(t)}" for i, t in enumerate(candidates, start=1))
+    return (
+        "🏆 *Só restam essas seleções pra campeão e vice:*\n"
+        f"{linhas}\n\n"
+        "Manda *campeão <número>* pro campeão (ex: *campeão 1*)\n"
+        "Manda *vice <número>* pro vice (ex: *vice 2*)\n"
+        "Ou os dois juntos: *campeão 1 vice 2*"
+    )
+
+
+def _champion_command(db: Session, user: User, norm: str) -> str | None:
+    """Palpite de Campeão/Vice pelo WhatsApp. Comandos:
+    'campeao <selecao>' · 'vice <selecao>' · 'campeao <selecao> vice <selecao>'.
+    Aceita formatos soltos tipo 'Campeão: Argentina\\nVice campeão: Espanha' (pontuação/
+    quebra de linha viram espaço; 'vice campeao' — fraseado natural de vice-campeão — colapsa
+    pra 'vice' antes de separar os dois blocos).
+    Retorna None se `norm` não é comando de campeão (deixa cair pro fluxo normal)."""
+    cleaned = re.sub(r"[:\-–—,.;\n]", " ", norm)
+    cleaned = re.sub(r"\bvice\s+campeao\b", "vice", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if not (cleaned == "campeao" or cleaned.startswith("campeao ") or cleaned == "vice" or cleaned.startswith("vice ")):
+        return None
+
+    from routers.champion import ChampionPick, _can_change, _deadline, CHAMPION_BONUS, RUNNER_UP_BONUS
+
+    if not _can_change(db):
+        dl_brt = (_deadline(db) - timedelta(hours=3)).strftime("%d/%m %H:%M")
+        return f"⏱️ Prazo pra escolher campeão/vice encerrado ({dl_brt}). Fica de olho pra próxima reabertura!"
+
+    champion_chunk = runnerup_chunk = None
+    if "vice" in cleaned:
+        before, _sep, after = cleaned.partition("vice")
+        before = before.strip()
+        if before.startswith("campeao"):
+            champion_chunk = before[len("campeao"):].strip()
+        runnerup_chunk = after.strip()
+    elif cleaned.startswith("campeao"):
+        champion_chunk = cleaned[len("campeao"):].strip()
+
+    comp_id = get_competition_id(db, "copa2026")
+    candidates = _champion_candidates(db, comp_id)
+
+    if not champion_chunk and not runnerup_chunk:
+        if candidates:
+            return _champion_candidates_message(candidates)
+        return (
+            "🏆 Pra escolher, manda assim:\n"
+            "*campeão Brasil* — só o campeão\n"
+            "*vice Argentina* — só o vice\n"
+            "*campeão Brasil vice Argentina* — os dois juntos"
+        )
+
+    teams = db.query(Team).filter(Team.competition_id == comp_id).all()
+    pick = db.query(ChampionPick).filter(ChampionPick.user_id == user.id).first()
+    new_champion_id = pick.team_id if pick else None
+    new_runnerup_id = pick.runner_up_team_id if pick else None
+    reply_lines = []
+
+    for chunk, bonus, label in ((champion_chunk, CHAMPION_BONUS, "champion"), (runnerup_chunk, RUNNER_UP_BONUS, "runnerup")):
+        if not chunk:
+            continue
+        if chunk.isdigit() and candidates:
+            idx = int(chunk)
+            if idx < 1 or idx > len(candidates):
+                return f"🤔 Número inválido. {_champion_candidates_message(candidates)}"
+            hits = [candidates[idx - 1]]
+        else:
+            hits = [t for t in teams if _team_hits(t, chunk)]
+        if len(hits) == 0:
+            return f"🤔 Não achei \"{chunk}\" entre as seleções da Copa. Confere o nome e tenta de novo."
+        if len(hits) > 1:
+            nomes = ", ".join(_pt(t) for t in hits)
+            return f"🤔 Achei mais de uma seleção parecida: {nomes}. Manda o nome completo."
+        team = hits[0]
+        if candidates and team.id not in {c.id for c in candidates}:
+            return f"🤔 {_pt(team)} já foi eliminada. {_champion_candidates_message(candidates)}"
+        other_id = new_runnerup_id if label == "champion" else new_champion_id
+        if other_id == team.id:
+            return "🤔 Campeão e vice não podem ser o mesmo time."
+        if label == "champion":
+            new_champion_id = team.id
+            reply_lines.append(f"🥇 Campeão: {_pt(team)} (+{bonus} pts se acertar)")
+        else:
+            new_runnerup_id = team.id
+            reply_lines.append(f"🥈 Vice: {_pt(team)} (+{bonus} pts se acertar)")
+
+    if not new_champion_id:
+        return "🤔 Preciso pelo menos do campeão pra salvar. Manda: *campeão <seleção>*"
+
+    if pick:
+        pick.team_id = new_champion_id
+        pick.runner_up_team_id = new_runnerup_id
+    else:
+        db.add(ChampionPick(user_id=user.id, team_id=new_champion_id, runner_up_team_id=new_runnerup_id))
+    log_action(db, user.id, "champion.pick", {
+        "team_id": new_champion_id, "runner_up_team_id": new_runnerup_id, "via": "whatsapp",
+    })
+    db.commit()
+    corpo = "\n".join(reply_lines)
+    return f"✅ *Palpite de campeão salvo!*\n{corpo}\n\nAcompanha em predicts.info/campeao"
 
 
 def send_welcome_whatsapp(user_id: int) -> None:
@@ -1298,30 +1436,36 @@ def admin_campaign_preview(segment: str = Query(default="opt_in"), db: Session =
     return {"segment": segment, "recipients": count}
 
 
-@router.post("/admin/whatsapp/campaign", status_code=201)
-def admin_create_campaign(payload: CampaignPayload, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    q = _campaign_recipients_query(db, payload.segment)
+def _create_campaign_internal(db: Session, message: str, segment: str = "opt_in",
+                               scheduled_at: str | None = None, created_by: int | None = None) -> dict:
+    """Cria campanha WhatsApp (mesma lógica do endpoint admin) — reusável por outros routers."""
+    q = _campaign_recipients_query(db, segment)
     recipients = [(u.id, u.phone) for u in q.all() if u.phone]
 
     scheduled_utc = None
-    if payload.scheduled_at:
+    if scheduled_at:
         try:
-            # datetime-local do admin vem em BRT — banco guarda UTC (+3h)
-            scheduled_utc = datetime.fromisoformat(payload.scheduled_at) + timedelta(hours=3)
+            scheduled_utc = datetime.fromisoformat(scheduled_at) + timedelta(hours=3)
         except ValueError:
             raise HTTPException(400, "scheduled_at inválido — use YYYY-MM-DDTHH:MM")
         if scheduled_utc <= _utcnow():
-            scheduled_utc = None  # horário no passado = manda já
+            scheduled_utc = None
 
     campaign = WhatsappCampaign(
-        message=payload.message, status="running", created_by=admin.id, scheduled_at=scheduled_utc,
+        message=message, status="running", created_by=created_by, scheduled_at=scheduled_utc,
     )
     db.add(campaign)
     db.flush()
     for user_id, phone in recipients:
         db.add(WhatsappCampaignRecipient(campaign_id=campaign.id, phone=phone, user_id=user_id))
     db.commit()
-    return {"id": campaign.id, "recipients": len(recipients), "scheduled_at": scheduled_utc}
+    return {"id": campaign.id, "recipients": len(recipients), "scheduled_at": scheduled_utc.isoformat() if scheduled_utc else None}
+
+
+@router.post("/admin/whatsapp/campaign", status_code=201)
+def admin_create_campaign(payload: CampaignPayload, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    return _create_campaign_internal(db, message=payload.message, segment=payload.segment,
+                                      scheduled_at=payload.scheduled_at, created_by=admin.id)
 
 
 @router.get("/admin/whatsapp/campaign/{campaign_id}")

@@ -688,25 +688,25 @@ async def _activation_email_loop():
                         <p class="text">Olá, <strong>{first}</strong>!</p>
                         <p class="text">
                           Você criou sua conta no <strong>Predicts</strong> mas ainda não apostou nenhum placar.
-                          A Copa 2026 está rolando — cada jogo é uma chance de pontuar no ranking!
+                          Copa 2026 (reta final) e Brasileirão Série A rolando agora — cada jogo é uma chance de pontuar no ranking!
                         </p>
                         <p class="text">
-                          ✅ Resultado certo = <strong>3 pontos</strong><br/>
-                          ✅ Placar exato = <strong>5 pontos</strong><br/>
-                          ✅ Campeão certo = <strong>bônus extra</strong>
+                          ✅ Resultado certo = <strong>10 a 18 pontos</strong><br/>
+                          ✅ Placar exato = <strong>25 pontos</strong><br/>
+                          ✅ Campeão certo (só Copa) = <strong>bônus extra</strong>
                         </p>
                         <div class="btn-wrap">
                           <a href="https://predicts.info/apostas" class="btn">Apostar Agora →</a>
                         </div>
                         """
-                        html = _base_template("⚽ Você ainda não apostou — Copa 2026", body)
+                        html = _base_template("⚽ Você ainda não apostou", body)
                         plain = (
                             f"Olá, {first}!\n\nVocê se cadastrou no Predicts mas ainda não apostou.\n"
                             f"Acesse https://predicts.info/apostas e dispute o ranking!\n\n— Predicts"
                         )
                         ok = send_email(
                             to=u.email,
-                            subject="⚽ Você ainda não fez seu palpite — Copa 2026",
+                            subject="⚽ Você ainda não fez seu palpite",
                             html=html,
                             plain=plain,
                         )

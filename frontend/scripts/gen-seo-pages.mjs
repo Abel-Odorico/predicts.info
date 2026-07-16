@@ -11,9 +11,9 @@ const base = readFileSync(join(dist, 'index.html'), 'utf8')
 
 const ROUTES = {
   dashboard: {
-    title: 'Simulador Copa 2026 — Probabilidades e Palpites ao Vivo | Predicts.info',
+    title: 'Predicts.info — Estatísticas e Palpites: Copa 2026 e Brasileirão ao Vivo',
     description:
-      'Simule qualquer jogo da Copa do Mundo 2026 com 1 milhão de iterações Monte Carlo. Probabilidades de vitória, placares mais prováveis e gols esperados, atualizados ao vivo.',
+      'Probabilidades ao vivo da reta final da Copa 2026 e do Brasileirão Série A, com simulação Monte Carlo, Elo e xG. Dê seu palpite de placar e dispute o ranking. Grátis.',
   },
   torneio: {
     title: 'Quem vai ganhar a Copa 2026? Probabilidades das 48 Seleções | Predicts.info',

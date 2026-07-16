@@ -486,6 +486,246 @@ function PointsChart({ bets }) {
   )
 }
 
+// ── Quantidade de resultados (totais + evolução por período) ──────────────
+const QTY_VIEWS = [
+  { id: 'totais',  label: 'Totais'      },
+  { id: 'periodo', label: 'Por período' },
+]
+const QTY_TIME_MODES = [
+  { id: 'dia',    label: 'Dia'    },
+  { id: 'semana', label: 'Semana' },
+  { id: 'mes',    label: 'Mês'    },
+  { id: 'ano',    label: 'Ano'    },
+]
+const QTY_META = [
+  { key: 'exact',   label: 'Exatos',    color: '#0f7a78' },
+  { key: 'correct', label: 'Certos',    color: '#2ec980' },
+  { key: 'wrong',   label: 'Erros',     color: '#e85252' },
+  { key: 'pending', label: 'Pendentes', color: '#3d5a78' },
+]
+
+function qtyPeriodKey(dateStr, mode) {
+  const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z')
+  if (isNaN(d)) return '?'
+  if (mode === 'dia')    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+  if (mode === 'semana') {
+    const monday = new Date(d)
+    const day = monday.getDay() || 7
+    monday.setDate(monday.getDate() - day + 1)
+    return monday.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+  }
+  if (mode === 'mes') return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'America/Sao_Paulo' })
+  if (mode === 'ano') return d.toLocaleDateString('pt-BR', { year: 'numeric', timeZone: 'America/Sao_Paulo' })
+  return '?'
+}
+
+function ResultQuantityChart({ bets }) {
+  const [view, setView]       = useState('totais')
+  const [mode, setMode]       = useState('mes')
+  const [hidden, setHidden]   = useState(() => new Set())
+  const [tooltip, setTooltip] = useState(null)
+
+  const toggleHidden = key => setHidden(prev => {
+    const next = new Set(prev)
+    next.has(key) ? next.delete(key) : next.add(key)
+    return next
+  })
+
+  const totals = useMemo(() => {
+    const t = { exact: 0, correct: 0, wrong: 0, pending: 0 }
+    bets.forEach(b => {
+      if (b.result === 'exact') t.exact++
+      else if (b.result === 'correct') t.correct++
+      else if (b.result === 'wrong') t.wrong++
+      else t.pending++
+    })
+    return t
+  }, [bets])
+  const totalAll = totals.exact + totals.correct + totals.wrong + totals.pending
+  const maxTotal = Math.max(totals.exact, totals.correct, totals.wrong, totals.pending, 1)
+
+  const periods = useMemo(() => {
+    const map = new Map()
+    const dated = [...bets].filter(b => b.match_date || b.created_at)
+      .sort((a, b) => new Date(a.match_date || a.created_at) - new Date(b.match_date || b.created_at))
+    for (const b of dated) {
+      const k = qtyPeriodKey(b.match_date || b.created_at, mode)
+      if (!map.has(k)) map.set(k, { label: k, exact: 0, correct: 0, wrong: 0, pending: 0 })
+      const s = map.get(k)
+      if (b.result === 'exact') s.exact++
+      else if (b.result === 'correct') s.correct++
+      else if (b.result === 'wrong') s.wrong++
+      else s.pending++
+    }
+    return [...map.values()]
+  }, [bets, mode])
+
+  if (totalAll === 0) return null
+
+  const W = 400, H = 200, PADL = 28, PADR = 8, PADT = 12, PADB = 20
+  const chartH = H - PADT - PADB
+  const visibleSeries = QTY_META.filter(m => !hidden.has(m.key))
+  const maxVal = Math.max(1, ...periods.flatMap(p => visibleSeries.map(m => p[m.key])), 1)
+  const toX = i => PADL + (periods.length <= 1 ? (W - PADL - PADR) / 2 : (i / (periods.length - 1)) * (W - PADL - PADR))
+  const toY = v => PADT + (1 - v / maxVal) * chartH
+  const yTicks = [0, Math.round(maxVal / 2), maxVal]
+  const colW = (W - PADL - PADR) / Math.max(periods.length, 1)
+
+  return (
+    <div className="uh-chart-card fade-in-3">
+      <div className="uh-chart-card__head">
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--s3)' }}>
+          <span className="uh-chart-card__label">Quantidade de resultados</span>
+          <span className="uh-chart-card__total">{totalAll}</span>
+        </div>
+        <div className="uh-chart-modes">
+          {QTY_VIEWS.map(v => (
+            <button key={v.id} onClick={() => setView(v.id)}
+              className={`uh-chart-mode${view === v.id ? ' active' : ''}`}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === 'totais' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)', padding: 'var(--s2) 0' }}>
+          {QTY_META.filter(m => totals[m.key] > 0).map(m => {
+            const isHidden = hidden.has(m.key)
+            return (
+              <div key={m.key} style={{ opacity: isHidden ? 0.35 : 1, transition: 'opacity .15s' }}>
+                <button
+                  onClick={() => toggleHidden(m.key)}
+                  title={isHidden ? `Mostrar ${m.label}` : `Ocultar ${m.label}`}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: m.color, textDecoration: isHidden ? 'line-through' : 'none' }}>{m.label}</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: m.color }}>{totals[m.key]}</span>
+                </button>
+                <div style={{ height: 8, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 4, background: m.color,
+                    width: isHidden ? '0%' : `${(totals[m.key] / maxTotal) * 100}%`,
+                    transition: 'width 700ms cubic-bezier(.4,0,.2,1)',
+                  }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <>
+          <div className="uh-chart-modes" style={{ marginBottom: 'var(--s3)' }}>
+            {QTY_TIME_MODES.map(m => (
+              <button key={m.id} onClick={() => setMode(m.id)}
+                className={`uh-chart-mode${mode === m.id ? ' active' : ''}`}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            {periods.length < 1 ? (
+              <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>
+                Sem dados suficientes para este período.
+              </div>
+            ) : (
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}
+              onMouseLeave={() => setTooltip(null)}>
+              {yTicks.map(v => {
+                const y = toY(v)
+                return (
+                  <g key={v}>
+                    <line x1={PADL} y1={y} x2={W - PADR} y2={y} stroke="currentColor" strokeOpacity="0.07" strokeWidth="1" />
+                    <text x={PADL - 4} y={y + 3} textAnchor="end"
+                      style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.35 }}>{v}</text>
+                  </g>
+                )
+              })}
+
+              {visibleSeries.map(m => {
+                const coords = periods.map((p, i) => [toX(i), toY(p[m.key])])
+                const d = coords.reduce((acc, [x, y], i) => acc + (i === 0 ? `M${x},${y}` : ` L${x},${y}`), '')
+                return (
+                  <g key={m.key}>
+                    <path d={d} fill="none" stroke={m.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" opacity={0.9} />
+                    {coords.map(([x, y], i) => {
+                      const active = tooltip?.idx === i
+                      return (
+                        <circle key={i} cx={x} cy={y} r={active ? 4.5 : 2.5}
+                          fill={active ? m.color : 'var(--bg-surface)'} stroke={m.color} strokeWidth={active ? 2 : 1.3} />
+                      )
+                    })}
+                  </g>
+                )
+              })}
+
+              {/* Colunas invisíveis pra hover */}
+              {periods.map((p, i) => (
+                <rect key={i} x={toX(i) - colW / 2} y={PADT} width={colW} height={chartH}
+                  fill="transparent" style={{ cursor: 'crosshair' }}
+                  onMouseEnter={() => setTooltip({ idx: i, x: toX(i), ...p })}
+                />
+              ))}
+
+              {periods.length >= 2 && (
+                <>
+                  <text x={PADL} y={H - 4} textAnchor="start"
+                    style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.3 }}>{periods[0].label}</text>
+                  <text x={W - PADR} y={H - 4} textAnchor="end"
+                    style={{ fontFamily: 'var(--font-data)', fontSize: 8, fill: 'currentColor', opacity: 0.3 }}>{periods[periods.length - 1].label}</text>
+                </>
+              )}
+            </svg>
+            )}
+
+            {tooltip && (() => {
+              const leftPct = (tooltip.x / W) * 100
+              const flipLeft = leftPct > 75
+              const totalPeriod = tooltip.exact + tooltip.correct + tooltip.wrong + tooltip.pending
+              return (
+                <div style={{
+                  position: 'absolute', left: `${leftPct}%`, top: 0,
+                  transform: `translate(${flipLeft ? 'calc(-100% - 8px)' : '8px'}, 0)`,
+                  background: 'var(--bg-overlay)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--r2)', padding: '6px 12px',
+                  pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 20,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', marginBottom: 4 }}>
+                    {tooltip.label} · {totalPeriod} {totalPeriod === 1 ? 'jogo' : 'jogos'}
+                  </div>
+                  {QTY_META.filter(m => tooltip[m.key] > 0).map(m => (
+                    <div key={m.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontFamily: 'var(--font-data)', fontSize: 11 }}>
+                      <span style={{ color: m.color }}>{m.label}</span>
+                      <span style={{ color: m.color, fontWeight: 700 }}>{tooltip[m.key]}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+
+          <div className="uh-chart-legend" style={{ marginTop: 'var(--s3)' }}>
+            {QTY_META.map(m => {
+              const isHidden = hidden.has(m.key)
+              return (
+                <button key={m.key} onClick={() => toggleHidden(m.key)}
+                  className="uh-chart-legend__item"
+                  title={isHidden ? `Mostrar ${m.label}` : `Ocultar ${m.label}`}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', opacity: isHidden ? 0.35 : 1, transition: 'opacity .15s' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, display: 'inline-block', background: isHidden ? 'transparent' : m.color, border: `1.5px solid ${m.color}` }} />
+                  <span style={{ textDecoration: isHidden ? 'line-through' : 'none' }}>{m.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Phase Chart ────────────────────────────────────────────────────────
 const PHASE_ORDER = ['r32', 'r16', 'qf', 'sf', '3rd', 'final']
 
@@ -1658,6 +1898,13 @@ export default function UserHistory() {
       {evaluated.length > 0 && (
         <div className="fade-in-3">
           <PointsChart bets={bets} />
+        </div>
+      )}
+
+      {/* ── Quantidade de resultados (totais + por período) ── */}
+      {bets.length > 0 && (
+        <div className="fade-in-3">
+          <ResultQuantityChart bets={bets} />
         </div>
       )}
 

@@ -7,7 +7,9 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
 import TitleEvolutionChart from '../components/TitleEvolutionChart'
+import BrTitleEvolutionChart from '../components/BrTitleEvolutionChart'
 import { PT_NAMES } from '../utils/teamNames'
+import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
 
 const PHASE_LABELS = {
   r32:   'Round of 32',
@@ -18,9 +20,12 @@ const PHASE_LABELS = {
   final: 'Final',
 }
 
-function PhaseBadge({ phase, groupName }) {
+function PhaseBadge({ phase, groupName, matchNumber }) {
   const isKnockout = phase && phase !== 'group'
-  const label = isKnockout ? PHASE_LABELS[phase] || phase : groupName ? `Grupo ${groupName}` : null
+  // Brasileirão: phase='group' mas sem group_name (times não têm grupo) — match_number é a rodada.
+  const label = isKnockout
+    ? (PHASE_LABELS[phase] || phase)
+    : groupName ? `Grupo ${groupName}` : (matchNumber ? `Rodada ${matchNumber}` : null)
   if (!label) return null
   return (
     <span className={`badge ${isKnockout ? 'badge-knockout' : 'badge-group'}`}>
@@ -167,6 +172,10 @@ function MatchDetailModal({ onClose, teamA, teamB, phase, groupName, matchDate, 
 }
 
 
+// Bets não tem aba "Geral" (aposta é sempre numa competição específica) — reusa
+// a fonte única de competições, só sem a entrada "geral".
+const COMPETITIONS = ALL_COMPETITIONS.filter(c => c.id !== 'geral').map(c => ({ id: c.id, label: `${c.emoji} ${c.label}` }))
+
 export default function Bets() {
   const { token } = useAuth()
   const navigate = useNavigate()
@@ -175,17 +184,19 @@ export default function Bets() {
   const [finished, setFinished]     = useState([])
   const [loading, setLoad]          = useState(true)
   const [tab, setTab]               = useState('open')
+  const [comp, setComp]             = useState('copa2026')
   const [shareMsg, setShareMsg] = useState('')
   const [now, setNow]         = useState(Date.now())
   const [pendingOpenId, setPendingOpenId] = useState(null)
   const matchRefs = useRef({})
 
   const load = useCallback(() => {
+    setLoad(true)
     const reqs = [
-      api.get('/matches?status=scheduled&limit=200'),
-      api.get('/matches?status=finished&limit=100'),
+      api.get(`/matches?status=scheduled&competition=${comp}&limit=200`),
+      api.get(`/matches?status=finished&competition=${comp}&limit=100`),
     ]
-    if (token) reqs.push(api.get('/bets/mine', token))
+    if (token) reqs.push(api.get(`/bets/mine?competition=${comp}`, token))
     // allSettled: one failure doesn't wipe the other data
     Promise.allSettled(reqs)
       .then(([mRes, fRes, bRes]) => {
@@ -194,7 +205,7 @@ export default function Bets() {
         if (token && bRes?.status === 'fulfilled' && bRes.value) setBets(bRes.value)
       })
       .finally(() => setLoad(false))
-  }, [token])
+  }, [token, comp])
 
 
   useEffect(() => { load() }, [load])
@@ -212,7 +223,8 @@ export default function Bets() {
   async function handleShare() {
     const url = `${window.location.origin}/login`
     try {
-      if (navigator.share) { await navigator.share({ title: 'Bolão Copa 2026', text: 'Aposte nos placares e dispute o ranking.', url }); setShareMsg('Link compartilhado.'); return }
+      const compLabel = COMPETITIONS.find(c => c.id === comp)?.label.replace(/^\S+\s/, '') || 'Predicts'
+      if (navigator.share) { await navigator.share({ title: `Bolão ${compLabel}`, text: 'Aposte nos placares e dispute o ranking.', url }); setShareMsg('Link compartilhado.'); return }
       if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(url); setShareMsg('Link copiado.'); return }
       setShareMsg(`Compartilhe: ${url}`)
     } catch (e) { if (e?.name !== 'AbortError') setShareMsg('Não foi possível compartilhar.') }
@@ -275,7 +287,20 @@ export default function Bets() {
         <p className="page-subtitle">Palpite até o apito inicial · ao iniciar, o palpite encerra automaticamente</p>
       </div>
 
-      <MyChampionCard />
+      <div className="phase-nav" style={{ marginBottom: 'var(--s5)' }}>
+        {COMPETITIONS.map(c => (
+          <button
+            key={c.id}
+            type="button"
+            className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`}
+            onClick={() => setComp(c.id)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {comp === 'copa2026' && <MyChampionCard />}
 
       <div className="card mt-6">
         <div className="card__header">
@@ -284,12 +309,12 @@ export default function Bets() {
           </span>
         </div>
         <div className="card__body" style={{ paddingTop: 'var(--s4)' }}>
-          <TitleEvolutionChart />
+          {comp === 'copa2026' ? <TitleEvolutionChart /> : <BrTitleEvolutionChart />}
         </div>
       </div>
 
       {/* Bracket CTA */}
-      <Link to="/torneio" style={{
+      {comp === 'copa2026' && <Link to="/torneio" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: 'var(--s3) var(--s4)',
         background: 'color-mix(in srgb, var(--accent) 7%, var(--bg-card))',
@@ -302,10 +327,10 @@ export default function Bets() {
           <span>⚔️</span> Ver Chaveamento Completo
         </span>
         <span style={{ fontFamily:'var(--font-cond)', fontSize:13, color:'var(--accent)', fontWeight:700 }}>→</span>
-      </Link>
+      </Link>}
 
       {/* Resultados CTA */}
-      <Link to="/resultados" style={{
+      {comp === 'copa2026' && <Link to="/resultados" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: 'var(--s3) var(--s4)',
         background: 'color-mix(in srgb, var(--accent) 7%, var(--bg-card))',
@@ -318,7 +343,7 @@ export default function Bets() {
           <span>📋</span> Consultar Resultados
         </span>
         <span style={{ fontFamily:'var(--font-cond)', fontSize:13, color:'var(--accent)', fontWeight:700 }}>→</span>
-      </Link>
+      </Link>}
 
       <GuideBanner onShare={handleShare} shareMsg={shareMsg} />
 
@@ -578,7 +603,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
   return (
     <div className={`bet-card bet-card--open fade-in${isUrgent ? ' bet-card--urgent' : ''}`} style={{ animationDelay: `${index * 30}ms` }}>
       <div className="bet-card__top">
-        <PhaseBadge phase={match.phase} groupName={match.group_name} />
+        <PhaseBadge phase={match.phase} groupName={match.group_name} matchNumber={match.match_number} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           {stillOpen && <Countdown ms={msBefore} />}
           <span className="bet-card__time">{formatMatchDate(match.match_date)}</span>
@@ -965,13 +990,13 @@ function BetShareModal({ bet, onClose }) {
   const flagA = bet.team_a_flag ? `<img src="${bet.team_a_flag}" style="width:20px;vertical-align:middle" /> ` : ''
   const flagB = bet.team_b_flag ? ` <img src="${bet.team_b_flag}" style="width:20px;vertical-align:middle" />` : ''
 
-  const resultLine = bet.result === 'exact'   ? `🎯 Placar exato! +${bet.points_earned ?? 10} pts`
-                   : bet.result === 'correct'  ? `✅ Resultado correto! +${bet.points_earned ?? 5} pts`
+  const resultLine = bet.result === 'exact'   ? `🎯 Placar exato! +${bet.points_earned ?? 25} pts`
+                   : bet.result === 'correct'  ? `✅ Resultado correto! +${bet.points_earned ?? 10} pts`
                    : bet.result === 'wrong'    ? `❌ Sem acerto desta vez.`
                    : '⏳ Aguardando resultado...'
 
   const shareText = [
-    `🏆 Meu palpite no Predicts — Copa 2026`,
+    `🏆 Meu palpite no Predicts`,
     ``,
     `⚽ ${teamA} × ${teamB}`,
     `🎯 Meu palpite: ${bet.score_a}–${bet.score_b}`,
@@ -1066,7 +1091,7 @@ function BetRow({ bet, index, onOpenSimulation, onEditBet }) {
     <>
     <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${index * 30}ms` }}>
       <div className="bet-card__top">
-        <PhaseBadge phase={bet.match_phase} groupName={bet.group_name} />
+        <PhaseBadge phase={bet.match_phase} groupName={bet.group_name} matchNumber={bet.match_number} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <span className="bet-card__time">{formatMatchDate(bet.match_date)}</span>
           <span className={`pts-badge ${ptsVariant}`}>{ptsValue}</span>
@@ -1371,7 +1396,7 @@ function FinishedNoBetRow({ match, index, onOpenSimulation }) {
   return (
     <div className="bet-card fade-in" style={{ animationDelay: `${index * 30}ms`, opacity: 0.65 }}>
       <div className="bet-card__top">
-        <PhaseBadge phase={match.phase} groupName={match.group_name} />
+        <PhaseBadge phase={match.phase} groupName={match.group_name} matchNumber={match.match_number} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <span className="bet-card__time">{formatMatchDate(match.match_date)}</span>
           <span className="pts-badge pts-badge--wrong">sem palpite</span>

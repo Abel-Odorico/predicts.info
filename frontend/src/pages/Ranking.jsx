@@ -6,6 +6,7 @@ import MyChampionCard from '../components/MyChampionCard'
 import LigaFlowModal from '../components/LigaFlowModal'
 import ShareCompetitionButton from '../components/ShareCompetitionButton'
 import { useAuth } from '../stores/authStore'
+import { COMPETITIONS } from '../utils/competitions'
 
 const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L']
 
@@ -78,6 +79,7 @@ export default function Ranking() {
   const [expandedBets, setExpandedBets] = useState({}) // user_id -> { loading, bets }
   const [shareOpen,   setShareOpen]   = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [comp,        setComp]        = useState('copa2026')
 
   useEffect(() => {
     api.get('/champion/picks/all')
@@ -107,7 +109,8 @@ export default function Ranking() {
   const loadSilent = useCallback((silent = false) => {
     if (!silent) setLoad(true)
     const params = new URLSearchParams()
-    if (group) params.set('group', group)
+    if (group && comp === 'copa2026') params.set('group', group)
+    params.set('competition', comp)
     const { date_from, date_to } = period === 'custom'
       ? { date_from: dateFrom, date_to: dateTo }
       : periodToDates(period)
@@ -117,7 +120,7 @@ export default function Ranking() {
 
     Promise.all([
       api.get(`/ranking${qs ? `?${qs}` : ''}`),
-      api.get(`/ranking?${todayQS()}&limit=1`),
+      api.get(`/ranking?${todayQS()}&competition=${comp}&limit=1`),
     ])
       .then(([main, today]) => {
         setData(main)
@@ -127,7 +130,7 @@ export default function Ranking() {
       })
       .catch(console.error)
       .finally(() => { if (!silent) setLoad(false) })
-  }, [group, period, dateFrom, dateTo])
+  }, [group, period, dateFrom, dateTo, comp])
 
   useEffect(() => { loadSilent(false) }, [loadSilent])
 
@@ -229,10 +232,23 @@ export default function Ranking() {
         </div>
       )}
 
-      <MyChampionCard compact />
+      <div className="phase-nav fade-in-1" style={{ margin: 'var(--s4) 0' }}>
+        {COMPETITIONS.filter(c => c.id !== 'geral').map(c => (
+          <button
+            key={c.id}
+            type="button"
+            className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`}
+            onClick={() => setComp(c.id)}
+          >
+            {c.emoji} {c.label}
+          </button>
+        ))}
+      </div>
+
+      {comp === 'copa2026' && <MyChampionCard compact />}
 
       {/* ── Switcher Geral / Fase ─────────────────────────────────────── */}
-      {competition && (
+      {comp === 'copa2026' && competition && (
         <div className="rank-segctrl" role="tablist" aria-label="Navegação de ranking" style={{ '--active-index': compView ? 1 : 0 }}>
           <div className="rank-segctrl__thumb" aria-hidden="true" />
           <button
@@ -340,7 +356,7 @@ export default function Ranking() {
                     const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
                     const leaderPts   = compData[0]?.total_points || 1
                     const gapLeader   = (compData[0]?.total_points ?? 0) - r.total_points
-                    const cp          = champPicks[r.user_id]
+                    const cp          = comp === 'copa2026' ? champPicks[r.user_id] : null
                     return (
                       <Link
                         key={r.user_id}
@@ -453,7 +469,7 @@ export default function Ranking() {
       <div>
       {!loading && data.length > 0 && (
         <>
-        <RankingPodium data={data} champPicks={champPicks} />
+        <RankingPodium data={data} champPicks={comp === 'copa2026' ? champPicks : {}} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s4)' }} className="fade-in-2">
           <HighlightCard
             icon="👑" label="Líder Geral"
@@ -533,7 +549,7 @@ export default function Ranking() {
             )}
           </div>
 
-          <div>
+          {comp === 'copa2026' && <div>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>
               Grupo
             </div>
@@ -559,7 +575,7 @@ export default function Ranking() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {isFiltered && (
             <button onClick={() => { setGroup(''); setPeriod('all'); setDateFrom(''); setDateTo('') }}
@@ -607,7 +623,7 @@ export default function Ranking() {
               const podiumClass = i === 0 ? 'ranking-row--gold' : i === 1 ? 'ranking-row--silver' : i === 2 ? 'ranking-row--bronze' : ''
               const leaderPts = data[0]?.total_points || 1
               const gapLeader = (data[0]?.total_points ?? 0) - r.total_points
-              const cp = champPicks[r.user_id]
+              const cp = comp === 'copa2026' ? champPicks[r.user_id] : null
               const isExpanded = expandedId === r.user_id
               const aprv = aproveitamento(r)
               const errosR = Math.max(0, (r.total_bets || 0) - acertos(r))

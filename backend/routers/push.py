@@ -149,7 +149,7 @@ def subscribe(
                 send_push_to_users(
                     db, [user.id],
                     title="⚽ Faça seu primeiro palpite!",
-                    body=f"{first}, a Copa 2026 está rolando. Aposte no placar e dispute o ranking!",
+                    body=f"{first}, Copa 2026 e Brasileirão rolando agora. Aposte no placar e dispute o ranking!",
                     url="/apostas",
                     tag="activation-bet",
                 )

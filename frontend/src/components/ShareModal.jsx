@@ -10,8 +10,8 @@ const SHARE_TARGETS = [
     label: 'Dashboard',
     icon: '⚽',
     url: `${BASE_URL}/dashboard`,
-    waText: `⚽ *Predicts — Bolão Copa 2026*\n\nFaça seus palpites, acumule pontos e dispute o ranking com amigos!\n\n🔗 ${BASE_URL}/dashboard`,
-    nativeTitle: 'Predicts — Bolão Copa 2026',
+    waText: `⚽ *Predicts — Copa 2026 + Brasileirão*\n\nFaça seus palpites, acumule pontos e dispute o ranking com amigos!\n\n🔗 ${BASE_URL}/dashboard`,
+    nativeTitle: 'Predicts — Copa 2026 + Brasileirão',
     nativeText: 'Faça seus palpites, acumule pontos e dispute o ranking!',
   },
   {
@@ -40,7 +40,7 @@ async function drawRankingCanvas(ranking, title) {
   ctx.font = 'bold 30px Arial, sans-serif'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'
   ctx.fillText('PREDICTS', W / 2, 48)
   ctx.font = '13px Arial, sans-serif'; ctx.fillStyle = '#8ecfcc'
-  ctx.fillText('Bolão Copa 2026 · predicts.info', W / 2, 70)
+  ctx.fillText('Copa 2026 + Brasileirão · predicts.info', W / 2, 70)
   ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(40, 82, W - 80, 1)
   ctx.font = 'bold 14px Arial, sans-serif'; ctx.fillStyle = '#0f7a78'
   ctx.fillText(title.toUpperCase(), W / 2, 110)
@@ -241,7 +241,7 @@ export default function ShareModal({ onClose, token }) {
           >×</button>
           <div style={{ fontSize: 36, lineHeight: 1, marginBottom: 10 }}>🎯</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#ffffff', letterSpacing: '0.08em' }}>PREDICTS</div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#8ecfcc', marginTop: 4, letterSpacing: '0.04em' }}>Bolão Copa 2026 · Convide para jogar</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#8ecfcc', marginTop: 4, letterSpacing: '0.04em' }}>Copa 2026 + Brasileirão · Convide para jogar</div>
         </div>
 
         <div style={{ padding: '20px 20px 24px' }}>

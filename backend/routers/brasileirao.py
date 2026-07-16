@@ -150,21 +150,32 @@ def rodada(n: int | None = Query(None, ge=1, le=38), db: Session = Depends(get_d
 
 # ── Projeção Monte Carlo da temporada ─────────────────────────────────────────
 
-def compute_projection(db: Session, n_sims: int = N_SIMS) -> dict:
+def compute_projection_at_round(
+    db: Session, clubs: list[Team], matches: list[Match],
+    as_of_round: int | None = None, n_sims: int = N_SIMS,
+) -> dict:
+    """Núcleo do Monte Carlo, parametrizado por 'até que rodada contar como jogada'.
+
+    as_of_round=None → comportamento de hoje (conta tudo que tem result, simula
+    só o que falta). as_of_round=N → reconstrói a projeção como estaria logo
+    após a rodada N: só entra na tabela base o que tem match_number<=N, e tudo
+    com match_number>N é tratado como 'ainda não jogado' e vai pro Monte Carlo
+    MESMO que já tenha resultado real gravado (é isso que reconstrói o retrato
+    histórico — ver seção 'Evolução de título' na skill predicts). Elo/xG usados
+    são os atuais do clube, não um snapshot histórico (mesma limitação já aceita
+    na calibração do engine principal — não existe tabela de rating por rodada)."""
     from routers.matches import _team_to_input
     from engine.weights import compute_weighted_lambdas
-
-    comp_id = _comp_id(db)
-    if not comp_id:
-        return {"clubs": [], "n_sims": 0}
-
-    clubs = db.query(Team).filter(Team.competition_id == comp_id).all()
-    matches = _load_matches(db, comp_id)
-    base = _build_table(clubs, matches)
 
     idx = {c.id: i for i, c in enumerate(clubs)}
     nc = len(clubs)
     rng = np.random.default_rng()
+
+    if as_of_round is None:
+        played = matches
+    else:
+        played = [m for m in matches if m.match_number and m.match_number <= as_of_round]
+    base = _build_table(clubs, played)
 
     pts = np.zeros((n_sims, nc), dtype=np.int32)
     wins = np.zeros((n_sims, nc), dtype=np.int32)
@@ -176,7 +187,14 @@ def compute_projection(db: Session, n_sims: int = N_SIMS) -> dict:
         pts[:, i] = b["pts"]; wins[:, i] = b["v"]; gp[:, i] = b["gp"]; gc[:, i] = b["gc"]
 
     inputs = {c.id: _team_to_input(c) for c in clubs}
-    remaining = [m for m in matches if not m.result and m.team_a_id in idx and m.team_b_id in idx]
+    if as_of_round is None:
+        remaining = [m for m in matches if not m.result and m.team_a_id in idx and m.team_b_id in idx]
+    else:
+        remaining = [
+            m for m in matches
+            if m.team_a_id in idx and m.team_b_id in idx
+            and (not m.match_number or m.match_number > as_of_round)
+        ]
 
     for m in remaining:
         la, lb, _ = compute_weighted_lambdas(
@@ -220,9 +238,19 @@ def compute_projection(db: Session, n_sims: int = N_SIMS) -> dict:
             "z4_pct": round(float((p >= nc - 3).mean() * 100), 1),
             "avg_pts": round(float(pts[:, i].mean()), 1),
             "avg_pos": round(float(p.mean()), 1),
+            "titles": BR_TITLES.get(c.code, 0),
         })
     out.sort(key=lambda r: r["avg_pos"])
     return {"clubs": out, "n_sims": n_sims, "remaining_matches": len(remaining)}
+
+
+def compute_projection(db: Session, n_sims: int = N_SIMS) -> dict:
+    comp_id = _comp_id(db)
+    if not comp_id:
+        return {"clubs": [], "n_sims": 0}
+    clubs = db.query(Team).filter(Team.competition_id == comp_id).all()
+    matches = _load_matches(db, comp_id)
+    return compute_projection_at_round(db, clubs, matches, as_of_round=None, n_sims=n_sims)
 
 
 # Títulos do Brasileirão Série A por clube (1971–2025, 70 edições) — dado
@@ -315,3 +343,64 @@ def projection(db: Session = Depends(get_db)):
         except Exception:
             pass
     return data
+
+
+TITLE_EVOLUTION_CACHE_KEY = "br:title-evolution:v1"
+TITLE_EVOLUTION_TTL = 6 * 3600
+
+
+@router.get("/title-evolution")
+def title_evolution(
+    codes: str | None = Query(None, description="códigos separados por vírgula, ex: PAL,FLA,FLU"),
+    db: Session = Depends(get_db),
+):
+    """Evolução da chance de título rodada a rodada — RECONSTRUÍDA (não há
+    snapshot histórico gravado, só sincronizamos desde 11/07): pra cada rodada
+    já disputada, roda o Monte Carlo tratando rodadas posteriores como ainda
+    não jogadas (ver compute_projection_at_round). Elo/xG são os atuais do
+    clube, não um snapshot por rodada — mesma limitação já aceita no motor
+    principal. Cache Redis 6h (mais caro que /projection: 1 Monte Carlo por
+    rodada), invalidado no fim do sync BR junto com PROJECTION_CACHE_KEY."""
+    cache_key = f"{TITLE_EVOLUTION_CACHE_KEY}:{codes or 'top5'}"
+    try:
+        r = _redis()
+        cached = r.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        r = None
+
+    comp_id = _comp_id(db)
+    if not comp_id:
+        return []
+
+    clubs = db.query(Team).filter(Team.competition_id == comp_id).all()
+    matches = _load_matches(db, comp_id)
+    current = _current_rodada(matches)
+    if not current or current <= 1:
+        return []
+    played_rounds = [n for n in range(1, current) if any(m.match_number == n and m.result for m in matches)]
+
+    if codes:
+        wanted = {c.strip().upper() for c in codes.split(",") if c.strip()}
+    else:
+        top = compute_projection_at_round(db, clubs, matches, as_of_round=None, n_sims=2000)
+        wanted = {c["code"] for c in top["clubs"][:5]}
+
+    club_by_code = {c.code: c for c in clubs if c.code in wanted}
+    out = []
+    for rnd in played_rounds:
+        snap = compute_projection_at_round(db, clubs, matches, as_of_round=rnd, n_sims=2000)
+        teams = {c["code"]: c["title_pct"] for c in snap["clubs"] if c["code"] in wanted}
+        out.append({"round": rnd, "teams": teams})
+
+    result = {
+        "rounds": out,
+        "teams_meta": {code: {"name": c.name} for code, c in club_by_code.items()},
+    }
+    try:
+        if r is not None:
+            r.setex(cache_key, TITLE_EVOLUTION_TTL, json.dumps(result))
+    except Exception:
+        pass
+    return result

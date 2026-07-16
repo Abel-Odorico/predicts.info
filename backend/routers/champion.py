@@ -25,7 +25,22 @@ def _utcnow() -> datetime:
 
 
 def _deadline(db: Session) -> datetime:
-    """Retorna o horário do 1º jogo r32 no banco (trava no início da fase eliminatória)."""
+    """Retorna o horário do 1º jogo r32 no banco (trava no início da fase eliminatória).
+
+    Override manual (admin, reabertura temporária): site_config['champion_deadline_override']
+    (UTC ISO). Só vale se ainda estiver no futuro — passou, volta a valer o deadline real do r32.
+    """
+    row = db.execute(
+        text("SELECT value FROM site_config WHERE key = 'champion_deadline_override'")
+    ).fetchone()
+    if row and row[0]:
+        override = datetime.fromisoformat(row[0])
+        if override.tzinfo is not None:
+            # aceita string com timezone (ex: sufixo 'Z') sem crashar na comparação com _utcnow() naive
+            override = override.astimezone(timezone.utc).replace(tzinfo=None)
+        if override > _utcnow():
+            return override
+
     row = db.execute(
         text("SELECT MIN(match_date) FROM matches WHERE phase = 'r32'")
     ).fetchone()
@@ -156,6 +171,49 @@ def picks_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/admin/champion/reopen-changes")
+def reopen_changes(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Quem mexeu no palpite de campeão/vice desde a reabertura (site_config
+    'champion_deadline_override'): separa quem TROCOU um palpite já existente
+    de antes de quem escolheu PELA 1ª VEZ durante a janela. Cobre WhatsApp e site
+    (baseado em created_at/updated_at do pick, não depende de log específico de canal)."""
+    row = db.execute(
+        text("SELECT value, updated_at FROM site_config WHERE key = 'champion_deadline_override'")
+    ).fetchone()
+    if not row:
+        return {"reopened_at": None, "trocaram": [], "novos": []}
+    reopened_at = row[1]
+
+    rows = (
+        db.query(ChampionPick, User)
+        .join(User, User.id == ChampionPick.user_id)
+        .filter(ChampionPick.updated_at >= reopened_at)
+        .order_by(ChampionPick.updated_at.desc())
+        .all()
+    )
+    team_ids = {p.team_id for p, _ in rows} | {p.runner_up_team_id for p, _ in rows if p.runner_up_team_id}
+    teams_map = {t.id: t for t in db.query(Team).filter(Team.id.in_(team_ids)).all()} if team_ids else {}
+
+    def _row(pick: "ChampionPick", user: User) -> dict:
+        return {
+            "user_id": user.id,
+            "name": user.name,
+            "champion": _team_dict(teams_map[pick.team_id]) if pick.team_id in teams_map else None,
+            "runner_up": _team_dict(teams_map[pick.runner_up_team_id]) if pick.runner_up_team_id in teams_map else None,
+            "updated_at": pick.updated_at.isoformat(),
+        }
+
+    trocaram = [_row(p, u) for p, u in rows if p.created_at < reopened_at]
+    novos = [_row(p, u) for p, u in rows if p.created_at >= reopened_at]
+    return {
+        "reopened_at": reopened_at.isoformat(),
+        "trocaram": trocaram,
+        "novos": novos,
+        "total_trocaram": len(trocaram),
+        "total_novos": len(novos),
+    }
+
+
 @router.get("/champion/picks/all")
 def all_picks(db: Session = Depends(get_db)):
     rows = (
@@ -183,19 +241,40 @@ def all_picks(db: Session = Depends(get_db)):
 
 @router.post("/admin/champion/reopen-notify")
 def reopen_notify(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    """Envia push + notificação in-app anunciando reabertura dos palpites de campeão."""
+    """Envia push + notificação in-app + WhatsApp (opt-in) anunciando reabertura dos palpites de campeão."""
+    from datetime import timedelta
     from routers.push import send_push_to_all
 
     dl = _deadline(db)
-    deadline_str = dl.strftime("%d/%m às %H:%M") + " UTC"
+    dl_brt = dl - timedelta(hours=3)
+    now_brt = _utcnow() - timedelta(hours=3)
+    deadline_brt = dl_brt.strftime("%H:%M")
+    # Override pode reabrir por mais de 1 dia — "de hoje" fixo mentia a data quando o prazo
+    # caía amanhã ou depois. Só usa "hoje" quando bate mesmo com o dia atual em BRT.
+    deadline_day = "hoje" if dl_brt.date() == now_brt.date() else f"dia {dl_brt.strftime('%d/%m')}"
+
+    push_title = "🏆 Só até " + deadline_brt + ": escolha seu Campeão!"
+    push_body = f"Campeão vale +{CHAMPION_BONUS} pts, Vice +{RUNNER_UP_BONUS} pts. Reaberto por tempo limitado — corre!"
+
+    notif_title = f"🏆 Campeão e Vice reabertos — só até {deadline_brt} de {deadline_day}!"
+    notif_body = (
+        f"Escolha ou troque seu palpite: acerte o Campeão (+{CHAMPION_BONUS} pts) e o Vice "
+        f"(+{RUNNER_UP_BONUS} pts). Prazo corre até {deadline_brt} de {deadline_day} (horário de Brasília) — depois fecha de novo. "
+        "Aproveita e confere as novidades: Brasileirão já rodando no predicts.info e o bot do WhatsApp completo "
+        "(ranking, seus palpites, resultado na hora do apito final)."
+    )
+    whatsapp_body = (
+        f"🏆 *Campeão e Vice reabertos* — só até {deadline_brt} de {deadline_day}!\n\n"
+        "Escolha (ou troque) seu palpite:\n"
+        f"🥇 Campeão = +{CHAMPION_BONUS} pts\n"
+        f"🥈 Vice = +{RUNNER_UP_BONUS} pts\n\n"
+        "Corre, o prazo é curto: predicts.info/campeao\n\n"
+        "Aproveita e vê as novidades: Brasileirão já rodando no site e o bot ficou completo "
+        "(ranking, seus palpites e resultado na hora, direto aqui no zap) 🇧🇷⚽"
+    )
 
     # Push para todos os subscribers
-    push_sent = send_push_to_all(
-        db,
-        title="🏆 Palpites de Campeão REABERTOS!",
-        body=f"Escolha ou troque seu campeão e vice até {deadline_str}. Corra!",
-        url="/campeao",
-    )
+    push_sent = send_push_to_all(db, title=push_title, body=push_body, url="/campeao")
 
     # Notificação in-app para todos os usuários registrados
     users = db.query(User).filter(User.email != "bot@predicts.info").all()
@@ -204,17 +283,23 @@ def reopen_notify(db: Session = Depends(get_db), _: User = Depends(require_admin
         db.add(Notification(
             user_id=u.id,
             type="champion_reopen",
-            title="🏆 Palpites de Campeão reabertos até " + deadline_str,
-            body="A fase eliminatória começa em breve! Escolha ou atualize seu palpite de campeão e vice-campeão.",
+            title=notif_title,
+            body=notif_body,
             meta={"deadline": dl.isoformat(), "url": "/campeao"},
         ))
         notif_count += 1
-
     db.commit()
+
+    # WhatsApp — campanha pro segmento opt-in (respeita consentimento e modo silêncio)
+    from routers.whatsapp import _create_campaign_internal
+    wa_result = _create_campaign_internal(db, message=whatsapp_body, segment="opt_in")
+
     return {
         "push_sent": push_sent,
         "notifications_sent": notif_count,
+        "whatsapp_campaign": wa_result,
         "deadline": dl.isoformat(),
+        "deadline_brt": deadline_brt,
     }
 
 
