@@ -58,13 +58,18 @@ export default function UserGroups() {
     if (!token) return
     setLoading(true)
     try {
-      const [response, matches] = await Promise.all([
-        api.get(`/user-groups?competition=${comp}`, token),
-        api.get('/matches'),
-      ])
+      // "geral" soma pontos entre competições — progresso de jogos não faz sentido
+      // misturado (Copa e Brasileirão têm calendários e tamanhos bem diferentes).
+      const reqs = [api.get(`/user-groups?competition=${comp}`, token)]
+      if (comp !== 'geral') reqs.push(api.get(`/matches?competition=${comp}`))
+      const [response, matches] = await Promise.all(reqs)
       setData(response)
-      const finished = matches.filter(m => m.status === 'finished').length
-      setMatchStats({ finished, total: matches.length })
+      if (matches) {
+        const finished = matches.filter(m => m.status === 'finished').length
+        setMatchStats({ finished, total: matches.length })
+      } else {
+        setMatchStats({ finished: 0, total: 0 })
+      }
     } catch (e) {
       setCreateMsg(e.message)
     } finally {
@@ -656,8 +661,8 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       {/* ── StatPills ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 'var(--s3)', padding: 'var(--s3) var(--s4)' }}>
         <StatPill icon="👥" label="Participantes" value={sortedMembers.length} />
-        {comp === 'copa2026' && <StatPill icon="⚽" label="Realizados" value={`${matchStats.finished}/${matchStats.total}`} />}
-        {comp === 'copa2026' && <StatPill icon="⏳" label="Pendentes" value={matchStats.total - matchStats.finished} />}
+        {comp !== 'geral' && <StatPill icon="⚽" label="Realizados" value={`${matchStats.finished}/${matchStats.total}`} />}
+        {comp !== 'geral' && <StatPill icon="⏳" label="Pendentes" value={matchStats.total - matchStats.finished} />}
         <StatPill icon="📈" label="Eficiência" value={`${gStats.efficiency}%`} sub={`${gStats.bets} palpites no total`} />
         <StatPill icon="🎯" label="Exatos" value={gStats.exacts} sub={`${gStats.exactRate}% taxa`} />
         <StatPill icon="🧮" label="Média/membro" value={`${gStats.avgPoints} pts`} />
