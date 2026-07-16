@@ -4,7 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS, COMPETITION_LABEL } from '../utils/competitions'
-import { aproveitamento, getBadges } from '../utils/groupBadges'
+import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
 
 function useCountdownStr(targetDateStr) {
   const [str, setStr] = useState('')
@@ -377,6 +377,11 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     const i = memberBadges.findIndex(bs => bs.some(b => b.icon === icon))
     return i === -1 ? null : sortedMembers[i]
   }
+  const myBadgeIcons = new Set(
+    (memberBadges[sortedMembers.findIndex(m => m.user_id === currentUser?.id)] ?? []).map(b => b.icon)
+  )
+  const badgeHolderCount = {}
+  memberBadges.forEach(bs => bs.forEach(b => { badgeHolderCount[b.icon] = (badgeHolderCount[b.icon] || 0) + 1 }))
   const highlights = (() => {
     const out = []
     const lead = holderOf('🏆')
@@ -698,6 +703,35 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: shared ? 'var(--win)' : 'var(--text-1)' }}>{shared || 'Enviar ranking →'}</div>
             <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-3)' }}>WhatsApp / nativo</div>
           </button>
+        </div>
+      )}
+
+      {/* ── Legenda: o que significa cada badge ── */}
+      {comp !== 'geral' && (
+        <div style={{ margin: '0 var(--s4) var(--s4)', padding: 'var(--s4) var(--s5)', background: 'var(--bg-raised)', borderRadius: 12, border: '1px solid var(--border)' }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8 }}>
+            🏅 O que significa cada badge {myBadgeIcons.size > 0 && <span style={{ color: 'var(--accent)' }}>· você tem {myBadgeIcons.size}</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {BADGE_CATALOG.map(b => {
+              const unlocked = myBadgeIcons.has(b.icon)
+              const holders = badgeHolderCount[b.icon] || 0
+              return (
+                <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 10, background: unlocked ? `${b.color}18` : 'var(--bg-overlay)', border: `1px solid ${unlocked ? `${b.color}50` : 'var(--border)'}`, opacity: unlocked ? 1 : 0.55 }}>
+                  <span style={{ fontSize: 18 }}>{b.icon}</span>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: unlocked ? b.color : 'var(--text-1)' }}>
+                      {b.label} {unlocked && '✓'}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>{b.desc}</div>
+                    {holders > 0 && (
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-3)', marginTop: 1 }}>{holders} do grupo já tem</div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

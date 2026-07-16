@@ -7,6 +7,20 @@ export function aproveitamento(r) {
   return Math.round(r.total_points / (r.total_bets * 25) * 100)
 }
 
+// Catálogo pra legenda "o que significa cada badge" — descrições de exibição,
+// separado da lógica de quem ganha em getBadges() mas com os mesmos ícones/labels.
+export const BADGE_CATALOG = [
+  { icon: '🏆', label: 'Líder', desc: '1º no grupo', color: '#e8a030' },
+  { icon: '🥈', label: 'Vice', desc: '2º no grupo', color: '#a0a0a0' },
+  { icon: '🎯', label: 'Sniper', desc: '≥28% exatos (mín. 5)', color: '#e85252' },
+  { icon: '💯', label: 'Cem%', desc: 'Apostou em todos os jogos', color: '#0fa896' },
+  { icon: '⚡', label: 'Maratonista', desc: '≥85% jogos apostados', color: '#9b5de8' },
+  { icon: '🔮', label: 'Preciso', desc: '≥60% aproveit (mín. 10)', color: '#4a90e8' },
+  { icon: '🔥', label: 'Em Alta', desc: 'Maior pts hoje no grupo', color: 'var(--win)' },
+  { icon: '🔗', label: 'Sequência', desc: '≥3 exatos consecutivos', color: '#0fa896' },
+  { icon: '🎲', label: 'Ousado', desc: 'Palpite mais audacioso', color: '#e8a030' },
+]
+
 export function getBadges(r, position, effectiveTotal, isHotToday, topStreak, isMuralHero) {
   const badges = []
   if (position === 1) badges.push({ icon: '🏆', label: 'Líder', color: '#e8a030' })

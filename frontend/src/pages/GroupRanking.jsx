@@ -5,7 +5,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS } from '../utils/competitions'
-import { aproveitamento, getBadges } from '../utils/groupBadges'
+import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -1302,17 +1302,7 @@ export default function GroupRanking() {
             Conquistas {myBadgeIcons.size > 0 && <span style={{ color: 'var(--accent)' }}>· você tem {myBadgeIcons.size}</span>}
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {[
-              { icon: '🏆', label: 'Líder', desc: '1º no grupo', color: '#e8a030' },
-              { icon: '🥈', label: 'Vice', desc: '2º no grupo', color: '#a0a0a0' },
-              { icon: '🎯', label: 'Sniper', desc: '≥28% exatos (mín. 5)', color: '#e85252' },
-              { icon: '💯', label: 'Cem%', desc: 'Apostou em todos os jogos', color: '#0fa896' },
-              { icon: '⚡', label: 'Maratonista', desc: '≥85% jogos apostados', color: '#9b5de8' },
-              { icon: '🔮', label: 'Preciso', desc: '≥60% aproveit (mín. 10)', color: '#4a90e8' },
-              { icon: '🔥', label: 'Em Alta', desc: 'Maior pts hoje no grupo', color: 'var(--win)' },
-              { icon: '🔗', label: 'Sequência', desc: '≥3 exatos consecutivos', color: '#0fa896' },
-              { icon: '🎲', label: 'Ousado', desc: 'Palpite mais audacioso', color: '#e8a030' },
-            ].map((b, i) => {
+            {BADGE_CATALOG.map((b, i) => {
               const unlocked = myBadgeIcons.has(b.icon)
               const holders = badgeHolderCount[b.icon] || 0
               return (
