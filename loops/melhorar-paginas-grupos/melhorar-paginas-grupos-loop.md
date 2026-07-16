@@ -54,7 +54,7 @@ independentes do gerador (ver Verificação).
      inteira (`git checkout -- <arquivos tocados>`), registrar em
      `state.json` o motivo exato, tentar ângulo diferente na próxima volta.
 - Evidência registrada: notas do gestor por critério/página (1–5 cada) +
-  resultado do `code-review` + saída de `npx vite build`, tudo gravado em
+  resultado do `code-review` + saída de `npm run build` (completo — vite + SEO shells + páginas geradas), tudo gravado em
   `state.json.attempts` a cada volta.
 
 **Rubrica congelada (não reinventar a cada volta):**
@@ -66,9 +66,9 @@ independentes do gerador (ver Verificação).
 | 3 | Motivação/gamificação real | Pelo menos 1 mecanismo novo ou reforçado (progresso visual, streak, comparação social, badge, milestone, contagem regressiva) ligado a dado real vindo da API — nunca estático/fake |
 | 4 | Gatilho de retenção | Algo visível sem scroll excessivo que dá razão concreta pra voltar (próximo evento, meta clara, "sua posição mudou", etc.) |
 | 5 | Sem regressão funcional | Toda chamada `api.get/post(...)` existente preservada; loading/error states mantidos; navegação/rotas intactas |
-| 6 | Build limpo | `npx vite build` (dentro de `frontend/`) sai com código 0 |
+| 6 | Build limpo | `npm run build` (dentro de `frontend/`, comando COMPLETO do CLAUDE.md — nunca `npx vite build` isolado, que trunca dist/ e derruba produção) sai com código 0 |
 
-- Regressão: `cd frontend && npx vite build` — falha = reprovação automática, nem chega no painel.
+- Regressão: `cd frontend && npm run build` (build completo — dist/ é servido direto por nginx em produção; um `vite build` isolado apaga as páginas SEO/estáticas e derruba rotas) — falha = reprovação automática, nem chega no painel.
 - Falha/timeout: registrar como falha da volta em `state.json`. Nunca tratar como sucesso.
 - Pronto = 3 páginas aprovadas nas 6 linhas da rubrica na MESMA volta, pelo painel completo (gestor + code-review), E o gestor escrever explicitamente que considera o resultado "verdadeiramente bom" (não só "passou na rubrica no limite").
 
@@ -77,7 +77,7 @@ independentes do gerador (ver Verificação).
 2. Fotografar baseline: ler os 3 arquivos-alvo + componentes/CSS que eles importam, no estado atual.
 3. Escolher, entre os 6 critérios da rubrica, o de maior gargalo ainda não tentado nesta rodada de voltas (consultar `attempts` em `state.json` — não repetir abordagem já rejeitada da mesma forma).
 4. Implementar UMA mudança coesa (pode tocar as 3 páginas se for o mesmo conceito, ex: "cabeçalho" nas 3) — usar a skill `frontend-craft` como guia de qualidade visual/anti-genérico.
-5. Rodar `cd frontend && npx vite build` (regressão). Se falhar, reverter e ir pro passo 7.
+5. Rodar `cd frontend && npm run build` (regressão — build COMPLETO, nunca `vite build` isolado). Se falhar, reverter e ir pro passo 7.
 6. Se build ok: rodar painel — agente `gestor` (rubrica) + skill `code-review`. Aceitar só se ambos aprovarem TODAS as 3 páginas.
 7. Aceitar → `git add <arquivos tocados>` + commit (1 commit por volta aprovada, mensagem descrevendo o critério trabalhado). Reprovar/erro → `git checkout -- <arquivos tocados>` (reverter tudo da volta).
 8. Persistir `state.json` (volta N, critério tentado, resultado, motivo se reprovado, notas do gestor).
