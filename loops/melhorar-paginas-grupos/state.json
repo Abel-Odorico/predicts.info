@@ -2,14 +2,14 @@
   "schema_version": 1,
   "loop": "melhorar-paginas-grupos",
   "status": "success",
-  "iteration": 4,
+  "iteration": 5,
   "max_iterations": 5,
   "baseline": "commit 7891d7b (working tree limpo antes da volta 1)",
   "incident": {
     "round": 2,
     "descricao": "Regra de regressão da volta 1/2 usava `npx vite build` isolado. dist/ é o docroot de produção do nginx (predicts.info) — vite build limpa dist/ sem regenerar seo/, copa/, jogos/, noticias/, landing.html, causando 404 real em /grupos e provavelmente outras rotas.",
     "deteccao": "reportado pelo Abel (404 nginx ao acessar)",
-    "correcao": "rodado `npm run build` completo (restaura seo/copa/jogos/noticias) — confirmado 200 em /, /dashboard, /grupos. Spec do loop corrigida (commit ac96472): regra de regressão agora exige `npm run build` completo, nunca `npx vite build` isolado.",
+    "correcao": "rodado `npm run build` completo (restaura seo/copa/jogos/noticias) — confirmado 200 em /, /dashboard, /grupos. Spec do loop corrigida (commit ac96472): regra de regressão agora exige `npm run build` completo, nunca `npx vite build` isolado. A partir da volta 5, testes de desenvolvimento passaram a usar `vite preview` com `--outDir` isolado (nunca mais escrevendo direto no dist/ de produção durante debug).",
     "status": "resolvido"
   },
   "debito_tecnico_backend": {
@@ -18,12 +18,12 @@
     "escopo": "fora do loop (loop é frontend-only por decisão do Abel) — precisa de mudança no backend (adicionar filtro competition_id nessas 2 queries) quando ele quiser tratar",
     "status": "reportado, não corrigido"
   },
-  "nota_operacional": "outro loop (predicts-seo) rodando em paralelo no mesmo repo, mexendo em frontend/public/index-landing.html — confirmado que os commits desta volta não tocaram nesses arquivos (git reset explícito antes de cada commit para excluí-los do stage).",
+  "nota_operacional": "outro loop (predicts-seo) rodando em paralelo no mesmo repo durante toda a sessão, mexendo em frontend/public/index-landing.html e loops/predicts-seo/state.json — confirmado a cada commit (git reset explícito) que nenhum desses arquivos entrou nos commits deste loop.",
   "last_check": {
-    "round": 4,
+    "round": 5,
     "build": "npm run build (completo) — OK",
-    "gestor": "aprovado, 'verdadeiramente bom' explícito — sem achado pendente",
-    "code_review": "fork de correção dedicado achou 2 problemas reais (dessincronia de filtro de fase + badge Vice ausente da legenda), ambos corrigidos antes do commit final"
+    "gestor": "aprovado, 'verdadeiramente bom' explícito na reavaliação final — sem achado pendente",
+    "code_review": "fork de correção dedicado achou 1 bug real (contaminação de snapshot entre abas de competição), corrigido e reconfirmado antes do commit final"
   },
   "accepted_changes": [
     {
@@ -49,6 +49,12 @@
       "commit": "9a89b53",
       "criterio": "conquistas mais visíveis (pedido explícito do Abel: unlock, animação) + polimento de espaçamento",
       "descricao": "GroupRanking.jsx: painel de Conquistas personalizado (✓ + contagem social + animação de unlock), 2 bugs corrigidos (dessincronia com filtro de fase, badge Vice ausente). UserGroups.jsx: respiro de espaçamento no mini-pódio (reportado pelo Abel ao vivo)"
+    },
+    {
+      "round": 5,
+      "commit": "b19f4e6",
+      "criterio": "notificação de progresso pessoal (feature pedida pelo Abel que tinha ficado de fora — apontado por ele mesmo após a declaração de sucesso da volta 4)",
+      "descricao": "GroupRanking.jsx: banner 'você subiu/desceu N posições' + 'fulano te ultrapassou' desde a última visita, reaproveitando prevPositions (já existia, localStorage). 2 bugs de fundo no mecanismo de leitura/escrita do snapshot corrigidos: (1) load() rodando 2x por rehidratação de token zerava o delta; (2) POSITION_STORE_KEY não escopada por competição contaminava o snapshot ao trocar de aba Geral/Copa/Brasileirão"
     }
   ],
   "attempts": [
@@ -93,6 +99,18 @@
       "tentativa": 2,
       "resultado": "aprovado",
       "motivo": "corrigidos os 2 bugs (ranking em vez de displayRanking; Vice adicionado à legenda) + animação de unlock (scale+opacity, sem cor hardcoded) adicionada. Testado ao vivo: contador estável trocando de aba de fase. Abel reportou espaçamento apertado no mini-pódio de UserGroups.jsx (fora do escopo desta página específica mas mesmo tema de 'página mais bonita') — corrigido junto (padding-top 0→var(--s4), gap s2→s3)"
+    },
+    {
+      "round": 5,
+      "tentativa": 1,
+      "resultado": "reprovado",
+      "motivo": "gestor achou (independentemente do revisor de correção, que achou o mesmo problema durante o próprio desenvolvimento) que POSITION_STORE_KEY não escopada por competição + o novo guard positionsReadRef causavam contaminação do snapshot de posição anterior ao trocar de aba Geral/Copa/Brasileirão — dado podia comparar posição de uma competição contra snapshot de outra"
+    },
+    {
+      "round": 5,
+      "tentativa": 2,
+      "resultado": "aprovado",
+      "motivo": "chave de storage e guard escopados por competição (groupId + comp); setPrevPos(null) explícito quando não há snapshot pra evitar vazamento entre abas. Testado localmente (vite preview isolado, nunca tocando produção) com snapshot fake só numa aba: banner aparece só na aba certa, some ao voltar pra outra. Gestor reconfirmou 5/5 nos 2 critérios reavaliados"
     }
   ],
   "approved_criteria": {
@@ -100,6 +118,6 @@
     "UserGroups.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"],
     "GroupRanking.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"]
   },
-  "last_gestor_notes": "Volta 4 final: 'verdadeiramente bom', sem achado pendente. As 3 páginas, no estado acumulado após 4 voltas, atendem aos 6 critérios da rubrica sem ressalva bloqueante.",
-  "terminal_reason": "sucesso: todos os pedidos explícitos do Abel (cabeçalho mais bonito, retenção/motivação real, mostrar mais ativos/quem apostou, conquistas visíveis com unlock/animação) foram implementados e aprovados 'verdadeiramente bom' pelo painel, sem ressalva pendente nas 3 páginas. 4 de 5 voltas usadas — parado por atingir a condição de sucesso, não por esgotamento de teto."
+  "last_gestor_notes": "Volta 5 final: 'verdadeiramente bom' na reavaliação, sem achado pendente. As 3 páginas, no estado acumulado após 5 voltas, atendem aos 6 critérios da rubrica sem ressalva bloqueante.",
+  "terminal_reason": "sucesso: todos os pedidos explícitos do Abel (cabeçalho mais bonito, retenção/motivação real, mostrar mais ativos/quem apostou, conquistas visíveis com unlock/animação, notificação de progresso pessoal) foram implementados e aprovados 'verdadeiramente bom' pelo painel, sem ressalva pendente nas 3 páginas. Teto de 5 voltas atingido no mesmo momento em que a condição de sucesso foi satisfeita."
 }
