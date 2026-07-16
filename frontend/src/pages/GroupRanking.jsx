@@ -387,6 +387,23 @@ export default function GroupRanking() {
     !championSearch || t.name.toLowerCase().includes(championSearch.toLowerCase()) || t.code.toLowerCase().includes(championSearch.toLowerCase())
   )
 
+  // Conquistas de todos os membros (mesma função já usada por linha da tabela) — reaproveitado
+  // aqui só pra saber quais o usuário já tem e quantos do grupo têm cada uma.
+  // Usa `ranking` (geral, nunca filtrado), não `displayRanking`: com um filtro de fase ativo,
+  // displayRanking vira phaseRanking, que só lista quem apostou NAQUELA fase — um membro sem
+  // aposta na fase filtrada sumiria do cálculo e o painel mostraria "0 conquistas" errado pra ele.
+  const allMemberBadges = ranking.map((r, i) => ({
+    user_id: r.user_id,
+    badges: getBadges(r, i + 1, effectiveTotal, todayTop?.user_id === r.user_id, streakMap[r.user_id] || 0, muralHeroName === r.name),
+  }))
+  // Chave por ÍCONE, não por label — o badge de sequência tem label dinâmico ("7 seguidos"),
+  // que nunca bateria com o nome fixo "Sequência" da legenda abaixo.
+  const myBadgeIcons = new Set(
+    (allMemberBadges.find(m => m.user_id === myEntry?.user_id)?.badges ?? []).map(b => b.icon)
+  )
+  const badgeHolderCount = {}
+  allMemberBadges.forEach(m => m.badges.forEach(b => { badgeHolderCount[b.icon] = (badgeHolderCount[b.icon] || 0) + 1 }))
+
   return (
     <div className="page">
 
@@ -1204,26 +1221,38 @@ export default function GroupRanking() {
       {/* ── Conquistas ── */}
       {ranking.length > 0 && (
         <div className="card mt-4 fade-in-4" style={{ padding: 'var(--s4) var(--s5)' }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8 }}>Conquistas</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8 }}>
+            Conquistas {myBadgeIcons.size > 0 && <span style={{ color: 'var(--accent)' }}>· você tem {myBadgeIcons.size}</span>}
+          </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {[
-              { icon: '🏆', label: 'Líder', desc: '1º no grupo' },
-              { icon: '🎯', label: 'Sniper', desc: '≥28% exatos (mín. 5)' },
-              { icon: '💯', label: 'Cem%', desc: 'Apostou em todos os jogos' },
-              { icon: '⚡', label: 'Maratonista', desc: '≥85% jogos apostados' },
-              { icon: '🔮', label: 'Preciso', desc: '≥60% aproveit (mín. 10)' },
-              { icon: '🔥', label: 'Em Alta', desc: 'Maior pts hoje no grupo' },
-              { icon: '🔗', label: 'Sequência', desc: '≥3 exatos consecutivos' },
-              { icon: '🎲', label: 'Ousado', desc: 'Palpite mais audacioso' },
-            ].map(b => (
-              <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 14 }}>{b.icon}</span>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{b.label}</div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>{b.desc}</div>
+              { icon: '🏆', label: 'Líder', desc: '1º no grupo', color: '#e8a030' },
+              { icon: '🥈', label: 'Vice', desc: '2º no grupo', color: '#a0a0a0' },
+              { icon: '🎯', label: 'Sniper', desc: '≥28% exatos (mín. 5)', color: '#e85252' },
+              { icon: '💯', label: 'Cem%', desc: 'Apostou em todos os jogos', color: '#0fa896' },
+              { icon: '⚡', label: 'Maratonista', desc: '≥85% jogos apostados', color: '#9b5de8' },
+              { icon: '🔮', label: 'Preciso', desc: '≥60% aproveit (mín. 10)', color: '#4a90e8' },
+              { icon: '🔥', label: 'Em Alta', desc: 'Maior pts hoje no grupo', color: 'var(--win)' },
+              { icon: '🔗', label: 'Sequência', desc: '≥3 exatos consecutivos', color: '#0fa896' },
+              { icon: '🎲', label: 'Ousado', desc: 'Palpite mais audacioso', color: '#e8a030' },
+            ].map((b, i) => {
+              const unlocked = myBadgeIcons.has(b.icon)
+              const holders = badgeHolderCount[b.icon] || 0
+              return (
+                <div key={b.label} className={unlocked ? 'badge-unlocked' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 10, background: unlocked ? `${b.color}18` : 'var(--bg-raised)', border: `1px solid ${unlocked ? `${b.color}50` : 'var(--border)'}`, opacity: unlocked ? 1 : 0.55, animationDelay: unlocked ? `${i * 90}ms` : undefined }}>
+                  <span style={{ fontSize: 18 }}>{b.icon}</span>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: unlocked ? b.color : 'var(--text-1)' }}>
+                      {b.label} {unlocked && '✓'}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-2)' }}>{b.desc}</div>
+                    {holders > 0 && (
+                      <div style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-3)', marginTop: 1 }}>{holders} do grupo já tem</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

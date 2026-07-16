@@ -607,7 +607,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
 
       {/* Mini Top-3 */}
       {sortedMembers.length > 0 && (
-        <div style={{ padding: '0 var(--s4) var(--s3)', display: 'flex', gap: 'var(--s2)', flexWrap: 'wrap' }}>
+        <div style={{ padding: 'var(--s4) var(--s4) var(--s3)', display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap' }}>
           {sortedMembers.slice(0, 3).map((m, i) => (
             <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--bg-overlay)', borderRadius: 20, padding: '3px 10px 3px 6px' }}>
               <span style={{ fontSize: 13 }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
