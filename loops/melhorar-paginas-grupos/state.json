@@ -2,14 +2,21 @@
   "schema_version": 1,
   "loop": "melhorar-paginas-grupos",
   "status": "running",
-  "iteration": 1,
+  "iteration": 2,
   "max_iterations": 5,
   "baseline": "commit 7891d7b (working tree limpo antes da volta 1)",
+  "incident": {
+    "round": 2,
+    "descricao": "Regra de regressão da volta 1/2 usava `npx vite build` isolado. dist/ é o docroot de produção do nginx (predicts.info) — vite build limpa dist/ sem regenerar seo/, copa/, jogos/, noticias/, landing.html, causando 404 real em /grupos e provavelmente outras rotas.",
+    "deteccao": "reportado pelo Abel (404 nginx ao acessar)",
+    "correcao": "rodado `npm run build` completo (restaura seo/copa/jogos/noticias) — confirmado 200 em /, /dashboard, /grupos. Spec do loop corrigida (commit ac96472): regra de regressão agora exige `npm run build` completo, nunca `npx vite build` isolado.",
+    "status": "resolvido"
+  },
   "last_check": {
-    "round": 1,
-    "build": "npx vite build — OK",
-    "gestor": "aprovado — Groups.jsx 4/5/5/5/4/5 (fix pessoal aplicado), UserGroups.jsx e GroupRanking.jsx 5/5 ou 4/5 em todos os itens, 'verdadeiramente bom' explícito nessas duas",
-    "code_review": "nenhum problema encontrado (2 passes: diff original + diff do fix de Groups.jsx)"
+    "round": 2,
+    "build": "npm run build (completo) — OK, seo/copa/jogos/noticias regeneradas",
+    "gestor": "aprovado, 'verdadeiramente bom' explícito — 5/5 em todos os 6 critérios em Groups.jsx e GroupRanking.jsx",
+    "code_review": "nenhum problema encontrado (fork de correção dedicado + confirmação do gestor)"
   },
   "accepted_changes": [
     {
@@ -17,6 +24,12 @@
       "commit": "b1fcb13",
       "criterio": "cabeçalho",
       "descricao": "componente .page-hero (ícone + posição/progresso real em destaque) nas 3 páginas"
+    },
+    {
+      "round": 2,
+      "commit": "4e7cfd5",
+      "criterio": "retenção/motivação (ressalvas da volta 1)",
+      "descricao": "Groups.jsx: percentil real (/bets/mine + /ranking) com guard anti-truncamento e anti-framing-negativo. GroupRanking.jsx: diferenciação do card 'Sua posição' → 'Seu desempenho' (sem remover dado)"
     }
   ],
   "attempts": [
@@ -31,6 +44,12 @@
       "tentativa": 2,
       "resultado": "aprovado",
       "motivo": "adicionado stat pessoal real (acertos do usuário na fase de grupos via /bets/mine) como fallback do stat global; 2 bugs de estado corrigidos (useEffect combinado refazia fetch de /groups a cada rehidratação do token; stat pessoal não resetava no logout) após review de correção"
+    },
+    {
+      "round": 2,
+      "tentativa": 1,
+      "resultado": "aprovado",
+      "motivo": "atacou as 2 ressalvas não-bloqueantes da volta 1 (comparação social + duplicação de posição); 1 ajuste preventivo aplicado antes do painel (guard rows.length >= 100 pra não gerar percentil enganoso se a base crescer)"
     }
   ],
   "approved_criteria": {
@@ -38,6 +57,6 @@
     "UserGroups.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"],
     "GroupRanking.jsx": ["cabecalho", "consistencia_visual", "motivacao_real", "retencao", "sem_regressao", "build_limpo"]
   },
-  "last_gestor_notes": "Todos os itens ≥4 nas 3 páginas na volta 1 (após fix). Groups.jsx: retenção 4/5 — sugestão de melhoria futura (não bloqueante): comparação social (ex: 'melhor que X% dos jogadores') reforçaria ainda mais. GroupRanking.jsx: informação de posição agora duplicada (cabeçalho + card 'Sua posição' mais abaixo) — não é bug, mas vale diferenciar melhor numa iteração futura.",
+  "last_gestor_notes": "Volta 2 'verdadeiramente bom' explícito, 5/5 em tudo nas 2 páginas atacadas. Única nota de manutenção (não-bloqueante): comentário no código de Groups.jsx menciona '49 usuários no total' mas o dado real de usuários ativos em copa2026 é 34 — comentário impreciso, cálculo em si correto (usa rows.length dinâmico, não hardcoded). UserGroups.jsx não foi tocado na volta 2 (não tinha ressalva pendente).",
   "terminal_reason": null
 }
