@@ -424,6 +424,12 @@ def match_live_bets(
             ref_a, ref_b = int(live["score_a"]), int(live["score_b"])
         except (TypeError, ValueError):
             ref_a = ref_b = None
+    else:
+        # Jogo do Brasileirão: placar ao vivo vem da football-data, não do tropatech
+        from routers.live import br_live_score
+        s = br_live_score(db, match.id)
+        if s:
+            ref_a, ref_b = s
 
     bets = (
         db.query(Bet, User.name.label("user_name"))

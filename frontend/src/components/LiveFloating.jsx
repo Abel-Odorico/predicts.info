@@ -90,14 +90,20 @@ export default function LiveFloating() {
     games.forEach(g => { if (g.match_id != null) loadGoals(g.match_id) })
   }, [open, games])
 
-  // Feed ao vivo (poll) — detecta gols comparando placar do poll anterior
+  // Feed ao vivo (poll) — Copa (tropatech) + Brasileirão (football-data),
+  // allSettled pra um feed fora do ar não derrubar o outro.
+  // Detecta gols comparando placar do poll anterior.
   useEffect(() => {
     let alive = true
     const load = () =>
-      api.get('/live/world-cup')
-        .then(d => {
+      Promise.allSettled([api.get('/live/world-cup'), api.get('/live/brasileirao')])
+        .then(([wc, br]) => {
           if (!alive) return
-          const liveGames = (d?.games || []).filter(g => g.status === 'live')
+          const all = [
+            ...(wc.status === 'fulfilled' ? wc.value?.games || [] : []),
+            ...(br.status === 'fulfilled' ? br.value?.games || [] : []),
+          ]
+          const liveGames = all.filter(g => g.status === 'live')
           const flashed = []
           for (const g of liveGames) {
             const k = `${g.team_a}-${g.team_b}`

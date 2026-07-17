@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from config import settings
 from database import get_db
-from models import Match, MatchPhase, MatchResult, Team
+from models import Match, MatchPhase, MatchResult, MatchStatus, Team
 
 router = APIRouter(prefix="/live", tags=["live"])
 
@@ -316,6 +316,149 @@ def world_cup_live_feed(db: Session = Depends(get_db)):
         game["match_id"] = match_lookup.get(key)
 
     return data
+
+
+# ── Live do Brasileirão (football-data) ─────────────────────────────────────
+# O feed tropatech é só Copa do Mundo; jogos do Brasileirão ao vivo saem da
+# football-data (mesma fonte do sync BR), que expõe placar corrente em IN_PLAY.
+# Free tier = 10 req/min: o cache Redis abaixo garante no máximo ~1 chamada
+# externa por minuto, independente de quantos clientes façam poll.
+BR_FEED_CACHE_KEY = "live:br:feed"
+BR_FEED_TTL_OK = 60
+BR_FEED_TTL_ERR = 20
+BR_LIVE_WINDOW_BEFORE_H = 4    # jogo começou há até 4h → candidato a live
+BR_LIVE_WINDOW_AFTER_MIN = 10  # começa em até 10min → já entra no radar
+
+
+def _br_status(raw: str) -> str:
+    if raw in ("IN_PLAY", "PAUSED"):
+        return "live"
+    if raw == "FINISHED":
+        return "finished"
+    return "scheduled"
+
+
+def _br_status_raw(raw: str, minute) -> str:
+    if raw == "PAUSED":
+        return "INTERVALO"
+    if raw == "IN_PLAY":
+        return f"{minute}'" if minute not in (None, "") else "AO VIVO"
+    if raw == "FINISHED":
+        return "FIM DE JOGO"
+    return ""
+
+
+def fetch_brasileirao_live_games(db: Session) -> dict:
+    empty = {"source": "football-data.org", "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "count": 0, "games": []}
+
+    # Cache primeiro — segura o rate limit da football-data
+    try:
+        r = _get_redis()
+        cached = r.get(BR_FEED_CACHE_KEY)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+
+    from competitions import get_competition_id
+    try:
+        br_id = get_competition_id(db, "brasileirao2026")
+    except Exception:
+        return empty
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    candidates = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .filter(
+            Match.competition_id == br_id,
+            Match.status != MatchStatus.finished,
+            Match.match_date >= now - timedelta(hours=BR_LIVE_WINDOW_BEFORE_H),
+            Match.match_date <= now + timedelta(minutes=BR_LIVE_WINDOW_AFTER_MIN),
+        )
+        .all()
+    )
+    if not candidates:
+        # Sem jogo na janela: cacheia o vazio também (poupa a query externa E a de banco)
+        try:
+            _get_redis().setex(BR_FEED_CACHE_KEY, BR_FEED_TTL_OK, json.dumps(empty, ensure_ascii=False))
+        except Exception:
+            pass
+        return empty
+
+    by_external = {m.external_id: m for m in candidates if m.external_id}
+
+    fetch_ok = True
+    games: list[dict] = []
+    try:
+        from routers.brasileirao_sync import BASE_URL, BSA_CODE, BSA_SEASON
+        from routers.football_data_sync import _api_key
+        d0 = min(m.match_date for m in candidates).date().isoformat()
+        d1 = (max(m.match_date for m in candidates) + timedelta(days=1)).date().isoformat()
+        resp = httpx.get(
+            f"{BASE_URL}/competitions/{BSA_CODE}/matches",
+            params={"season": BSA_SEASON, "dateFrom": d0, "dateTo": d1},
+            headers={"X-Auth-Token": _api_key(db)},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        for m in resp.json().get("matches", []):
+            row = by_external.get(m.get("id"))
+            if not row:
+                continue
+            ft = (m.get("score") or {}).get("fullTime") or {}
+            kickoff_brt = row.match_date - timedelta(hours=3)
+            games.append({
+                "competition": "Brasileirão Série A",
+                "date_label": kickoff_brt.strftime("%d/%m"),
+                "time_label": kickoff_brt.strftime("%H:%M"),
+                "status": _br_status(m.get("status") or ""),
+                "status_raw": _br_status_raw(m.get("status") or "", m.get("minute")),
+                "team_a": row.team_a.name if row.team_a else None,
+                "team_b": row.team_b.name if row.team_b else None,
+                "team_a_key": _normalize_team_name(row.team_a.name if row.team_a else ""),
+                "team_b_key": _normalize_team_name(row.team_b.name if row.team_b else ""),
+                "score_a": ft.get("home"),
+                "score_b": ft.get("away"),
+                "team_a_flag": row.team_a.flag_url if row.team_a else None,
+                "team_b_flag": row.team_b.flag_url if row.team_b else None,
+                "competition_logo": None,
+                "channels": [],
+                "venue": row.venue,
+                "city": row.city,
+                "match_id": row.id,
+            })
+    except Exception:
+        fetch_ok = False
+
+    result = {
+        "source": "football-data.org",
+        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        "count": len(games),
+        "games": games,
+    }
+    try:
+        r = _get_redis()
+        r.setex(BR_FEED_CACHE_KEY, BR_FEED_TTL_OK if fetch_ok else BR_FEED_TTL_ERR, json.dumps(result, ensure_ascii=False))
+    except Exception:
+        pass
+    return result
+
+
+def br_live_score(db: Session, match_id: int) -> tuple[int, int] | None:
+    """Placar ao vivo de um jogo BR (pro live-bets), via mesmo cache do feed."""
+    try:
+        for g in fetch_brasileirao_live_games(db).get("games", []):
+            if g.get("match_id") == match_id and g.get("score_a") is not None and g.get("score_b") is not None:
+                return int(g["score_a"]), int(g["score_b"])
+    except Exception:
+        pass
+    return None
+
+
+@router.get("/brasileirao")
+def brasileirao_live_feed(db: Session = Depends(get_db)):
+    return fetch_brasileirao_live_games(db)
 
 
 # ── Fallback de resultado via feed tropatech ────────────────────────────────
