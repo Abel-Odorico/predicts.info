@@ -1,6 +1,12 @@
 # Predicts.info
 
-Plataforma web para simulacao da Copa do Mundo 2026 com previsoes estatisticas, apostas por placar, ranking de usuarios, grupos privados, analytics e painel administrativo.
+Plataforma web para simulacao da Copa do Mundo 2026 (e Brasileirao) com previsoes estatisticas, apostas por placar, ranking de usuarios, grupos privados, bot WhatsApp, analytics e painel administrativo.
+
+## Arquitetura
+
+![Arquitetura do predicts.info](docs/arquitetura.svg)
+
+Diagrama gerado com [archify](https://github.com/tt-a1i/archify) (SVG dual-theme, acompanha o tema claro/escuro do GitHub). Fonte: `docs/arquitetura.architecture.json` — editar o JSON e re-renderizar para atualizar.
 
 ## Stack
 

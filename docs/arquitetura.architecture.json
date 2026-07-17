@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "predicts.info — Arquitetura",
+    "subtitle": "Simulador Copa 2026 + Brasileirão · FastAPI + React + PostgreSQL/Redis · /opt/predicts",
+    "output": "arquitetura.html"
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "Usuário", "sublabel": "Browser / PWA", "pos": [40, 300], "size": [130, 60] },
+    { "id": "nginx", "type": "cloud", "label": "nginx", "sublabel": "SSL · proxy", "pos": [250, 300], "size": [130, 60] },
+    { "id": "spa", "type": "frontend", "label": "React SPA", "sublabel": "dist/ · sw.js", "pos": [250, 150], "size": [130, 60], "tag": "Vite" },
+    { "id": "api", "type": "backend", "label": "FastAPI", "sublabel": "Uvicorn :8130", "pos": [460, 300], "size": [130, 60], "tag": "Python 3.11" },
+    { "id": "llm", "type": "external", "label": "LLMs", "sublabel": "Gemini · OpenRouter", "pos": [460, 20], "size": [130, 64] },
+    { "id": "redis", "type": "database", "label": "Redis 7", "sublabel": "cache de sims", "pos": [670, 150], "size": [130, 60] },
+    { "id": "db", "type": "database", "label": "PostgreSQL 16", "sublabel": "predicts2026", "pos": [670, 300], "size": [140, 60] },
+    { "id": "cron", "type": "backend", "label": "Cron Jobs", "sublabel": "host + docker exec", "pos": [890, 300], "size": [140, 60] },
+    { "id": "fontes", "type": "external", "label": "Fontes de dados", "sublabel": "Wikipedia · football-data", "pos": [890, 150], "size": [140, 64] },
+    { "id": "evolution", "type": "external", "label": "Evolution API", "sublabel": "WhatsApp bot", "pos": [460, 460], "size": [130, 64] },
+    { "id": "telegram", "type": "external", "label": "Telegram", "sublabel": "projeções · relatório", "pos": [890, 460], "size": [140, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "docker compose · /opt/predicts", "wraps": ["api", "redis", "db"] }
+  ],
+  "connections": [
+    { "from": "user", "to": "nginx", "label": "HTTPS", "variant": "emphasis" },
+    { "from": "nginx", "to": "spa", "label": "serve build", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelDy": -58 },
+    { "from": "nginx", "to": "api", "label": "/api → :8130", "variant": "emphasis" },
+    { "from": "api", "to": "db", "label": "SQL", "variant": "emphasis" },
+    { "from": "api", "to": "llm", "label": "Oráculo · análises", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelAt": [525, 122] },
+    { "from": "api", "to": "redis", "fromSide": "right", "toSide": "bottom", "route": "orthogonal-h", "label": "cache", "labelAt": [620, 240] },
+    { "from": "cron", "to": "db", "label": "sync · pontuação", "labelAt": [850, 296] },
+    { "from": "fontes", "to": "cron", "fromSide": "bottom", "toSide": "top", "label": "resultados", "labelDy": 58 },
+    { "from": "api", "to": "evolution", "label": "bot · campanhas", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "from": "cron", "to": "telegram", "fromSide": "bottom", "toSide": "top", "label": "projeções 24h", "labelDy": 58 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Stack", "items": ["React 18 + Vite, PWA (sw.js + Web Push VAPID)", "FastAPI + Uvicorn, Python 3.11, Alembic", "PostgreSQL 16 + Redis 7 em Docker Compose"] },
+    { "dot": "emerald", "title": "Motor & IA", "items": ["Pesos: odds 53,7% · xG 41,3% · H2H 5% + Monte Carlo", "Oráculo LLM com gate de confiança 85", "Análises pré-geradas com fatos verificados (hook)"] },
+    { "dot": "amber", "title": "Cron", "items": ["Copa: sync 5min (Wikipedia + feed ao vivo)", "Brasileirão: sync 30min (football-data BSA, Elo replay)", "Campanhas WhatsApp 1min · projeções Telegram"] },
+    { "dot": "rose", "title": "Multi-competição", "items": ["copa2026 + brasileirao2026 (competition_id em tudo)", "Blindagem copa2026: todo scan filtra competição", "Rankings: 1 linha por usuário POR competição"] }
+  ]
+}

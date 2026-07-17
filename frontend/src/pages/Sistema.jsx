@@ -25,104 +25,23 @@ const SUBTABS = [
   { id: 'gotchas',   label: 'Gotchas' },
 ]
 
-// ── Diagrama de arquitetura (SVG estático, dados reais do sistema) ──────────
-
-function ArchBox({ x, y, w, h, title, sub, tone = 'neutral' }) {
-  const tones = {
-    neutral: { bg: 'var(--bg-overlay)', border: 'var(--border)', text: 'var(--text-1)' },
-    accent:  { bg: 'rgba(15,122,120,0.12)', border: 'var(--accent)', text: 'var(--accent)' },
-    db:      { bg: 'rgba(78,131,255,0.10)', border: '#4e83ff', text: '#7ea3ff' },
-    redis:   { bg: 'rgba(255,90,90,0.10)', border: '#ff5a5a', text: '#ff8a8a' },
-    ext:     { bg: 'rgba(232,196,74,0.08)', border: 'rgba(232,196,74,0.5)', text: '#e8c44a' },
-    wa:      { bg: 'rgba(37,211,102,0.10)', border: '#25D366', text: '#25D366' },
-  }
-  const t = tones[tone] || tones.neutral
-  return (
-    <g>
-      <rect x={x} y={y} width={w} height={h} rx={10} fill={t.bg} stroke={t.border} strokeWidth={1.4} />
-      <text x={x + w / 2} y={y + h / 2 - (sub ? 6 : -4)} textAnchor="middle" fontFamily="var(--font-cond)" fontWeight="700" fontSize="13" fill={t.text}>{title}</text>
-      {sub && <text x={x + w / 2} y={y + h / 2 + 12} textAnchor="middle" fontFamily="var(--font-mono)" fontSize="9.5" fill="var(--text-4)">{sub}</text>}
-    </g>
-  )
-}
-
-function Arrow({ x1, y1, x2, y2, label, dashed }) {
-  return (
-    <g>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--text-4)" strokeWidth={1.3}
-        strokeDasharray={dashed ? '4 3' : undefined} markerEnd="url(#arrowhead)" opacity={0.75} />
-      {label && (
-        <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 5} textAnchor="middle" fontFamily="var(--font-mono)" fontSize="9" fill="var(--text-4)">{label}</text>
-      )}
-    </g>
-  )
-}
+// ── Diagrama de arquitetura ──────────────────────────────────────────────────
+// SVG dual-theme gerado com archify (peep-skills) a partir de
+// docs/arquitetura.architecture.json. Pra atualizar: editar o JSON e rodar
+//   node bin/archify.mjs render architecture docs/arquitetura.architecture.json docs/arquitetura.html
+// depois exportar o SVG (menu Export) pra frontend/public/arquitetura.svg.
 
 function ArchDiagram() {
-  const extBoxes = [
-    { title: 'Evolution API', sub: 'WhatsApp Baileys', tone: 'wa' },
-    { title: 'Telegram Bot API', sub: 'relatórios + projeções', tone: 'ext' },
-    { title: 'Gemini / OpenRouter', sub: 'Oráculo + análise IA', tone: 'ext' },
-    { title: 'football-data.org', sub: 'Brasileirão (BSA)', tone: 'ext' },
-    { title: 'Wikipedia', sub: 'grupos, mata-mata, artilheiros', tone: 'ext' },
-    { title: 'Feed tropatech', sub: 'fallback resultado ao vivo', tone: 'ext' },
-  ]
-  const extW = 176, extGap = 16
-  const extStartX = (1180 - (extW * 6 + extGap * 5)) / 2
-
   return (
     <div style={{ overflowX: 'auto', background: '#070c0a', borderRadius: 12, border: '1px solid var(--border)', padding: '18px 8px' }}>
-      <svg viewBox="0 0 1180 620" width="100%" style={{ minWidth: 820, display: 'block' }}>
-        <defs>
-          <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" fill="var(--text-4)" opacity={0.75} />
-          </marker>
-        </defs>
-
-        {/* fronteira docker compose */}
-        <rect x={20} y={190} width={1140} height={230} rx={14} fill="none" stroke="var(--border)" strokeDasharray="6 5" strokeWidth={1} />
-        <text x={40} y={210} fontFamily="var(--font-mono)" fontSize="10" fill="var(--text-4)">docker compose · VPS (predicts_net)</text>
-
-        {/* cliente */}
-        <ArchBox x={490} y={16} w={200} h={54} title="Navegador / PWA" sub="React SPA + Service Worker" tone="neutral" />
-        <Arrow x1={590} y1={70} x2={590} y2={104} />
-
-        {/* nginx */}
-        <ArchBox x={490} y={106} w={200} h={54} title="nginx (edge)" sub="SSL · proxy · SPA fallback" tone="accent" />
-
-        {/* dist estático */}
-        <ArchBox x={860} y={106} w={220} h={54} title="dist/ (estático)" sub="landing SEO + SPA build" tone="neutral" />
-        <Arrow x1={690} y1={125} x2={858} y2={120} label="/ e /*.html" />
-
-        {/* cron */}
-        <ArchBox x={30} y={216} w={170} h={58} title="Cron (9 jobs)" sub="1min – 6h, ver Automação" tone="neutral" />
-        <Arrow x1={200} y1={245} x2={488} y2={245} label="script.py / docker exec" />
-
-        {/* nginx -> api */}
-        <Arrow x1={560} y1={160} x2={560} y2={214} label="/api/*" />
-
-        {/* api */}
-        <ArchBox x={490} y={216} w={220} h={60} title="FastAPI (predicts_api)" sub="Uvicorn :8000 → :8130" tone="accent" />
-
-        {/* db / redis */}
-        <Arrow x1={560} y1={276} x2={430} y2={334} label="SQLAlchemy" />
-        <ArchBox x={330} y={336} w={190} h={58} title="PostgreSQL 16" sub="predicts_db · predicts2026" tone="db" />
-
-        <Arrow x1={640} y1={276} x2={760} y2={334} label="cache/sim" />
-        <ArchBox x={670} y={336} w={190} h={58} title="Redis 7" sub="predicts_redis · TTL cache" tone="redis" />
-
-        {/* external row */}
-        {extBoxes.map((b, i) => {
-          const bx = extStartX + i * (extW + extGap)
-          return (
-            <g key={b.title}>
-              <Arrow x1={600} y1={278} x2={bx + extW / 2} y2={468} dashed />
-              <ArchBox x={bx} y={470} w={extW} h={56} title={b.title} sub={b.sub} tone={b.tone} />
-            </g>
-          )
-        })}
-        <text x={extStartX} y={455} fontFamily="var(--font-mono)" fontSize="10" fill="var(--text-4)">serviços externos (HTTP, fora do compose)</text>
-      </svg>
+      <img
+        src="/arquitetura.svg"
+        alt="Arquitetura do predicts.info: Usuário → nginx → FastAPI → PostgreSQL/Redis, com cron jobs, fontes de dados, LLMs, Evolution API e Telegram"
+        style={{ display: 'block', width: '100%', minWidth: 820 }}
+      />
+      <div style={{ marginTop: 8, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-4)' }}>
+        fonte: docs/arquitetura.architecture.json · gerado com archify
+      </div>
     </div>
   )
 }
