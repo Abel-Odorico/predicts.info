@@ -287,8 +287,9 @@ def recompute_stats(db: Session) -> dict:
 
 def evaluate_bets(db: Session) -> dict:
     """Pontua bets do Brasileirão (mesma régua V2 da Copa) e reconstrói o
-    ranking da competição. Sem notificações por enquanto (Fase 3 decide a
-    comunicação — regra: nada de fan-out sem pedido). Idempotente."""
+    ranking da competição. Idempotente. DM WhatsApp de resultado só na
+    PRIMEIRA avaliação de cada bet (evaluated_at era NULL) — re-runs não
+    reenviam, e bets pontuadas antes da feature nunca disparam retroativo."""
     from models import Bet, Ranking
     from world_cup_sync import _score_points_v2
 
@@ -305,6 +306,7 @@ def evaluate_bets(db: Session) -> dict:
     db.query(Ranking).filter(Ranking.competition_id == comp_id).delete(synchronize_session=False)
     totals: dict[int, dict[str, int]] = {}
     evaluated = 0
+    wa_events: list[dict] = []
     now = _utcnow()
     for bet in db.query(Bet).filter(Bet.competition_id == comp_id).all():
         res = results.get(bet.match_id)
@@ -312,10 +314,18 @@ def evaluate_bets(db: Session) -> dict:
             bet.points_earned = 0
             bet.evaluated_at = None
             continue
+        first_eval = bet.evaluated_at is None
         points, exact, correct = _score_points_v2(bet.score_a, bet.score_b, res.score_a, res.score_b)
         bet.points_earned = points
         bet.evaluated_at = now
         evaluated += 1
+        if first_eval:
+            wa_events.append({
+                "user_id": bet.user_id, "match_id": bet.match_id,
+                "bet_a": bet.score_a, "bet_b": bet.score_b,
+                "res_a": res.score_a, "res_b": res.score_b,
+                "points": points, "exact": exact, "correct": correct,
+            })
         stats = totals.setdefault(bet.user_id, {"total_points": 0, "exact_scores": 0, "correct_results": 0})
         stats["total_points"] += points
         if exact:
@@ -326,9 +336,76 @@ def evaluate_bets(db: Session) -> dict:
     for user_id, stats in totals.items():
         db.add(Ranking(user_id=user_id, competition_id=comp_id, **stats))
     db.commit()
-    out = {"evaluated": evaluated, "users_ranked": len(totals), "at": now.isoformat()}
+    # DM depois do commit: falha de envio nunca desfaz pontuação
+    _notify_bet_results_whatsapp_br(db, comp_id, wa_events)
+    out = {"evaluated": evaluated, "users_ranked": len(totals), "wa_dms": len(wa_events), "at": now.isoformat()}
     _last_run["bets"] = out
     return out
+
+
+def _notify_bet_results_whatsapp_br(db: Session, comp_id: int, events: list[dict]) -> None:
+    """DM pós-jogo do Brasileirão — espelho do _notify_bet_results_whatsapp da
+    Copa (world_cup_sync.py), adaptado a clube: nome direto do Team (sem
+    PT_NAMES), sem et_points, ranking/posição da competição BR. Só opt-in
+    ativo com pref `match_result`; respeita modo silêncio. Isolado — nunca
+    derruba o sync."""
+    if not events:
+        return
+    try:
+        from models import Ranking, User, WhatsappMessage
+        from routers.whatsapp import _wants
+        import whatsapp_client as wa
+
+        if wa.is_quiet_now(db):
+            return  # modo silêncio: DM some (sino/push cobrem), sem log "failed"
+
+        rows = (
+            db.query(Ranking)
+            .filter(Ranking.competition_id == comp_id)
+            .order_by(Ranking.total_points.desc(), Ranking.exact_scores.desc())
+            .all()
+        )
+        pos_by_user = {r.user_id: (i + 1, r.total_points) for i, r in enumerate(rows)}
+
+        for ev in events:
+            try:
+                user = db.query(User).filter(User.id == ev["user_id"]).first()
+                if (
+                    not user or not user.phone or not user.whatsapp_opt_in
+                    or not getattr(user, "is_active", True)
+                    or not _wants(user.whatsapp_prefs, "match_result")
+                ):
+                    continue
+                match = db.query(Match).filter(Match.id == ev["match_id"]).first()
+                ta = db.query(Team).filter(Team.id == match.team_a_id).first() if match else None
+                tb = db.query(Team).filter(Team.id == match.team_b_id).first() if match else None
+                if not ta or not tb:
+                    continue
+
+                if ev["exact"]:
+                    veredito = f"🎯 *NA MOSCA! +{ev['points']} pts*"
+                elif ev["correct"]:
+                    veredito = f"✅ Acertou o resultado: *+{ev['points']} pts*"
+                else:
+                    veredito = "❌ Não foi dessa vez — 0 pts"
+
+                pos, pts = pos_by_user.get(user.id, (None, None))
+                rank_line = f"\n\n📊 Você no Brasileirão: *{pos}º lugar* · {pts} pts" if pos else ""
+
+                msg = (
+                    f"🏁 *Fim de jogo: {ta.name} {ev['res_a']} x {ev['res_b']} {tb.name}*\n\n"
+                    f"Seu palpite: {ev['bet_a']}x{ev['bet_b']}\n"
+                    f"{veredito}{rank_line}\n\n"
+                    f"predicts.info/brasileirao"
+                )
+                ok = wa.send_text(db, user.phone, msg)
+                db.add(WhatsappMessage(direction="outbound", phone=user.phone, body=msg,
+                                       status="sent" if ok else "failed"))
+            except Exception:
+                continue
+        db.commit()
+    except Exception:
+        pass
 
 
 def _invalidate_projection_cache() -> None:
