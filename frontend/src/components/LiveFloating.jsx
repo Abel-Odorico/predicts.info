@@ -24,7 +24,7 @@ function _brTime(iso) {
 
 export default function LiveFloating() {
   const navigate = useNavigate()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [games, setGames] = useState([])
   const [classByMatch, setClassByMatch] = useState({})
   const [upcoming, setUpcoming] = useState([])
@@ -68,6 +68,28 @@ export default function LiveFloating() {
     if (!open) return
     games.forEach(g => { if (g.match_id != null) loadDetails(g.match_id) })
   }, [open, games])
+
+  // Tracking: popup não é rota, então loga page_view sintético "/live-popup"
+  // a cada abertura do modal (mesmo payload do useTrack)
+  useEffect(() => {
+    if (!open) return
+    try {
+      fetch('/api/analytics/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: '/live-popup',
+          referrer: window.location.pathname,
+          user_id: user?.id ?? null,
+          standalone: window.matchMedia?.('(display-mode: standalone)').matches
+            || window.navigator.standalone === true,
+          utm_source: sessionStorage.getItem('predicts_utm_source') || null,
+          utm_campaign: sessionStorage.getItem('predicts_utm_campaign') || null,
+        }),
+        keepalive: true,
+      }).catch(() => {})
+    } catch (_) {}
+  }, [open])
 
   // Palpites: effect próprio, sem loadedRef. Refaz quando o token muda
   // (login/logout) e a cada refresh do feed (games muda de ref), pra o
