@@ -329,6 +329,34 @@ def _save_config(db: Session, provider: str, or_key: str, or_model: str, g_key: 
 
 # ─── LLM callers ─────────────────────────────────────────────────────────────
 
+# A API da OpenAI NÃO retorna custo por chamada (só a OpenRouter retorna) — sem
+# esta tabela, gasto OpenAI entra como cost_usd=0 e o budget diário não o enxerga.
+# Preços por 1M tokens (in, out), tabela 2026-07-18. Match por prefixo mais longo.
+OPENAI_PRICES_PER_M = {
+    "gpt-5.4-mini": (0.75, 4.50),
+    "gpt-5.4-nano": (0.20, 1.25),
+    "gpt-5.4":      (2.50, 15.00),
+    "gpt-5.6-luna": (1.00, 6.00),
+    "gpt-5.6-terra": (2.50, 15.00),
+    "gpt-5-mini":   (0.25, 2.00),
+    "gpt-5-nano":   (0.05, 0.40),
+    "gpt-5":        (1.25, 10.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1":      (2.00, 8.00),
+}
+
+
+def _openai_cost_usd(model: str, tokens_in: int, tokens_out: int) -> float:
+    best = ""
+    for prefix in OPENAI_PRICES_PER_M:
+        if model.startswith(prefix) and len(prefix) > len(best):
+            best = prefix
+    if not best:
+        return 0.0
+    pi, po = OPENAI_PRICES_PER_M[best]
+    return round(tokens_in * pi / 1e6 + tokens_out * po / 1e6, 6)
+
+
 def _call_openai(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
     resp = http_requests.post(
         "https://api.openai.com/v1/chat/completions",
@@ -351,10 +379,12 @@ def _call_openai(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
     data = resp.json()
     usage = data.get("usage", {})
     result = json.loads(data["choices"][0]["message"]["content"])
+    t_in = int(usage.get("prompt_tokens", 0))
+    t_out = int(usage.get("completion_tokens", 0))
     meta = {
-        "tokens_in":  int(usage.get("prompt_tokens", 0)),
-        "tokens_out": int(usage.get("completion_tokens", 0)),
-        "cost_usd":   0.0,  # calculated separately if needed
+        "tokens_in":  t_in,
+        "tokens_out": t_out,
+        "cost_usd":   _openai_cost_usd(model, t_in, t_out),
     }
     return result, meta
 
@@ -709,10 +739,18 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
             print(f"[analysis] {p['label']} em cooldown (circuit breaker)", flush=True)
             continue
 
-        if p.get("paid"):
+        # Guarda de orçamento cobre QUALQUER provider pago, não só o fallback marcado:
+        # openrouter com modelo não-:free (ex.: sonnet-5 configurado como principal)
+        # e openai direto também gastam dinheiro real. Gemini (free tier) passa livre.
+        is_paid = bool(
+            p.get("paid")
+            or p["type"] == "openai"
+            or (p["type"] == "openrouter" and not str(p.get("model", "")).endswith(":free"))
+        )
+        if is_paid:
             over_budget, spent, limit = _check_daily_budget()
             if over_budget:
-                print(f"[analysis] budget diário atingido ({spent:.2f}/{limit:.2f} USD) — provider pago pulado", flush=True)
+                print(f"[analysis] budget diário atingido ({spent:.2f}/{limit:.2f} USD) — provider pago pulado ({p['label']})", flush=True)
                 _alert_budget_exceeded(spent, limit)
                 continue
 
