@@ -1841,3 +1841,194 @@ def test_llm_providers(db: Session = Depends(get_db), _: User = Depends(require_
     """Testa a cadeia INTEIRA de providers LLM individualmente (prompt mínimo,
     timeout curto). Cacheado 5min pra não gastar quota clicando repetido."""
     return get_llm_health(db)
+
+
+# ─── Custos & Consumo LLM (dashboard admin) ───────────────────────────────────
+# GET /admin/llm/costs — série diária + KPIs + quebra por trigger/modelo, tudo
+# lido de analysis_logs. Datas exibidas em BRT (banco grava UTC via _utcnow()).
+# ⚠️ created_at é TIMESTAMP naive representando UTC — conversão pra BRT correta
+# exige o encadeamento "AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo'"
+# (uma conversão só, como o by_day de /admin/analysis/stats faz, SOMA 3h em vez
+# de subtrair — bug pré-existente daquele endpoint, não usado aqui).
+_BRT_EXPR = "(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')"
+
+TRIGGER_LABELS = {
+    "manual":    "Análise (manual)",
+    "auto":      "Análise (auto)",
+    "pre_match": "Análise (pré-jogo)",
+    "oracle":    "Oráculo",
+    "h2h":       "H2H",
+}
+
+
+def _get_llm_daily_budget(db: Session) -> float:
+    try:
+        row = db.execute(
+            text("SELECT value FROM site_config WHERE key = 'llm_daily_budget_usd'")
+        ).fetchone()
+        if row and row[0]:
+            return float(row[0])
+    except Exception:
+        pass
+    return LLM_DAILY_BUDGET_DEFAULT_USD
+
+
+@router.get("/admin/llm/costs")
+def llm_costs(days: int = 30, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Dashboard de custos LLM — KPIs (hoje/7d/30d/projeção mensal), série diária
+    (14 dias, BRT, dias sem custo aparecem como zero), quebra por trigger e por
+    modelo no período pedido, e aviso de orçamento (llm_daily_budget_usd, default
+    US$1,50). Cada bloco isolado em try/except — analysis_logs pode estar vazia."""
+    days = max(1, min(days, 90))
+    budget_limit = _get_llm_daily_budget(db)
+
+    # ── KPIs (hoje BRT / 7d / 30d) ────────────────────────────────────────────
+    kpis = {"cost_today": 0.0, "cost_7d": 0.0, "cost_30d": 0.0}
+    try:
+        row = db.execute(text(f"""
+            SELECT
+                COALESCE(SUM(cost_usd) FILTER (
+                    WHERE status = 'ok'
+                      AND DATE({_BRT_EXPR}) = DATE(NOW() AT TIME ZONE 'America/Sao_Paulo')
+                ), 0) AS cost_today,
+                COALESCE(SUM(cost_usd) FILTER (WHERE status = 'ok' AND created_at >= NOW() - INTERVAL '7 days'), 0) AS cost_7d,
+                COALESCE(SUM(cost_usd) FILTER (WHERE status = 'ok' AND created_at >= NOW() - INTERVAL '30 days'), 0) AS cost_30d
+            FROM analysis_logs
+        """)).fetchone()
+        kpis = {
+            "cost_today": float(row[0] or 0),
+            "cost_7d":    float(row[1] or 0),
+            "cost_30d":   float(row[2] or 0),
+        }
+    except Exception as e:
+        print(f"[llm_costs] KPIs falharam (analysis_logs vazia/ausente?): {e}", flush=True)
+
+    # Projeção mensal: ritmo atual (média diária dos últimos 7 dias) × 30 —
+    # mais sensível a mudança recente de uso que a média dos 30 dias inteiros.
+    avg_daily_7d = kpis["cost_7d"] / 7
+    monthly_projection = round(avg_daily_7d * 30, 4)
+
+    over_budget_pct = round((kpis["cost_today"] / budget_limit) * 100, 1) if budget_limit > 0 else 0.0
+    budget_alert = over_budget_pct >= 80
+
+    # ── Série diária (14 dias, BRT, zero-fill) ────────────────────────────────
+    daily = []
+    try:
+        rows = db.execute(text(f"""
+            WITH days AS (
+                SELECT generate_series(
+                    (DATE(NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '13 days')::date,
+                    DATE(NOW() AT TIME ZONE 'America/Sao_Paulo')::date,
+                    INTERVAL '1 day'
+                )::date AS day
+            ),
+            agg AS (
+                SELECT
+                    DATE({_BRT_EXPR}) AS day,
+                    COUNT(*) FILTER (WHERE status = 'ok')    AS calls_ok,
+                    COUNT(*) FILTER (WHERE status = 'error') AS calls_error,
+                    COALESCE(SUM(tokens_in)  FILTER (WHERE status = 'ok'), 0)
+                        + COALESCE(SUM(tokens_out) FILTER (WHERE status = 'ok'), 0) AS tokens,
+                    COALESCE(SUM(cost_usd) FILTER (WHERE status = 'ok'), 0) AS cost_usd
+                FROM analysis_logs
+                WHERE created_at >= NOW() - INTERVAL '15 days'
+                GROUP BY 1
+            )
+            SELECT days.day, COALESCE(agg.calls_ok, 0), COALESCE(agg.calls_error, 0),
+                   COALESCE(agg.tokens, 0), COALESCE(agg.cost_usd, 0)
+            FROM days
+            LEFT JOIN agg ON agg.day = days.day
+            ORDER BY days.day ASC
+        """)).fetchall()
+        daily = [
+            {
+                "day": str(r[0]),
+                "calls_ok": int(r[1] or 0),
+                "calls_error": int(r[2] or 0),
+                "tokens": int(r[3] or 0),
+                "cost_usd": float(r[4] or 0),
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        print(f"[llm_costs] série diária falhou: {e}", flush=True)
+
+    # ── Quebra por trigger (período `days`) ───────────────────────────────────
+    by_trigger = []
+    try:
+        rows = db.execute(text("""
+            SELECT
+                COALESCE(trigger, 'manual') AS trig,
+                COUNT(*) FILTER (WHERE status = 'ok')    AS calls_ok,
+                COUNT(*) FILTER (WHERE status = 'error') AS calls_error,
+                COALESCE(SUM(tokens_in)  FILTER (WHERE status = 'ok'), 0)
+                    + COALESCE(SUM(tokens_out) FILTER (WHERE status = 'ok'), 0) AS tokens,
+                COALESCE(SUM(cost_usd) FILTER (WHERE status = 'ok'), 0) AS cost_usd
+            FROM analysis_logs
+            WHERE created_at >= NOW() - (:days || ' days')::interval
+            GROUP BY 1
+            ORDER BY cost_usd DESC, calls_ok DESC
+        """), {"days": days}).fetchall()
+        by_trigger = [
+            {
+                "trigger": r[0],
+                "label": TRIGGER_LABELS.get(r[0], r[0]),
+                "calls_ok": int(r[1] or 0),
+                "calls_error": int(r[2] or 0),
+                "tokens": int(r[3] or 0),
+                "cost_usd": float(r[4] or 0),
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        print(f"[llm_costs] quebra por trigger falhou: {e}", flush=True)
+
+    # ── Quebra por modelo (período `days`) ────────────────────────────────────
+    by_model = []
+    try:
+        rows = db.execute(text("""
+            SELECT
+                COALESCE(model_used, '—') AS model,
+                COALESCE(provider, '—')   AS provider,
+                COUNT(*) FILTER (WHERE status = 'ok')    AS calls_ok,
+                COUNT(*) FILTER (WHERE status = 'error') AS calls_error,
+                COALESCE(SUM(tokens_in)  FILTER (WHERE status = 'ok'), 0)
+                    + COALESCE(SUM(tokens_out) FILTER (WHERE status = 'ok'), 0) AS tokens,
+                COALESCE(SUM(cost_usd) FILTER (WHERE status = 'ok'), 0) AS cost_usd
+            FROM analysis_logs
+            WHERE created_at >= NOW() - (:days || ' days')::interval
+            GROUP BY 1, 2
+            ORDER BY cost_usd DESC, calls_ok DESC
+        """), {"days": days}).fetchall()
+        by_model = [
+            {
+                "model": r[0],
+                "provider": r[1],
+                "calls_ok": int(r[2] or 0),
+                "calls_error": int(r[3] or 0),
+                "tokens": int(r[4] or 0),
+                "cost_usd": float(r[5] or 0),
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        print(f"[llm_costs] quebra por modelo falhou: {e}", flush=True)
+
+    return {
+        "days": days,
+        "kpis": {
+            "cost_today_usd": round(kpis["cost_today"], 4),
+            "cost_7d_usd":    round(kpis["cost_7d"], 4),
+            "cost_30d_usd":   round(kpis["cost_30d"], 4),
+            "monthly_projection_usd": monthly_projection,
+        },
+        "budget": {
+            "limit_usd": budget_limit,
+            "spent_today_usd": round(kpis["cost_today"], 4),
+            "pct_used": over_budget_pct,
+            "alert": budget_alert,
+        },
+        "daily": daily,
+        "by_trigger": by_trigger,
+        "by_model": by_model,
+    }

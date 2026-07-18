@@ -276,6 +276,163 @@ function LlmHealthCard({ health, loading, err, onTest }) {
   )
 }
 
+// ── Custos & Consumo LLM ────────────────────────────────────────────────────
+// GET /admin/llm/costs — KPIs (hoje BRT/7d/30d/projeção), série diária 14d,
+// quebra por trigger (Análise/Oráculo/H2H) e por modelo. Fonte: analysis_logs.
+
+function fmtInt(v) {
+  return (v ?? 0).toLocaleString('pt-BR')
+}
+
+function LlmCostBars({ daily }) {
+  const W = 640, H = 168, PADL = 6, PADR = 6, PADB = 22, PADT = 10
+  const chartH = H - PADT - PADB
+  const n = daily.length || 1
+  const chartW = W - PADL - PADR
+  const slot = chartW / n
+  const barGap = Math.min(6, slot * 0.25)
+  const barW = Math.max(4, slot - barGap)
+  const maxCost = Math.max(0.000001, ...daily.map(d => d.cost_usd))
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 460, display: 'block' }}>
+        <line x1={PADL} y1={PADT + chartH} x2={W - PADR} y2={PADT + chartH} stroke="currentColor" strokeOpacity="0.15" />
+        {daily.map((d, i) => {
+          const x = PADL + i * slot + barGap / 2
+          const costH = d.cost_usd > 0 ? Math.max(2, (d.cost_usd / maxCost) * chartH) : 0
+          const y = PADT + chartH - costH
+          const dt = new Date(`${d.day}T12:00:00`)
+          const label = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+          const title = `${label} — US$ ${d.cost_usd.toFixed(4)} · ${d.calls_ok} ok / ${d.calls_error} erro · ${fmtInt(d.tokens)} tokens`
+          return (
+            <g key={d.day}>
+              {/* hit area cheia da coluna, pro hover funcionar mesmo em dia sem custo (barra zero) */}
+              <rect x={x} y={PADT} width={barW} height={chartH} fill="transparent">
+                <title>{title}</title>
+              </rect>
+              {costH > 0 && (
+                <rect x={x} y={y} width={barW} height={costH} rx="2" fill="var(--accent)" opacity="0.85">
+                  <title>{title}</title>
+                </rect>
+              )}
+              <text x={x + barW / 2} y={H - 6} textAnchor="middle"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 8, fill: 'currentColor', opacity: 0.4 }}>
+                {label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
+
+function LlmCostsCard({ data, loading, err, onReload }) {
+  const h4 = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6, marginTop: 14 }
+  const kpis = data?.kpis
+  const budget = data?.budget
+  const daily = data?.daily || []
+  const byTrigger = data?.by_trigger || []
+  const byModel = data?.by_model || []
+
+  return (
+    <div className="adm-card">
+      <div className="adm-card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <span className="adm-card__title">💰 Custos & Consumo LLM</span>
+        <button className="btn btn-ghost btn-sm" onClick={onReload} disabled={loading}>
+          {loading ? '… carregando' : '↻ Atualizar'}
+        </button>
+      </div>
+
+      <div style={{ padding: '4px 2px' }}>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', margin: '0 0 10px' }}>
+          Consumo real gravado em <code>analysis_logs</code> a cada chamada de LLM (análise de partida, Oráculo, H2H).
+          Datas em horário de Brasília.
+        </p>
+
+        {err && (
+          <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 10, background: 'var(--bg-overlay)', border: '1px solid var(--lose)', fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--lose)' }}>
+            ✗ {err}
+          </div>
+        )}
+
+        {!data && !loading && !err && (
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--text-4)', padding: '8px 2px' }}>
+            Sem dados ainda.
+          </div>
+        )}
+
+        {data && (
+          <>
+            {budget?.alert && (
+              <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 10, background: 'rgba(220,60,60,0.1)', border: '1px solid var(--lose)', fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--lose)' }}>
+                ⚠️ Custo de hoje já consumiu <strong>{budget.pct_used}%</strong> do orçamento diário (US$ {Number(budget.limit_usd).toFixed(2)}) — <code>llm_daily_budget_usd</code> em <code>site_config</code>.
+              </div>
+            )}
+
+            <div className="adm-kpi-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 16 }}>
+              <div className="adm-kpi">
+                <div className="adm-kpi__val" style={{ color: budget?.alert ? 'var(--lose)' : 'var(--text-1)' }}>{fmtUsd(kpis?.cost_today_usd)}</div>
+                <div className="adm-kpi__label">Hoje (BRT)</div>
+              </div>
+              <div className="adm-kpi"><div className="adm-kpi__val">{fmtUsd(kpis?.cost_7d_usd)}</div><div className="adm-kpi__label">7 dias</div></div>
+              <div className="adm-kpi"><div className="adm-kpi__val">{fmtUsd(kpis?.cost_30d_usd)}</div><div className="adm-kpi__label">30 dias</div></div>
+              <div className="adm-kpi"><div className="adm-kpi__val" style={{ color: 'var(--accent)' }}>{fmtUsd(kpis?.monthly_projection_usd)}</div><div className="adm-kpi__label">Projeção mensal</div></div>
+            </div>
+
+            <div style={h4}>Custo por dia — últimos 14 dias (BRT)</div>
+            {daily.length ? <LlmCostBars daily={daily} /> : (
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>sem chamadas no período</p>
+            )}
+
+            <div style={h4}>Por gatilho</div>
+            <div className="adm-table-wrap" style={{ marginBottom: 16 }}>
+              <table className="adm-table" style={{ fontSize: 11 }}>
+                <thead><tr><th>Gatilho</th><th>Chamadas ok</th><th>Erros</th><th>Tokens</th><th>Custo (US$)</th></tr></thead>
+                <tbody>
+                  {byTrigger.length ? byTrigger.map((t, i) => (
+                    <tr key={i}>
+                      <td>{t.label}</td>
+                      <td>{fmtInt(t.calls_ok)}</td>
+                      <td style={{ color: t.calls_error ? 'var(--lose)' : 'var(--text-4)' }}>{fmtInt(t.calls_error)}</td>
+                      <td>{fmtInt(t.tokens)}</td>
+                      <td>{fmtUsd(t.cost_usd)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={5} style={{ color: 'var(--text-4)' }}>sem chamadas nos últimos 30 dias</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={h4}>Por modelo</div>
+            <div className="adm-table-wrap">
+              <table className="adm-table" style={{ fontSize: 11 }}>
+                <thead><tr><th>Modelo</th><th>Provider</th><th>Chamadas ok</th><th>Erros</th><th>Tokens</th><th>Custo (US$)</th></tr></thead>
+                <tbody>
+                  {byModel.length ? byModel.map((m, i) => (
+                    <tr key={i}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, maxWidth: 260, wordBreak: 'break-all' }}>{m.model}</td>
+                      <td>{m.provider}</td>
+                      <td>{fmtInt(m.calls_ok)}</td>
+                      <td style={{ color: m.calls_error ? 'var(--lose)' : 'var(--text-4)' }}>{fmtInt(m.calls_error)}</td>
+                      <td>{fmtInt(m.tokens)}</td>
+                      <td>{fmtUsd(m.cost_usd)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={6} style={{ color: 'var(--text-4)' }}>sem chamadas nos últimos 30 dias</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Sistema() {
   const { token } = useAuth()
   const [sub, setSub] = useState('geral')
@@ -286,6 +443,10 @@ export default function Sistema() {
   const [llmHealth, setLlmHealth] = useState(null)
   const [llmLoading, setLlmLoading] = useState(false)
   const [llmErr, setLlmErr] = useState('')
+
+  const [llmCosts, setLlmCosts] = useState(null)
+  const [llmCostsLoading, setLlmCostsLoading] = useState(false)
+  const [llmCostsErr, setLlmCostsErr] = useState('')
 
   async function load() {
     setLoading(true); setErr('')
@@ -301,7 +462,14 @@ export default function Sistema() {
     finally { setLlmLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  async function loadLlmCosts() {
+    setLlmCostsLoading(true); setLlmCostsErr('')
+    try { setLlmCosts(await api.get('/admin/llm/costs?days=30', token)) }
+    catch (e) { setLlmCostsErr(e?.message || 'Erro ao carregar custos LLM') }
+    finally { setLlmCostsLoading(false) }
+  }
+
+  useEffect(() => { load(); loadLlmCosts() }, [])
 
   const h4 = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6, marginTop: 14 }
   const p = { fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.65, margin: '0 0 8px' }
@@ -498,11 +666,20 @@ export default function Sistema() {
               </div>
             </div>
 
-            <LlmHealthCard
-              health={llmHealth}
-              loading={llmLoading}
-              err={llmErr}
-              onTest={testLlm}
+            <div style={{ marginBottom: 16 }}>
+              <LlmHealthCard
+                health={llmHealth}
+                loading={llmLoading}
+                err={llmErr}
+                onTest={testLlm}
+              />
+            </div>
+
+            <LlmCostsCard
+              data={llmCosts}
+              loading={llmCostsLoading}
+              err={llmCostsErr}
+              onReload={loadLlmCosts}
             />
           </>
         )}
