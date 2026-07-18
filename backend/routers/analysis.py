@@ -1534,7 +1534,9 @@ def analysis_stats(db: Session = Depends(get_db), _: User = Depends(require_admi
 
     by_day = db.execute(text("""
         SELECT
-            DATE(created_at AT TIME ZONE 'America/Sao_Paulo') AS day,
+            -- created_at é TIMESTAMP naive em UTC: precisa do encadeamento UTC→BRT,
+            -- senão o PG trata como horário local e SOMA 3h em vez de subtrair
+            DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS day,
             COUNT(*) FILTER (WHERE status='ok')    AS ok,
             COUNT(*) FILTER (WHERE status='error') AS error,
             COALESCE(SUM(tokens_in)  FILTER (WHERE status='ok'), 0) AS ti,
