@@ -29,6 +29,29 @@ Design:
 Calibration history:
   2026-06-27: Brier 0.1882 → 0.1689 (-10.3%), 64 group matches
   2026-07-06: Brier 0.4976 → 0.4776 (-4.0%), 93 finished matches, bootstrap median
+  2026-07-18: refit TENTADO, pesos MANTIDOS (regressão em holdout, não melhoria).
+    103 jogos Copa finalizados + 285 Copa+Brasileirão conjunto (holdout = últimos
+    20% por data em cada variante). SLSQP sobre neg-log-likelihood do placar
+    exato (DC-Poisson), 2 métodos (h2h fixo 5% / 3 pesos livres). O fit sempre
+    convergia para MENOS market_odds e MAIS xg (ex.: Copa-only foi a
+    odds=25.4%/xg=69.6%/h2h=5%) — parecia melhora no treino (loglik/Brier
+    treino melhores), mas PIOROU em holdout nas 4 combinações testadas:
+      Brier holdout Copa-only:      0.4164 (atual) → 0.4481 / 0.4417 (novos)
+      Brier holdout Copa+BR conjunto: 0.4508 (atual) → 0.4688 / 0.4636 (novos)
+    Split aleatório (não cronológico) como contraprova: diferença cai quase a
+    zero (novo ~empatado, nunca melhor) — confirma que o ganho do fit
+    cronológico era overfitting no viés já documentado no Caveat acima
+    (xg_for/xg_against = estado ATUAL do time, que pra jogos antigos já
+    embute resultado de partidas POSTERIORES; quanto mais cedo o jogo, mais
+    "vazamento de futuro" — efeito mais forte no treino, que é
+    cronologicamente mais antigo, do que no holdout, mais perto do presente).
+    Achado extra: Copa-only bate o conjunto Copa+Brasileirão em holdout mesmo
+    com os pesos ATUAIS (0.4164 vs 0.4508) — Elo do Brasileirão é replay
+    próprio (base 1500, K=24, +70 casa) enquanto o da Copa vem do
+    EloRatings.net; escalas/calibração de fonte diferentes, combinar não
+    ajudou desta vez. Decisão: WEIGHTS inalterado (53.7/41.3/5.0). Reavaliar
+    só quando existir snapshot histórico real de elo/xg/forma por partida
+    (bloqueador estrutural de dado, não de método — reler Caveat acima).
 """
 
 from dataclasses import dataclass
