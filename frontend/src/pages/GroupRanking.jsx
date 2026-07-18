@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS } from '../utils/competitions'
 import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
+import { displayName } from '../utils/displayName'
+import RankingNameToggle from '../components/RankingNameToggle'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -65,7 +68,8 @@ function useCountdown(targetDateStr) {
 
 export default function GroupRanking() {
   const { groupId } = useParams()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
+  const namePref = user?.ranking_display_pref === 'username' ? 'username' : 'name'
 
   // ── Core state ─────────────────────────────────────────────
   const [data, setData] = useState(null)
@@ -89,6 +93,25 @@ export default function GroupRanking() {
   const [shareCopied, setShareCopied] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [showQr, setShowQr] = useState(false)
+  const [qrEnlarged, setQrEnlarged] = useState(false)
+  const personalLink = inviteLink && user?.id ? `${inviteLink}?by=${user.id}` : inviteLink
+
+  // ── Pedidos de entrada pendentes (link de membro que não é o dono) ──────────
+  const [joinRequests, setJoinRequests] = useState([])
+  const [showJoinRequestsModal, setShowJoinRequestsModal] = useState(false)
+  const [joinReqActionId, setJoinReqActionId] = useState(null)
+
+  useEffect(() => {
+    if (!qrEnlarged) return
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [qrEnlarged])
+
+  useEffect(() => {
+    if (!showJoinRequestsModal) return
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [showJoinRequestsModal])
 
   // ── Owner actions ───────────────────────────────────────────
   const [renaming, setRenaming] = useState(false)
@@ -167,6 +190,14 @@ export default function GroupRanking() {
       }
       const groupData = rankRes.value
       setData(groupData)
+      if (groupData.is_owner) {
+        api.get(`/user-groups/${groupId}/join-requests`, token)
+          .then(list => {
+            setJoinRequests(list)
+            if (list.length > 0) setShowJoinRequestsModal(true)
+          })
+          .catch(() => {})
+      }
       if (matchRes.status === 'fulfilled') {
         const matches = matchRes.value ?? []
         const finished = matches.filter(m => m.status === 'finished').length
@@ -231,10 +262,10 @@ export default function GroupRanking() {
 
   // ── QR Code generation ──────────────────────────────────────
   useEffect(() => {
-    if (!inviteLink) return
-    QRCode.toDataURL(inviteLink, { width: 200, margin: 1, color: { dark: '#0c1a2a', light: '#f5f7fb' } })
+    if (!personalLink) return
+    QRCode.toDataURL(personalLink, { width: 260, margin: 1, color: { dark: '#0c1a2a', light: '#f5f7fb' } })
       .then(setQrDataUrl).catch(() => {})
-  }, [inviteLink])
+  }, [personalLink])
 
   // Aba de fases só existe na Copa — trocar de competição sem resetar deixava o
   // ranking de fase antigo (ex: Semi) preso e exibido por baixo do pano na aba nova.
@@ -272,10 +303,10 @@ export default function GroupRanking() {
     finally { setLinkLoading(false) }
   }
   async function copyLink() {
-    try { await navigator.clipboard.writeText(inviteLink); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch {}
+    try { await navigator.clipboard.writeText(personalLink); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch {}
   }
   async function shareLink() {
-    if (navigator.share) await navigator.share({ title: data?.group_name, url: inviteLink })
+    if (navigator.share) await navigator.share({ title: data?.group_name, url: personalLink })
     else copyLink()
   }
   async function saveRename(e) {
@@ -298,12 +329,31 @@ export default function GroupRanking() {
     } catch (err) { setError(err.message) }
     finally { setRemovingId(null) }
   }
+  async function approveJoinRequest(reqId) {
+    if (!window.confirm('Aceitar esse pedido de entrada no grupo?')) return
+    setJoinReqActionId(reqId)
+    try {
+      await api.post(`/user-groups/${groupId}/join-requests/${reqId}/approve`, {}, token)
+      setJoinRequests(list => list.filter(r => r.id !== reqId))
+      load()
+    } catch (err) { setError(err.message) }
+    finally { setJoinReqActionId(null) }
+  }
+  async function rejectJoinRequest(reqId) {
+    if (!window.confirm('Recusar esse pedido de entrada? Essa ação não pode ser desfeita.')) return
+    setJoinReqActionId(reqId)
+    try {
+      await api.post(`/user-groups/${groupId}/join-requests/${reqId}/reject`, {}, token)
+      setJoinRequests(list => list.filter(r => r.id !== reqId))
+    } catch (err) { setError(err.message) }
+    finally { setJoinReqActionId(null) }
+  }
   function copyShareText() {
-    const text = buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, inviteLink)
+    const text = buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, personalLink)
     navigator.clipboard.writeText(text).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000) })
   }
   function shareWhatsApp() {
-    const text = buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, inviteLink)
+    const text = buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, personalLink)
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
   async function pickChampion(teamId) {
@@ -457,6 +507,7 @@ export default function GroupRanking() {
                 <div className="page-hero__stat-label">{myEntry.effective_points ?? myEntry.total_points} pts</div>
               </div>
             )}
+            <RankingNameToggle />
             <button type="button" className="btn btn-sm" style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }} onClick={() => setShareOpen(o => !o)}>
               📤 Ranking
             </button>
@@ -484,7 +535,7 @@ export default function GroupRanking() {
             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
               {myPosDelta > 0 && `Você subiu ${myPosDelta} posiç${myPosDelta === 1 ? 'ão' : 'ões'} desde sua última visita!`}
               {myPosDelta <= 0 && passedMeBy.length > 0 && (
-                `${passedMeBy.slice(0, 2).map(m => m.name).join(' e ')}${passedMeBy.length > 2 ? ` e mais ${passedMeBy.length - 2}` : ''} te ultrapassa${passedMeBy.length === 1 ? 'ou' : 'ram'} desde sua última visita`
+                `${passedMeBy.slice(0, 2).map(m => displayName(m, namePref)).join(' e ')}${passedMeBy.length > 2 ? ` e mais ${passedMeBy.length - 2}` : ''} te ultrapassa${passedMeBy.length === 1 ? 'ou' : 'ram'} desde sua última visita`
               )}
               {myPosDelta < 0 && passedMeBy.length === 0 && `Você caiu ${Math.abs(myPosDelta)} posiç${Math.abs(myPosDelta) === 1 ? 'ão' : 'ões'} desde sua última visita`}
             </span>
@@ -540,7 +591,7 @@ export default function GroupRanking() {
         <div className="card mt-4 fade-in-1" style={{ padding: 'var(--s4) var(--s5)', borderLeft: '3px solid var(--accent)' }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>Compartilhar Ranking</div>
           <pre style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-1)', background: 'var(--bg-overlay)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
-            {buildShareText(data.group_name, ranking, finished, total, inviteLink)}
+            {buildShareText(data.group_name, ranking, finished, total, personalLink)}
           </pre>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={shareWhatsApp} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, background: '#25D366', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -551,7 +602,7 @@ export default function GroupRanking() {
             </button>
             {navigator.share && (
               <button
-                onClick={() => navigator.share({ title: data?.group_name, text: buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, inviteLink) })}
+                onClick={() => navigator.share({ title: data?.group_name, text: buildShareText(data.group_name, ranking, matchStats.finished, matchStats.total, personalLink) })}
                 style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-raised)', color: 'var(--text-2)', fontSize: 16 }}
                 title="Compartilhar"
               >
@@ -567,9 +618,9 @@ export default function GroupRanking() {
         <StatPill icon="⚽" label="Realizados" value={`${finished}/${total}`} />
         <StatPill icon="⏳" label="Pendentes" value={total - finished} />
         <StatPill icon="👥" label="Participantes" value={ranking.length} />
-        {todayTop && <StatPill icon="🔥" label="Em Alta Hoje" value={todayTop.name} sub={`+${todayTop.total_points} pts hoje`} accent />}
-        {weekLeader && <StatPill icon="📅" label="Destaque Semana" value={weekLeader.name} sub={`+${weekLeader.pts_week} pts (7 dias)`} />}
-        {bestApproval && <StatPill icon="📊" label="Melhor Aproveito" value={bestApproval.name} sub={`${bestApproval.pct}% eficiência`} />}
+        {todayTop && <StatPill icon="🔥" label="Em Alta Hoje" value={displayName(todayTop, namePref)} sub={`+${todayTop.total_points} pts hoje`} accent />}
+        {weekLeader && <StatPill icon="📅" label="Destaque Semana" value={displayName(weekLeader, namePref)} sub={`+${weekLeader.pts_week} pts (7 dias)`} />}
+        {bestApproval && <StatPill icon="📊" label="Melhor Aproveito" value={displayName(bestApproval, namePref)} sub={`${bestApproval.pct}% eficiência`} />}
         {myEntry && (
           <Link to={`/usuarios/${myEntry.user_id}/historico`} style={{ textDecoration: 'none' }}>
             <StatPill icon="📜" label="Meu Histórico" value="Ver tudo →" sub="palpites detalhados" />
@@ -731,7 +782,7 @@ export default function GroupRanking() {
                   <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
                     <div className="group-podium__avatar">{getInitials(r.name)}</div>
                     <div className="group-podium__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
-                    <div className="group-podium__name" title={r.name}>{r.name}{r.is_me ? ' ★' : ''}</div>
+                    <div className="group-podium__name" title={r.name}>{displayName(r, namePref)}{r.is_me ? ' ★' : ''}</div>
                     <div className="group-podium__pts">{r.effective_points ?? r.total_points} pts</div>
                     {r.exact_scores > 0 && (
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, color: 'var(--win)', marginTop: 2 }}>
@@ -750,7 +801,7 @@ export default function GroupRanking() {
                 <div className="group-ranking-hero__pos" aria-hidden="true">📊</div>
                 <div className="group-ranking-hero__info">
                   <div className="group-ranking-hero__label">Seu desempenho</div>
-                  <div className="group-ranking-hero__name">{myEntry.name}</div>
+                  <div className="group-ranking-hero__name">{displayName(myEntry, namePref)}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                     <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)' }}>
                       {myEntry.exact_scores} exatos · {myEntry.correct_results} certos · {myEntry.total_bets} apostas
@@ -825,7 +876,7 @@ export default function GroupRanking() {
                         </div>
                         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 'clamp(15px, 4vw, 16px)', color: 'var(--text-1)' }}>{r.name}</span>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 'clamp(15px, 4vw, 16px)', color: 'var(--text-1)' }}>{displayName(r, namePref)}</span>
                             {r.is_me && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>VOCÊ</span>}
                             {memberChampion && (
                               <span title={`Campeão: ${memberChampion.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '0px 5px' }}>
@@ -967,8 +1018,8 @@ export default function GroupRanking() {
                               {i === 0
                                 ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>👑 Líder do grupo</span>
                                 : leaderDiff === 0
-                                  ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {displayRanking[0].name}</span>
-                                  : <>−<strong style={{ color: 'var(--text-1)' }}>{leaderDiff} pts</strong> para {displayRanking[0].name}</>
+                                  ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {displayName(displayRanking[0], namePref)}</span>
+                                  : <>−<strong style={{ color: 'var(--text-1)' }}>{leaderDiff} pts</strong> para {displayName(displayRanking[0], namePref)}</>
                               }
                             </div>
                             <div style={{ display: 'flex', gap: 6 }}>
@@ -1093,7 +1144,7 @@ export default function GroupRanking() {
         <div className="card mt-4 fade-in-3" style={{ padding: 'var(--s4) var(--s5)' }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0fa896', marginBottom: 8 }}>🔗 Maior Sequência de Exatos</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text-1)', lineHeight: 1 }}>{highlights.streaks[0].streak}</div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', marginTop: 4 }}>{highlights.streaks[0].name}</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', marginTop: 4 }}>{displayName(highlights.streaks[0], namePref)}</div>
           <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-2)', marginTop: 2 }}>consecutivos</div>
         </div>
       )}
@@ -1143,7 +1194,7 @@ export default function GroupRanking() {
                 {weeklyRanking.slice(0, 8).map((r, i) => (
                   <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
                     <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
-                    <span className="weekly-ranking__name">{r.name}</span>
+                    <span className="weekly-ranking__name">{displayName(r, namePref)}</span>
                     <span className="weekly-ranking__pts">+{r.pts_week}</span>
                   </div>
                 ))}
@@ -1159,7 +1210,7 @@ export default function GroupRanking() {
                 {monthlyRanking.slice(0, 8).map((r, i) => (
                   <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
                     <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
-                    <span className="weekly-ranking__name">{r.name}</span>
+                    <span className="weekly-ranking__name">{displayName(r, namePref)}</span>
                     <span className="weekly-ranking__pts">+{r.pts_month}</span>
                   </div>
                 ))}
@@ -1175,7 +1226,7 @@ export default function GroupRanking() {
                 {mostActiveRanking.slice(0, 8).map((r, i) => (
                   <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
                     <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
-                    <span className="weekly-ranking__name">{r.name}</span>
+                    <span className="weekly-ranking__name">{displayName(r, namePref)}</span>
                     <span className="weekly-ranking__pts">{r.total_bets}</span>
                   </div>
                 ))}
@@ -1240,12 +1291,103 @@ export default function GroupRanking() {
         </div>
         {showQr && qrDataUrl && (
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-            <img src={qrDataUrl} alt="QR Code do convite" style={{ width: 180, height: 180, borderRadius: 10, border: '1px solid var(--border)' }} />
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>Compartilhe o QR para entrar no bolão</span>
+            <img
+              src={qrDataUrl}
+              alt="QR Code do convite"
+              onClick={() => setQrEnlarged(true)}
+              style={{ width: 180, height: 180, borderRadius: 10, border: '1px solid var(--border)', cursor: 'zoom-in' }}
+            />
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)' }}>Compartilhe o QR para entrar no bolão · toque pra ampliar</span>
           </div>
+        )}
+        {qrEnlarged && qrDataUrl && createPortal(
+          <div
+            onClick={() => setQrEnlarged(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 9600, background: 'rgba(3,8,14,0.82)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, cursor: 'zoom-out' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, maxWidth: 360 }}
+            >
+              <img src={qrDataUrl} alt="QR Code do convite ampliado" style={{ width: '100%', maxWidth: 280, borderRadius: 8 }} />
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', textAlign: 'center' }}>Escaneie para entrar no bolão</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQrEnlarged(false)}>Fechar</button>
+            </div>
+          </div>,
+          document.body
         )}
         <div style={{ marginTop: 6, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-2)' }}>Qualquer pessoa com o link pode entrar no grupo.</div>
       </div>
+
+      {joinRequests.length > 0 && !showJoinRequestsModal && (
+        <button
+          type="button"
+          onClick={() => setShowJoinRequestsModal(true)}
+          className="card mt-4 fade-in-3"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: 'var(--s10) var(--s16)', width: '100%', border: '1px solid var(--accent)', background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-raised))', cursor: 'pointer' }}
+        >
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+            🔔 {joinRequests.length} pedido{joinRequests.length !== 1 ? 's' : ''} de entrada aguardando aprovação
+          </span>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>Decidir →</span>
+        </button>
+      )}
+
+      {showJoinRequestsModal && createPortal(
+        <div
+          onClick={() => setShowJoinRequestsModal(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 9600, background: 'rgba(3,8,14,0.82)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 420, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>🔔 Pedidos de entrada</span>
+              <button type="button" onClick={() => setShowJoinRequestsModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-2)', margin: 0 }}>
+              Entraram por um link repassado por outro membro — não o seu link direto de dono. Aprove só quem você reconhece.
+            </p>
+            {joinRequests.length === 0 ? (
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-3)', textAlign: 'center', padding: '12px 0' }}>Nenhum pedido pendente. 🎉</p>
+            ) : joinRequests.map(req => (
+              <div key={req.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-overlay)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {req.name || req.email_masked}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>
+                    {req.invited_by_name ? `via ${req.invited_by_name}` : 'via link'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    disabled={joinReqActionId === req.id}
+                    onClick={() => approveJoinRequest(req.id)}
+                    style={{ width: 30, height: 30, padding: 0, borderRadius: 8, border: '1px solid var(--win)', background: 'color-mix(in srgb, var(--win) 12%, transparent)', color: 'var(--win)', fontSize: 14, cursor: 'pointer' }}
+                  >
+                    {joinReqActionId === req.id ? '·' : '✓'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={joinReqActionId === req.id}
+                    onClick={() => rejectJoinRequest(req.id)}
+                    style={{ width: 30, height: 30, padding: 0, borderRadius: 8, border: '1px solid var(--lose)', background: 'color-mix(in srgb, var(--lose) 12%, transparent)', color: 'var(--lose)', fontSize: 14, cursor: 'pointer' }}
+                  >
+                    {joinReqActionId === req.id ? '·' : '✕'}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowJoinRequestsModal(false)}>
+              {joinRequests.length > 0 ? 'Decidir depois' : 'Fechar'}
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* ── Chat do bolão ── */}
       <div className="card mt-4 fade-in-4">

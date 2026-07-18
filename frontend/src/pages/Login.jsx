@@ -140,7 +140,16 @@ export default function Login({ initialMode = 'login' }) {
   // que no anterior assim que `user` virava truthy (React error #300, intermitente
   // logo após o login, "carrega e apaga").
   useEffect(() => {
-    if (user) navigate('/')
+    if (!user) return
+    const pendingJoin = sessionStorage.getItem('join_token')
+    if (!pendingJoin) { navigate('/'); return }
+    const pendingJoinBy = sessionStorage.getItem('join_by')
+    sessionStorage.removeItem('join_token')
+    sessionStorage.removeItem('join_by')
+    const qs = pendingJoinBy ? `?by=${pendingJoinBy}` : ''
+    api.post(`/user-groups/join/${pendingJoin}${qs}`, {}, useAuth.getState().token)
+      .then(res => navigate(`/bolao/${pendingJoin}`, { state: res?.status === 'pending_approval' ? { pendingApproval: true } : { justJoined: true } }))
+      .catch(() => navigate(`/bolao/${pendingJoin}`))
   }, [user, navigate])
 
   if (user) return null
@@ -151,15 +160,18 @@ export default function Login({ initialMode = 'login' }) {
     setLoad(true)
     try {
       const pendingJoin = sessionStorage.getItem('join_token')
+      const pendingJoinBy = sessionStorage.getItem('join_by')
       if (mode === 'login') {
         const data = await api.login(email, pass)
         const me = await api.get('/auth/me', data.access_token)
         login(me, data.access_token)
         if (pendingJoin) {
           sessionStorage.removeItem('join_token')
+          sessionStorage.removeItem('join_by')
           try {
-            await api.post(`/user-groups/join/${pendingJoin}`, {}, data.access_token)
-            navigate(`/bolao/${pendingJoin}`, { state: { justJoined: true } })
+            const qs = pendingJoinBy ? `?by=${pendingJoinBy}` : ''
+            const res = await api.post(`/user-groups/join/${pendingJoin}${qs}`, {}, data.access_token)
+            navigate(`/bolao/${pendingJoin}`, { state: res?.status === 'pending_approval' ? { pendingApproval: true } : { justJoined: true } })
           } catch (_) {
             navigate(`/bolao/${pendingJoin}`)
           }
@@ -175,9 +187,11 @@ export default function Login({ initialMode = 'login' }) {
         login(me, data.access_token)
         if (pendingJoin) {
           sessionStorage.removeItem('join_token')
+          sessionStorage.removeItem('join_by')
           try {
-            await api.post(`/user-groups/join/${pendingJoin}`, {}, data.access_token)
-            navigate(`/bolao/${pendingJoin}`, { state: { justJoined: true } })
+            const qs = pendingJoinBy ? `?by=${pendingJoinBy}` : ''
+            const res = await api.post(`/user-groups/join/${pendingJoin}${qs}`, {}, data.access_token)
+            navigate(`/bolao/${pendingJoin}`, { state: res?.status === 'pending_approval' ? { pendingApproval: true } : { justJoined: true } })
           } catch (_) {
             navigate(`/bolao/${pendingJoin}`)
           }

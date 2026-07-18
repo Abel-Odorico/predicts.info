@@ -628,6 +628,21 @@ def _run_migrations():
             "ALTER TABLE matches ADD COLUMN IF NOT EXISTS external_id INTEGER",
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_teams_external ON teams (external_id) WHERE external_id IS NOT NULL",
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_matches_external ON matches (external_id) WHERE external_id IS NOT NULL",
+            # Rastreio de convites de bolão: quem trouxe quem via link pessoal (?by=<user_id>)
+            "ALTER TABLE user_group_members ADD COLUMN IF NOT EXISTS invited_by_user_id INTEGER REFERENCES users(id)",
+            # Entrada via link de membro (não do dono) vira pedido, precisa aprovação do dono
+            """CREATE TABLE IF NOT EXISTS user_group_join_requests (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL REFERENCES user_groups(id),
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                invited_by_user_id INTEGER REFERENCES users(id),
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT NOW(),
+                responded_at TIMESTAMP
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_group_join_request_pending ON user_group_join_requests (group_id, user_id) WHERE status = 'pending'",
+            # Preferência de exibição em rankings: nome de cadastro ou @username
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS ranking_display_pref VARCHAR(10) DEFAULT 'name'",
         ]:
             try:
                 conn.execute(text(alter))

@@ -1,10 +1,23 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { createPortal } from 'react-dom'
+import QRCode from 'qrcode'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS, COMPETITION_LABEL } from '../utils/competitions'
 import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
+
+function timeAgo(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'agora'
+  if (m < 60) return `há ${m}min`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `há ${h}h`
+  return `há ${Math.floor(h / 24)}d`
+}
 
 function useCountdownStr(targetDateStr) {
   const [str, setStr] = useState('')
@@ -53,6 +66,18 @@ export default function UserGroups() {
   })
   const [comp, setComp] = useState('geral')
   const [todayRanking, setTodayRanking] = useState([])
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [switcherQuery, setSwitcherQuery] = useState('')
+  const switcherRef = useRef(null)
+
+  useEffect(() => {
+    if (!switcherOpen) return
+    function onClick(e) { if (switcherRef.current && !switcherRef.current.contains(e.target)) setSwitcherOpen(false) }
+    function onKey(e) { if (e.key === 'Escape') setSwitcherOpen(false) }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey) }
+  }, [switcherOpen])
 
   async function loadGroups() {
     if (!token) return
@@ -136,7 +161,7 @@ export default function UserGroups() {
   const nextMatch = data.next_match ?? null
   const myBetNext = data.my_bet_next ?? false
   const totalMembers = groups.reduce((sum, g) => sum + (g.members?.length ?? 0), 0)
-  const totalGroupInvites = groups.reduce((sum, g) => sum + (g.pending_invites?.length ?? 0), 0)
+  const totalGroupInvites = groups.reduce((sum, g) => sum + (g.pending_invites?.length ?? 0) + (g.pending_join_requests?.length ?? 0), 0)
   const totalConvites = pendingInvites.length + totalGroupInvites
 
   // Grupo em foco: respeita seleção salva; cai no 1º se inválida.
@@ -254,33 +279,83 @@ export default function UserGroups() {
         </section>
       ) : (
         <>
-          {groups.length > 1 && (
-            <nav className="groups-switcher fade-in-3" aria-label="Selecionar grupo">
-              {groups.map(group => {
-                const members = group.members?.length ?? 0
-                const sorted = [...(group.members ?? [])].sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0))
-                const pos = sorted.findIndex(m => m.user_id === user?.id) + 1
-                const invites = group.pending_invites?.length ?? 0
-                const active = group.id === activeGroup?.id
-                return (
-                  <button
-                    key={group.id}
-                    type="button"
-                    className={`groups-switcher__tab${active ? ' is-active' : ''}`}
-                    onClick={() => selectGroup(group.id)}
-                    aria-pressed={active}
-                  >
-                    <span className="groups-switcher__name">{group.name}</span>
-                    <span className="groups-switcher__meta">
-                      {members} membro{members !== 1 ? 's' : ''}
-                      {pos > 0 && <> · {pos}º</>}
+          {groups.length > 1 && (() => {
+            const withMeta = groups.map(group => {
+              const members = group.members?.length ?? 0
+              const sorted = [...(group.members ?? [])].sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0))
+              const pos = sorted.findIndex(m => m.user_id === user?.id) + 1
+              const invites = (group.pending_invites?.length ?? 0) + (group.pending_join_requests?.length ?? 0)
+              return { group, members, pos, invites }
+            })
+            const totalInvites = withMeta.reduce((sum, g) => sum + g.invites, 0)
+            const activeMeta = withMeta.find(g => g.group.id === activeGroup?.id)
+            const q = switcherQuery.trim().toLowerCase()
+            const filtered = q ? withMeta.filter(g => g.group.name.toLowerCase().includes(q)) : withMeta
+
+            return (
+              <div className="groups-switcher-dd fade-in-3" ref={switcherRef}>
+                <button
+                  type="button"
+                  className="groups-switcher-dd__trigger"
+                  onClick={() => setSwitcherOpen(o => !o)}
+                  aria-expanded={switcherOpen}
+                  aria-haspopup="listbox"
+                >
+                  <span className="groups-switcher-dd__trigger-icon">🏆</span>
+                  <span className="groups-switcher-dd__trigger-text">
+                    <span className="groups-switcher-dd__trigger-name">{activeGroup?.name}</span>
+                    <span className="groups-switcher-dd__trigger-meta">
+                      {activeMeta?.members} membro{activeMeta?.members !== 1 ? 's' : ''}
+                      {activeMeta?.pos > 0 && <> · {activeMeta.pos}º</>}
+                      {' '}· {groups.length} bolões no total
                     </span>
-                    {invites > 0 && <span className="groups-switcher__badge">{invites}</span>}
-                  </button>
-                )
-              })}
-            </nav>
-          )}
+                  </span>
+                  {totalInvites > 0 && <span className="groups-switcher-dd__trigger-badge">{totalInvites}</span>}
+                  <span className={`groups-switcher-dd__chevron${switcherOpen ? ' is-open' : ''}`}>▾</span>
+                </button>
+
+                {switcherOpen && (
+                  <div className="groups-switcher-dd__panel" role="listbox">
+                    {groups.length > 6 && (
+                      <input
+                        type="text"
+                        className="groups-switcher-dd__search"
+                        placeholder="Buscar bolão..."
+                        value={switcherQuery}
+                        onChange={e => setSwitcherQuery(e.target.value)}
+                        autoFocus
+                      />
+                    )}
+                    <div className="groups-switcher-dd__list">
+                      {filtered.length === 0 && (
+                        <div className="groups-switcher-dd__empty">Nenhum bolão encontrado</div>
+                      )}
+                      {filtered.map(({ group, members, pos, invites }) => {
+                        const active = group.id === activeGroup?.id
+                        return (
+                          <button
+                            key={group.id}
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            className={`groups-switcher-dd__row${active ? ' is-active' : ''}`}
+                            onClick={() => { selectGroup(group.id); setSwitcherOpen(false); setSwitcherQuery('') }}
+                          >
+                            <span className="groups-switcher-dd__row-name">{group.name}</span>
+                            <span className="groups-switcher-dd__row-meta">
+                              {members} membro{members !== 1 ? 's' : ''}
+                              {pos > 0 && <> · {pos}º</>}
+                            </span>
+                            {invites > 0 && <span className="groups-switcher-dd__row-badge">{invites}</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           <section className="groups-list-grid fade-in-3" aria-label="Grupo selecionado">
             {activeGroup && (
@@ -325,6 +400,8 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   const [newName, setNewName] = useState(group.name)
   const [savingName, setSavingName] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
+  const [reqActionId, setReqActionId] = useState(null)
+  const [removingMemberId, setRemovingMemberId] = useState(null)
   const [showAllMembers, setShowAllMembers] = useState(false)
   const [expandedMemberId, setExpandedMemberId] = useState(null)
   const [inviteLink, setInviteLink] = useState(
@@ -332,6 +409,37 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   )
   const [linkLoading, setLinkLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // Link pessoal (?by=<meu_id>) — cada membro rastreia quem entrou via SEU compartilhamento,
+  // mesmo token de convite pra todos, atribuição só muda o parâmetro
+  const personalLink = inviteLink && currentUser?.id ? `${inviteLink}?by=${currentUser.id}` : inviteLink
+  const signupLink = group.invite_token && currentUser?.id
+    ? `${window.location.origin}/entrar?join=${group.invite_token}&by=${currentUser.id}`
+    : ''
+  const [qrDataUrl, setQrDataUrl] = useState('')
+  const [signupQrDataUrl, setSignupQrDataUrl] = useState('')
+  const [enlargedQr, setEnlargedQr] = useState(null) // null | 'invite' | 'signup'
+
+  // position:fixed dentro de um ancestral com scroll/transform fica preso ao offset
+  // dele em vez do viewport (bug clássico mobile) — portal pro body + lock de scroll
+  // garante centralização real na tela, mesmo card rolado
+  useEffect(() => {
+    if (!enlargedQr) return
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [enlargedQr])
+
+  useEffect(() => {
+    if (!personalLink) { setQrDataUrl(''); return }
+    QRCode.toDataURL(personalLink, { width: 260, margin: 1, color: { dark: '#0c1a2a', light: '#f5f7fb' } })
+      .then(setQrDataUrl).catch(() => {})
+  }, [personalLink])
+
+  useEffect(() => {
+    if (!signupLink) { setSignupQrDataUrl(''); return }
+    QRCode.toDataURL(signupLink, { width: 260, margin: 1, color: { dark: '#0c1a2a', light: '#f5f7fb' } })
+      .then(setSignupQrDataUrl).catch(() => {})
+  }, [signupLink])
 
   const visibleMembers = showAllMembers ? sortedMembers : sortedMembers.slice(0, 4)
   const extraMembers = Math.max(sortedMembers.length - 4, 0)
@@ -414,7 +522,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       lead ? `👑 Líder: ${lead.name} (${lead.total_points} pts)` : '',
       `👥 ${gStats.members} membros · 🎯 ${gStats.exacts} placares exatos · 📊 ${gStats.bets} palpites`,
       `⭐ ${gStats.points} pts no total · aproveitamento ${gStats.efficiency}%`,
-      inviteLink ? `Entre no bolão: ${inviteLink}` : `Jogue em ${window.location.origin}`,
+      personalLink ? `Entre no bolão: ${personalLink}` : `Jogue em ${window.location.origin}`,
     ].filter(Boolean).join('\n')
     try {
       if (navigator.share) { await navigator.share({ title: group.name, text }); setShared('✓ Compartilhado') }
@@ -478,10 +586,10 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   async function copyLink() {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(inviteLink)
+        await navigator.clipboard.writeText(personalLink)
       } else {
         const el = document.createElement('textarea')
-        el.value = inviteLink
+        el.value = personalLink
         document.body.appendChild(el)
         el.select()
         document.execCommand('copy')
@@ -494,7 +602,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
 
   async function shareLink() {
     if (navigator.share) {
-      await navigator.share({ title: group.name, text: `Entre no meu bolão: ${group.name}`, url: inviteLink })
+      await navigator.share({ title: group.name, text: `Entre no meu bolão: ${group.name}`, url: personalLink })
     } else {
       copyLink()
     }
@@ -528,6 +636,48 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       setMsg(`✗ ${e.message}`)
     } finally {
       setCancellingId(null)
+    }
+  }
+
+  async function approveJoinRequest(requestId) {
+    if (!window.confirm('Aceitar esse pedido de entrada no grupo?')) return
+    setReqActionId(requestId)
+    try {
+      await api.post(`/user-groups/${group.id}/join-requests/${requestId}/approve`, {}, token)
+      setMsg('✓ Pedido aceito.')
+      onRefresh()
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+    } finally {
+      setReqActionId(null)
+    }
+  }
+
+  async function removeMember(targetUserId, name) {
+    if (!window.confirm(`Remover ${name} do grupo? Essa ação não pode ser desfeita.`)) return
+    setRemovingMemberId(targetUserId)
+    try {
+      await api.delete(`/user-groups/${group.id}/members/${targetUserId}`, token)
+      setMsg('✓ Membro removido.')
+      onRefresh()
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+    } finally {
+      setRemovingMemberId(null)
+    }
+  }
+
+  async function rejectJoinRequest(requestId) {
+    if (!window.confirm('Recusar esse pedido de entrada? Essa ação não pode ser desfeita.')) return
+    setReqActionId(requestId)
+    try {
+      await api.post(`/user-groups/${group.id}/join-requests/${requestId}/reject`, {}, token)
+      setMsg('✓ Pedido recusado.')
+      onRefresh()
+    } catch (e) {
+      setMsg(`✗ ${e.message}`)
+    } finally {
+      setReqActionId(null)
     }
   }
 
@@ -781,6 +931,11 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                           ))}
                         </div>
                       )}
+                      {member.invited_by_name && (
+                        <div style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)', marginTop: 2 }}>
+                          🔗 indicado por {member.invited_by_name}
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <div style={{ height: 3, width: 60, background: 'var(--bg-overlay)', borderRadius: 2, overflow: 'hidden' }}>
@@ -831,13 +986,25 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                               : <>−<strong style={{ color: 'var(--text-1)' }}>{leaderDiff} pts</strong> para {sortedMembers[0].name}</>
                           }
                         </span>
-                        <Link
-                          to={`/usuarios/${member.user_id}/historico`}
-                          onClick={e => e.stopPropagation()}
-                          style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: 'var(--bg-overlay)', color: 'var(--accent)', border: '1px solid var(--accent)', textDecoration: 'none' }}
-                        >
-                          📜 Histórico
-                        </Link>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <Link
+                            to={`/usuarios/${member.user_id}/historico`}
+                            onClick={e => e.stopPropagation()}
+                            style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: 'var(--bg-overlay)', color: 'var(--accent)', border: '1px solid var(--accent)', textDecoration: 'none' }}
+                          >
+                            📜 Histórico
+                          </Link>
+                          {isOwner && !member.is_owner && (
+                            <button
+                              type="button"
+                              disabled={removingMemberId === member.user_id}
+                              onClick={e => { e.stopPropagation(); removeMember(member.user_id, member.name) }}
+                              style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: 'color-mix(in srgb, var(--lose) 10%, transparent)', color: 'var(--lose)', border: '1px solid var(--lose)', cursor: 'pointer' }}
+                            >
+                              {removingMemberId === member.user_id ? '...' : '🚫 Remover'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -884,7 +1051,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
                 <a
-                  href={`https://wa.me/?text=${encodeURIComponent(`🏆 *${group.name} — Bolão ${COMPETITION_LABEL[comp] ?? 'Predicts'}*\n\nVem disputar comigo no Predicts!\n\n👉 ${inviteLink}`)}`}
+                  href={`https://wa.me/?text=${encodeURIComponent(`🏆 *${group.name} — Bolão ${COMPETITION_LABEL[comp] ?? 'Predicts'}*\n\nVem disputar comigo no Predicts!\n\n👉 ${personalLink}`)}`}
                   target="_blank" rel="noopener noreferrer"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
@@ -896,7 +1063,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                   WhatsApp
                 </a>
                 <a
-                  href={`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(`🏆 ${group.name} — venha disputar no Predicts!`)}`}
+                  href={`https://t.me/share/url?url=${encodeURIComponent(personalLink)}&text=${encodeURIComponent(`🏆 ${group.name} — venha disputar no Predicts!`)}`}
                   target="_blank" rel="noopener noreferrer"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
@@ -908,27 +1075,116 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                   Telegram
                 </a>
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+                {qrDataUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setEnlargedQr('invite')}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 10, padding: 8, cursor: 'zoom-in' }}
+                  >
+                    <img src={qrDataUrl} alt="QR do link de convite" style={{ width: '100%', maxWidth: 96, borderRadius: 6 }} />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>🔍 QR do convite</span>
+                  </button>
+                )}
+                {signupQrDataUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setEnlargedQr('signup')}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 10, padding: 8, cursor: 'zoom-in' }}
+                  >
+                    <img src={signupQrDataUrl} alt="QR direto para cadastro" style={{ width: '100%', maxWidth: 96, borderRadius: 6 }} />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>🔍 QR → cadastro direto</span>
+                  </button>
+                )}
+              </div>
+              <p className="group-tool-note" style={{ marginTop: 6 }}>
+                O QR do convite leva pra tela do bolão; o QR de cadastro pula direto pro formulário de criar conta. Toque pra ampliar.
+              </p>
             </>
           )}
         </section>
 
-        {/* Pending invites */}
-        {group.pending_invites.length > 0 && (
+        {enlargedQr && createPortal(
+          <div
+            onClick={() => setEnlargedQr(null)}
+            style={{ position: 'fixed', inset: 0, zIndex: 9600, background: 'rgba(3,8,14,0.82)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, cursor: 'zoom-out' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, maxWidth: 360 }}
+            >
+              <img
+                src={enlargedQr === 'invite' ? qrDataUrl : signupQrDataUrl}
+                alt={enlargedQr === 'invite' ? 'QR do link de convite ampliado' : 'QR de cadastro direto ampliado'}
+                style={{ width: '100%', maxWidth: 280, borderRadius: 8 }}
+              />
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', textAlign: 'center' }}>
+                {enlargedQr === 'invite' ? 'Escaneie para entrar no bolão' : 'Escaneie para criar conta e já entrar no bolão'}
+              </span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEnlargedQr(null)}>Fechar</button>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        {/* Pending invites + join requests (link de membro que não é o dono, aguarda aprovação) */}
+        {(group.pending_invites.length + (group.pending_join_requests?.length ?? 0)) > 0 && (
           <section className="group-manager-section">
             <div className="group-manager-section__header">
               <h3>Convites pendentes</h3>
-              <span>{group.pending_invites.length}</span>
+              <span>{group.pending_invites.length + (group.pending_join_requests?.length ?? 0)}</span>
             </div>
-            <div className="group-pending-list">
-              {group.pending_invites.map(invite => (
-                <div key={invite.id} className="pending-invite-row">
+            <div className="group-pending-list" style={{ gap: 4 }}>
+              {(group.pending_join_requests ?? []).map(req => (
+                <div key={`req-${req.id}`} className="pending-invite-row" style={{ padding: '6px 10px', gap: 8 }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }} title="Pedido de entrada via link de membro">🔔</span>
                   <div className="pending-invite-row__content">
-                    <span className="pending-invite-row__email">{maskEmail(invite.invitee_email)}</span>
-                    <span className="pending-invite-row__meta">Aguardando resposta</span>
+                    <span className="pending-invite-row__email">{req.name || req.email_masked}</span>
+                    <span className="pending-invite-row__meta">
+                      {req.invited_by_name ? `via ${req.invited_by_name}` : 'via link'} · {timeAgo(req.created_at)}
+                    </span>
                   </div>
                   {isOwner && (
-                    <button type="button" className="btn btn-ghost btn-sm group-manager-card__danger" disabled={cancellingId === invite.id} onClick={() => cancelInvite(invite.id)}>
-                      {cancellingId === invite.id ? '...' : 'Cancelar'}
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        title="Aceitar"
+                        disabled={reqActionId === req.id}
+                        onClick={() => approveJoinRequest(req.id)}
+                        style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: '1px solid var(--win)', background: 'color-mix(in srgb, var(--win) 12%, transparent)', color: 'var(--win)', fontSize: 13, cursor: 'pointer' }}
+                      >
+                        {reqActionId === req.id ? '·' : '✓'}
+                      </button>
+                      <button
+                        type="button"
+                        title="Recusar"
+                        disabled={reqActionId === req.id}
+                        onClick={() => rejectJoinRequest(req.id)}
+                        style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: '1px solid var(--lose)', background: 'color-mix(in srgb, var(--lose) 12%, transparent)', color: 'var(--lose)', fontSize: 13, cursor: 'pointer' }}
+                      >
+                        {reqActionId === req.id ? '·' : '✕'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {group.pending_invites.map(invite => (
+                <div key={`inv-${invite.id}`} className="pending-invite-row" style={{ padding: '6px 10px', gap: 8 }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }} title="Convite por email">✉️</span>
+                  <div className="pending-invite-row__content">
+                    <span className="pending-invite-row__email">{maskEmail(invite.invitee_email)}</span>
+                    <span className="pending-invite-row__meta">{timeAgo(invite.created_at)}</span>
+                  </div>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      title="Cancelar convite"
+                      disabled={cancellingId === invite.id}
+                      onClick={() => cancelInvite(invite.id)}
+                      style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+                    >
+                      {cancellingId === invite.id ? '·' : '✕'}
                     </button>
                   )}
                 </div>

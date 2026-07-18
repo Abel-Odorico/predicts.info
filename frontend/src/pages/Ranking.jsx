@@ -7,6 +7,8 @@ import LigaFlowModal from '../components/LigaFlowModal'
 import ShareCompetitionButton from '../components/ShareCompetitionButton'
 import { useAuth } from '../stores/authStore'
 import { COMPETITIONS } from '../utils/competitions'
+import { displayName } from '../utils/displayName'
+import RankingNameToggle from '../components/RankingNameToggle'
 
 const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L']
 
@@ -58,7 +60,8 @@ function erros(r) {
 }
 
 export default function Ranking() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
+  const namePref = user?.ranking_display_pref === 'username' ? 'username' : 'name'
   const [data,        setData]      = useState([])
   const [todayTop,    setTodayTop]  = useState(null)
   const [loading,     setLoad]      = useState(true)
@@ -200,13 +203,16 @@ export default function Ranking() {
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setShareOpen(o => !o)}
-          style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'var(--on-accent)', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, flexShrink: 0 }}
-        >
-          📤 Compartilhar
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <RankingNameToggle />
+          <button
+            type="button"
+            onClick={() => setShareOpen(o => !o)}
+            style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'var(--on-accent)', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, flexShrink: 0 }}
+          >
+            📤 Compartilhar
+          </button>
+        </div>
       </div>
 
       {shareOpen && (
@@ -323,10 +329,10 @@ export default function Ranking() {
               <>
                 {/* Cards de destaque — tema âmbar */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--s3)', marginBottom: 'var(--s6)' }} className="fade-in-2">
-                  <HighlightCard icon="👑" label="Líder da Fase"        name={cLeader?.name}    stat={`${cLeader?.total_points ?? 0} pts`}               sub={cLeader    ? `${cLeader.exact_scores} exatos · ${aproveitamento(cLeader) ?? 0}% aproveito` : ''} userId={cLeader?.user_id}    accent={AMBER} />
-                  <HighlightCard icon="🎯" label="Rei dos Exatos"       name={cReiExatos?.name} stat={`${cReiExatos?.exact_scores ?? 0} placares exatos`} sub={cReiExatos  ? `${pctExato(cReiExatos) ?? 0}% de exatidão · ${cReiExatos.total_bets} apostas` : ''} userId={cReiExatos?.user_id} accent="#e8944a" />
-                  <HighlightCard icon="🔥" label="Mais Ativo"           name={cMaisAtivo?.name} stat={`${cMaisAtivo?.total_bets ?? 0} apostas`}           sub={cMaisAtivo  ? `${cMaisAtivo.total_points} pts · ${aproveitamento(cMaisAtivo) ?? 0}% aproveito` : ''} userId={cMaisAtivo?.user_id} accent="#e86a4a" />
-                  <HighlightCard icon="📈" label="Melhor Aproveitamento" name={cTopAcerto?.name || '—'} stat={cTopAcerto ? `${aproveitamento(cTopAcerto) ?? 0}% aproveito` : `mín. ${MIN_APROV_BETS} palpites`} sub={cTopAcerto ? `${cTopAcerto.total_points} pts em ${cTopAcerto.total_bets} palpites` : `Ninguém com ${MIN_APROV_BETS}+ palpites`} userId={cTopAcerto?.user_id} accent="#c4e84a" />
+                  <HighlightCard icon="👑" label="Líder da Fase"        name={displayName(cLeader, namePref)}    stat={`${cLeader?.total_points ?? 0} pts`}               sub={cLeader    ? `${cLeader.exact_scores} exatos · ${aproveitamento(cLeader) ?? 0}% aproveito` : ''} userId={cLeader?.user_id}    accent={AMBER} />
+                  <HighlightCard icon="🎯" label="Rei dos Exatos"       name={displayName(cReiExatos, namePref)} stat={`${cReiExatos?.exact_scores ?? 0} placares exatos`} sub={cReiExatos  ? `${pctExato(cReiExatos) ?? 0}% de exatidão · ${cReiExatos.total_bets} apostas` : ''} userId={cReiExatos?.user_id} accent="#e8944a" />
+                  <HighlightCard icon="🔥" label="Mais Ativo"           name={displayName(cMaisAtivo, namePref)} stat={`${cMaisAtivo?.total_bets ?? 0} apostas`}           sub={cMaisAtivo  ? `${cMaisAtivo.total_points} pts · ${aproveitamento(cMaisAtivo) ?? 0}% aproveito` : ''} userId={cMaisAtivo?.user_id} accent="#e86a4a" />
+                  <HighlightCard icon="📈" label="Melhor Aproveitamento" name={displayName(cTopAcerto, namePref) || '—'} stat={cTopAcerto ? `${aproveitamento(cTopAcerto) ?? 0}% aproveito` : `mín. ${MIN_APROV_BETS} palpites`} sub={cTopAcerto ? `${cTopAcerto.total_points} pts em ${cTopAcerto.total_bets} palpites` : `Ninguém com ${MIN_APROV_BETS}+ palpites`} userId={cTopAcerto?.user_id} accent="#c4e84a" />
                 </div>
 
                 {/* Tabela completa — mesma estrutura do ranking geral */}
@@ -370,7 +376,7 @@ export default function Ranking() {
 
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {r.name}
+                            {displayName(r, namePref)}
                           </div>
                           {/* Barra relativa ao líder — âmbar */}
                           <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
@@ -469,11 +475,11 @@ export default function Ranking() {
       <div>
       {!loading && data.length > 0 && (
         <>
-        <RankingPodium data={data} champPicks={comp === 'copa2026' ? champPicks : {}} />
+        <RankingPodium data={data} champPicks={comp === 'copa2026' ? champPicks : {}} namePref={namePref} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--s3)', marginTop: 'var(--s4)' }} className="fade-in-2">
           <HighlightCard
             icon="👑" label="Líder Geral"
-            name={leader?.name}
+            name={displayName(leader, namePref)}
             stat={`${leader?.total_points ?? 0} pts`}
             sub={leader ? `${leader.total_bets} palpites · ${aproveitamento(leader) ?? 0}% aproveito` : ''}
             userId={leader?.user_id}
@@ -481,7 +487,7 @@ export default function Ranking() {
           />
           <HighlightCard
             icon="⚡" label="Melhor do Dia"
-            name={todayTop?.name || '—'}
+            name={displayName(todayTop, namePref) || '—'}
             stat={todayTop ? `${todayTop.total_points} pts hoje` : 'Sem apostas hoje'}
             sub={todayTop ? `${todayTop.exact_scores} exatos · ${pctExato(todayTop) ?? 0}% exatos` : ''}
             userId={todayTop?.user_id}
@@ -489,7 +495,7 @@ export default function Ranking() {
           />
           <HighlightCard
             icon="🎯" label="Rei dos Exatos"
-            name={reiExatos?.name}
+            name={displayName(reiExatos, namePref)}
             stat={`${reiExatos?.exact_scores ?? 0} placares exatos`}
             sub={reiExatos ? `${pctExato(reiExatos) ?? 0}% de exatidão · ${reiExatos.total_bets} apostas` : ''}
             userId={reiExatos?.user_id}
@@ -497,7 +503,7 @@ export default function Ranking() {
           />
           <HighlightCard
             icon="🔥" label="Mais Ativo"
-            name={maisAtivo?.name}
+            name={displayName(maisAtivo, namePref)}
             stat={`${maisAtivo?.total_bets ?? 0} apostas`}
             sub={maisAtivo ? `${maisAtivo.total_points} pts · ${aproveitamento(maisAtivo) ?? 0}% aproveito` : ''}
             userId={maisAtivo?.user_id}
@@ -505,7 +511,7 @@ export default function Ranking() {
           />
           <HighlightCard
             icon="📈" label="Melhor Aproveitamento"
-            name={topAcerto?.name || '—'}
+            name={displayName(topAcerto, namePref) || '—'}
             stat={topAcerto ? `${aproveitamento(topAcerto) ?? 0}% aproveito` : `mín. ${MIN_APROV_BETS} palpites`}
             sub={topAcerto
               ? `${topAcerto.total_points} pts em ${topAcerto.total_bets} palpites`
@@ -641,7 +647,7 @@ export default function Ranking() {
 
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {r.name}
+                        {displayName(r, namePref)}
                       </div>
                       {/* Barra relativa ao líder */}
                       <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
@@ -764,8 +770,8 @@ export default function Ranking() {
                           {i === 0
                             ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>👑 Líder Geral</span>
                             : gapLeader === 0
-                              ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {data[0].name}</span>
-                              : <>−<strong style={{ color: 'var(--text-1)' }}>{gapLeader} pts</strong> para {data[0].name}</>
+                              ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {displayName(data[0], namePref)}</span>
+                              : <>−<strong style={{ color: 'var(--text-1)' }}>{gapLeader} pts</strong> para {displayName(data[0], namePref)}</>
                           }
                         </span>
                         <Link
@@ -932,7 +938,7 @@ function _initials(name) {
   return (name || '').split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase() || '?'
 }
 
-function RankingPodium({ data, champPicks }) {
+function RankingPodium({ data, champPicks, namePref }) {
   const top3 = data.slice(0, 3)
   if (!top3.length) return null
   // CSS order: slot--2 (left), slot--1 (center/gold), slot--3 (right)
@@ -950,7 +956,7 @@ function RankingPodium({ data, champPicks }) {
             <div key={r.user_id} className={`group-podium__slot ${SLOT[i]}`}>
               <div className="group-podium__avatar">{_initials(r.name)}</div>
               <div className="group-podium__medal">{MEDAL[i]}</div>
-              <div className="group-podium__name" title={r.name}>{r.name}</div>
+              <div className="group-podium__name" title={r.name}>{displayName(r, namePref)}</div>
               <div className="group-podium__pts">{r.total_points} pts</div>
               {cp?.champion && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>

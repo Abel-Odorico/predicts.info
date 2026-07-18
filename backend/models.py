@@ -227,6 +227,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.user)
     theme = Column(String(10), default='system', nullable=False)
+    ranking_display_pref = Column(String(10), default='name', nullable=False)
     created_at  = Column(DateTime, default=_utcnow)
     updated_at  = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     referred_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -241,7 +242,7 @@ class User(Base):
     bets = relationship("Bet", back_populates="user")
     ranking = relationship("Ranking", back_populates="user", uselist=False)
     owned_groups = relationship("UserGroup", back_populates="owner", foreign_keys="UserGroup.owner_user_id")
-    group_memberships = relationship("UserGroupMember", back_populates="user")
+    group_memberships = relationship("UserGroupMember", back_populates="user", foreign_keys="UserGroupMember.user_id")
     sent_group_invites = relationship("UserGroupInvite", back_populates="inviter", foreign_keys="UserGroupInvite.inviter_user_id")
     received_group_invites = relationship("UserGroupInvite", back_populates="invitee", foreign_keys="UserGroupInvite.invitee_user_id")
 
@@ -347,6 +348,7 @@ class UserGroup(Base):
     owner = relationship("User", back_populates="owned_groups", foreign_keys=[owner_user_id])
     members = relationship("UserGroupMember", back_populates="group", cascade="all, delete-orphan")
     invites = relationship("UserGroupInvite", back_populates="group", cascade="all, delete-orphan")
+    join_requests = relationship("UserGroupJoinRequest", back_populates="group", cascade="all, delete-orphan")
 
 
 class UserGroupMember(Base):
@@ -359,10 +361,12 @@ class UserGroupMember(Base):
     is_owner = Column(Boolean, default=False)
     joined_at = Column(DateTime, default=_utcnow)
     champion_pick_team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
+    invited_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     group = relationship("UserGroup", back_populates="members")
-    user = relationship("User", back_populates="group_memberships")
+    user = relationship("User", back_populates="group_memberships", foreign_keys=[user_id])
     champion_pick = relationship("Team", foreign_keys=[champion_pick_team_id])
+    invited_by = relationship("User", foreign_keys=[invited_by_user_id])
 
 
 class UserGroupInvite(Base):
@@ -380,6 +384,24 @@ class UserGroupInvite(Base):
     group = relationship("UserGroup", back_populates="invites")
     inviter = relationship("User", back_populates="sent_group_invites", foreign_keys=[inviter_user_id])
     invitee = relationship("User", back_populates="received_group_invites", foreign_keys=[invitee_user_id])
+
+
+class UserGroupJoinRequest(Base):
+    """Pedido de entrada via link/QR de um membro que não é o dono — precisa aprovação
+    do dono do grupo (só o link/QR do próprio dono entra direto). Ver join_group_by_token."""
+    __tablename__ = "user_group_join_requests"
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    invited_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(Enum(GroupInviteStatus), default=GroupInviteStatus.pending, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+    responded_at = Column(DateTime)
+
+    group = relationship("UserGroup", back_populates="join_requests")
+    user = relationship("User", foreign_keys=[user_id])
+    invited_by = relationship("User", foreign_keys=[invited_by_user_id])
 
 
 class Poll(Base):

@@ -339,6 +339,23 @@ def update_theme(
     return user
 
 
+class RankingDisplayPrefUpdate(BaseModel):
+    ranking_display_pref: str
+
+@router.patch("/ranking-display-pref", response_model=UserResponse)
+def update_ranking_display_pref(
+    payload: RankingDisplayPrefUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if payload.ranking_display_pref not in ('name', 'username'):
+        raise HTTPException(400, "Preferência inválida — use name ou username")
+    user.ranking_display_pref = payload.ranking_display_pref
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 # ── Forgot / Reset Password ────────────────────────────────────────────────
 
 _RESET_EXPIRE_MINUTES = 60

@@ -13,6 +13,9 @@ const TYPE_META = {
   poll_reminder:  { icon: '📊', color: '#06b6d4', label: 'Pesquisa' },
   version_update: { icon: '🚀', color: '#10b981', label: 'Update' },
   group_invite:   { icon: '👥', color: '#4a90e8', label: 'Convite' },
+  group_join_request:  { icon: '🔔', color: '#4a90e8', label: 'Pedido' },
+  group_join_approved: { icon: '✅', color: '#2ec980', label: 'Aprovado' },
+  group_join_rejected: { icon: '🚫', color: '#e85252', label: 'Recusado' },
   champion_bonus: { icon: '🏆', color: '#e8a030', label: 'Bônus' },
   champion_remind:{ icon: '🏅', color: '#e8a030', label: 'Campeão' },
 }
@@ -43,7 +46,7 @@ function filterByType(items, filter) {
   if (filter === 'bet')      return items.filter(n => n.type.startsWith('bet_e') || n.type.startsWith('bet_c') || n.type.startsWith('bet_w'))
   if (filter === 'ranking')  return items.filter(n => n.type === 'ranking_top3')
   if (filter === 'reminder') return items.filter(n => n.type === 'bet_reminder' || n.type === 'poll_reminder')
-  if (filter === 'invite')   return items.filter(n => n.type === 'group_invite')
+  if (filter === 'invite')   return items.filter(n => n.type === 'group_invite' || n.type.startsWith('group_join_'))
   if (filter === 'update')   return items.filter(n => n.type === 'version_update')
   return items
 }

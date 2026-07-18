@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
@@ -9,11 +9,14 @@ export default function JoinGroup() {
   const { token, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const byId = searchParams.get('by')
   const [group,   setGroup]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [joining, setJoining] = useState(false)
   const [error,   setError]   = useState('')
   const [joined,  setJoined]  = useState(!!location.state?.justJoined)
+  const [pendingApproval, setPendingApproval] = useState(!!location.state?.pendingApproval)
 
   useEffect(() => {
     api.get(`/user-groups/join/${joinToken}`)
@@ -25,14 +28,17 @@ export default function JoinGroup() {
   async function handleJoin() {
     if (!token) {
       sessionStorage.setItem('join_token', joinToken)
+      if (byId) sessionStorage.setItem('join_by', byId)
       navigate('/login')
       return
     }
     setJoining(true)
     setError('')
     try {
-      await api.post(`/user-groups/join/${joinToken}`, {}, token)
-      setJoined(true)
+      const qs = byId ? `?by=${byId}` : ''
+      const res = await api.post(`/user-groups/join/${joinToken}${qs}`, {}, token)
+      if (res?.status === 'pending_approval') setPendingApproval(true)
+      else setJoined(true)
     } catch (e) {
       const msg = e.message || ''
       if (msg.includes('já faz parte')) {
@@ -55,6 +61,23 @@ export default function JoinGroup() {
           <h1 className="page-title">Link inválido</h1>
           <p className="page-subtitle">{error}</p>
           <Link to="/ranking" className="btn btn-primary btn-sm mt-4">Ver Ranking</Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (pendingApproval) {
+    return (
+      <div className="page">
+        <div className="card fade-in-1" style={{ textAlign: 'center', padding: 'var(--s24)' }}>
+          <div style={{ fontSize: 48, marginBottom: 'var(--s8)' }}>⏳</div>
+          <h1 className="page-title">Pedido enviado</h1>
+          <p className="page-subtitle">
+            Esse link não é do dono do grupo <strong>{group?.group_name}</strong> — seu pedido de entrada foi enviado e precisa ser aprovado por ele.
+          </p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 'var(--s8)', flexWrap: 'wrap' }}>
+            <Link to="/meus-grupos" className="btn btn-primary">Ver meus grupos</Link>
+          </div>
         </div>
       </div>
     )

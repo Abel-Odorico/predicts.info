@@ -444,7 +444,7 @@ img {
   justify-content: center;
   gap: 4px;
   height: var(--mobile-nav);
-  color: var(--text-3);
+  color: var(--text-2);
   text-decoration: none;
   transition: color 120ms;
   position: relative;
@@ -471,6 +471,24 @@ img {
   transition: transform 150ms;
 }
 .mobile-dock__item.active .mobile-dock__icon { transform: scale(1.15); }
+
+.mobile-dock__badge {
+  position: absolute;
+  top: 2px;
+  right: calc(50% - 22px);
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--lose);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-cond);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+}
 
 .mobile-dock__label {
   font-family: var(--font-cond);
@@ -1428,6 +1446,18 @@ img {
   border: 1px solid var(--border);
 }
 
+/* Escudo de clube (quadrado) detectado em runtime (TeamCrestFlag) — bandeira
+   retangular é feita pra object-fit:cover, escudo precisa contain + moldura
+   quadrada (mesmo tratamento já usado em .br-match__sim .duel-bar__flag). */
+.duel-bar__flag--crest {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border: none;
+  background: var(--bg-overlay);
+  border-radius: 6px;
+}
+
 .duel-bar__name {
   font-family: var(--font-display);
   font-size: 24px;
@@ -1662,6 +1692,17 @@ img {
   flex-shrink: 0;
 }
 
+/* Escudo de clube (Brasileirão) detectado em runtime (TeamCrestFlag) na
+   mesma vaga de UI da bandeira da Copa — ver .duel-bar__flag--crest acima. */
+.match-card__flag--crest {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border: none;
+  background: var(--bg-overlay);
+  border-radius: 4px;
+}
+
 .team-label {
   display: inline-flex;
   align-items: center;
@@ -1676,6 +1717,10 @@ img {
 .odds-label__team .team-label .match-card__flag {
   width: 16px;
   height: 11px;
+}
+.odds-label__team .team-label .match-card__flag--crest {
+  width: 15px;
+  height: 15px;
 }
 
 .match-card__sep,
@@ -6912,59 +6957,152 @@ button.admin-options-quick__card {
   margin: var(--s2) 0 0;
   line-height: 1.6;
 }
-.groups-switcher {
-  display: flex;
-  gap: var(--s2);
-  margin-top: var(--s5);
-  padding-bottom: var(--s2);
-  overflow-x: auto;
-  scrollbar-width: thin;
-  -webkit-overflow-scrolling: touch;
-}
-.groups-switcher__tab {
+.groups-switcher-dd {
   position: relative;
-  flex: 0 0 auto;
+  z-index: 5;
+  margin-top: var(--s5);
+}
+.groups-switcher-dd__trigger {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 140px;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
   padding: var(--s3) var(--s4);
   border: 1px solid var(--border);
   border-radius: var(--r2);
   background: var(--bg-surface);
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms;
+}
+.groups-switcher-dd__trigger:hover { border-color: var(--accent); }
+.groups-switcher-dd__trigger-icon { font-size: 20px; flex: 0 0 auto; }
+.groups-switcher-dd__trigger-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.groups-switcher-dd__trigger-name {
+  font-family: var(--font-cond);
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.groups-switcher-dd__trigger-meta {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.groups-switcher-dd__trigger-badge {
+  flex: 0 0 auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--lose, #e85252);
+  color: #fff;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 700;
+}
+.groups-switcher-dd__chevron {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  transition: transform 150ms;
+}
+.groups-switcher-dd__chevron.is-open { transform: rotate(180deg); }
+
+.groups-switcher-dd__panel {
+  position: absolute;
+  top: calc(100% + var(--s2));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+.groups-switcher-dd__search {
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-1);
+  font-family: var(--font-cond);
+  font-size: 14px;
+  outline: none;
+}
+.groups-switcher-dd__list {
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.groups-switcher-dd__empty {
+  padding: var(--s4);
+  text-align: center;
+  color: var(--text-3);
+  font-family: var(--font-cond);
+  font-size: 12px;
+}
+.groups-switcher-dd__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
   color: var(--text-2);
   cursor: pointer;
   text-align: left;
-  transition: border-color 150ms, background 150ms, color 150ms;
+  transition: background 120ms, color 120ms;
 }
-.groups-switcher__tab:hover { border-color: var(--accent); }
-.groups-switcher__tab.is-active {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+.groups-switcher-dd__list .groups-switcher-dd__row:last-child { border-bottom: none; }
+.groups-switcher-dd__row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.groups-switcher-dd__row.is-active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text-1);
 }
-.groups-switcher__name {
+.groups-switcher-dd__row-name {
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-cond);
   font-weight: 700;
   font-size: 13px;
   white-space: nowrap;
-  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.groups-switcher__meta {
+.groups-switcher-dd__row-meta {
+  flex: 0 0 auto;
   font-family: var(--font-cond);
   font-size: 10px;
   color: var(--text-4);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.groups-switcher__tab.is-active .groups-switcher__meta { color: var(--accent); }
-.groups-switcher__badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
+.groups-switcher-dd__row.is-active .groups-switcher-dd__row-meta { color: var(--accent); }
+.groups-switcher-dd__row-badge {
+  flex: 0 0 auto;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;

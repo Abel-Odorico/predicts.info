@@ -149,6 +149,7 @@ class UserResponse(BaseModel):
     whatsapp_prompted_at: datetime | None = None
     whatsapp_prefs: dict | None = None
     theme: str = 'system'
+    ranking_display_pref: str = 'name'
     created_at: datetime
 
     model_config = {"from_attributes": True}

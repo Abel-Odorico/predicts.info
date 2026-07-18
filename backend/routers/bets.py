@@ -458,6 +458,7 @@ def ranking(
             db.query(
                 User.id.label("user_id"),
                 User.name.label("name"),
+                User.username.label("username"),
                 func.coalesce(agg.c.total_points, 0).label("total_points"),
                 func.coalesce(agg.c.exact_scores, 0).label("exact_scores"),
                 func.coalesce(agg.c.correct_results, 0).label("correct_results"),
@@ -487,6 +488,7 @@ def ranking(
             db.query(
                 User.id.label("user_id"),
                 User.name.label("name"),
+                User.username.label("username"),
                 func.coalesce(Ranking.total_points, 0).label("total_points"),
                 func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
                 func.coalesce(Ranking.correct_results, 0).label("correct_results"),
@@ -510,6 +512,7 @@ def ranking(
             "position": i + 1,
             "user_id": r.user_id,
             "name": r.name,
+            "username": r.username,
             "total_points": r.total_points,
             "exact_scores": r.exact_scores,
             "correct_results": r.correct_results,

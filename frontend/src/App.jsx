@@ -52,6 +52,13 @@ function RefCapture() {
     if (ref && /^\d+$/.test(ref)) {
       localStorage.setItem('predicts_ref', ref)
     }
+    // QR de convite de bolão pode cair direto em /entrar (cadastro), sem passar
+    // pela tela intermediária /bolao/:token — captura aqui pra Login.jsx achar
+    // o convite pendente igual já faz quando vem de JoinGroup.jsx.
+    const join = params.get('join')
+    if (join) sessionStorage.setItem('join_token', join)
+    const by = params.get('by')
+    if (by && /^\d+$/.test(by)) sessionStorage.setItem('join_by', by)
   }, [])
   return null
 }

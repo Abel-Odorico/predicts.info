@@ -181,6 +181,7 @@ export default function Layout() {
             { to: '/ranking',      icon: <IconPodium />,        label: 'Ranking'           },
             { to: '/meus-grupos',  icon: <IconUsers />,         label: 'Meus Grupos'       },
             { to: '/brasileirao',  icon: '🇧🇷',                  label: 'Brasileirão'       },
+            ...(user ? [{ to: `/usuarios/${user.id}/historico`, icon: <IconHistory />, label: 'Histórico' }] : []),
           ].map(n => (
             <NavLink
               key={n.to} to={n.to} end={n.end}
@@ -341,6 +342,16 @@ export default function Layout() {
               <span className="mobile-drawer__item-label">{n.label}</span>
             </NavLink>
           ))}
+          {user && (
+            <NavLink
+              to={`/usuarios/${user.id}/historico`}
+              onClick={closeDrawer}
+              className={({ isActive }) => `mobile-drawer__item${isActive ? ' active' : ''}`}
+            >
+              <span className="mobile-drawer__item-icon"><IconHistory /></span>
+              <span className="mobile-drawer__item-label">Histórico</span>
+            </NavLink>
+          )}
           {/* Página estática (fora do SPA) — <a> normal, recarrega a página */}
           <a href="/noticias" className="mobile-drawer__item" onClick={closeDrawer}>
             <span className="mobile-drawer__item-icon">📰</span>
@@ -440,12 +451,10 @@ export default function Layout() {
           <span className="mobile-dock__label">Ranking</span>
         </NavLink>
 
-        <NavLink
-          to={user ? `/usuarios/${user.id}/historico` : '/login'}
-          className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}
-        >
-          <span className="mobile-dock__icon"><IconHistory size={20} /></span>
-          <span className="mobile-dock__label">Histórico</span>
+        <NavLink to="/meus-grupos" className={({ isActive }) => `mobile-dock__item${isActive ? ' active' : ''}`}>
+          <span className="mobile-dock__icon"><IconUsers size={20} /></span>
+          <span className="mobile-dock__label">Grupos</span>
+          {inviteCount > 0 && <span className="mobile-dock__badge">{inviteCount}</span>}
         </NavLink>
       </nav>
     </>

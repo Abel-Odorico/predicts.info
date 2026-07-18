@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from auth_utils import get_current_user
 from competitions import get_competition_id
 from database import get_db
-from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Notification, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupMember
+from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Notification, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupJoinRequest, UserGroupMember
 from routers.audit import log_action
 from routers.report import notify_new_group_telegram
 
@@ -43,6 +43,10 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None, recent_for
         invite for invite in group.invites
         if invite.status == GroupInviteStatus.pending
     ]
+    pending_join_requests = [
+        req for req in group.join_requests
+        if req.status == GroupInviteStatus.pending
+    ]
     members_out = []
     total_bets_g = total_exacts_g = 0
     for member in accepted_members:
@@ -64,6 +68,8 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None, recent_for
             "total_bets": bets,
             "correct_results": correct,
             "recent_form": form,
+            "invited_by_user_id": member.invited_by_user_id,
+            "invited_by_name": member.invited_by.name if member.invited_by else None,
         })
     member_count = len(accepted_members)
     group_xp = total_bets_g * 10 + total_exacts_g * 20 + member_count * 50
@@ -88,6 +94,18 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None, recent_for
             }
             for invite in pending_invites
         ],
+        "pending_join_requests": [
+            {
+                "id": req.id,
+                "user_id": req.user_id,
+                "name": req.user.name if req.user else "",
+                "email_masked": _mask_email(req.user.email if req.user else ""),
+                "invited_by_user_id": req.invited_by_user_id,
+                "invited_by_name": req.invited_by.name if req.invited_by else None,
+                "created_at": req.created_at,
+            }
+            for req in pending_join_requests
+        ],
     }
 
 
@@ -96,7 +114,10 @@ def _load_group(group_id: int, db: Session) -> UserGroup | None:
         db.query(UserGroup)
         .options(
             joinedload(UserGroup.members).joinedload(UserGroupMember.user),
+            joinedload(UserGroup.members).joinedload(UserGroupMember.invited_by),
             joinedload(UserGroup.invites),
+            joinedload(UserGroup.join_requests).joinedload(UserGroupJoinRequest.user),
+            joinedload(UserGroup.join_requests).joinedload(UserGroupJoinRequest.invited_by),
         )
         .filter(UserGroup.id == group_id)
         .first()
@@ -122,7 +143,10 @@ def list_user_groups(
         db.query(UserGroupMember)
         .options(
             joinedload(UserGroupMember.group).joinedload(UserGroup.members).joinedload(UserGroupMember.user),
+            joinedload(UserGroupMember.group).joinedload(UserGroup.members).joinedload(UserGroupMember.invited_by),
             joinedload(UserGroupMember.group).joinedload(UserGroup.invites),
+            joinedload(UserGroupMember.group).joinedload(UserGroup.join_requests).joinedload(UserGroupJoinRequest.user),
+            joinedload(UserGroupMember.group).joinedload(UserGroup.join_requests).joinedload(UserGroupJoinRequest.invited_by),
         )
         .filter(UserGroupMember.user_id == user.id)
         .all()
@@ -503,6 +527,7 @@ def group_ranking(
             db.query(
                 User.id.label("user_id"),
                 User.name.label("name"),
+                User.username.label("username"),
                 func.coalesce(func.sum(Ranking.total_points), 0).label("total_points"),
                 func.coalesce(func.sum(Ranking.exact_scores), 0).label("exact_scores"),
                 func.coalesce(func.sum(Ranking.correct_results), 0).label("correct_results"),
@@ -511,7 +536,7 @@ def group_ranking(
             .outerjoin(Ranking, User.id == Ranking.user_id)
             .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
             .filter(User.id.in_(member_ids))
-            .group_by(User.id, User.name, bet_counts.c.total_bets)
+            .group_by(User.id, User.name, User.username, bet_counts.c.total_bets)
             .all()
         )
     else:
@@ -519,6 +544,7 @@ def group_ranking(
             db.query(
                 User.id.label("user_id"),
                 User.name.label("name"),
+                User.username.label("username"),
                 func.coalesce(Ranking.total_points, 0).label("total_points"),
                 func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
                 func.coalesce(Ranking.correct_results, 0).label("correct_results"),
@@ -554,6 +580,7 @@ def group_ranking(
                 "position": i + 1,
                 "user_id": r.user_id,
                 "name": r.name,
+                "username": r.username,
                 "total_points": int(r.total_points or 0),
                 "exact_scores": int(r.exact_scores or 0),
                 "correct_results": int(r.correct_results or 0),
@@ -620,6 +647,7 @@ def get_group_by_token(token: str, db: Session = Depends(get_db)):
 @router.post("/join/{token}")
 def join_group_by_token(
     token: str,
+    by: int | None = Query(None, description="user_id de quem compartilhou o link (rastreio de indicação)"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -632,10 +660,166 @@ def join_group_by_token(
     ).first()
     if existing:
         raise HTTPException(409, "Você já faz parte deste grupo")
-    db.add(UserGroupMember(group_id=group.id, user_id=user.id, is_owner=False))
-    log_action(db, user.id, "group.join", {"group_id": group.id, "group_name": group.name})
+
+    # Só o link/QR do PRÓPRIO dono entra direto. Repassado por qualquer outro membro
+    # (ou link sem atribuição — ?by ausente/estranho) vira pedido, precisa aprovação —
+    # trava o grupo crescer sem controle via link forwardado adiante.
+    if by == group.owner_user_id:
+        db.add(UserGroupMember(group_id=group.id, user_id=user.id, is_owner=False, invited_by_user_id=by))
+        log_action(db, user.id, "group.join", {"group_id": group.id, "group_name": group.name, "invited_by_user_id": by})
+        db.commit()
+        return {"status": "joined", "group_id": group.id, "group_name": group.name}
+
+    existing_request = db.query(UserGroupJoinRequest).filter(
+        UserGroupJoinRequest.group_id == group.id,
+        UserGroupJoinRequest.user_id == user.id,
+        UserGroupJoinRequest.status == GroupInviteStatus.pending,
+    ).first()
+    if existing_request:
+        return {"status": "pending_approval", "group_id": group.id, "group_name": group.name}
+
+    invited_by_user_id = None
+    if by and by != user.id:
+        referrer_is_member = db.query(UserGroupMember).filter(
+            UserGroupMember.group_id == group.id,
+            UserGroupMember.user_id == by,
+        ).first()
+        if referrer_is_member:
+            invited_by_user_id = by
+
+    req = UserGroupJoinRequest(group_id=group.id, user_id=user.id, invited_by_user_id=invited_by_user_id)
+    db.add(req)
+    log_action(db, user.id, "group.join_request", {"group_id": group.id, "group_name": group.name, "invited_by_user_id": invited_by_user_id})
     db.commit()
-    return {"status": "joined", "group_id": group.id, "group_name": group.name}
+
+    db.add(Notification(
+        user_id=group.owner_user_id,
+        type="group_join_request",
+        title=f"🔔 Pedido de entrada em '{group.name}'",
+        body=f"{user.name} quer entrar no seu bolão — aprove ou recuse",
+        meta={"group_id": group.id, "group_name": group.name, "requester_name": user.name},
+    ))
+    db.commit()
+    try:
+        from routers.push import send_push_to_users
+        send_push_to_users(
+            db, [group.owner_user_id],
+            f"🔔 Pedido de entrada em '{group.name}'",
+            f"{user.name} quer entrar no seu bolão",
+            "/meus-grupos",
+            "group_join_request",
+        )
+    except Exception:
+        pass
+
+    return {"status": "pending_approval", "group_id": group.id, "group_name": group.name}
+
+
+@router.get("/{group_id}/join-requests")
+def list_join_requests(
+    group_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    _ensure_group_owner(group, user)
+    reqs = (
+        db.query(UserGroupJoinRequest)
+        .options(joinedload(UserGroupJoinRequest.user), joinedload(UserGroupJoinRequest.invited_by))
+        .filter(UserGroupJoinRequest.group_id == group_id, UserGroupJoinRequest.status == GroupInviteStatus.pending)
+        .order_by(UserGroupJoinRequest.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "user_id": r.user_id,
+            "name": r.user.name if r.user else "",
+            "email_masked": _mask_email(r.user.email if r.user else ""),
+            "invited_by_user_id": r.invited_by_user_id,
+            "invited_by_name": r.invited_by.name if r.invited_by else None,
+            "created_at": r.created_at,
+        }
+        for r in reqs
+    ]
+
+
+@router.post("/{group_id}/join-requests/{request_id}/approve")
+def approve_join_request(
+    group_id: int,
+    request_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    _ensure_group_owner(group, user)
+    req = db.query(UserGroupJoinRequest).filter(
+        UserGroupJoinRequest.id == request_id,
+        UserGroupJoinRequest.group_id == group_id,
+        UserGroupJoinRequest.status == GroupInviteStatus.pending,
+    ).first()
+    if not req:
+        raise HTTPException(404, "Pedido pendente não encontrado")
+
+    existing = db.query(UserGroupMember).filter(
+        UserGroupMember.group_id == group_id,
+        UserGroupMember.user_id == req.user_id,
+    ).first()
+    if not existing:
+        db.add(UserGroupMember(group_id=group_id, user_id=req.user_id, is_owner=False, invited_by_user_id=req.invited_by_user_id))
+    req.status = GroupInviteStatus.accepted
+    req.responded_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    log_action(db, user.id, "group.join_request_approve", {"group_id": group_id, "request_id": request_id, "requester_user_id": req.user_id})
+    db.commit()
+
+    db.add(Notification(
+        user_id=req.user_id,
+        type="group_join_approved",
+        title=f"✅ Pedido aprovado — '{group.name}'",
+        body=f"Você já faz parte do bolão '{group.name}'",
+        meta={"group_id": group_id, "group_name": group.name},
+    ))
+    db.commit()
+    return {"status": "approved", "group_id": group_id, "request_id": request_id}
+
+
+@router.post("/{group_id}/join-requests/{request_id}/reject")
+def reject_join_request(
+    group_id: int,
+    request_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    _ensure_group_owner(group, user)
+    req = db.query(UserGroupJoinRequest).filter(
+        UserGroupJoinRequest.id == request_id,
+        UserGroupJoinRequest.group_id == group_id,
+        UserGroupJoinRequest.status == GroupInviteStatus.pending,
+    ).first()
+    if not req:
+        raise HTTPException(404, "Pedido pendente não encontrado")
+
+    req.status = GroupInviteStatus.rejected
+    req.responded_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    log_action(db, user.id, "group.join_request_reject", {"group_id": group_id, "request_id": request_id, "requester_user_id": req.user_id})
+    db.commit()
+
+    db.add(Notification(
+        user_id=req.user_id,
+        type="group_join_rejected",
+        title=f"Pedido recusado — '{group.name}'",
+        body=f"O dono do bolão '{group.name}' não aprovou seu pedido de entrada",
+        meta={"group_id": group_id, "group_name": group.name},
+    ))
+    db.commit()
+    return {"status": "rejected", "group_id": group_id, "request_id": request_id}
 
 
 # ── Rename group ──────────────────────────────────────────────────────────────
@@ -809,6 +993,9 @@ def group_highlights(
     members_with_names = {
         r.id: r.name for r in db.query(User.id, User.name).filter(User.id.in_(member_ids)).all()
     }
+    members_with_usernames = {
+        r.id: r.username for r in db.query(User.id, User.username).filter(User.id.in_(member_ids)).all()
+    }
 
     # Próximo jogo aberto (só desta competição)
     next_match = (
@@ -861,7 +1048,7 @@ def group_highlights(
             else:
                 cur = 0
         if max_streak > 0:
-            streak_list.append({"user_id": uid, "name": members_with_names.get(uid, ""), "streak": max_streak})
+            streak_list.append({"user_id": uid, "name": members_with_names.get(uid, ""), "username": members_with_usernames.get(uid), "streak": max_streak})
     streak_list.sort(key=lambda x: -x["streak"])
 
     # Recent form per user (last 5 bets, most recent first)
@@ -889,7 +1076,7 @@ def group_highlights(
         .all()
     )
     weekly_ranking = [
-        {"user_id": r.user_id, "name": members_with_names.get(r.user_id, ""), "pts_week": int(r.pts_week or 0)}
+        {"user_id": r.user_id, "name": members_with_names.get(r.user_id, ""), "username": members_with_usernames.get(r.user_id), "pts_week": int(r.pts_week or 0)}
         for r in weekly_rows
     ]
 
@@ -909,7 +1096,7 @@ def group_highlights(
         .all()
     )
     monthly_ranking = [
-        {"user_id": r.user_id, "name": members_with_names.get(r.user_id, ""), "pts_month": int(r.pts_month or 0)}
+        {"user_id": r.user_id, "name": members_with_names.get(r.user_id, ""), "username": members_with_usernames.get(r.user_id), "pts_month": int(r.pts_month or 0)}
         for r in monthly_rows
     ]
 
@@ -960,6 +1147,7 @@ def group_highlights(
         db.query(
             User.id.label("user_id"),
             User.name.label("name"),
+            User.username.label("username"),
             func.coalesce(Ranking.total_points, 0).label("total_points"),
             func.coalesce(_bet_cnt_sub.c.cnt, 0).label("total_bets"),
         )
@@ -977,7 +1165,7 @@ def group_highlights(
         _pct = round(int(_ar.total_points or 0) / (_tb * 25) * 100)
         if _pct > _best_pct:
             _best_pct = _pct
-            best_approval = {"user_id": _ar.user_id, "name": _ar.name, "pct": _pct}
+            best_approval = {"user_id": _ar.user_id, "name": _ar.name, "username": _ar.username, "pct": _pct}
 
     # Recent bets with match/result details per member (last 20 each, ordered by date desc)
     _rd_rows = (
@@ -1368,6 +1556,7 @@ def group_ranking_by_phase(
         db.query(
             Bet.user_id,
             User.name,
+            User.username,
             func.sum(Bet.points_earned).label("total_points"),
             func.sum(case((Bet.points_earned == 3, 1), else_=0)).label("exact_scores"),
             func.sum(case((Bet.points_earned == 1, 1), else_=0)).label("correct_results"),
@@ -1383,7 +1572,7 @@ def group_ranking_by_phase(
         except ValueError:
             raise HTTPException(400, f"Fase inválida: {phase}")
     rows = (
-        q.group_by(Bet.user_id, User.name)
+        q.group_by(Bet.user_id, User.name, User.username)
         .order_by(desc(func.sum(Bet.points_earned)), desc(func.sum(case((Bet.points_earned == 3, 1), else_=0))))
         .all()
     )
@@ -1392,6 +1581,7 @@ def group_ranking_by_phase(
             "position": i + 1,
             "user_id": r.user_id,
             "name": r.name,
+            "username": r.username,
             "total_points": int(r.total_points or 0),
             "exact_scores": int(r.exact_scores or 0),
             "correct_results": int(r.correct_results or 0),
