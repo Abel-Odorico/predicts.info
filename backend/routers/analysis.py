@@ -43,6 +43,7 @@ OPENROUTER_FREE_MODELS = [
 # "google/gemini-2.5-flash-lite" adicionado (existe, mais barato que o flash normal).
 OPENROUTER_PAID_MODELS = [
     {"id": "anthropic/claude-opus-4",                      "label": "💎 Claude Opus 4 (melhor análise)"},
+    {"id": "anthropic/claude-sonnet-4.6",                   "label": "💎 Claude Sonnet 4.6 (recomendado Oráculo)"},
     {"id": "anthropic/claude-sonnet-4.5",                   "label": "💎 Claude Sonnet 4.5 (rápido+capaz)"},
     {"id": "openai/gpt-4.1",                               "label": "💎 GPT-4.1 (excelente contexto)"},
     {"id": "openai/gpt-4o",                                "label": "💎 GPT-4o"},
