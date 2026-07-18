@@ -37,7 +37,7 @@ function dismiss(key, days) {
 }
 
 // ── Shared: ModalShell (centro da tela) ───────────────────────────────────────
-function ModalShell({ onClose, children, maxWidth = 460, zIndex = 9500 }) {
+function ModalShell({ onClose, children, maxWidth = 460, zIndex = 'var(--z-modal)' }) {
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -46,32 +46,9 @@ function ModalShell({ onClose, children, maxWidth = 460, zIndex = 9500 }) {
   }, [onClose])
 
   return createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex,
-        background: 'rgba(3,8,14,0.75)', backdropFilter: 'blur(5px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        className="fade-in-1"
-        style={{
-          width: '100%', maxWidth, maxHeight: '90vh', overflowY: 'auto',
-          background: 'var(--bg-surface)', border: '1px solid var(--border)',
-          borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
-          position: 'relative',
-        }}
-      >
-        <button
-          onClick={onClose} aria-label="Fechar"
-          style={{
-            position: 'absolute', top: 12, right: 12, zIndex: 2,
-            width: 30, height: 30, borderRadius: 8, border: 'none', cursor: 'pointer',
-            background: 'var(--bg-overlay)', color: 'var(--text-2)', fontSize: 16, lineHeight: 1,
-          }}
-        >×</button>
+    <div onClick={onClose} className="pop-backdrop" style={{ zIndex }}>
+      <div onClick={e => e.stopPropagation()} className="pop-card fade-in-1" style={{ maxWidth }}>
+        <button onClick={onClose} aria-label="Fechar" className="pop-close">✕</button>
         {children}
       </div>
     </div>,
@@ -80,29 +57,13 @@ function ModalShell({ onClose, children, maxWidth = 460, zIndex = 9500 }) {
 }
 
 // ── Shared: BottomSheet (mobile-friendly) ─────────────────────────────────────
-function BottomSheet({ onClose, children, zIndex = 9400 }) {
+function BottomSheet({ onClose, children, zIndex = 'var(--z-sheet)' }) {
   return createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex,
-        background: 'rgba(3,8,14,0.72)', backdropFilter: 'blur(5px)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-        padding: '0 0 env(safe-area-inset-bottom, 16px)',
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        className="fade-in-1"
-        style={{
-          width: '100%', maxWidth: 440,
-          background: 'var(--bg-surface)', border: '1.5px solid var(--border)',
-          borderRadius: '16px 16px 0 0', padding: '20px 20px 24px',
-          boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
-        }}
-      >
+    <div onClick={onClose} className="pop-backdrop pop-backdrop--sheet" style={{ zIndex }}>
+      <div onClick={e => e.stopPropagation()} className="pop-sheet fade-in-1">
+        <button onClick={onClose} aria-label="Fechar" className="pop-close">✕</button>
         {/* drag handle */}
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 16px' }} />
+        <div className="pop-sheet__handle" />
         {children}
       </div>
     </div>,
@@ -353,7 +314,7 @@ export function InstallAppPopup({ onClose }) {
   const steps = INSTALL_STEPS[platform]
 
   return (
-    <ModalShell onClose={onClose} maxWidth={460} zIndex={9300}>
+    <ModalShell onClose={onClose} maxWidth={460} zIndex="var(--z-install)">
       <div style={{ padding: '0 0 6px' }}>
 
         {/* Hero banner */}
@@ -501,7 +462,7 @@ function PushPromptPopup({ token, onClose }) {
   }
 
   return (
-    <BottomSheet onClose={onClose} zIndex={9400}>
+    <BottomSheet onClose={onClose} zIndex="var(--z-sheet)">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
         <span style={{ fontSize: 32, lineHeight: 1, flexShrink: 0 }}>🔔</span>
         <div>
@@ -598,7 +559,7 @@ export function CompetitionPopup({ competition, onClose, showRankingLink = false
   }
 
   return (
-    <ModalShell onClose={onClose} maxWidth={460} zIndex={9600}>
+    <ModalShell onClose={onClose} maxWidth={460} zIndex="var(--z-popup-top)">
       <div style={{ padding: '0 0 4px' }}>
         {/* Hero */}
         <div style={{

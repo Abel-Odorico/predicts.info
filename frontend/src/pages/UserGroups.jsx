@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
 import { api } from '../api'
+import { toast } from '../toast'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS, COMPETITION_LABEL } from '../utils/competitions'
@@ -391,7 +392,6 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [email, setEmail] = useState('')
-  const [msg, setMsg] = useState('')
   const [searching, setSearching] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -539,7 +539,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       await api.delete(`/user-groups/${group.id}`, token)
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
       setDeleting(false)
     }
   }
@@ -551,7 +551,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       await api.delete(`/user-groups/${group.id}/leave`, token)
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
       setLeaving(false)
     }
   }
@@ -563,9 +563,10 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     try {
       await api.put(`/user-groups/${group.id}`, { name: newName.trim() }, token)
       setRenaming(false)
+      toast.success('Nome do grupo atualizado.')
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setSavingName(false)
     }
@@ -577,7 +578,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       const res = await api.post(`/user-groups/${group.id}/invite-link`, {}, token)
       setInviteLink(`${window.location.origin}/bolao/${res.token}`)
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setLinkLoading(false)
     }
@@ -597,7 +598,10 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
       }
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {}
+      toast.success('Link copiado!')
+    } catch {
+      toast.error('Não foi possível copiar o link.')
+    }
   }
 
   async function shareLink() {
@@ -630,10 +634,10 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     setCancellingId(inviteId)
     try {
       await api.delete(`/user-groups/${group.id}/invites/${inviteId}`, token)
-      setMsg('✓ Convite cancelado.')
+      toast.success('Convite cancelado.')
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setCancellingId(null)
     }
@@ -644,10 +648,10 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     setReqActionId(requestId)
     try {
       await api.post(`/user-groups/${group.id}/join-requests/${requestId}/approve`, {}, token)
-      setMsg('✓ Pedido aceito.')
+      toast.success('Pedido aceito.')
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setReqActionId(null)
     }
@@ -658,10 +662,10 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     setRemovingMemberId(targetUserId)
     try {
       await api.delete(`/user-groups/${group.id}/members/${targetUserId}`, token)
-      setMsg('✓ Membro removido.')
+      toast.success('Membro removido.')
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setRemovingMemberId(null)
     }
@@ -672,10 +676,10 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     setReqActionId(requestId)
     try {
       await api.post(`/user-groups/${group.id}/join-requests/${requestId}/reject`, {}, token)
-      setMsg('✓ Pedido recusado.')
+      toast.success('Pedido recusado.')
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setReqActionId(null)
     }
@@ -685,16 +689,15 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
     e.preventDefault()
     if (!email.trim()) return
     setInviting(true)
-    setMsg('')
     try {
       await api.post(`/user-groups/${group.id}/invites`, { email }, token)
       setEmail('')
       setQuery('')
       setResults([])
-      setMsg('✓ Convite enviado.')
+      toast.success('Convite enviado.')
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setInviting(false)
     }
@@ -702,15 +705,14 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
 
   async function inviteUser(userId) {
     setInviting(true)
-    setMsg('')
     try {
       await api.post(`/user-groups/${group.id}/invites`, { user_id: userId }, token)
       setQuery('')
       setResults([])
-      setMsg('✓ Convite enviado.')
+      toast.success('Convite enviado.')
       onRefresh()
     } catch (e) {
-      setMsg(`✗ ${e.message}`)
+      toast.error(e.message)
     } finally {
       setInviting(false)
     }
@@ -1238,13 +1240,8 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                   <button type="submit" className="btn btn-ghost btn-sm" disabled={inviting || !email.trim()}>{inviting ? 'Enviando...' : 'Enviar'}</button>
                 </div>
               </form>
-              {msg && <div className={`group-tool-message ${msg.startsWith('✓') ? 'is-success' : 'is-error'}`}>{msg}</div>}
             </div>
           </section>
-        )}
-
-        {!isOwner && msg && (
-          <div className={`group-tool-message ${msg.startsWith('✓') ? 'is-success' : 'is-error'}`} style={{ marginTop: 'var(--s3)' }}>{msg}</div>
         )}
       </div>
     </article>

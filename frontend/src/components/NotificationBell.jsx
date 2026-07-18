@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { useAuth } from '../stores/authStore'
@@ -29,6 +29,18 @@ const FILTERS = [
   { id: 'update',   label: '🚀 Updates' },
 ]
 
+const PAGE_SIZE = 30
+const PANEL_WIDTH = 400
+
+const EMPTY_MSG = {
+  all:      { icon: '🎉', title: 'Tudo em dia por aqui',              sub: 'Nenhuma notificação para mostrar agora.' },
+  bet:      { icon: '⚽', title: 'Nenhuma novidade de apostas',        sub: 'Seus palpites conferidos aparecem aqui.' },
+  ranking:  { icon: '🏆', title: 'Sem novidades no ranking',           sub: 'Suba no ranking pra ver alguma coisa por aqui.' },
+  reminder: { icon: '⏰', title: 'Sem lembretes por enquanto',         sub: 'Avisamos antes dos próximos jogos começarem.' },
+  invite:   { icon: '👥', title: 'Nenhum convite novo',                sub: 'Convites de grupo e bolão aparecem aqui.' },
+  update:   { icon: '🚀', title: 'Nenhuma novidade do app',            sub: 'Atualizações do Predicts aparecem por aqui.' },
+}
+
 function relTime(iso) {
   if (!iso) return ''
   const diff = Date.now() - new Date(iso).getTime()
@@ -51,25 +63,101 @@ function filterByType(items, filter) {
   return items
 }
 
-// Pendentes primeiro (na ordem que vieram, mais novas primeiro), depois lidas.
-// A ordem é congelada ao abrir/trocar filtro — marcar como lida não reordena
-// a fila embaixo do usuário no meio da navegação.
-function buildQueue(items, filter) {
-  const filtered = filterByType(items, filter)
-  const unread = filtered.filter(n => !n.read)
-  const read   = filtered.filter(n => n.read)
-  return [...unread, ...read].map(n => n.id)
+function sectionLabel(iso) {
+  const d = new Date(iso)
+  const now = new Date()
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startYesterday = new Date(startToday); startYesterday.setDate(startYesterday.getDate() - 1)
+  const startWeek = new Date(startToday); startWeek.setDate(startWeek.getDate() - 7)
+  if (d >= startToday) return 'Hoje'
+  if (d >= startYesterday) return 'Ontem'
+  if (d >= startWeek) return 'Esta semana'
+  return 'Anteriores'
+}
+
+// Agrupa preservando a ordem (lista já vem mais nova → mais antiga do backend).
+function groupBySection(items) {
+  const groups = []
+  let cur = null
+  for (const n of items) {
+    const label = sectionLabel(n.created_at)
+    if (!cur || cur.label !== label) {
+      cur = { label, items: [] }
+      groups.push(cur)
+    }
+    cur.items.push(n)
+  }
+  return groups
+}
+
+function anchoredStyle(rect) {
+  const gap = 8
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  let left = rect.right - PANEL_WIDTH
+  if (left < 12) left = 12
+  if (left + PANEL_WIDTH > vw - 12) left = Math.max(12, vw - 12 - PANEL_WIDTH)
+
+  const spaceBelow = vh - rect.bottom - gap - 12
+  const spaceAbove = rect.top - gap - 12
+  const wantMax = vh * 0.7
+
+  // Pouco espaço embaixo e mais espaço em cima → abre para cima.
+  if (spaceBelow < 240 && spaceAbove > spaceBelow) {
+    const maxHeight = Math.max(Math.min(wantMax, spaceAbove), 200)
+    return { position: 'fixed', bottom: vh - rect.top + gap, left, width: PANEL_WIDTH, maxHeight }
+  }
+  const maxHeight = Math.max(Math.min(wantMax, spaceBelow), 200)
+  return { position: 'fixed', top: rect.bottom + gap, left, width: PANEL_WIDTH, maxHeight }
+}
+
+// ── Modal de detalhe (corpo completo + data/hora completa) ──────────────────
+function NotificationDetailModal({ n, onClose }) {
+  const meta = TYPE_META[n.type] || { icon: '🔔', color: 'var(--accent)', label: '' }
+  const fullDate = n.created_at ? new Date(n.created_at).toLocaleString('pt-BR') : ''
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return createPortal(
+    <div className="pop-backdrop" style={{ zIndex: 'var(--z-popup-top)' }} onClick={onClose}>
+      <div className="pop-card fade-in-1" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} aria-label="Fechar" className="pop-close">✕</button>
+        <div className="notif-detail">
+          <div className="notif-detail__icon" style={{ color: meta.color }}>{meta.icon}</div>
+          <div className="notif-detail__title">{n.title}</div>
+          {n.body && <div className="notif-detail__body">{n.body}</div>}
+          <div className="notif-detail__time">{meta.label}{meta.label ? ' · ' : ''}{fullDate || relTime(n.created_at)}</div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
 }
 
 export default function NotificationBell() {
   const { token, user } = useAuth()
+  const bellRef = useRef(null)
+  const prevCountRef = useRef(0)
+  const initRef = useRef(false)
+
   const [open, setOpen] = useState(false)
+  const [anchor, setAnchor] = useState(null)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 600)
+
   const [count, setCount] = useState(0)
+  const [pulse, setPulse] = useState(false)
+
   const [items, setItems] = useState([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [filter, setFilter] = useState('all')
-  const [queueIds, setQueueIds] = useState([])
-  const [index, setIndex] = useState(0)
+  const [detail, setDetail] = useState(null)
+
   const [competition, setCompetition] = useState(null)
   const [showCompPopup, setShowCompPopup] = useState(false)
 
@@ -77,21 +165,25 @@ export default function NotificationBell() {
     if (!token) return
     try {
       const r = await api.get('/notifications/unread-count', token)
-      setCount(r.count || 0)
+      const next = r.count || 0
+      if (initRef.current && next > prevCountRef.current) setPulse(true)
+      initRef.current = true
+      prevCountRef.current = next
+      setCount(next)
     } catch {}
   }, [token])
 
-  const fetchAll = useCallback(async (activeFilter) => {
+  const fetchList = useCallback(async (offset) => {
     if (!token) return
-    setLoading(true)
+    if (offset === 0) setLoading(true); else setLoadingMore(true)
     try {
-      const r = await api.get('/notifications?limit=100', token)
+      const r = await api.get(`/notifications?limit=${PAGE_SIZE}&offset=${offset}`, token)
       const list = r.items || []
-      setItems(list)
-      setQueueIds(buildQueue(list, activeFilter))
-      setIndex(0)
+      setTotal(r.total || 0)
+      setItems(prev => (offset === 0 ? list : [...prev, ...list]))
     } catch {} finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [token])
 
@@ -107,176 +199,185 @@ export default function NotificationBell() {
   }, [])
 
   useEffect(() => {
-    if (!open) return
-    fetchAll(filter)
-  }, [open, fetchAll]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!pulse) return
+    const t = setTimeout(() => setPulse(false), 400)
+    return () => clearTimeout(t)
+  }, [pulse])
 
-  const current = useMemo(
-    () => items.find(n => n.id === queueIds[index]) || null,
-    [items, queueIds, index]
-  )
+  useEffect(() => {
+    function onResize() { setIsMobile(window.innerWidth <= 600) }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    fetchList(0)
+    function updateAnchor() {
+      if (bellRef.current) setAnchor(bellRef.current.getBoundingClientRect())
+    }
+    updateAnchor()
+    window.addEventListener('resize', updateAnchor)
+    window.addEventListener('scroll', updateAnchor, true)
+    return () => {
+      window.removeEventListener('resize', updateAnchor)
+      window.removeEventListener('scroll', updateAnchor, true)
+    }
+  }, [open, fetchList])
+
+  useEffect(() => {
+    function onKey(e) {
+      if (!open) return
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open])
 
   const markRead = useCallback(async (id) => {
     try {
       await api.patch(`/notifications/${id}/read`, {}, token)
       setItems(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
       setCount(c => Math.max(0, c - 1))
+      prevCountRef.current = Math.max(0, prevCountRef.current - 1)
     } catch {}
   }, [token])
-
-  // Cada notificação vista (pousou no índice) marca como lida na hora — não repete.
-  useEffect(() => {
-    if (!open || !current || current.read) return
-    markRead(current.id)
-  }, [open, current, markRead])
 
   async function markAllRead() {
     try {
       await api.patch('/notifications/read-all', {}, token)
       setItems(prev => prev.map(n => ({ ...n, read: true })))
       setCount(0)
+      prevCountRef.current = 0
     } catch {}
   }
 
-  function changeFilter(f) {
-    setFilter(f)
-    setQueueIds(buildQueue(items, f))
-    setIndex(0)
+  function openItem(n) {
+    setDetail(n)
+    if (!n.read) markRead(n.id)
   }
 
-  function goPrev() { setIndex(i => Math.max(0, i - 1)) }
-  function goNext() { setIndex(i => Math.min(queueIds.length - 1, i + 1)) }
+  function toggleOpen() {
+    setOpen(o => {
+      const next = !o
+      if (next && bellRef.current) setAnchor(bellRef.current.getBoundingClientRect())
+      return next
+    })
+  }
 
-  useEffect(() => {
-    function onKey(e) {
-      if (!open) return
-      if (e.key === 'Escape') setOpen(false)
-      if (e.key === 'ArrowLeft') goPrev()
-      if (e.key === 'ArrowRight') goNext()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, queueIds.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  const filtered = useMemo(() => filterByType(items, filter), [items, filter])
+  const sections = useMemo(() => groupBySection(filtered), [filtered])
+  const unreadCount = items.filter(n => !n.read).length
+  const emptyMsg = EMPTY_MSG[filter] || EMPTY_MSG.all
 
   if (!user) return null
 
-  const unreadCount = items.filter(n => !n.read).length
-  const meta = current ? (TYPE_META[current.type] || { icon: '🔔', color: 'var(--accent)', label: '' }) : null
-  const fullDate = current?.created_at ? new Date(current.created_at).toLocaleString('pt-BR') : ''
+  const panelStyle = isMobile ? undefined : anchoredStyle(anchor || { top: 60, right: 16, bottom: 60, left: 16, width: 0 })
+
+  const panelBody = (
+    <>
+      <div className="notif-panel__header">
+        <div>
+          <div className="notif-panel__title">Notificações</div>
+          {unreadCount > 0 && (
+            <div className="notif-panel__sub">{unreadCount} pendente{unreadCount !== 1 ? 's' : ''}</div>
+          )}
+        </div>
+        <div className="notif-panel__actions">
+          {unreadCount > 0 && (
+            <button className="notif-mark-all" onClick={markAllRead}>Marcar tudo</button>
+          )}
+          <button className="notif-close" onClick={() => setOpen(false)} aria-label="Fechar">✕</button>
+        </div>
+      </div>
+
+      <div className="notif-filters">
+        {FILTERS.map(f => (
+          <button
+            key={f.id}
+            className={`notif-filter${filter === f.id ? ' notif-filter--active' : ''}`}
+            onClick={() => setFilter(f.id)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {competition && (
+        <button className="notif-comp-banner" onClick={() => setShowCompPopup(true)}>
+          <span className="notif-comp-banner__icon">⚡</span>
+          <span className="notif-comp-banner__label">{competition.name}</span>
+          <span className="notif-comp-banner__arrow">→</span>
+        </button>
+      )}
+
+      {loading && (
+        <div className="notif-loading">
+          <span>Carregando…</span>
+        </div>
+      )}
+
+      {!loading && sections.length === 0 && (
+        <div className="notif-empty">
+          <div className="notif-empty__icon">{emptyMsg.icon}</div>
+          <div className="notif-empty__title">{emptyMsg.title}</div>
+          <div className="notif-empty__sub">{emptyMsg.sub}</div>
+        </div>
+      )}
+
+      {!loading && sections.length > 0 && (
+        <div className="notif-list">
+          {sections.map(group => (
+            <div key={group.label}>
+              <div className="notif-section__header">{group.label}</div>
+              {group.items.map(n => {
+                const meta = TYPE_META[n.type] || { icon: '🔔', color: 'var(--accent)', label: '' }
+                return (
+                  <button
+                    key={n.id}
+                    className={`notif-item${!n.read ? ' notif-item--unread' : ''}`}
+                    onClick={() => openItem(n)}
+                  >
+                    {!n.read && <span className="notif-item__dot" />}
+                    <span className="notif-item__icon" style={{ color: meta.color }}>{meta.icon}</span>
+                    <span className="notif-item__body">
+                      <span className="notif-item__title">{n.title}</span>
+                      {n.body && <span className="notif-item__snippet">{n.body}</span>}
+                      <span className="notif-item__time">{relTime(n.created_at)}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && items.length < total && (
+        <div className="notif-footer">
+          <button className="notif-load-more" onClick={() => fetchList(items.length)} disabled={loadingMore}>
+            {loadingMore ? 'Carregando…' : 'Carregar mais'}
+          </button>
+        </div>
+      )}
+    </>
+  )
 
   const portal = createPortal(
     <>
-      {open && <div className="notif-backdrop" onClick={() => setOpen(false)} />}
-
       {open && (
-        <div className="notif-modal" onClick={() => setOpen(false)}>
-          <div className="notif-modal__card" onClick={e => e.stopPropagation()}>
-            <div className="notif-panel__header">
-              <div>
-                <div className="notif-panel__title">Notificações</div>
-                {unreadCount > 0 && (
-                  <div className="notif-panel__sub">{unreadCount} pendente{unreadCount !== 1 ? 's' : ''}</div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {unreadCount > 0 && (
-                  <button className="notif-mark-all" onClick={markAllRead}>
-                    Marcar tudo
-                  </button>
-                )}
-                <button className="notif-close" onClick={() => setOpen(false)}>✕</button>
-              </div>
-            </div>
-
-            <div className="notif-filters">
-              {FILTERS.map(f => (
-                <button
-                  key={f.id}
-                  className={`notif-filter${filter === f.id ? ' notif-filter--active' : ''}`}
-                  onClick={() => changeFilter(f.id)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            {competition && (
-              <button
-                onClick={() => setShowCompPopup(true)}
-                style={{
-                  margin: '10px 20px 0', padding: '10px 12px',
-                  background: 'linear-gradient(135deg,rgba(232,196,74,0.13) 0%,rgba(232,196,74,0.04) 100%)',
-                  border: '1.5px solid rgba(232,196,74,0.3)', borderRadius: 10,
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  cursor: 'pointer', textAlign: 'left',
-                }}
-              >
-                <span style={{ fontSize: 18, flexShrink: 0 }}>⚡</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12.5, color: '#e8c44a', lineHeight: 1.2 }}>
-                    {competition.name}
-                  </div>
-                </div>
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: '#e8c44a', flexShrink: 0 }}>→</span>
-              </button>
-            )}
-
-            {loading && (
-              <div className="notif-empty">
-                <div className="notif-empty__icon">⏳</div>
-                <div>Carregando...</div>
-              </div>
-            )}
-
-            {!loading && queueIds.length === 0 && (
-              <div className="notif-empty">
-                <div className="notif-empty__icon">✨</div>
-                <div className="notif-empty__title">Nenhuma notificação</div>
-                <div className="notif-empty__sub">Você está em dia!</div>
-              </div>
-            )}
-
-            {!loading && current && (
-              <>
-                <div className="notif-progress">
-                  <span>{index + 1} de {queueIds.length}</span>
-                  <span className={`notif-progress__state notif-progress__state--${current.read ? 'read' : 'unread'}`}>
-                    {current.read ? 'LIDA' : 'PENDENTE'}
-                  </span>
-                </div>
-
-                <div className="notif-card">
-                  <div className="notif-card__icon" style={{ color: meta.color }}>{meta.icon}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="notif-card__title">{current.title}</div>
-                    {current.body && <div className="notif-card__body">{current.body}</div>}
-                    <div className="notif-card__time">{meta.label} · {fullDate || relTime(current.created_at)}</div>
-                  </div>
-                </div>
-
-                <div className="notif-nav">
-                  <button className="notif-nav__arrow" onClick={goPrev} disabled={index === 0} aria-label="Anterior">
-                    ◀
-                  </button>
-                  <div className="notif-nav__dots">
-                    {queueIds.map((id, i) => {
-                      const n = items.find(x => x.id === id)
-                      return (
-                        <span
-                          key={id}
-                          className={`notif-nav__dot${i === index ? ' notif-nav__dot--current' : n && !n.read ? ' notif-nav__dot--unread' : ''}`}
-                          onClick={() => setIndex(i)}
-                        />
-                      )
-                    })}
-                  </div>
-                  <button className="notif-nav__arrow" onClick={goNext} disabled={index >= queueIds.length - 1} aria-label="Próxima">
-                    ▶
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+        <div
+          className={`notif-scrim${isMobile ? ' notif-scrim--sheet' : ''}`}
+          onClick={() => setOpen(false)}
+        />
+      )}
+      {open && (
+        <div
+          className={isMobile ? 'notif-sheet' : 'notif-panel'}
+          style={panelStyle}
+          onClick={e => e.stopPropagation()}
+        >
+          {panelBody}
         </div>
       )}
     </>,
@@ -286,18 +387,22 @@ export default function NotificationBell() {
   return (
     <>
       <button
+        ref={bellRef}
         className="notif-bell"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggleOpen}
         title="Notificações"
         aria-label={`Notificações${count > 0 ? ` (${count} não lidas)` : ''}`}
       >
         <span className="notif-bell__icon">🔔</span>
         {count > 0 && (
-          <span className="notif-bell__badge">{count > 99 ? '99+' : count}</span>
+          <span className={`notif-bell__badge${pulse ? ' notif-bell__badge--pulse' : ''}`}>
+            {count > 99 ? '99+' : count}
+          </span>
         )}
       </button>
 
       {portal}
+      {detail && <NotificationDetailModal n={detail} onClose={() => setDetail(null)} />}
       {showCompPopup && competition && (
         <CompetitionPopup
           competition={competition}

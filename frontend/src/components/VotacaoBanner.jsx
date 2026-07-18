@@ -10,13 +10,16 @@ export default function VotacaoBanner() {
   const location = useLocation()
   const [poll, setPoll] = useState(null)
   const [myVote, setMyVote] = useState(null)
-  const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem('votacao_dismissed') === '1'
-  )
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     api.get('/poll/active').then(setPoll).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!poll?.id) return
+    setDismissed(localStorage.getItem(`votacao_dismissed_${poll.id}`) === '1')
+  }, [poll?.id])
 
   useEffect(() => {
     if (token && poll?.is_open) {
@@ -33,7 +36,7 @@ export default function VotacaoBanner() {
   if (voted) return null
 
   function dismiss() {
-    sessionStorage.setItem('votacao_dismissed', '1')
+    if (poll?.id) localStorage.setItem(`votacao_dismissed_${poll.id}`, '1')
     setDismissed(true)
   }
 

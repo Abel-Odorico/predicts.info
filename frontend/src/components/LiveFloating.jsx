@@ -193,7 +193,7 @@ export default function LiveFloating() {
         style={{
           position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 70px)', left: '50%',
           transform: 'translateX(-50%)',
-          zIndex: 8000,
+          zIndex: 'var(--z-pill)',
           display: 'flex', flexDirection: 'column', gap: 0, cursor: 'pointer',
           padding: '8px 16px', borderRadius: 18,
           background: 'rgba(20,20,24,0.82)', backdropFilter: 'blur(10px)',
@@ -297,7 +297,7 @@ export default function LiveFloating() {
       {open && createPortal(
         <div
           onClick={() => setOpen(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-live-modal)', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
         >
           <div
             onClick={e => e.stopPropagation()}

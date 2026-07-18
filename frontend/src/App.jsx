@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Layout        from './components/Layout'
 import VotacaoBanner from './components/VotacaoBanner'
 import Spinner       from './components/Spinner'
 import AdSlot        from './components/AdSlot'
+import Toaster       from './components/Toaster'
 import { useAuth }   from './stores/authStore'
 import { api }       from './api'
 
@@ -122,6 +124,7 @@ export default function App() {
           <AdSlotByRoute slot="content" />
         </main>
       </div>
+      <Toaster />
     </BrowserRouter>
   )
 }
@@ -154,10 +157,10 @@ function UpdateBanner() {
 
   const changes = version?.changes || []
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 68px)',
-      left: 12, right: 12, zIndex: 8500,
+      left: 12, right: 12, zIndex: 'var(--z-banner)',
       background: 'var(--bg-card)',
       border: '2px solid var(--accent)',
       borderRadius: 14,
@@ -216,7 +219,8 @@ function UpdateBanner() {
           </ul>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 

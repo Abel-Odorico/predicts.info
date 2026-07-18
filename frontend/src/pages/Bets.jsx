@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { toast } from '../toast'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
@@ -603,7 +604,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
       setCommunityBets(null)
       if (showOdds) fetchCommunityBets()
     } catch (e) {
-      setMsg(e.message)
+      toast.error(e.message)
     } finally {
       setSaving(false)
     }
@@ -868,7 +869,7 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
             {saving ? 'Salvando...' : hasBet ? 'Atualizar Palpite' : 'Confirmar Palpite'}
           </button>
           {msg && (
-            <p className="bet-inline-msg" style={{ color: msg.startsWith('✓') ? 'var(--win)' : 'var(--lose)' }}>
+            <p className="bet-inline-msg" style={{ color: 'var(--lose)' }}>
               {msg}
             </p>
           )}
