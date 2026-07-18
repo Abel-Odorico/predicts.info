@@ -115,6 +115,8 @@ def _get_or_fetch_h2h(db: Session, code_a: str, code_b: str, name_a: str, name_b
 
 def _campanha(db: Session, match: Match, team_id: int, team_code: str) -> str:
     from sqlalchemy import or_
+    is_br = match.competition_id == get_competition_id(db, "brasileirao2026")
+    sem_jogos_msg = "sem jogos anteriores no Brasileirão" if is_br else "sem jogos anteriores nesta Copa"
     rows = (
         db.query(Match)
         .options(joinedload(Match.result), joinedload(Match.team_a), joinedload(Match.team_b))
@@ -138,7 +140,7 @@ def _campanha(db: Session, match: Match, team_id: int, team_code: str) -> str:
         opp = m.team_b.code if is_a else m.team_a.code
         tag = f" ({m.phase.value})" if m.phase and m.phase.value != "group" else ""
         parts.append(f"{my_score}x{opp_score} {opp}{tag}")
-    return " · ".join(parts) if parts else "sem jogos anteriores nesta Copa"
+    return " · ".join(parts) if parts else sem_jogos_msg
 
 
 def _pt(v: float, casas: int = 1) -> str:
@@ -160,6 +162,11 @@ def build_analysis_body(db: Session, match: Match, cache_only: bool = False) -> 
     ta, tb = match.team_a, match.team_b
     if not ta or not tb:
         return None
+
+    # Rótulo "Campanha" — texto genérico "nesta Copa" não faz sentido pro
+    # Brasileirão (Oráculo passou a cobrir clube também, ver routers/bot.py).
+    is_br = match.competition_id == get_competition_id(db, "brasileirao2026")
+    campanha_label = "Campanha no Brasileirão" if is_br else "Campanha nesta Copa"
 
     ta_in = _team_to_input(ta)
     tb_in = _team_to_input(tb)
@@ -194,7 +201,7 @@ def build_analysis_body(db: Session, match: Match, cache_only: bool = False) -> 
         f"<u>Ataque (xG/jogo)</u>: {ta.code} {_pt(ta.xg_for, 2)} vs {tb.code} {_pt(tb.xg_for, 2)}",
         f"<u>Defesa (xGA/jogo)</u>: {ta.code} {_pt(ta.xg_against, 2)} vs {tb.code} {_pt(tb.xg_against, 2)}",
         "",
-        "<u>Campanha nesta Copa</u>:",
+        f"<u>{campanha_label}</u>:",
         f"{ta.code}: {_campanha(db, match, ta.id, ta.code)}",
         f"{tb.code}: {_campanha(db, match, tb.id, tb.code)}",
     ]

@@ -32,7 +32,60 @@ BOT_EMAIL = "bot@predicts.info"
 BOT_NAME  = "🔮 Oráculo Predictor"
 BOT_USER  = "predictor_ia"
 
+# Extensão pro Brasileirão (2026-07-18): Oráculo passa a cobrir brasileirao2026
+# além de copa2026. copa2026 nunca precisou de janela de data no /bet em lote
+# porque suas partidas só existem no banco progressivamente (mata-mata é criado
+# conforme a fase anterior termina). O Brasileirão já tem as 380 partidas da
+# temporada inteira pré-carregadas — sem essa janela, "apostar em lote" faria
+# o bot apostar em rodadas distantes de uma vez. Só se aplica a competições
+# kind="league" (Copa é "cup", fica intocada).
+BOT_BATCH_LEAGUE_WINDOW_DAYS = 3
+
 router = APIRouter(prefix="/admin/bot", tags=["bot"])
+
+
+def _bot_competition_ids(db: Session) -> list[int]:
+    """IDs das competições que o Oráculo cobre hoje: copa2026 + brasileirao2026."""
+    copa_id = get_competition_id(db)
+    br_id = get_competition_id(db, "brasileirao2026")
+    return [c for c in (copa_id, br_id) if c is not None]
+
+
+def _bot_competition_stats(db: Session, bot_id: int, comp_id: int | None) -> dict:
+    """Stats do bot (apostas/pontos/posição) escopados numa única competição."""
+    empty = {
+        "total_bets": 0, "evaluated": 0, "pending": 0,
+        "exatos": 0, "certos": 0, "erros": 0,
+        "total_points": 0, "ranking_position": None,
+    }
+    if comp_id is None:
+        return empty
+    ranking = db.query(Ranking).filter(
+        Ranking.user_id == bot_id, Ranking.competition_id == comp_id
+    ).first()
+    bets_q = db.query(Bet).filter(Bet.user_id == bot_id, Bet.competition_id == comp_id)
+    total_bets = bets_q.count()
+    evaluated = bets_q.filter(Bet.evaluated_at.isnot(None)).all()
+
+    exatos = sum(1 for b in evaluated if b.points_earned == 25)
+    certos = sum(1 for b in evaluated if b.points_earned in (10, 12, 15, 18))
+    erros  = sum(1 for b in evaluated if b.points_earned == 0)
+    total_pts = ranking.total_points if ranking else 0
+
+    pos = None
+    if ranking:
+        pos = db.query(func.count(Ranking.user_id)).filter(
+            Ranking.competition_id == comp_id,
+            Ranking.total_points > total_pts,
+        ).scalar()
+        pos = (pos or 0) + 1
+
+    return {
+        "total_bets": total_bets, "evaluated": len(evaluated),
+        "pending": total_bets - len(evaluated),
+        "exatos": exatos, "certos": certos, "erros": erros,
+        "total_points": total_pts, "ranking_position": pos,
+    }
 
 
 def _require_admin(user: User = Depends(get_current_user)) -> User:
@@ -124,26 +177,17 @@ def bot_status(db: Session = Depends(get_db), _admin: User = Depends(_require_ad
     if not bot:
         return {"exists": False}
 
-    from competitions import get_competition_id
-    ranking = db.query(Ranking).filter(
-        Ranking.user_id == bot.id, Ranking.competition_id == get_competition_id(db)
-    ).first()
-    total_bets = db.query(func.count(Bet.id)).filter(Bet.user_id == bot.id).scalar() or 0
-    evaluated = db.query(Bet).filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None)).all()
+    copa_id = get_competition_id(db)
+    copa_stats = _bot_competition_stats(db, bot.id, copa_id)
 
-    exatos    = sum(1 for b in evaluated if b.points_earned == 25)
-    certos    = sum(1 for b in evaluated if b.points_earned in (10, 12, 15, 18))
-    erros     = sum(1 for b in evaluated if b.points_earned == 0)
-    total_pts = ranking.total_points if ranking else 0
-
-    # Posição no ranking
-    pos = None
-    if ranking:
-        pos = db.query(func.count(Ranking.user_id)).filter(
-            Ranking.competition_id == get_competition_id(db),
-            Ranking.total_points > total_pts
-        ).scalar()
-        pos = (pos or 0) + 1
+    # Bloco Brasileirão — aditivo, nunca derruba o status da Copa se falhar.
+    br_stats = None
+    try:
+        br_id = get_competition_id(db, "brasileirao2026")
+        if br_id is not None:
+            br_stats = _bot_competition_stats(db, bot.id, br_id)
+    except Exception as e:
+        print(f"[bot_status] stats Brasileirão falharam (ignorado): {e}", flush=True)
 
     # Champion pick
     pick = db.query(ChampionPick).filter(ChampionPick.user_id == bot.id).first()
@@ -154,14 +198,8 @@ def bot_status(db: Session = Depends(get_db), _admin: User = Depends(_require_ad
         "exists": True,
         "user_id": bot.id,
         "name": bot.name,
-        "total_bets": total_bets,
-        "evaluated": len(evaluated),
-        "pending": total_bets - len(evaluated),
-        "exatos": exatos,
-        "certos": certos,
-        "erros": erros,
-        "total_points": total_pts,
-        "ranking_position": pos,
+        **copa_stats,
+        "brasileirao": br_stats,
         "champion": {"id": champ_team.id, "name": champ_team.name, "code": champ_team.code, "flag": champ_team.flag_url} if champ_team else None,
         "vice": {"id": vice_team.id, "name": vice_team.name, "code": vice_team.code, "flag": vice_team.flag_url} if vice_team else None,
     }
@@ -183,10 +221,10 @@ def bot_bet(
 
     now = _utcnow()
 
-    from competitions import get_competition_id
+    comp_ids = _bot_competition_ids(db)
     q = db.query(Match).filter(
         Match.status == MatchStatus.scheduled,
-        Match.competition_id == get_competition_id(db),
+        Match.competition_id.in_(comp_ids),
     )
     if phase:
         try:
@@ -195,6 +233,22 @@ def bot_bet(
             raise HTTPException(400, f"Fase inválida: {phase}")
 
     matches = q.all()
+
+    # Competições "league" (Brasileirão) já têm a temporada inteira no banco —
+    # sem essa janela, apostar em lote bateria em rodadas bem distantes de uma
+    # vez só. Copa é "cup" (não afetada — bracket só existe conforme avança).
+    from models import Competition
+    league_ids = {
+        cid for (cid,) in db.query(Competition.id)
+        .filter(Competition.kind == "league", Competition.id.in_(comp_ids))
+        .all()
+    }
+    if league_ids:
+        horizon_batch = now + timedelta(days=BOT_BATCH_LEAGUE_WINDOW_DAYS)
+        matches = [
+            m for m in matches
+            if m.competition_id not in league_ids or (m.match_date and m.match_date <= horizon_batch)
+        ]
 
     existing_ids = {
         b.match_id
@@ -344,6 +398,8 @@ def bot_bets(db: Session = Depends(get_db), _admin: User = Depends(_require_admi
             return "correct"
         return "wrong"
 
+    br_id = get_competition_id(db, "brasileirao2026")
+
     rows = []
     by_phase: dict[str, dict] = {}
 
@@ -352,6 +408,10 @@ def bot_bets(db: Session = Depends(get_db), _admin: User = Depends(_require_admi
         r = m.result if m else None
         outcome = _outcome(b)
         phase = (m.phase.value if m and m.phase else "group")
+        # Brasileirão é sempre phase=group — sem isso, o balde "group" agregado
+        # aqui embaixo misturaria fase de grupos da Copa com rodadas do
+        # Brasileirão (times/pontos diferentes, mesma chave). Balde próprio.
+        phase_key = "brasileirao" if (br_id is not None and b.competition_id == br_id) else phase
 
         row = {
             "id": b.id,
@@ -371,9 +431,9 @@ def bot_bets(db: Session = Depends(get_db), _admin: User = Depends(_require_admi
         }
         rows.append(row)
 
-        if phase not in by_phase:
-            by_phase[phase] = {"total": 0, "evaluated": 0, "exatos": 0, "certos": 0, "erros": 0, "points": 0}
-        bp = by_phase[phase]
+        if phase_key not in by_phase:
+            by_phase[phase_key] = {"total": 0, "evaluated": 0, "exatos": 0, "certos": 0, "erros": 0, "points": 0}
+        bp = by_phase[phase_key]
         bp["total"] += 1
         if outcome is not None:
             bp["evaluated"] += 1
@@ -574,6 +634,95 @@ def _build_oracle_prompt(db: Session, match: Match, base: tuple[int, int]) -> st
     )
 
 
+def _is_br_match(db: Session, match: Match) -> bool:
+    """True se a partida é do Brasileirão (clube, não seleção)."""
+    br_id = get_competition_id(db, "brasileirao2026")
+    return br_id is not None and match.competition_id == br_id
+
+
+def _build_oracle_prompt_br(db: Session, match: Match, base: tuple[int, int]) -> str:
+    """Prompt do Oráculo pra jogo de CLUBE (Brasileirão) — sem convocados/Mundiais
+    (não fazem sentido pra clube), com tabela/pontos/Elo/forma/títulos e confronto
+    direto NESTA temporada. Reusa _get_br_context/BR_TITLES de routers/analysis.py
+    (mesmo padrão do BR_PROMPT_TEMPLATE da análise, ver commit 9be0dd8)."""
+    from routers.analysis import _get_mc_prob, _get_recent_results, _get_br_context
+
+    ta, tb = match.team_a, match.team_b
+    mc = _get_mc_prob(db, match.id)
+    ra = _get_recent_results(db, ta.code, limit=5) if ta else []
+    rb = _get_recent_results(db, tb.code, limit=5) if tb else []
+    ctx_a, ctx_b, h2h_season = _get_br_context(db, match.competition_id, match.team_a_id, match.team_b_id)
+
+    def fmt_results(results) -> str:
+        if not results:
+            return "  Sem dados disponíveis nesta temporada"
+        return "\n".join(
+            f"  {r['date']}: {r['team_a']} {r['score_a']}–{r['score_b']} {r['team_b']}"
+            for r in results
+        )
+
+    def fmt_h2h() -> str:
+        if not h2h_season:
+            return "  Times ainda não se enfrentaram nesta temporada"
+        return "\n".join(
+            f"  {g['home']} {g['score_home']}–{g['score_away']} {g['away']}" for g in h2h_season[:3]
+        )
+
+    mc_block = "indisponível"
+    if mc:
+        top = "  |  ".join(
+            f"{s['score']} ({s['prob']:.1f}%)" for s in mc.get("top_scores", [])[:8]
+        )
+        mc_block = (
+            f"Vitória {ta.name}: {mc['prob_a']:.1f}% | Empate: {mc['prob_draw']:.1f}% | Vitória {tb.name}: {mc['prob_b']:.1f}%\n"
+            f"xG esperado: {ta.name} {mc['lambda_a']:.2f} gols × {tb.name} {mc['lambda_b']:.2f} gols\n"
+            f"Top placares (Monte Carlo): {top}"
+        )
+
+    rodada = match.match_number or "?"
+
+    return (
+        "Você é o ORÁCULO PREDICTOR — IA especialista em prever placares EXATOS de futebol.\n"
+        "Seu objetivo é maximizar acertos de RESULTADO e PLACAR EXATO no Campeonato Brasileiro Série A 2026.\n\n"
+        f"## Partida\n"
+        f"{ta.name} ({ta.code}) x {tb.name} ({tb.code}) — rodada {rodada} de 38. "
+        "NÃO é mata-mata: preveja só o placar do jogo (sem prorrogação/pênaltis).\n\n"
+        f"## Modelo Estatístico (Dixon-Coles + Monte Carlo)\n"
+        f"Baseline atual: {base[0]}×{base[1]}\n"
+        f"{mc_block}\n\n"
+        f"## {ta.name} ({ta.code})\n"
+        f"Posição: {ctx_a['pos']}º lugar | {ctx_a['pts']} pts (V{ctx_a['v']} E{ctx_a['e']} D{ctx_a['d']}) | Saldo de gols: {ctx_a['sg']}\n"
+        f"Elo (replay da temporada): {ta.elo_rating or 'N/D'} | Forma (10j): {ta.form_10 or 'N/D'}\n"
+        f"Ataque: {ta.avg_goals_for or 'N/D'} gols/jogo | Defesa: {ta.avg_goals_against or 'N/D'} sofridos/jogo\n"
+        f"Títulos do Brasileirão: {ctx_a['titles']}\n"
+        f"Últimos jogos na temporada:\n{fmt_results(ra)}\n\n"
+        f"## {tb.name} ({tb.code})\n"
+        f"Posição: {ctx_b['pos']}º lugar | {ctx_b['pts']} pts (V{ctx_b['v']} E{ctx_b['e']} D{ctx_b['d']}) | Saldo de gols: {ctx_b['sg']}\n"
+        f"Elo (replay da temporada): {tb.elo_rating or 'N/D'} | Forma (10j): {tb.form_10 or 'N/D'}\n"
+        f"Ataque: {tb.avg_goals_for or 'N/D'} gols/jogo | Defesa: {tb.avg_goals_against or 'N/D'} sofridos/jogo\n"
+        f"Títulos do Brasileirão: {ctx_b['titles']}\n"
+        f"Últimos jogos na temporada:\n{fmt_results(rb)}\n\n"
+        f"## Confronto direto (nesta temporada)\n{fmt_h2h()}\n\n"
+        "## Decisão\n"
+        "Analise TODOS os dados acima. Prioridade de decisão:\n"
+        "1. Se o favorito do Elo (>100 pts acima) tem ataque forte e forma positiva → aposte na vitória do favorito.\n"
+        "2. Use os top-placares do Monte Carlo como âncora — desvie só se forma/posição na tabela justificarem.\n"
+        "3. Considere o que está em jogo na tabela (briga por título/G4/Libertadores ou risco de rebaixamento) "
+        "como motivação extra, mas não substitua os dados estatísticos por isso.\n"
+        "4. NÃO temos boletim médico de clube (sem convocação oficial) — NÃO cite lesão/suspensão específica; "
+        "se for considerar desfalque, fale em termos genéricos de 'força do elenco'.\n"
+        "5. Só se afaste do baseline com convicção real (forma muito destoante, mando de campo decisivo). "
+        "Divergência sem motivo forte derruba a taxa de acerto de placar exato — na dúvida, confirme o baseline.\n\n"
+        "Responda em JSON PURO (sem markdown, sem ```):\n"
+        "{\n"
+        f'  "score_a": <int gols {ta.code}>,\n'
+        f'  "score_b": <int gols {tb.code}>,\n'
+        '  "confidence": <int 0-100>,\n'
+        '  "reason": "3-5 frases em PT-BR: qual dado foi decisivo, por que confirma ou altera o baseline"\n'
+        "}"
+    )
+
+
 def _has_relevant_absence(db: Session, match: Match) -> bool:
     """True se algum convocado das duas equipes está lesionado/suspenso."""
     from models import Player
@@ -608,7 +757,10 @@ def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
         return result
     from routers.analysis import _call_llm, _get_provider_chain, _build_slot_entries
     try:
-        prompt = _build_oracle_prompt(db, match, (base_a, base_b))
+        if _is_br_match(db, match):
+            prompt = _build_oracle_prompt_br(db, match, (base_a, base_b))
+        else:
+            prompt = _build_oracle_prompt(db, match, (base_a, base_b))
         # "oracle_fallback_enabled"="false": só o provider PRIMÁRIO (oracle_provider),
         # sem cair pros outros — nem reordenar, nem tentar mais nada na cadeia.
         oracle_fallback_on = str(
@@ -698,9 +850,13 @@ def _oracle_telegram(db: Session, match: Match, decision: dict, action: str, old
         # Mesma fundamentação (probabilidades/xG/Elo/forma/campanha/H2H) da
         # Projeção automática — reusa build_analysis_body pra não duplicar o
         # cálculo de lambdas/Monte Carlo/H2H em dois lugares.
+        # cache_only=True em jogo do Brasileirão: team_head_to_head é histórico
+        # de SELEÇÕES (prompt da busca via LLM pede "seleções principais"), não
+        # existe cache de clube — sem isso, chamaria o LLM síncrono com prompt
+        # errado pra clube. Cache vazio pra clube = seção H2H simplesmente não entra.
         try:
             from projections import build_analysis_body
-            body = build_analysis_body(db, match)
+            body = build_analysis_body(db, match, cache_only=_is_br_match(db, match))
             if body:
                 lines += [""] + body
         except Exception as e:
@@ -834,11 +990,22 @@ def _oracle_slack(db: Session, match: Match, decision: dict, action: str, old,
 
 def run_oracle_prediction(db: Session, trigger: str = "pre_match",
                           window_minutes: int = 60, force: bool = False,
-                          telegram: bool = True) -> dict:
+                          telegram: bool = True, match_id: int | None = None,
+                          push: bool = True) -> dict:
     """
     Re-analisa partidas que começam dentro de `window_minutes` (≈1h antes),
     deixando a IA dedicada confirmar ou alterar o palpite do Oráculo.
     `pre_match`: dedupe por partida (1x na janela). `manual`: sempre roda.
+
+    `match_id`: restringe a UMA partida específica (ignora a janela de data) —
+    útil pra testar/reenviar telegram/push de um jogo só sem processar (e
+    notificar de novo) todo mundo que também estivesse dentro da janela.
+
+    `push`: Web Push vai pra TODOS os inscritos reais do site (`send_push_to_all`),
+    independente do trigger ser teste manual ou o loop automático — default True
+    (comportamento de sempre), mas testes/dry-runs devem passar `push=False` pra
+    não fazer fan-out real durante verificação manual (regra: nunca notificar
+    usuário real sem necessidade).
     """
     bot = _get_bot(db)
     if not bot:
@@ -849,18 +1016,29 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
     now = _utcnow()
     horizon = now + timedelta(minutes=window_minutes)
 
-    matches = (
-        db.query(Match)
-        .filter(
-            Match.status == MatchStatus.scheduled,
-            Match.match_date.isnot(None),
-            Match.match_date > now,
-            Match.match_date <= horizon,
-            Match.competition_id == get_competition_id(db),
+    if match_id is not None:
+        matches = (
+            db.query(Match)
+            .filter(
+                Match.id == match_id,
+                Match.status == MatchStatus.scheduled,
+                Match.competition_id.in_(_bot_competition_ids(db)),
+            )
+            .all()
         )
-        .order_by(Match.match_date.asc())
-        .all()
-    )
+    else:
+        matches = (
+            db.query(Match)
+            .filter(
+                Match.status == MatchStatus.scheduled,
+                Match.match_date.isnot(None),
+                Match.match_date > now,
+                Match.match_date <= horizon,
+                Match.competition_id.in_(_bot_competition_ids(db)),
+            )
+            .order_by(Match.match_date.asc())
+            .all()
+        )
 
     summary = {
         "trigger": trigger, "llm": llm_label, "llm_origin": origin,
@@ -918,7 +1096,7 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
             slack_ok = _oracle_slack(db, match, decision, action, old, webhook=slack_url)
             if slack_ok:
                 summary["slack_sent"] += 1
-        if notify:
+        if notify and push:
             push_sent = _oracle_push(db, match, decision, action)
             if push_sent:
                 summary["push_sent"] = summary.get("push_sent", 0) + push_sent
@@ -961,13 +1139,17 @@ def run_oracle_prediction(db: Session, trigger: str = "pre_match",
 def bot_run_prediction(
     window: int | None = None,
     telegram: bool = True,
+    match_id: int | None = None,
+    push: bool = True,
     db: Session = Depends(get_db),
     _admin: User = Depends(_require_admin),
 ):
-    """Dispara manualmente a re-análise do Oráculo (ignora dedupe da janela)."""
+    """Dispara manualmente a re-análise do Oráculo (ignora dedupe da janela).
+    `match_id`: restringe a uma partida só (não notifica as demais candidatas).
+    `push=false`: dry-run seguro pra teste — não manda Web Push real pros inscritos."""
     from config import settings
     win = window or settings.oracle_window_minutes
-    return run_oracle_prediction(db, trigger="manual", window_minutes=win, force=True, telegram=telegram)
+    return run_oracle_prediction(db, trigger="manual", window_minutes=win, force=True, telegram=telegram, match_id=match_id, push=push)
 
 
 @router.get("/logs")
@@ -1117,34 +1299,31 @@ def bot_public(db: Session = Depends(get_db)):
     if not bot:
         return {"exists": False}
 
-    from competitions import get_competition_id
-    ranking = db.query(Ranking).filter(
-        Ranking.user_id == bot.id, Ranking.competition_id == get_competition_id(db)
-    ).first()
-    total_bets = db.query(func.count(Bet.id)).filter(Bet.user_id == bot.id).scalar() or 0
-    evaluated = db.query(Bet).filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None)).all()
+    copa_id = get_competition_id(db)
+    copa_stats = _bot_competition_stats(db, bot.id, copa_id)
+    total_bets, evaluated_n = copa_stats["total_bets"], copa_stats["evaluated"]
+    exatos, certos, erros = copa_stats["exatos"], copa_stats["certos"], copa_stats["erros"]
+    total_pts, pos = copa_stats["total_points"], copa_stats["ranking_position"]
 
-    exatos    = sum(1 for b in evaluated if b.points_earned == 25)
-    certos    = sum(1 for b in evaluated if b.points_earned in (10, 12, 15, 18))
-    erros     = sum(1 for b in evaluated if b.points_earned == 0)
-    total_pts = ranking.total_points if ranking else 0
-
-    pos = None
-    if ranking:
-        pos = db.query(func.count(Ranking.user_id)).filter(
-            Ranking.competition_id == get_competition_id(db),
-            Ranking.total_points > total_pts
-        ).scalar()
-        pos = (pos or 0) + 1
+    # Bloco Brasileirão — aditivo, nunca derruba o público se falhar.
+    br_stats = None
+    try:
+        br_id = get_competition_id(db, "brasileirao2026")
+        if br_id is not None:
+            br_stats = _bot_competition_stats(db, bot.id, br_id)
+    except Exception as e:
+        print(f"[bot_public] stats Brasileirão falharam (ignorado): {e}", flush=True)
 
     pick = db.query(ChampionPick).filter(ChampionPick.user_id == bot.id).first()
     champ_team = db.query(Team).filter(Team.id == pick.team_id).first() if pick else None
     vice_team  = db.query(Team).filter(Team.id == pick.runner_up_team_id).first() if (pick and pick.runner_up_team_id) else None
 
-    # Bets com resultado (últimas 20 avaliadas)
+    # Bets com resultado (últimas 20 avaliadas) — escopado em Copa: "by_phase"
+    # agrupa por MatchPhase e o Brasileirão é sempre phase=group, conflitaria
+    # com a fase de grupos da Copa no mesmo balde se não filtrasse aqui.
     recent_bets = (
         db.query(Bet)
-        .filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None))
+        .filter(Bet.user_id == bot.id, Bet.evaluated_at.isnot(None), Bet.competition_id == copa_id)
         .join(Bet.match)
         .order_by(Match.match_date.asc().nullslast())
         .limit(20)
@@ -1190,12 +1369,13 @@ def bot_public(db: Session = Depends(get_db)):
         "exists": True,
         "name": bot.name,
         "total_bets": total_bets,
-        "evaluated": len(evaluated),
+        "evaluated": evaluated_n,
         "exatos": exatos,
         "certos": certos,
         "erros": erros,
         "total_points": total_pts,
         "ranking_position": pos,
+        "brasileirao": br_stats,
         "champion": {"name": champ_team.name, "code": champ_team.code, "flag": champ_team.flag_url} if champ_team else None,
         "vice": {"name": vice_team.name, "code": vice_team.code, "flag": vice_team.flag_url} if vice_team else None,
         "recent_bets": recent_rows,
