@@ -60,6 +60,14 @@ def _build_report(db: Session) -> dict:
     unique_today = db.execute(
         text("SELECT COUNT(DISTINCT ip) FROM page_views WHERE created_at >= :d"), {"d": today}
     ).scalar() or 0
+    views_yesterday = db.execute(
+        text("SELECT COUNT(*) FROM page_views WHERE created_at >= :y AND created_at < :d"),
+        {"y": yesterday, "d": today},
+    ).scalar() or 0
+    unique_yesterday = db.execute(
+        text("SELECT COUNT(DISTINCT ip) FROM page_views WHERE created_at >= :y AND created_at < :d"),
+        {"y": yesterday, "d": today},
+    ).scalar() or 0
     views_week = db.execute(
         text("SELECT COUNT(*) FROM page_views WHERE created_at >= :d"), {"d": week_ago}
     ).scalar() or 0
@@ -206,6 +214,8 @@ def _build_report(db: Session) -> dict:
         "views": {
             "today": views_today,
             "unique_today": unique_today,
+            "yesterday": views_yesterday,
+            "unique_yesterday": unique_yesterday,
             "new_visitors_today": new_visitors_today,
             "week": views_week,
             "unique_week": unique_week,
@@ -260,6 +270,18 @@ def _build_report(db: Session) -> dict:
     }
 
 
+def _variacao(hoje: int, ontem: int) -> str:
+    """Comparativo hoje vs. ontem, formatado pra colar no fim de uma linha do relatório."""
+    if ontem == 0:
+        return "" if hoje == 0 else " (🆕 sem base ontem)"
+    pct = round((hoje - ontem) / ontem * 100)
+    if pct > 0:
+        return f" (📈 +{pct}%)"
+    if pct < 0:
+        return f" (📉 {pct}%)"
+    return " (➡️ estável)"
+
+
 def _format_text(data: dict) -> str:
     from datetime import datetime, timedelta
     from html import escape as _e
@@ -285,6 +307,7 @@ def _format_text(data: dict) -> str:
         "",
         "📈 <b>ACESSOS</b>",
         f"• Hoje: <b>{v['today']}</b> views · <b>{v['unique_today']}</b> únicos · <b>{v['new_visitors_today']}</b> novos",
+        f"• Ontem: <b>{v.get('yesterday', 0)}</b> views · <b>{v.get('unique_yesterday', 0)}</b> únicos{_variacao(v['today'], v.get('yesterday', 0))}",
         f"• Semana: <b>{v['week']}</b> views · <b>{v['unique_week']}</b> únicos · <b>{v.get('new_visitors_week', 0)}</b> novos",
         f"• Total: <b>{v.get('total', 0)}</b> views · <b>{v.get('unique_total', 0)}</b> únicos",
         "",
