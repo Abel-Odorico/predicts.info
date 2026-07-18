@@ -6,12 +6,12 @@ import { api, CONF_HEX } from '../api'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
 import LiveClassificationCard from '../components/LiveClassificationCard'
-import { InstallAppPopup, CompetitionPopup } from '../components/AppPopups'
+import { InstallAppPopup } from '../components/AppPopups'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import LigaFlowModal from '../components/LigaFlowModal'
 import { PT_NAMES } from '../utils/teamNames'
 import { useAuth } from '../stores/authStore'
-import { useCountdown, CountdownDisplay } from '../hooks/useCountdown.jsx'
+import { useCountdown } from '../hooks/useCountdown.jsx'
 import BattleHistoryCard from '../components/BattleHistoryCard'
 import TitleEvolutionChart from '../components/TitleEvolutionChart'
 import FourChampionsFeature from '../components/FourChampionsFeature'
@@ -392,17 +392,14 @@ export default function Dashboard() {
   const [topBettors, setTopBettors]   = useState([])
   const [liveBets, setLiveBets]       = useState({})
   const [appVersion, setAppVersion]   = useState(null)
-  const [competition, setCompetition] = useState(null)
   const [awards, setAwards]           = useState(null)
   const [loading, setLoading]         = useState(true)
   const [showConvPopup,  setShowConvPopup]  = useState(false)
   const [showLigaModal,  setShowLigaModal]  = useState(false)
-  const [showCompPopup,  setShowCompPopup]  = useState(false)
   const [goalFlash, setGoalFlash] = useState({})
   const [comp, setComp] = useState('geral')
   const prevScoresRef = useRef({})
   const navigate = useNavigate()
-  const compCountdown = useCountdown(competition?.start_date)
 
   // Popup de conversão: só para anônimos, 10s de delay, dismiss por 3 dias
   useEffect(() => {
@@ -474,7 +471,6 @@ export default function Dashboard() {
           setTopBettors(Array.isArray(bettors) ? bettors.filter(b => b.total_points > 0) : [])
         }).catch(() => {})
         api.get('/version/latest').then(v => { if (mounted) setAppVersion(v) }).catch(() => {})
-        api.get('/competition/active').then(c => { if (mounted) setCompetition(c || null) }).catch(() => {})
         api.get('/tournament/awards').then(a => { if (mounted) setAwards(a) }).catch(() => {})
         if (token) {
           api.get('/bets/mine', token).then(myBets => {
@@ -690,53 +686,6 @@ export default function Dashboard() {
       </div>
 
       <InstallBanner />
-
-      {/* Anúncio de fase + CTA de liga privada — independentes da aba selecionada
-          (antes ficavam presos dentro da aba Copa; usuário na aba padrão 'geral'
-          nunca via o popup de nova fase nem o convite pra criar bolão). */}
-      {competition && (() => {
-        const isFuture = compCountdown && !compCountdown.started
-        return (
-          <button
-            type="button"
-            onClick={() => setShowCompPopup(true)}
-            style={{
-              width: '100%', margin: '12px 0', padding: '14px 16px',
-              background: 'linear-gradient(135deg, #7a5a00 0%, #5a4000 100%)',
-              border: '1.5px solid rgba(232,196,74,0.6)', borderRadius: 12,
-              display: 'flex', alignItems: 'center', gap: 12,
-              cursor: 'pointer', textAlign: 'left',
-            }}
-          >
-            <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#e8c44a', letterSpacing: '0.08em' }}>
-                {isFuture ? 'EM BREVE' : 'NOVA FASE DA COMPETIÇÃO'}
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: '#fff', marginTop: 2 }}>
-                {competition.name}
-              </div>
-              {isFuture && compCountdown
-                ? <CountdownDisplay timeLeft={compCountdown} style={{ marginTop: 4 }} />
-                : competition.promo_text && (
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
-                    {competition.promo_text}
-                  </div>
-                )
-              }
-            </div>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: '#e8c44a', flexShrink: 0 }}>Ver →</span>
-          </button>
-        )
-      })()}
-
-      {showCompPopup && competition && (
-        <CompetitionPopup
-          competition={competition}
-          onClose={() => setShowCompPopup(false)}
-          showRankingLink
-        />
-      )}
 
       {token && (
         <button

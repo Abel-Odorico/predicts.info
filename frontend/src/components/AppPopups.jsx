@@ -6,7 +6,7 @@
  * renderizado — nunca dois popups sobrepostos. Fechar um avança pro próximo
  * pendente (fluxo de navegação), sem popup "roubando" a vez de outro.
  *
- * Ordem: version → competition → champion → invite → push → whatsapp
+ * Ordem: version → champion → invite → push → whatsapp
  * (onboarding virou página: visitante novo é redirecionado pra /bem-vindo)
  */
 
@@ -914,16 +914,15 @@ function WhatsAppOptInPopup({ user, token, onDone }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // ORQUESTRADOR — fila única. Um popup por vez, próximo só entra quando o
 // anterior é fechado (fluxo de navegação, sem sobreposição/empilhamento).
-// Ordem: version → competition → champion → invite → push → whatsapp
+// Ordem: version → champion → invite → push → whatsapp
 // ═════════════════════════════════════════════════════════════════════════════
-const POPUP_ORDER = ['version', 'competition', 'champion', 'invite', 'push', 'whatsapp']
+const POPUP_ORDER = ['version', 'champion', 'invite', 'push', 'whatsapp']
 const ONBOARDED_KEY = 'predicts-onboarded'
 
 export default function AppPopups() {
   const { token, user } = useAuth()
   const [queue, setQueue] = useState([])
   const [versionData, setVersionData] = useState(null)
-  const [competitionData, setCompetitionData] = useState(null)
   const [pendingInvites, setPendingInvites] = useState([])
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -952,13 +951,6 @@ export default function AppPopups() {
         }
       } catch {}
 
-      try {
-        const c = await api.get('/competition/active')
-        if (c?.id && !localStorage.getItem(`predicts_comp_seen_${c.id}`)) {
-          if (mounted) setCompetitionData(c)
-          eligible.push('competition')
-        }
-      } catch {}
 
       if (token) {
         if (CHAMP_DEADLINE - Date.now() > 0 && localStorage.getItem(CHAMP_DISMISS_KEY) !== todayKey()) {
@@ -1023,11 +1015,6 @@ export default function AppPopups() {
     advance()
   }
 
-  function closeCompetition() {
-    if (competitionData?.id) localStorage.setItem(`predicts_comp_seen_${competitionData.id}`, '1')
-    advance()
-  }
-
   function closeInvite() {
     localStorage.setItem(INVITE_DISMISS_KEY, String(Date.now()))
     advance()
@@ -1041,7 +1028,6 @@ export default function AppPopups() {
   // Na página de boas-vindas nenhum popup entra na frente — o conteúdo é ela.
   if (pathname === '/bem-vindo') return null
   if (active === 'version' && versionData) return <VersionPopup version={versionData} onClose={closeVersion} />
-  if (active === 'competition' && competitionData) return <CompetitionPopup competition={competitionData} onClose={closeCompetition} />
   if (active === 'champion')               return <ChampionPopup token={token} onClose={closeChampion} />
   if (active === 'invite' && pendingInvites.length > 0) return <InvitePopup invites={pendingInvites} token={token} onClose={closeInvite} />
   if (active === 'push')                   return <PushPromptPopup token={token} onClose={closePush} />
