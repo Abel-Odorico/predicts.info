@@ -394,6 +394,7 @@ ORACLE_CONFIG_KEYS = (
     "oracle_gemini_key", "oracle_gemini_model",
     "oracle_openrouter_key", "oracle_openrouter_model",
     "oracle_openai_key", "oracle_openai_model",
+    "oracle_fallback_enabled",
 )
 
 ORACLE_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
@@ -605,15 +606,29 @@ def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
     if not cfg:
         result["reason"] = "IA não configurada — usado o modelo estatístico."
         return result
-    from routers.analysis import _call_llm, _get_provider_chain
+    from routers.analysis import _call_llm, _get_provider_chain, _build_slot_entries
     try:
         prompt = _build_oracle_prompt(db, match, (base_a, base_b))
-        # Monta cadeia na ordem preferida: OpenRouter → Gemini (ao contrário do default Gemini→OR)
-        full_chain = _get_provider_chain(cfg)
-        or_entries  = [p for p in full_chain if p["type"] == "openrouter"]
-        gem_entries = [p for p in full_chain if p["type"] == "gemini"]
-        oai_entries = [p for p in full_chain if p["type"] == "openai"]
-        ordered_chain = or_entries + oai_entries + gem_entries or full_chain
+        # "oracle_fallback_enabled"="false": só o provider PRIMÁRIO (oracle_provider),
+        # sem cair pros outros — nem reordenar, nem tentar mais nada na cadeia.
+        oracle_fallback_on = str(
+            _oracle_raw_config(db).get("oracle_fallback_enabled", "true")
+        ).strip().lower() != "false"
+        if not oracle_fallback_on:
+            primary_slot = cfg.get("provider") or "gemini"
+            entries = _build_slot_entries(primary_slot, cfg)
+            ordered_chain = [entries[0]] if entries else []
+        else:
+            # Monta cadeia na ordem preferida: OpenRouter → Gemini (ao contrário do default Gemini→OR).
+            # cfg["fallback_enabled"] aqui pode ter vindo HERDADO da config de Análise (_get_config)
+            # quando o Oráculo não tem chave própria — é o toggle de OUTRA feature (aba Análises) e
+            # não pode vazar pro Oráculo: se o toggle do Oráculo pediu fallback (chegamos no else),
+            # força fallback_enabled=true só pra esta chamada, sem mexer no cfg herdado de verdade.
+            full_chain = _get_provider_chain({**cfg, "fallback_enabled": "true"})
+            or_entries  = [p for p in full_chain if p["type"] == "openrouter"]
+            gem_entries = [p for p in full_chain if p["type"] == "gemini"]
+            oai_entries = [p for p in full_chain if p["type"] == "openai"]
+            ordered_chain = or_entries + oai_entries + gem_entries or full_chain
         content, model_tag, usage = _call_llm(cfg, prompt, chain=ordered_chain)
         try:
             from routers.analysis import log_llm_usage
@@ -1015,6 +1030,7 @@ def get_oracle_config(db: Session = Depends(get_db), _admin: User = Depends(_req
         "openai_models":         OPENAI_DIRECT_MODELS,
         "active_llm":            llm_label,
         "llm_origin":            origin,
+        "fallback_enabled":      str(raw.get("oracle_fallback_enabled", "true")).strip().lower() != "false",
         # Slack
         "slack_webhook_masked":  _mask(_slack_config(db)),
         "slack_has_webhook":     bool(_slack_config(db)),
@@ -1032,6 +1048,7 @@ class OracleConfigIn(BaseModel):
     openai_model: str = "gpt-4o-mini"
     slack_webhook: str | None = None
     slack_enabled: bool | None = None
+    fallback_enabled: bool = True
 
 
 @router.post("/oracle-config")
@@ -1042,6 +1059,7 @@ def save_oracle_config(body: OracleConfigIn, db: Session = Depends(get_db), _adm
         ("oracle_gemini_model",     body.gemini_model),
         ("oracle_openrouter_model", body.openrouter_model),
         ("oracle_openai_model",     body.openai_model),
+        ("oracle_fallback_enabled", "true" if body.fallback_enabled else "false"),
     ]
     if body.gemini_key and not body.gemini_key.startswith("•"):
         pairs.append(("oracle_gemini_key", body.gemini_key))

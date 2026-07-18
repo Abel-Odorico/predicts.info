@@ -92,9 +92,42 @@ CONFIG_KEYS = (
     "openai_api_key",     "openai_model",
     "analysis_prompt_template",
     "llm_paid_fallback_model", "llm_paid_fallback_enabled",
+    "llm_provider_order", "llm_fallback_enabled",
 )
 
 BEST_FREE_OR_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+
+# ─── Ordem/cadeia de providers (2026-07-18, redesign admin) ──────────────────
+# "slot" != modelo: cada slot é uma FONTE de provider (não confundir com o
+# catálogo de MODELOS acima). "gemini"/"gemini2" são as 2 keys do Gemini
+# tratadas como posições independentes na ordem (permite reordenar key2 antes
+# de openai, por exemplo). "openrouter" sempre contribui em bloco (primário
+# configurado + frees + pago) na posição em que aparecer na ordem.
+DEFAULT_PROVIDER_ORDER = ["gemini", "gemini2", "openai", "openrouter"]
+VALID_PROVIDER_SLOTS = {"gemini", "gemini2", "openai", "openrouter"}
+
+PROVIDER_SLOT_LABELS = {
+    "gemini":     "Gemini (chave 1)",
+    "gemini2":    "Gemini (chave 2 · fallback)",
+    "openai":     "OpenAI (direto)",
+    "openrouter": "OpenRouter",
+}
+
+
+def _parse_provider_order(raw_value) -> list[str]:
+    """Valida a ordem salva em site_config.llm_provider_order (JSON array de
+    slots). Valores desconhecidos são ignorados silenciosamente; se sobrar
+    vazio ou o valor salvo for inválido, cai no default."""
+    order = None
+    if raw_value:
+        try:
+            order = json.loads(raw_value)
+        except (TypeError, ValueError):
+            order = None
+    if not isinstance(order, list):
+        return list(DEFAULT_PROVIDER_ORDER)
+    cleaned = [s for s in order if isinstance(s, str) and s in VALID_PROVIDER_SLOTS]
+    return cleaned or list(DEFAULT_PROVIDER_ORDER)
 
 
 def _utcnow():
@@ -128,6 +161,8 @@ def _get_config(db: Session) -> dict:
         "prompt_template":   c.get("analysis_prompt_template", "") or "",
         "paid_fallback_model":   c.get("llm_paid_fallback_model", DEFAULT_PAID_FALLBACK_MODEL) or DEFAULT_PAID_FALLBACK_MODEL,
         "paid_fallback_enabled": c.get("llm_paid_fallback_enabled", "true"),
+        "provider_order":    _parse_provider_order(c.get("llm_provider_order")),
+        "fallback_enabled":  c.get("llm_fallback_enabled", "true"),
     }
 
 
@@ -157,37 +192,71 @@ OR_FREE_FALLBACKS = [
     "qwen/qwen3-next-80b-a3b-instruct:free",
 ]
 
-def _get_provider_chain(cfg: dict) -> list[dict]:
-    """Cadeia de fallback: Gemini1 → Gemini2 → OpenAI → OpenRouter (modelo config + free fallbacks)."""
-    chain = []
-    if cfg.get("gemini_key"):
-        chain.append({"type": "gemini", "key": cfg["gemini_key"], "model": cfg["gemini_model"], "label": "Gemini key1"})
-    if cfg.get("gemini_key_2"):
-        chain.append({"type": "gemini", "key": cfg["gemini_key_2"], "model": cfg["gemini_model"], "label": "Gemini key2"})
-    if cfg.get("openai_key"):
-        oai_model = cfg.get("openai_model") or "gpt-4o-mini"
-        chain.append({"type": "openai", "key": cfg["openai_key"], "model": oai_model, "label": f"OpenAI {oai_model}"})
-    if cfg.get("openrouter_key"):
+def _build_slot_entries(slot: str, cfg: dict) -> list[dict]:
+    """Entradas de cadeia produzidas por 1 slot de provider. "openrouter" é o
+    único slot que pode gerar mais de 1 entrada (primário + frees + pago)."""
+    if slot == "gemini":
+        if cfg.get("gemini_key"):
+            return [{"type": "gemini", "key": cfg["gemini_key"], "model": cfg["gemini_model"], "label": "Gemini key1"}]
+        return []
+    if slot == "gemini2":
+        if cfg.get("gemini_key_2"):
+            return [{"type": "gemini", "key": cfg["gemini_key_2"], "model": cfg["gemini_model"], "label": "Gemini key2"}]
+        return []
+    if slot == "openai":
+        if cfg.get("openai_key"):
+            oai_model = cfg.get("openai_model") or "gpt-4o-mini"
+            return [{"type": "openai", "key": cfg["openai_key"], "model": oai_model, "label": f"OpenAI {oai_model}"}]
+        return []
+    if slot == "openrouter":
+        if not cfg.get("openrouter_key"):
+            return []
         or_key = cfg["openrouter_key"]
         or_model = cfg.get("openrouter_model") or BEST_FREE_OR_MODEL
-        # Primary configured model
-        chain.append({"type": "openrouter", "key": or_key, "model": or_model, "label": f"OpenRouter {or_model.split('/')[-1]}"})
+        entries = [{"type": "openrouter", "key": or_key, "model": or_model, "label": f"OpenRouter {or_model.split('/')[-1]}"}]
         # Free fallbacks (skip if same as primary)
         for m in OR_FREE_FALLBACKS:
             if m != or_model:
-                chain.append({"type": "openrouter", "key": or_key, "model": m, "label": f"OpenRouter {m.split('/')[-1]}"})
-
-        # Fallback PAGO garantido no fim da cadeia (2026-07-18): depois de esgotar
-        # os :free (frequentemente rate-limited upstream), usa 1 modelo pago da
-        # OpenRouter — crédito real existe e nunca era usado sem isso. Marcado
-        # "paid": True pra _call_llm aplicar a guarda de orçamento diário antes
-        # de chamar. Desligável via site_config.llm_paid_fallback_enabled="false".
+                entries.append({"type": "openrouter", "key": or_key, "model": m, "label": f"OpenRouter {m.split('/')[-1]}"})
+        # Fallback PAGO garantido no fim do bloco OpenRouter (2026-07-18): depois
+        # de esgotar os :free (frequentemente rate-limited upstream), usa 1
+        # modelo pago da OpenRouter — crédito real existe e nunca era usado sem
+        # isso. Marcado "paid": True pra _call_llm aplicar a guarda de orçamento
+        # diário antes de chamar. Desligável via site_config.llm_paid_fallback_enabled="false".
         if str(cfg.get("paid_fallback_enabled", "true")).strip().lower() != "false":
             paid_model = cfg.get("paid_fallback_model") or DEFAULT_PAID_FALLBACK_MODEL
-            chain.append({
+            entries.append({
                 "type": "openrouter", "key": or_key, "model": paid_model,
                 "label": f"OpenRouter PAGO {paid_model.split('/')[-1]}", "paid": True,
             })
+        return entries
+    return []
+
+
+def _get_provider_chain(cfg: dict) -> list[dict]:
+    """Cadeia de fallback montada na ordem de cfg['provider_order'] (site_config
+    llm_provider_order, JSON array de slots — default gemini→gemini2→openai→
+    openrouter, ver DEFAULT_PROVIDER_ORDER). Slots sem key configurada são
+    pulados silenciosamente; valores desconhecidos na ordem também (validado em
+    _parse_provider_order).
+
+    Se cfg['fallback_enabled'] (site_config llm_fallback_enabled) for "false",
+    a cadeia inteira vira só o PRIMEIRO provider configurado da ordem — sem
+    frees, sem fallback pago (se o primeiro for openrouter, usa só o modelo
+    primário configurado, nada mais)."""
+    order = cfg.get("provider_order") or list(DEFAULT_PROVIDER_ORDER)
+    fallback_on = str(cfg.get("fallback_enabled", "true")).strip().lower() != "false"
+
+    if not fallback_on:
+        for slot in order:
+            entries = _build_slot_entries(slot, cfg)
+            if entries:
+                return [entries[0]]
+        return []
+
+    chain = []
+    for slot in order:
+        chain.extend(_build_slot_entries(slot, cfg))
     return chain
 
 
@@ -1363,6 +1432,12 @@ def get_analysis(match_id: int, db: Session = Depends(get_db)):
 def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     cfg = _get_config(db)
     chain = _get_provider_chain(cfg)
+    has_key_by_slot = {
+        "gemini":     bool(cfg["gemini_key"]),
+        "gemini2":    bool(cfg["gemini_key_2"]),
+        "openai":     bool(cfg["openai_key"]),
+        "openrouter": bool(cfg["openrouter_key"]),
+    }
     return {
         "provider":               cfg["provider"],
         "openrouter_key_masked":  _mask(cfg["openrouter_key"]),
@@ -1382,8 +1457,21 @@ def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require
         "openai_models":          OPENAI_DIRECT_MODELS,
         "prompt_template":        cfg["prompt_template"],
         "default_prompt":         DEFAULT_PROMPT_TEMPLATE,
-        "provider_chain":         [{"label": p["label"], "type": p["type"]} for p in chain],
+        "provider_chain":         [
+            {"label": p["label"], "type": p["type"], "model": p.get("model"), "paid": bool(p.get("paid"))}
+            for p in chain
+        ],
         "best_free_or_model":     BEST_FREE_OR_MODEL,
+        # ── Ordem / fallback (redesign 2026-07-18) ──────────────────────────
+        "provider_order":         cfg["provider_order"],
+        "provider_slots": [
+            {"id": slot, "label": PROVIDER_SLOT_LABELS[slot], "has_key": has_key_by_slot[slot]}
+            for slot in DEFAULT_PROVIDER_ORDER
+        ],
+        "fallback_enabled":       str(cfg["fallback_enabled"]).strip().lower() != "false",
+        "paid_fallback_model":    cfg["paid_fallback_model"],
+        "paid_fallback_enabled":  str(cfg["paid_fallback_enabled"]).strip().lower() != "false",
+        "llm_daily_budget_usd":   _get_llm_daily_budget(db),
     }
 
 
@@ -1397,15 +1485,27 @@ class AnalysisConfigIn(BaseModel):
     openai_key:      str = ""
     openai_model:    str = "gpt-4o-mini"
     prompt_template: str = ""
+    provider_order:        list[str] = list(DEFAULT_PROVIDER_ORDER)
+    fallback_enabled:       bool = True
+    paid_fallback_model:    str = DEFAULT_PAID_FALLBACK_MODEL
+    paid_fallback_enabled:  bool = True
+    daily_budget_usd:       float = LLM_DAILY_BUDGET_DEFAULT_USD
 
 
 def _save_config_full(db: Session, body: "AnalysisConfigIn"):
+    order = [s for s in (body.provider_order or []) if isinstance(s, str) and s in VALID_PROVIDER_SLOTS]
+    order = order or list(DEFAULT_PROVIDER_ORDER)
     pairs = [
         ("analysis_provider",        body.provider),
         ("openrouter_model",         body.openrouter_model),
         ("gemini_model",             body.gemini_model),
         ("openai_model",             body.openai_model),
         ("analysis_prompt_template", body.prompt_template),
+        ("llm_provider_order",       json.dumps(order)),
+        ("llm_fallback_enabled",     "true" if body.fallback_enabled else "false"),
+        ("llm_paid_fallback_model",  body.paid_fallback_model or DEFAULT_PAID_FALLBACK_MODEL),
+        ("llm_paid_fallback_enabled", "true" if body.paid_fallback_enabled else "false"),
+        ("llm_daily_budget_usd",     str(body.daily_budget_usd)),
     ]
     if body.openrouter_key and not body.openrouter_key.startswith("•"):
         pairs.append(("openrouter_api_key", body.openrouter_key))

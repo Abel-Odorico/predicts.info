@@ -7,10 +7,24 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { api } from '../api'
+import { toast } from '../toast'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import ImageEditorModal from '../components/ImageEditorModal'
 import TeamCrestFlag from '../components/TeamCrestFlag'
+
+// Metadados de exibição dos 4 slots de provider da cadeia de Análise IA
+// (espelha routers/analysis.py::PROVIDER_SLOT_LABELS / DEFAULT_PROVIDER_ORDER).
+const PROVIDER_SLOT_META = {
+  gemini:     { icon: '✦',  name: 'Gemini',     sub: 'chave 1' },
+  gemini2:    { icon: '✦',  name: 'Gemini',     sub: 'chave 2 · fallback' },
+  openai:     { icon: '🤖', name: 'OpenAI',      sub: 'direto' },
+  openrouter: { icon: '🔀', name: 'OpenRouter', sub: 'multi-modelo' },
+}
+
+function StatusDot({ color, title }) {
+  return <span title={title} style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
+}
 
 function normalizeDate(value) {
   if (!value) return null
@@ -499,7 +513,16 @@ export default function Admin() {
     gemini_key: '', gemini_key_2: '', gemini_model: '',
     openai_key: '', openai_model: 'gpt-4o-mini',
     prompt_template: '',
+    provider_order: ['gemini', 'gemini2', 'openai', 'openrouter'],
+    fallback_enabled: true,
+    paid_fallback_model: '',
+    paid_fallback_enabled: true,
+    daily_budget_usd: 1.5,
   })
+  // Saúde da cadeia (POST /admin/llm/test) — compartilhada entre o card de
+  // Análise e o card do Oráculo (mesmo endpoint, cache 5min no backend).
+  const [llmHealth, setLlmHealth]               = useState(null)
+  const [llmHealthLoading, setLlmHealthLoading] = useState(false)
 
   async function fetchProgress() {
     try {
@@ -538,8 +561,87 @@ export default function Admin() {
         gemini_model: cfg.gemini_model,
         openai_model: cfg.openai_model || 'gpt-4o-mini',
         prompt_template: cfg.prompt_template || '',
+        provider_order: cfg.provider_order || ['gemini', 'gemini2', 'openai', 'openrouter'],
+        fallback_enabled: cfg.fallback_enabled !== false,
+        paid_fallback_model: cfg.paid_fallback_model || '',
+        paid_fallback_enabled: cfg.paid_fallback_enabled !== false,
+        daily_budget_usd: cfg.llm_daily_budget_usd ?? 1.5,
       }))
     } catch {}
+  }
+
+  // Reordena a cadeia (troca posição idx com idx+dir). Opera sobre os 4 slots
+  // (gemini/gemini2/openai/openrouter) — providers sem chave também podem ser
+  // reordenados (útil pra já deixar pronto antes de configurar a chave).
+  function moveProviderSlot(idx, dir) {
+    setAForm(f => {
+      const order = [...(f.provider_order || [])]
+      const j = idx + dir
+      if (j < 0 || j >= order.length) return f
+      ;[order[idx], order[j]] = [order[j], order[idx]]
+      return { ...f, provider_order: order }
+    })
+  }
+
+  async function testLlmChain() {
+    setLlmHealthLoading(true)
+    try { setLlmHealth(await api.post('/admin/llm/test', {}, token)) }
+    catch (e) { toast.error('Erro ao testar cadeia: ' + (e?.message || 'falha')) }
+    finally { setLlmHealthLoading(false) }
+  }
+
+  // Entrada da cadeia real (analysisConfig.provider_chain, já na ordem de
+  // produção) correspondente a 1 slot — usada pra casar com llmHealth.providers
+  // pelo mesmo campo `label` (backend usa o mesmo texto nas duas respostas).
+  function findChainEntry(slotId) {
+    const chain = analysisConfig?.provider_chain || []
+    if (slotId === 'gemini')     return chain.find(p => p.label === 'Gemini key1')
+    if (slotId === 'gemini2')    return chain.find(p => p.label === 'Gemini key2')
+    if (slotId === 'openai')     return chain.find(p => p.type === 'openai')
+    if (slotId === 'openrouter') return chain.find(p => p.type === 'openrouter' && !p.paid && p.model === aForm.openrouter_model)
+    return null
+  }
+
+  function slotStatusDot(slotId) {
+    const entry = findChainEntry(slotId)
+    const h = entry && llmHealth?.providers ? llmHealth.providers.find(p => p.label === entry.label) : null
+    if (!h) return { color: 'var(--text-4)', title: 'Ainda não testado — clique em "Testar cadeia"' }
+    return h.ok
+      ? { color: 'var(--win)', title: `✓ ok · ${h.latency_ms}ms` }
+      : { color: 'var(--lose)', title: `✗ ${h.error || 'falhou'}` }
+  }
+
+  // Posição efetiva na cadeia: pula slots sem chave (mesma regra do backend
+  // _get_provider_chain) — o 1º slot COM CHAVE na ordem é o PRINCIPAL de fato.
+  function slotPositionBadge(slotId) {
+    const hasKey = analysisConfig?.provider_slots?.find(s => s.id === slotId)?.has_key
+    if (!hasKey) return { label: 'SEM CHAVE', muted: true }
+    const activeOrder = (aForm.provider_order || []).filter(
+      id => analysisConfig?.provider_slots?.find(s => s.id === id)?.has_key
+    )
+    const idx = activeOrder.indexOf(slotId)
+    return idx === 0 ? { label: 'PRINCIPAL', primary: true } : { label: `FALLBACK ${idx}`, muted: false }
+  }
+
+  // ── Oráculo: mesmo padrão visual, mas primário = oracleForm.provider (fixo,
+  // sem reordenar — a ordem interna de fallback do Oráculo é OR→OpenAI→Gemini,
+  // decisão do backend, não editável aqui) ──────────────────────────────────
+  function oracleSlotBadge(slotId) {
+    const hasKey = slotId === 'gemini' ? oracleCfg?.gemini_has_key
+      : slotId === 'openai' ? oracleCfg?.openai_has_key
+      : oracleCfg?.openrouter_has_key
+    if (oracleForm?.provider === slotId) return { label: 'PRINCIPAL', primary: true }
+    return { label: 'FALLBACK', primary: false, dim: !hasKey }
+  }
+
+  function oracleSlotStatusDot(slotId) {
+    // /admin/llm/test testa a config de ANÁLISE — só é fiel ao Oráculo quando
+    // ele HERDA essa config (sem chave própria). Com chave dedicada, não dá
+    // pra saber pelo teste global — mostra neutro em vez de arriscar falso ok/erro.
+    if (oracleCfg?.llm_origin !== 'herdado (análise geral)') {
+      return { color: 'var(--text-4)', title: 'Oráculo usa credencial própria — teste específico não disponível' }
+    }
+    return slotStatusDot(slotId)
   }
 
   async function viewAnalysis(matchId) {
@@ -555,12 +657,12 @@ export default function Admin() {
 
   async function saveAnalysisConfig(e) {
     e.preventDefault()
-    setAnalysisSaving(true); setAnalysisMsg('')
+    setAnalysisSaving(true)
     try {
-      await api.post('/admin/analysis/config', aForm, token)
-      setAnalysisMsgTimed('✓ Configuração salva com sucesso!')
+      await api.post('/admin/analysis/config', { ...aForm, daily_budget_usd: Number(aForm.daily_budget_usd) || 0 }, token)
+      toast.success('Configuração de IA salva com sucesso!')
       loadAnalysisConfig()
-    } catch(err) { setAnalysisMsgTimed('✗ Erro ao salvar: ' + (err?.message || 'falha')) }
+    } catch(err) { toast.error('Erro ao salvar: ' + (err?.message || 'falha')) }
     finally { setAnalysisSaving(false) }
   }
 
@@ -749,6 +851,7 @@ export default function Admin() {
         gemini_key: '', gemini_model: ocfg.gemini_model,
         openrouter_key: '', openrouter_model: ocfg.openrouter_model,
         openai_key: '', openai_model: ocfg.openai_model,
+        fallback_enabled: ocfg.fallback_enabled !== false,
       })
     } catch {}
     finally { setBotLoading(false) }
@@ -765,12 +868,12 @@ export default function Admin() {
   }
 
   async function saveOracleConfig() {
-    setOracleSaving(true); setBotMsg('')
+    setOracleSaving(true)
     try {
       await api.post('/admin/bot/oracle-config', oracleForm, token)
-      setBotMsg('✓ Configuração do Oráculo salva')
+      toast.success('Configuração do Oráculo salva')
       loadBot()
-    } catch (e) { setBotMsg(`✗ ${e?.message || 'erro'}`) }
+    } catch (e) { toast.error(e?.message || 'erro ao salvar') }
     finally { setOracleSaving(false) }
   }
 
@@ -3380,147 +3483,220 @@ export default function Admin() {
       {/* ── Análises IA ──────────────────────────────────────────────────── */}
       {tab === 'analyses' && (
         <div className="adm-pane">
-          {/* Config card */}
+          {/* Cadeia de Análise IA (redesign 2026-07-18) */}
           <div className="adm-card">
-            <div className="adm-card__header">
-              <span className="adm-card__title">🤖 Configuração Provedores IA</span>
+            <div className="adm-card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <span className="adm-card__title">🧠 Cadeia de Análise IA</span>
+              <button type="button" className="btn btn-sm" onClick={testLlmChain} disabled={llmHealthLoading}>
+                {llmHealthLoading ? '… testando' : '▶ Testar cadeia'}
+              </button>
             </div>
             <div className="adm-card__body">
               <form onSubmit={saveAnalysisConfig} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                {/* Provider selector */}
+                {/* Modo de operação: principal+fallback ou somente principal */}
                 <div>
-                  <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', display: 'block', marginBottom: 6 }}>PROVEDOR ATIVO</label>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {[{ id: 'openrouter', label: '🔀 OpenRouter (free)' }, { id: 'gemini', label: '✦ Gemini (Google)' }].map(p => (
-                      <button type="button" key={p.id}
-                        onClick={() => setAForm(f => ({ ...f, provider: p.id }))}
-                        style={{
-                          flex: 1, padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
-                          fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
-                          border: `2px solid ${aForm.provider === p.id ? 'var(--accent)' : 'var(--border)'}`,
-                          background: aForm.provider === p.id ? 'rgba(15,122,120,0.12)' : 'var(--bg-overlay)',
-                          color: aForm.provider === p.id ? 'var(--accent)' : 'var(--text-3)',
-                        }}
-                      >{p.label}</button>
-                    ))}
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                    MODO DE OPERAÇÃO
                   </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button"
+                      className={`btn btn-sm${aForm.fallback_enabled ? ' btn-primary' : ' btn-ghost'}`}
+                      onClick={() => setAForm(f => ({ ...f, fallback_enabled: true }))}
+                    >🔗 Principal + fallbacks</button>
+                    <button type="button"
+                      className={`btn btn-sm${!aForm.fallback_enabled ? ' btn-primary' : ' btn-ghost'}`}
+                      onClick={() => setAForm(f => ({ ...f, fallback_enabled: false }))}
+                    >1️⃣ Somente principal</button>
+                  </div>
+                  {!aForm.fallback_enabled && (
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--lose)', marginTop: 6 }}>
+                      ⚠️ Se o provider principal falhar (quota/erro), a geração falha direto — não tenta os demais.
+                    </div>
+                  )}
                 </div>
 
-                {/* OpenRouter section */}
-                <div style={{ border: `1px solid var(--border)`, borderRadius: 10, padding: '14px 16px' }}>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
-                    🔀 OPENROUTER
-                    {analysisConfig?.openrouter_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ {analysisConfig.openrouter_key_masked}</span>}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <input type="password"
-                      placeholder={analysisConfig?.openrouter_has_key ? '••• (vazio = manter)' : 'sk-or-v1-...'}
-                      value={aForm.openrouter_key}
-                      onChange={e => setAForm(f => ({ ...f, openrouter_key: e.target.value }))}
-                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
-                    />
-                    <div>
-                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>🆓 MODELOS GRATUITOS</label>
-                      <select value={analysisConfig?.openrouter_free_models?.find(m => m.id === aForm.openrouter_model) ? aForm.openrouter_model : ''}
-                        onChange={e => e.target.value && setAForm(f => ({ ...f, openrouter_model: e.target.value }))}
-                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13, width: '100%' }}>
-                        <option value="">— selecionar —</option>
-                        {(analysisConfig?.openrouter_free_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>💎 MODELOS PAGOS</label>
-                      <select value={analysisConfig?.openrouter_paid_models?.find(m => m.id === aForm.openrouter_model) ? aForm.openrouter_model : ''}
-                        onChange={e => e.target.value && setAForm(f => ({ ...f, openrouter_model: e.target.value }))}
-                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13, width: '100%' }}>
-                        <option value="">— selecionar —</option>
-                        {(analysisConfig?.openrouter_paid_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)', background: 'var(--bg-base)', borderRadius: 6, padding: '6px 10px' }}>
-                      Modelo ativo: <span style={{ color: 'var(--accent)' }}>{aForm.openrouter_model || '—'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Gemini section */}
-                <div style={{ border: `1px solid ${aForm.provider === 'gemini' ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px' }}>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
-                    ✦ GEMINI (GOOGLE AI)
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div>
-                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>
-                        CHAVE 1 {analysisConfig?.gemini_has_key && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.gemini_key_masked}</span>}
-                      </label>
-                      <input type="password"
-                        placeholder={analysisConfig?.gemini_has_key ? '••• (vazio = manter)' : 'AIzaSy...'}
-                        value={aForm.gemini_key}
-                        onChange={e => setAForm(f => ({ ...f, gemini_key: e.target.value }))}
-                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', display: 'block', marginBottom: 4 }}>
-                        CHAVE 2 (fallback) {analysisConfig?.gemini_has_key_2 && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.gemini_key_2_masked}</span>}
-                      </label>
-                      <input type="password"
-                        placeholder={analysisConfig?.gemini_has_key_2 ? '••• (vazio = manter)' : 'AIzaSy... (segunda conta Google AI Studio)'}
-                        value={aForm.gemini_key_2}
-                        onChange={e => setAForm(f => ({ ...f, gemini_key_2: e.target.value }))}
-                        style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
-                      />
-                    </div>
-                    <select value={aForm.gemini_model} onChange={e => setAForm(f => ({ ...f, gemini_model: e.target.value }))}
-                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-                      {(analysisConfig?.gemini_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* OpenAI Direct section */}
-                <div style={{ border: `1px solid var(--border)`, borderRadius: 10, padding: '14px 16px' }}>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
-                    🤖 OPENAI (DIRETO)
-                    {analysisConfig?.openai_has_key && <span style={{ color: 'var(--win)', marginLeft: 8 }}>✓ {analysisConfig.openai_key_masked}</span>}
-                    <span style={{ fontWeight: 400, color: 'var(--text-4)', marginLeft: 8 }}>entra na cadeia após Gemini</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <input type="password"
-                      placeholder={analysisConfig?.openai_has_key ? '••• (vazio = manter)' : 'sk-...'}
-                      value={aForm.openai_key}
-                      onChange={e => setAForm(f => ({ ...f, openai_key: e.target.value }))}
-                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
-                    />
-                    <select value={aForm.openai_model} onChange={e => setAForm(f => ({ ...f, openai_model: e.target.value }))}
-                      style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-1)', fontFamily: 'var(--font-cond)', fontSize: 13 }}>
-                      {(analysisConfig?.openai_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Fallback chain preview */}
-                {analysisConfig?.provider_chain?.length > 0 && (
-                  <div style={{ padding: '10px 14px', background: 'rgba(15,122,120,0.06)', border: '1px solid rgba(15,122,120,0.2)', borderRadius: 8 }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', letterSpacing: '0.07em', marginBottom: 6 }}>CADEIA DE FALLBACK ATIVA</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      {analysisConfig.provider_chain.map((p, i) => (
-                        <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--accent)', background: 'rgba(15,122,120,0.12)', border: '1px solid rgba(15,122,120,0.3)', borderRadius: 4, padding: '2px 8px' }}>
-                            {i + 1}. {p.label}
+                {/* Linhas da cadeia, na ordem configurada — reordenável */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(aForm.provider_order || []).map((slotId, idx) => {
+                    const meta = PROVIDER_SLOT_META[slotId] || { icon: '❓', name: slotId, sub: '' }
+                    const badge = slotPositionBadge(slotId)
+                    const dot = slotStatusDot(slotId)
+                    const dimmed = !aForm.fallback_enabled && !badge.primary
+                    const hasKey = analysisConfig?.provider_slots?.find(s => s.id === slotId)?.has_key
+                    return (
+                      <div key={slotId} style={{
+                        border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border)'}`,
+                        borderRadius: 10, padding: '14px 16px',
+                        opacity: dimmed ? 0.45 : 1, transition: 'opacity 150ms',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                          <span className="badge" style={{
+                            background: badge.primary ? 'var(--accent)' : 'var(--bg-overlay)',
+                            color: badge.primary ? 'var(--on-accent)' : 'var(--text-3)',
+                            border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border-strong)'}`,
+                          }}>{badge.label}</span>
+                          <StatusDot color={dot.color} title={dot.title} />
+                          <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>
+                            {meta.icon} {meta.name} <span style={{ fontWeight: 400, color: 'var(--text-4)', fontSize: 11 }}>({meta.sub})</span>
                           </span>
-                          {i < analysisConfig.provider_chain.length - 1 && (
-                            <span style={{ color: 'var(--text-4)', fontSize: 12 }}>→</span>
-                          )}
-                        </span>
-                      ))}
+                          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                            <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}
+                              disabled={idx === 0} onClick={() => moveProviderSlot(idx, -1)} title="Mover para cima">↑</button>
+                            <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}
+                              disabled={idx === (aForm.provider_order.length - 1)} onClick={() => moveProviderSlot(idx, 1)} title="Mover para baixo">↓</button>
+                          </div>
+                        </div>
+
+                        {slotId === 'gemini' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Chave {analysisConfig?.gemini_has_key && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.gemini_key_masked}</span>}
+                              <input className="form-input" type="password"
+                                placeholder={analysisConfig?.gemini_has_key ? '••• (vazio = manter)' : 'AIzaSy...'}
+                                value={aForm.gemini_key}
+                                onChange={e => setAForm(f => ({ ...f, gemini_key: e.target.value }))}
+                              />
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Modelo (compartilhado entre as 2 chaves)
+                              <select className="form-input" value={aForm.gemini_model} onChange={e => setAForm(f => ({ ...f, gemini_model: e.target.value }))}>
+                                {(analysisConfig?.gemini_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                        )}
+
+                        {slotId === 'gemini2' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Chave {analysisConfig?.gemini_has_key_2 && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.gemini_key_2_masked}</span>}
+                              <input className="form-input" type="password"
+                                placeholder={analysisConfig?.gemini_has_key_2 ? '••• (vazio = manter)' : 'AIzaSy... (segunda conta Google AI Studio)'}
+                                value={aForm.gemini_key_2}
+                                onChange={e => setAForm(f => ({ ...f, gemini_key_2: e.target.value }))}
+                              />
+                            </label>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', alignSelf: 'end' }}>
+                              Usa o mesmo modelo da chave 1, quota separada (2ª conta Google AI Studio).
+                            </div>
+                          </div>
+                        )}
+
+                        {slotId === 'openai' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Chave {analysisConfig?.openai_has_key && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.openai_key_masked}</span>}
+                              <input className="form-input" type="password"
+                                placeholder={analysisConfig?.openai_has_key ? '••• (vazio = manter)' : 'sk-...'}
+                                value={aForm.openai_key}
+                                onChange={e => setAForm(f => ({ ...f, openai_key: e.target.value }))}
+                              />
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Modelo
+                              <select className="form-input" value={aForm.openai_model} onChange={e => setAForm(f => ({ ...f, openai_model: e.target.value }))}>
+                                {(analysisConfig?.openai_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                        )}
+
+                        {slotId === 'openrouter' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Chave {analysisConfig?.openrouter_has_key && <span style={{ color: 'var(--win)' }}>✓ {analysisConfig.openrouter_key_masked}</span>}
+                              <input className="form-input" type="password"
+                                placeholder={analysisConfig?.openrouter_has_key ? '••• (vazio = manter)' : 'sk-or-v1-...'}
+                                value={aForm.openrouter_key}
+                                onChange={e => setAForm(f => ({ ...f, openrouter_key: e.target.value }))}
+                              />
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              🆓 Modelo principal (grátis)
+                              <select className="form-input"
+                                value={analysisConfig?.openrouter_free_models?.find(m => m.id === aForm.openrouter_model) ? aForm.openrouter_model : ''}
+                                onChange={e => e.target.value && setAForm(f => ({ ...f, openrouter_model: e.target.value }))}>
+                                <option value="">— selecionar —</option>
+                                {(analysisConfig?.openrouter_free_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                              </select>
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              💎 Ou modelo pago como principal
+                              <select className="form-input"
+                                value={analysisConfig?.openrouter_paid_models?.find(m => m.id === aForm.openrouter_model) ? aForm.openrouter_model : ''}
+                                onChange={e => e.target.value && setAForm(f => ({ ...f, openrouter_model: e.target.value }))}>
+                                <option value="">— selecionar —</option>
+                                {(analysisConfig?.openrouter_paid_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                        )}
+
+                        {!hasKey && (
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+                            Sem chave configurada — este provider é pulado automaticamente na cadeia.
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Rede de segurança — fallbacks free/pago do OpenRouter */}
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    🛟 REDE DE SEGURANÇA (OPENROUTER)
+                  </div>
+                  <div style={{ opacity: aForm.fallback_enabled ? 1 : 0.45, transition: 'opacity 150ms', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginBottom: 6 }}>
+                        🆓 Fallbacks gratuitos automáticos (tentados em sequência se o principal falhar)
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {analysisConfig?.openrouter_has_key ? (
+                          (analysisConfig?.provider_chain || [])
+                            .filter(p => p.type === 'openrouter' && !p.paid && p.model !== aForm.openrouter_model)
+                            .map((p, i) => (
+                              <span key={i} className="badge" style={{ background: 'var(--bg-overlay)', color: 'var(--text-3)', border: '1px solid var(--border-strong)' }}>
+                                {p.model.split('/').pop()}
+                              </span>
+                            ))
+                        ) : (
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>Configure a chave OpenRouter acima para ativar.</span>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 6 }}>
-                      Quando quota/429 no provider atual, avança automaticamente para o próximo.
+
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 10 }}>
+                        <input type="checkbox" checked={aForm.paid_fallback_enabled}
+                          onChange={e => setAForm(f => ({ ...f, paid_fallback_enabled: e.target.checked }))}
+                          style={{ accentColor: 'var(--accent)' }} />
+                        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-2)' }}>💎 Fallback pago (último recurso da cadeia)</span>
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, opacity: aForm.paid_fallback_enabled ? 1 : 0.5 }}>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                          Modelo pago
+                          <select className="form-input" disabled={!aForm.paid_fallback_enabled}
+                            value={aForm.paid_fallback_model}
+                            onChange={e => setAForm(f => ({ ...f, paid_fallback_model: e.target.value }))}>
+                            {(analysisConfig?.openrouter_paid_models || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                          </select>
+                        </label>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                          Budget diário (US$)
+                          <input className="form-input" type="number" step="0.1" min="0" disabled={!aForm.paid_fallback_enabled}
+                            value={aForm.daily_budget_usd}
+                            onChange={e => setAForm(f => ({ ...f, daily_budget_usd: e.target.value }))} />
+                        </label>
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+                        Ao estourar o budget do dia (UTC), o pago é pulado — a cadeia segue só com os gratuitos e um alerta é enviado (Telegram).
+                      </div>
                     </div>
                   </div>
-                )}
+                </div>
 
                 {/* Metodologia — dados injetados no prompt */}
                 <AnalysisMethodologyCard />
@@ -3575,7 +3751,7 @@ export default function Admin() {
                   <button className="btn btn-primary btn-sm" disabled={analysisSaving} type="submit">
                     {analysisSaving ? 'Salvando…' : '💾 Salvar config'}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus(); loadAnalysisStats(); setAnalysisMsgTimed('✓ Atualizado!') }}>↻ Atualizar</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { loadAnalysisConfig(); loadAnalysisStatus(); loadAnalysisStats(); toast.info('Atualizado!') }}>↻ Atualizar</button>
                 </div>
 
                 {/* Ações de geração */}
@@ -4041,63 +4217,124 @@ export default function Admin() {
             </div>
           )}
 
-          {/* IA dedicada do Oráculo */}
+          {/* IA dedicada do Oráculo (redesign 2026-07-18 — mesmo padrão do card de Análise) */}
           {botStatus?.exists && oracleCfg && oracleForm && (
             <div className="adm-card">
-              <div className="adm-card__header">
+              <div className="adm-card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 <span className="adm-card__title">🧠 IA do Oráculo (dedicada)</span>
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: oracleCfg.active_llm ? 'var(--win)' : 'var(--lose)' }}>
-                  {oracleCfg.active_llm ? `Ativa: ${oracleCfg.active_llm} · ${oracleCfg.llm_origin}` : 'Nenhuma IA disponível'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: oracleCfg.active_llm ? 'var(--win)' : 'var(--lose)' }}>
+                    {oracleCfg.active_llm ? `Ativa: ${oracleCfg.active_llm} · ${oracleCfg.llm_origin}` : 'Nenhuma IA disponível'}
+                  </span>
+                  <button type="button" className="btn btn-sm" onClick={testLlmChain} disabled={llmHealthLoading}>
+                    {llmHealthLoading ? '… testando' : '▶ Testar'}
+                  </button>
+                </div>
               </div>
               <div className="adm-card__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>
-                  IA exclusiva do Oráculo, separada da análise de partidas. Se nenhuma chave for definida aqui, ele herda a IA da aba Análises. Cadeia de fallback: Gemini → OpenAI → OpenRouter.
+                  IA exclusiva do Oráculo, separada da análise de partidas. Se nenhuma chave for definida aqui, ele herda a IA da aba Análises.
                 </div>
 
-                {/* Provider preferido */}
+                {/* Modo de operação */}
                 <div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Provider preferido</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {[{ id: 'gemini', l: 'Gemini' }, { id: 'openai', l: 'OpenAI' }, { id: 'openrouter', l: 'OpenRouter' }].map(p => (
-                      <button key={p.id} className={`btn btn-sm${oracleForm.provider === p.id ? ' btn-primary' : ''}`} onClick={() => setOracleForm({ ...oracleForm, provider: p.id })} style={{ fontSize: 11 }}>{p.l}</button>
-                    ))}
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                    MODO DE OPERAÇÃO
                   </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button"
+                      className={`btn btn-sm${oracleForm.fallback_enabled ? ' btn-primary' : ' btn-ghost'}`}
+                      onClick={() => setOracleForm({ ...oracleForm, fallback_enabled: true })}
+                    >🔗 Principal + fallback</button>
+                    <button type="button"
+                      className={`btn btn-sm${!oracleForm.fallback_enabled ? ' btn-primary' : ' btn-ghost'}`}
+                      onClick={() => setOracleForm({ ...oracleForm, fallback_enabled: false })}
+                    >1️⃣ Somente principal</button>
+                  </div>
+                  {!oracleForm.fallback_enabled && (
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--lose)', marginTop: 6 }}>
+                      ⚠️ Se {oracleForm.provider} falhar, o Oráculo cai pro modelo estatístico (Monte Carlo/Elo) — não tenta outra IA.
+                    </div>
+                  )}
                 </div>
 
-                {/* Gemini */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
-                    Gemini — chave {oracleCfg.gemini_has_key && <span style={{ color: 'var(--win)' }}>({oracleCfg.gemini_key_masked})</span>}
-                    <input className="form-input" type="password" placeholder="AIzaSy…" value={oracleForm.gemini_key} onChange={e => setOracleForm({ ...oracleForm, gemini_key: e.target.value })} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
-                    Gemini — modelo
-                    <select className="form-input" value={oracleForm.gemini_model} onChange={e => setOracleForm({ ...oracleForm, gemini_model: e.target.value })}>
-                      {oracleCfg.gemini_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
-                    OpenAI — chave {oracleCfg.openai_has_key && <span style={{ color: 'var(--win)' }}>({oracleCfg.openai_key_masked})</span>}
-                    <input className="form-input" type="password" placeholder="sk-…" value={oracleForm.openai_key} onChange={e => setOracleForm({ ...oracleForm, openai_key: e.target.value })} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
-                    OpenAI — modelo
-                    <select className="form-input" value={oracleForm.openai_model} onChange={e => setOracleForm({ ...oracleForm, openai_model: e.target.value })}>
-                      {oracleCfg.openai_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
-                    OpenRouter — chave {oracleCfg.openrouter_has_key && <span style={{ color: 'var(--win)' }}>({oracleCfg.openrouter_key_masked})</span>}
-                    <input className="form-input" type="password" placeholder="sk-or-v1-…" value={oracleForm.openrouter_key} onChange={e => setOracleForm({ ...oracleForm, openrouter_key: e.target.value })} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
-                    OpenRouter — modelo
-                    <select className="form-input" value={oracleForm.openrouter_model} onChange={e => setOracleForm({ ...oracleForm, openrouter_model: e.target.value })}>
-                      <optgroup label="Grátis">{oracleCfg.openrouter_free_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</optgroup>
-                      <optgroup label="Pagos">{oracleCfg.openrouter_paid_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</optgroup>
-                    </select>
-                  </label>
+                {/* Linhas de provider — clique na linha define o primário (oracle_provider) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {['gemini', 'openai', 'openrouter'].map(slotId => {
+                    const meta = PROVIDER_SLOT_META[slotId]
+                    const badge = oracleSlotBadge(slotId)
+                    const dot = oracleSlotStatusDot(slotId)
+                    const dimmed = !oracleForm.fallback_enabled && !badge.primary
+                    return (
+                      <div key={slotId} style={{
+                        border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border)'}`,
+                        borderRadius: 10, padding: '14px 16px',
+                        opacity: dimmed ? 0.45 : 1, transition: 'opacity 150ms',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                          <button type="button" className="badge" style={{
+                            background: badge.primary ? 'var(--accent)' : 'var(--bg-overlay)',
+                            color: badge.primary ? 'var(--on-accent)' : 'var(--text-3)',
+                            border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border-strong)'}`,
+                            cursor: 'pointer',
+                          }} onClick={() => setOracleForm({ ...oracleForm, provider: slotId })}
+                             title="Tornar este o provider principal do Oráculo">
+                            {badge.primary ? 'PRINCIPAL' : 'FALLBACK · tornar principal'}
+                          </button>
+                          <StatusDot color={dot.color} title={dot.title} />
+                          <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>
+                            {meta.icon} {meta.name}
+                          </span>
+                        </div>
+
+                        {slotId === 'gemini' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Chave {oracleCfg.gemini_has_key && <span style={{ color: 'var(--win)' }}>✓ {oracleCfg.gemini_key_masked}</span>}
+                              <input className="form-input" type="password" placeholder="AIzaSy…" value={oracleForm.gemini_key} onChange={e => setOracleForm({ ...oracleForm, gemini_key: e.target.value })} />
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Modelo
+                              <select className="form-input" value={oracleForm.gemini_model} onChange={e => setOracleForm({ ...oracleForm, gemini_model: e.target.value })}>
+                                {oracleCfg.gemini_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                        )}
+
+                        {slotId === 'openai' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Chave {oracleCfg.openai_has_key && <span style={{ color: 'var(--win)' }}>✓ {oracleCfg.openai_key_masked}</span>}
+                              <input className="form-input" type="password" placeholder="sk-…" value={oracleForm.openai_key} onChange={e => setOracleForm({ ...oracleForm, openai_key: e.target.value })} />
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Modelo
+                              <select className="form-input" value={oracleForm.openai_model} onChange={e => setOracleForm({ ...oracleForm, openai_model: e.target.value })}>
+                                {oracleCfg.openai_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                        )}
+
+                        {slotId === 'openrouter' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Chave {oracleCfg.openrouter_has_key && <span style={{ color: 'var(--win)' }}>✓ {oracleCfg.openrouter_key_masked}</span>}
+                              <input className="form-input" type="password" placeholder="sk-or-v1-…" value={oracleForm.openrouter_key} onChange={e => setOracleForm({ ...oracleForm, openrouter_key: e.target.value })} />
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
+                              Modelo
+                              <select className="form-input" value={oracleForm.openrouter_model} onChange={e => setOracleForm({ ...oracleForm, openrouter_model: e.target.value })}>
+                                <optgroup label="Grátis">{oracleCfg.openrouter_free_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</optgroup>
+                                <optgroup label="Pagos">{oracleCfg.openrouter_paid_models?.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</optgroup>
+                              </select>
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
 
                 <div>
