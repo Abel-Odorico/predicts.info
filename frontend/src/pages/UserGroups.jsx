@@ -180,43 +180,57 @@ export default function UserGroups() {
 
   return (
     <div className="page">
-      <div className="page-hero fade-in-1">
-        <div className="page-hero__main">
-          <div className="page-hero__icon">🏆</div>
-          <div className="page-hero__text">
-            <h1 className="page-hero__title">Meus Grupos</h1>
-            <div className="page-hero__subtitle">
-              <span className="groups-pill">{groups.length} bolão{groups.length !== 1 ? 'es' : ''}</span>
-              <span className="groups-pill">{totalMembers} membro{totalMembers !== 1 ? 's' : ''}</span>
-              {totalConvites > 0 && <span className="groups-pill groups-pill--alert">{totalConvites} convite{totalConvites !== 1 ? 's' : ''}</span>}
+      <div className="page-hero groups-hero fade-in-1">
+        <div className="groups-hero__top">
+          <div className="page-hero__main">
+            <div className="page-hero__icon">🏆</div>
+            <div className="page-hero__text">
+              <h1 className="page-hero__title groups-hero__title">Meus Grupos</h1>
+              <div className="page-hero__subtitle">Seus bolões privados, num só lugar</div>
             </div>
           </div>
-        </div>
-        <div className="page-hero__actions">
-          {myBestRank && (
-            <div className="page-hero__stat">
-              <div className="page-hero__stat-value">{bestRankMedal || `${myBestRank}º`}</div>
-              <div className="page-hero__stat-label">Melhor posição</div>
-            </div>
-          )}
           <button
             type="button"
-            className="btn btn-ghost btn-sm groups-create-toggle"
+            className="btn btn-primary groups-hero__cta"
             onClick={() => { setShowCreateForm(v => !v); setCreateMsg('') }}
             aria-expanded={showCreateForm}
           >
-            {showCreateForm ? '✕ Cancelar' : '+ Criar bolão'}
+            <span className="groups-hero__cta-icon">{showCreateForm ? '✕' : '+'}</span>
+            {showCreateForm ? 'Cancelar' : 'Criar bolão'}
           </button>
+        </div>
+
+        <div className="groups-hero__stats">
+          <div className="groups-stat-card fade-in-1">
+            <span className="groups-stat-card__icon">🏆</span>
+            <span className="groups-stat-card__value">{groups.length}</span>
+            <span className="groups-stat-card__label">{groups.length === 1 ? 'Bolão' : 'Bolões'}</span>
+          </div>
+          <div className="groups-stat-card fade-in-2">
+            <span className="groups-stat-card__icon">👥</span>
+            <span className="groups-stat-card__value">{totalMembers}</span>
+            <span className="groups-stat-card__label">{totalMembers === 1 ? 'Membro' : 'Membros'}</span>
+          </div>
+          <div className={`groups-stat-card fade-in-3${totalConvites > 0 ? ' groups-stat-card--alert' : ''}`}>
+            <span className="groups-stat-card__icon">✉️</span>
+            <span className="groups-stat-card__value">{totalConvites}</span>
+            <span className="groups-stat-card__label">{totalConvites === 1 ? 'Convite' : 'Convites'}</span>
+          </div>
+          <div className={`groups-stat-card groups-stat-card--best${bestRankMedal ? ' groups-stat-card--medal' : ' fade-in-4'}`}>
+            <span className="groups-stat-card__icon">{bestRankMedal || '🎖️'}</span>
+            <span className="groups-stat-card__value">{myBestRank ? (bestRankMedal || `${myBestRank}º`) : '–'}</span>
+            <span className="groups-stat-card__label">Melhor posição</span>
+          </div>
         </div>
       </div>
 
-      <div className="phase-nav fade-in-1" style={{ margin: 'var(--s3) 0 0' }}>
+      <div className="phase-nav groups-comp-nav fade-in-2">
         {COMPETITIONS.map(c => (
           <button key={c.id} type="button" className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`} onClick={() => setComp(c.id)}>{c.emoji} {c.label}</button>
         ))}
       </div>
       {comp === 'geral' && (
-        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', margin: 'var(--s2) 0 0' }}>
+        <p className="groups-comp-note">
           Soma bruta dos pontos entre competições — só curiosidade, sem pódio oficial de nenhuma delas.
         </p>
       )}

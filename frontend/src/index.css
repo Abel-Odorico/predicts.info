@@ -5585,6 +5585,43 @@ img {
   color: #fff;
 }
 
+/* Meus Grupos (/meus-grupos) — abas de competição viram segmented control
+   pill (mesma receita visual do .br-page acima), só muda a casca — lógica das
+   3 abas (geral/copa2026/brasileirao2026) intocada em UserGroups.jsx. */
+.groups-comp-nav {
+  gap: 4px;
+  padding: 4px;
+  margin: var(--s4) 0 0;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--r3);
+}
+.groups-comp-nav .phase-nav__tab {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  border-radius: calc(var(--r3) - 3px);
+  border-bottom: none;
+  margin-bottom: 0;
+  transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+.groups-comp-nav .phase-nav__tab.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, var(--win)));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.groups-comp-nav .phase-nav__tab.active .phase-nav__count {
+  background: rgba(255,255,255,0.22);
+  border-color: rgba(255,255,255,0.35);
+  color: #fff;
+}
+.groups-comp-note {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  color: var(--text-3);
+  margin: var(--s2) 0 0;
+}
+
 /* ── Groups view ── */
 
 .comp-groups-grid {
@@ -8542,6 +8579,124 @@ button.admin-options-quick__card {
 @media (max-width: 640px) {
   .groups-topbar { flex-direction: column; }
   .groups-create-bar { width: 100%; }
+}
+
+/* ── Meus Grupos — hero moderno (2026-07-18) ────────────────────────────
+   Substitui os 4 números em texto solto por cards glass + CTA proeminente.
+   `.groups-hero__top` empilha em coluna abaixo de 640px de propósito: título
+   + botão competindo lado a lado no mesmo flex row era a causa real do bug
+   "título cortado/só 'Meus'" (page-hero__title tem white-space:nowrap+
+   ellipsis, e a largura disponível pro texto ficava espremida pelo botão +
+   pelo stat de posição em telas ≤360px). Empilhado, o título sempre ganha a
+   largura inteira da linha. */
+.groups-hero__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+.groups-hero__cta {
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+.groups-hero__cta-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+@media (max-width: 640px) {
+  .groups-hero__top { flex-direction: column; align-items: stretch; }
+  .groups-hero__cta { width: 100%; }
+  /* rede de segurança extra: mesmo com a linha só pro título agora, nunca
+     mais corta — quebra pro texto inteiro aparecer se algum dia sobrar pouco */
+  .groups-hero__title { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+
+.groups-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s3);
+  margin-top: var(--s5);
+}
+@media (min-width: 700px) {
+  .groups-hero__stats { grid-template-columns: repeat(4, 1fr); }
+}
+
+.groups-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--s4);
+  border-radius: var(--r3);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.groups-stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-soft);
+  border-color: var(--border-accent);
+}
+.groups-stat-card__icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.groups-stat-card__value {
+  font-family: var(--font-data);
+  font-size: clamp(1.3rem, 5vw, 1.8rem);
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.groups-stat-card__label {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.groups-stat-card--alert {
+  border-color: rgba(232,160,48,.35);
+}
+.groups-stat-card--alert .groups-stat-card__value {
+  color: #e8a030;
+}
+.groups-stat-card--best {
+  border-color: var(--border-accent);
+  background: linear-gradient(135deg, var(--bg-raised) 0%, var(--accent-dim) 100%);
+}
+.groups-stat-card--best .groups-stat-card__value {
+  font-family: var(--font-display);
+  color: var(--accent);
+}
+.groups-stat-card--best .groups-stat-card__icon {
+  font-size: 24px;
+}
+
+/* Destaque só quando há medalha real (top 3) — entrada com stagger (mesmo
+   atraso do 4º card) + loop perpétuo NUMA ÚNICA declaração `animation`
+   (gotcha do projeto: 2 classes setando animation shorthand no mesmo elemento
+   faz a última cancelar a primeira inteira e o card trava em opacity:0). */
+@keyframes groups-best-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes groups-best-glow {
+  0%, 100% { box-shadow: 0 0 0 1px var(--border-accent), 0 4px 14px var(--accent-glow); }
+  50%       { box-shadow: 0 0 0 3px var(--border-accent), 0 10px 28px var(--accent-glow); }
+}
+.groups-stat-card--medal {
+  opacity: 0;
+  animation: groups-best-fade-in 300ms ease 240ms both, groups-best-glow 2.6s ease-in-out 540ms infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .groups-stat-card--medal { animation: none; opacity: 1; }
+  .groups-stat-card { transition: none; }
 }
 
 /* ── Group Podium ────────────────────────────────────────────────────── */
