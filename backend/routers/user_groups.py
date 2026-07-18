@@ -60,6 +60,7 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None, recent_for
             "id": member.id,
             "user_id": member.user_id,
             "name": member.user.name if member.user else "",
+            "username": member.user.username if member.user else None,
             "email_masked": _mask_email(member.user.email if member.user else ""),
             "is_owner": member.is_owner,
             "joined_at": member.joined_at,
@@ -70,6 +71,7 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None, recent_for
             "recent_form": form,
             "invited_by_user_id": member.invited_by_user_id,
             "invited_by_name": member.invited_by.name if member.invited_by else None,
+            "invited_by_username": member.invited_by.username if member.invited_by else None,
         })
     member_count = len(accepted_members)
     group_xp = total_bets_g * 10 + total_exacts_g * 20 + member_count * 50
@@ -99,9 +101,11 @@ def _group_payload(group: UserGroup, ranking_map: dict | None = None, recent_for
                 "id": req.id,
                 "user_id": req.user_id,
                 "name": req.user.name if req.user else "",
+                "username": req.user.username if req.user else None,
                 "email_masked": _mask_email(req.user.email if req.user else ""),
                 "invited_by_user_id": req.invited_by_user_id,
                 "invited_by_name": req.invited_by.name if req.invited_by else None,
+                "invited_by_username": req.invited_by.username if req.invited_by else None,
                 "created_at": req.created_at,
             }
             for req in pending_join_requests
@@ -266,6 +270,7 @@ def list_user_groups(
             "group_name": invite.group.name if invite.group else "",
             "invitee_email": invite.invitee_email,
             "inviter_name": invite.inviter.name if invite.inviter else "",
+            "inviter_username": invite.inviter.username if invite.inviter else None,
             "created_at": invite.created_at,
         }
         for invite in invites

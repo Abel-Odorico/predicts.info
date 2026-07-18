@@ -8,6 +8,8 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { COMPETITIONS, COMPETITION_LABEL } from '../utils/competitions'
 import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
+import { displayName } from '../utils/displayName'
+import RankingNameToggle from '../components/RankingNameToggle'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -157,6 +159,7 @@ export default function UserGroups() {
 
   if (loading) return <Spinner text="Carregando grupos privados..." />
 
+  const namePref = user?.ranking_display_pref === 'username' ? 'username' : 'name'
   const groups = data.groups ?? []
   const pendingInvites = data.pending_invites ?? []
   const nextMatch = data.next_match ?? null
@@ -235,6 +238,10 @@ export default function UserGroups() {
         </p>
       )}
 
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="fade-in-2">
+        <RankingNameToggle />
+      </div>
+
       {showCreateForm && (
         <form onSubmit={createGroup} className="groups-create-panel fade-in-1" aria-label="Criar novo grupo">
           <input
@@ -272,7 +279,7 @@ export default function UserGroups() {
               <div key={invite.id} className="groups-received-invite">
                 <div className="groups-received-invite__main">
                   <strong>{invite.group_name}</strong>
-                  <span>Convite enviado por {invite.inviter_name || 'usuário'}</span>
+                  <span>Convite enviado por {invite.inviter_name ? displayName({ name: invite.inviter_name, username: invite.inviter_username }, namePref) : 'usuário'}</span>
                 </div>
                 <div className="groups-received-invite__actions">
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => respondToInvite(invite.id, 'accept')}>Aceitar</button>
@@ -385,6 +392,7 @@ export default function UserGroups() {
                 myBetNext={myBetNext}
                 comp={comp}
                 todayRanking={todayRanking}
+                namePref={namePref}
               />
             )}
           </section>
@@ -394,7 +402,7 @@ export default function UserGroups() {
   )
 }
 
-function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 }, nextMatch = null, myBetNext = false, comp = 'geral', todayRanking = [] }) {
+function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { finished: 0, total: 0 }, nextMatch = null, myBetNext = false, comp = 'geral', todayRanking = [], namePref = 'name' }) {
   const isOwner = group.owner_user_id === currentUser?.id
   const myEntry = (group.members ?? []).find(m => m.user_id === currentUser?.id)
   const myPoints = myEntry?.total_points ?? 0
@@ -804,7 +812,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
           {sortedMembers.slice(0, 3).map((m, i) => (
             <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--bg-overlay)', borderRadius: 20, padding: '3px 10px 3px 6px' }}>
               <span style={{ fontSize: 13 }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-2)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-2)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName(m, namePref)}</span>
               <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>{m.total_points}</span>
             </div>
           ))}
@@ -858,7 +866,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                 <span style={{ fontSize: 15 }}>{h.icon}</span>
                 <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: h.color ?? 'var(--accent)' }}>{h.label}</span>
               </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.m.name}</div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName(h.m, namePref)}</div>
               <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--text-2)' }}>{h.val}</div>
             </Link>
           ))}
@@ -934,7 +942,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                     <div className="group-member-row__identity" style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
                         <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {member.name}{member.user_id === currentUser?.id ? ' (você)' : ''}
+                          {displayName(member, namePref)}{member.user_id === currentUser?.id ? ' (você)' : ''}
                         </strong>
                         {member.is_owner && <span className="badge badge-group" style={{ fontSize: 9 }}>Dono</span>}
                       </div>
@@ -949,7 +957,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                       )}
                       {member.invited_by_name && (
                         <div style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)', marginTop: 2 }}>
-                          🔗 indicado por {member.invited_by_name}
+                          🔗 indicado por {displayName({ name: member.invited_by_name, username: member.invited_by_username }, namePref)}
                         </div>
                       )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
@@ -998,8 +1006,8 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                           {i === 0
                             ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>👑 Líder do grupo</span>
                             : leaderDiff === 0
-                              ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {sortedMembers[0].name}</span>
-                              : <>−<strong style={{ color: 'var(--text-1)' }}>{leaderDiff} pts</strong> para {sortedMembers[0].name}</>
+                              ? <span style={{ color: 'var(--win)', fontWeight: 700 }}>= empatado com {displayName(sortedMembers[0], namePref)}</span>
+                              : <>−<strong style={{ color: 'var(--text-1)' }}>{leaderDiff} pts</strong> para {displayName(sortedMembers[0], namePref)}</>
                           }
                         </span>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1014,7 +1022,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                             <button
                               type="button"
                               disabled={removingMemberId === member.user_id}
-                              onClick={e => { e.stopPropagation(); removeMember(member.user_id, member.name) }}
+                              onClick={e => { e.stopPropagation(); removeMember(member.user_id, displayName(member, namePref)) }}
                               style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: 'color-mix(in srgb, var(--lose) 10%, transparent)', color: 'var(--lose)', border: '1px solid var(--lose)', cursor: 'pointer' }}
                             >
                               {removingMemberId === member.user_id ? '...' : '🚫 Remover'}
@@ -1156,9 +1164,9 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                 <div key={`req-${req.id}`} className="pending-invite-row" style={{ padding: '6px 10px', gap: 8 }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }} title="Pedido de entrada via link de membro">🔔</span>
                   <div className="pending-invite-row__content">
-                    <span className="pending-invite-row__email">{req.name || req.email_masked}</span>
+                    <span className="pending-invite-row__email">{req.name ? displayName(req, namePref) : req.email_masked}</span>
                     <span className="pending-invite-row__meta">
-                      {req.invited_by_name ? `via ${req.invited_by_name}` : 'via link'} · {timeAgo(req.created_at)}
+                      {req.invited_by_name ? `via ${displayName({ name: req.invited_by_name, username: req.invited_by_username }, namePref)}` : 'via link'} · {timeAgo(req.created_at)}
                     </span>
                   </div>
                   {isOwner && (

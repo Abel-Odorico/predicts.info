@@ -150,7 +150,7 @@ export default function Layout() {
   const closeDrawer = () => setDrawerOpen(false)
 
   const initials = user?.name
-    ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    ? (user.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : '?'
 
   return (
@@ -281,7 +281,7 @@ export default function Layout() {
         <div className="mobile-topbar__brand">
           <div className="mobile-topbar__logo">PREDICTS</div>
           <div className="mobile-topbar__subtitle">
-            {user ? `Olá, ${user.name.split(' ')[0]}` : 'Simulador Estatístico'}
+            {user?.name ? `Olá, ${user.name.split(' ')[0]}` : 'Simulador Estatístico'}
           </div>
         </div>
         <div className="mobile-topbar__actions">

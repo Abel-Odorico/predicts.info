@@ -3,7 +3,7 @@ import { useAuth } from '../stores/authStore'
 
 export default function RankingNameToggle() {
   const { user, token, setUser } = useAuth()
-  if (!token) return null
+  if (!token || !user) return null
 
   const pref = user?.ranking_display_pref === 'username' ? 'username' : 'name'
 
