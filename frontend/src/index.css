@@ -6955,9 +6955,7 @@ button.admin-options-quick__card {
 .groups-received-invite,
 .group-manager-card__header,
 .group-manager-card__actions,
-.group-manager-section__header,
-.group-search-result,
-.group-email-invite__row {
+.group-manager-section__header {
   display: flex;
   align-items: center;
   gap: var(--s3);
@@ -6965,8 +6963,7 @@ button.admin-options-quick__card {
 .groups-invite-strip__header,
 .groups-received-invite,
 .group-manager-card__header,
-.group-manager-section__header,
-.group-search-result {
+.group-manager-section__header {
   justify-content: space-between;
 }
 .groups-section-heading {
@@ -6995,15 +6992,13 @@ button.admin-options-quick__card {
   gap: 2px;
   min-width: 180px;
 }
-.groups-received-invite__main strong,
-.group-search-result strong {
+.groups-received-invite__main strong {
   color: var(--text-1);
   font-family: var(--font-cond);
   font-size: 14px;
   line-height: 1.2;
 }
-.groups-received-invite__main span,
-.group-search-result span {
+.groups-received-invite__main span {
   color: var(--text-3);
   font-size: 12px;
 }
@@ -7467,15 +7462,7 @@ button.admin-options-quick__card {
   color: var(--text-1);
   letter-spacing: 0;
 }
-.group-manager-section__header span {
-  font-family: var(--font-data);
-  font-size: 11px;
-  color: var(--text-4);
-}
-.group-member-preview,
-.group-pending-list,
-.group-invite-tools,
-.group-search-results {
+.group-member-preview {
   display: grid;
   gap: var(--s2);
 }
@@ -7527,45 +7514,182 @@ button.admin-options-quick__card {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pending-invite-row__content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.group-search-result {
-  padding: var(--s3);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  background: var(--bg-surface);
-}
-.group-search-result > div {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-.group-search-result strong,
-.group-search-result span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .group-tool-note {
   color: var(--text-3);
   font-size: 12px;
 }
-.group-email-invite {
+
+/* ── Convites pendentes — lista modernizada ──────────────────────────── */
+.group-invites-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 100px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+.group-invites-list {
   display: grid;
   gap: var(--s2);
+}
+.group-invites-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+.group-invites-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+}
+.group-invites-avatar--request {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.group-invites-avatar--email {
+  color: #4a90e8;
+  background: color-mix(in srgb, #4a90e8 16%, transparent);
+  border: 1px solid color-mix(in srgb, #4a90e8 35%, transparent);
+}
+.group-invites-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.group-invites-name {
+  font-family: var(--font-cond);
+  font-size: 13px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-invites-name--data {
+  font-family: var(--font-data);
+  font-size: 12.5px;
+}
+.group-invites-meta {
+  font-size: 11px;
+  color: var(--text-4);
+}
+.group-invites-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.group-invites-icon-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+}
+.group-invites-icon-btn--approve {
+  border-color: color-mix(in srgb, var(--win) 45%, transparent);
+  color: var(--win);
+}
+.group-invites-icon-btn--approve:hover {
+  color: var(--win);
+  border-color: var(--win);
+  background: color-mix(in srgb, var(--win) 12%, transparent);
+}
+.group-invites-empty {
+  padding: var(--s4);
+  border-radius: var(--r2);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  color: var(--text-4);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* ── Ferramentas de convite — card modernizado ───────────────────────── */
+.group-tools-body {
+  display: grid;
+  gap: var(--s3);
+}
+.group-tools-field {
+  display: grid;
+  gap: 6px;
+}
+.group-tools-results {
+  display: grid;
+  gap: var(--s2);
+}
+.group-tools-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-width: 0;
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--bg-surface);
+  transition: border-color 150ms, background 150ms;
+}
+@media (hover: hover) and (pointer: fine) {
+  .group-tools-result-row:hover {
+    border-color: var(--border-accent);
+    background: var(--bg-overlay);
+  }
+}
+.group-tools-result-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.group-tools-result-name {
+  font-family: var(--font-cond);
+  font-size: 13px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-tools-result-email {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-tools-invite-form {
   padding-top: var(--s2);
   border-top: 1px solid var(--border);
 }
-.group-email-invite__row {
+.group-tools-invite-row {
+  display: flex;
   align-items: stretch;
+  gap: var(--s2);
 }
-.group-email-invite__row .form-input {
+.group-tools-invite-row .form-input {
   min-width: 0;
+  flex: 1;
+}
+.group-tools-invite-row .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 @media (min-width: 768px) {
@@ -7597,19 +7721,15 @@ button.admin-options-quick__card {
   .groups-empty-state {
     align-items: flex-start;
   }
-  .groups-received-invite,
-  .group-search-result,
-  .group-email-invite__row {
+  .groups-received-invite {
     align-items: stretch;
   }
   .groups-received-invite__actions,
-  .group-manager-card__actions,
-  .group-email-invite__row {
+  .group-manager-card__actions {
     width: 100%;
   }
   .groups-received-invite__actions > *,
-  .group-manager-card__actions > *,
-  .group-email-invite__row > * {
+  .group-manager-card__actions > * {
     flex: 1;
   }
   .group-manager-card__actions > .group-manager-card__icon-btn {
@@ -7626,34 +7746,15 @@ button.admin-options-quick__card {
   .group-stat:last-child {
     border-bottom: 0;
   }
-}
-
-/* ── Pending invite cancel row ───────────────────────────────────────── */
-.pending-invite-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  flex-wrap: wrap;
-  padding: var(--s3) var(--s4);
-  border-radius: var(--r2);
-  background: var(--bg-overlay);
-  border: 1px solid var(--border);
-  font-size: 12px;
-}
-.pending-invite-row__email {
-  color: var(--text-2);
-  font-family: var(--font-cond);
-  font-size: 13px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pending-invite-row__meta {
-  color: var(--text-4);
-  font-size: 11px;
-  font-family: var(--font-data);
+  .group-tools-invite-row {
+    flex-direction: column;
+  }
+  .group-tools-invite-row .btn {
+    width: 100%;
+  }
+  .group-invites-row {
+    flex-wrap: wrap;
+  }
 }
 
 /* ── Group my-position strip ─────────────────────────────────────────── */
@@ -9048,6 +9149,18 @@ button.admin-options-quick__card {
   font-size: 12px;
   font-weight: 600;
   color: var(--lose);
+}
+
+/* ── Detalhe do bolão (/meus-grupos/:id): ações do header não estouram
+   em telas estreitas — page-hero__actions tem flex-shrink:0 (proposital
+   pras outras páginas que usam .page-hero), então aqui a gente força
+   quebra de linha interna só nesta página via classe própria ── */
+@media (max-width: 480px) {
+  .group-detail-hero__actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 /* ── Mobile: aumentar fontes dos cards de grupo (iPhone) ─────────────── */

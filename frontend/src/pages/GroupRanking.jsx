@@ -492,7 +492,13 @@ export default function GroupRanking() {
                   {renameMsg && <span style={{ fontSize: 12, color: 'var(--lose)' }}>{renameMsg}</span>}
                 </form>
               ) : (
-                <h1 className="page-hero__title">{data?.group_name}</h1>
+                <>
+                  <div className="group-manager-card__kicker">Bolão privado</div>
+                  <div className="group-manager-card__title-row">
+                    <h1 className="group-manager-card__title">{data?.group_name}</h1>
+                    {amOwner && <span className="group-manager-card__owner-chip">Dono</span>}
+                  </div>
+                </>
               )}
               <div className="page-hero__subtitle">
                 <span>{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</span>
@@ -500,7 +506,7 @@ export default function GroupRanking() {
               </div>
             </div>
           </div>
-          <div className="page-hero__actions">
+          <div className="page-hero__actions group-detail-hero__actions">
             {myEntry && (
               <div className="page-hero__stat">
                 <div className="page-hero__stat-value">
@@ -510,11 +516,11 @@ export default function GroupRanking() {
               </div>
             )}
             <RankingNameToggle />
-            <button type="button" className="btn btn-sm" style={{ background: 'var(--accent)', color: 'var(--on-accent)', fontWeight: 700 }} onClick={() => setShareOpen(o => !o)}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setShareOpen(o => !o)}>
               📤 Ranking
             </button>
             {amOwner && !renaming && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setNewName(data?.group_name ?? ''); setRenaming(true) }}>
+              <button type="button" className="group-manager-card__icon-btn" onClick={() => { setNewName(data?.group_name ?? ''); setRenaming(true) }} title="Editar nome" aria-label="Editar nome do bolão">
                 ✏️
               </button>
             )}

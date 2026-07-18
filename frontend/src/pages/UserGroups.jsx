@@ -770,6 +770,9 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   const groupXp = group.group_xp ?? 0
   const groupLevelNext = group.group_level_xp_next ?? 500
   const xpPct = Math.min(100, Math.round((groupXp % 500) / 5))
+  const joinRequests = group.pending_join_requests ?? []
+  const emailInvites = group.pending_invites
+  const pendingTotal = joinRequests.length + emailInvites.length
 
   return (
     <article className="group-manager-card">
@@ -1183,30 +1186,32 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
         )}
 
         {/* Pending invites + join requests (link de membro que não é o dono, aguarda aprovação) */}
-        {(group.pending_invites.length + (group.pending_join_requests?.length ?? 0)) > 0 && (
-          <section className="group-manager-section">
-            <div className="group-manager-section__header">
-              <h3>Convites pendentes</h3>
-              <span>{group.pending_invites.length + (group.pending_join_requests?.length ?? 0)}</span>
-            </div>
-            <div className="group-pending-list" style={{ gap: 4 }}>
-              {(group.pending_join_requests ?? []).map(req => (
-                <div key={`req-${req.id}`} className="pending-invite-row" style={{ padding: '6px 10px', gap: 8 }}>
-                  <span style={{ fontSize: 14, flexShrink: 0 }} title="Pedido de entrada via link de membro">🔔</span>
-                  <div className="pending-invite-row__content">
-                    <span className="pending-invite-row__email">{req.name ? displayName(req, namePref) : req.email_masked}</span>
-                    <span className="pending-invite-row__meta">
+        <section className="group-manager-section group-invites-section">
+          <div className="group-manager-section__header">
+            <span className="group-manager-card__kicker">Convites pendentes</span>
+            <span className="group-invites-count">{pendingTotal}</span>
+          </div>
+          {pendingTotal === 0 ? (
+            <div className="group-invites-empty">Nenhum convite ou pedido pendente por aqui.</div>
+          ) : (
+            <div className="group-invites-list">
+              {joinRequests.map(req => (
+                <div key={`req-${req.id}`} className="group-invites-row">
+                  <span className="group-invites-avatar group-invites-avatar--request" title="Pedido de entrada via link de membro">🔔</span>
+                  <div className="group-invites-content">
+                    <span className="group-invites-name">{req.name ? displayName(req, namePref) : req.email_masked}</span>
+                    <span className="group-invites-meta">
                       {req.invited_by_name ? `via ${displayName({ name: req.invited_by_name, username: req.invited_by_username }, namePref)}` : 'via link'} · {timeAgo(req.created_at)}
                     </span>
                   </div>
                   {isOwner && (
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <div className="group-invites-actions">
                       <button
                         type="button"
                         title="Aceitar"
                         disabled={reqActionId === req.id}
                         onClick={() => approveJoinRequest(req.id)}
-                        style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: '1px solid var(--win)', background: 'color-mix(in srgb, var(--win) 12%, transparent)', color: 'var(--win)', fontSize: 13, cursor: 'pointer' }}
+                        className="group-manager-card__icon-btn group-invites-icon-btn group-invites-icon-btn--approve"
                       >
                         {reqActionId === req.id ? '·' : '✓'}
                       </button>
@@ -1215,7 +1220,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                         title="Recusar"
                         disabled={reqActionId === req.id}
                         onClick={() => rejectJoinRequest(req.id)}
-                        style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: '1px solid var(--lose)', background: 'color-mix(in srgb, var(--lose) 12%, transparent)', color: 'var(--lose)', fontSize: 13, cursor: 'pointer' }}
+                        className="group-manager-card__icon-btn group-manager-card__icon-btn--danger group-invites-icon-btn"
                       >
                         {reqActionId === req.id ? '·' : '✕'}
                       </button>
@@ -1223,64 +1228,68 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                   )}
                 </div>
               ))}
-              {group.pending_invites.map(invite => (
-                <div key={`inv-${invite.id}`} className="pending-invite-row" style={{ padding: '6px 10px', gap: 8 }}>
-                  <span style={{ fontSize: 14, flexShrink: 0 }} title="Convite por email">✉️</span>
-                  <div className="pending-invite-row__content">
-                    <span className="pending-invite-row__email">{maskEmail(invite.invitee_email)}</span>
-                    <span className="pending-invite-row__meta">{timeAgo(invite.created_at)}</span>
+              {emailInvites.map(invite => (
+                <div key={`inv-${invite.id}`} className="group-invites-row">
+                  <span className="group-invites-avatar group-invites-avatar--email" title="Convite por email">✉️</span>
+                  <div className="group-invites-content">
+                    <span className="group-invites-name group-invites-name--data">{maskEmail(invite.invitee_email)}</span>
+                    <span className="group-invites-meta">{timeAgo(invite.created_at)}</span>
                   </div>
                   {isOwner && (
-                    <button
-                      type="button"
-                      title="Cancelar convite"
-                      disabled={cancellingId === invite.id}
-                      onClick={() => cancelInvite(invite.id)}
-                      style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
-                    >
-                      {cancellingId === invite.id ? '·' : '✕'}
-                    </button>
+                    <div className="group-invites-actions">
+                      <button
+                        type="button"
+                        title="Cancelar convite"
+                        disabled={cancellingId === invite.id}
+                        onClick={() => cancelInvite(invite.id)}
+                        className="group-manager-card__icon-btn group-manager-card__icon-btn--danger group-invites-icon-btn"
+                      >
+                        {cancellingId === invite.id ? '·' : '✕'}
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         {/* Invite tools (owner only) */}
         {isOwner && (
-          <section className="group-manager-section group-manager-section--tools">
+          <section className="group-manager-section group-manager-section--tools group-tools-section">
             <div className="group-manager-section__header">
-              <h3>Ferramentas de convite</h3>
-              <span>Admin</span>
+              <span className="group-manager-card__kicker">Ferramentas de convite</span>
+              <span className="group-manager-card__owner-chip">Admin</span>
             </div>
-            <div className="group-invite-tools">
-              <label className="form-label" htmlFor={`user-search-${group.id}`}>Buscar usuário</label>
-              <input
-                id={`user-search-${group.id}`}
-                type="text"
-                className="form-input"
-                placeholder="Nome ou email"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-              />
+            <div className="group-tools-body">
+              <div className="group-tools-field">
+                <label className="form-label" htmlFor={`user-search-${group.id}`}>Buscar usuário</label>
+                <input
+                  id={`user-search-${group.id}`}
+                  type="text"
+                  className="form-input"
+                  placeholder="Nome ou email"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                />
+              </div>
               {searching && <div className="group-tool-note">Buscando usuários...</div>}
               {results.length > 0 && (
-                <div className="group-search-results">
+                <div className="group-tools-results">
                   {results.map(result => (
-                    <div key={result.id} className="group-search-result">
+                    <div key={result.id} className="group-tools-result-row">
                       <div>
-                        <strong>{result.name}</strong>
-                        <span style={{ color: 'var(--text-4)', fontSize: 11 }}>{result.email_masked}</span>
+                        <span className="group-tools-result-name">{result.name}</span>
+                        <span className="group-tools-result-email">{result.email_masked}</span>
                       </div>
                       <button type="button" className="btn btn-primary btn-sm" disabled={inviting} onClick={() => inviteUser(result.id, null)}>Convidar</button>
                     </div>
                   ))}
                 </div>
               )}
-              <form onSubmit={inviteByEmail} className="group-email-invite">
+              <form onSubmit={inviteByEmail} className="group-tools-field group-tools-invite-form">
                 <label className="form-label" htmlFor={`invite-email-${group.id}`}>Convidar por email</label>
-                <div className="group-email-invite__row">
+                <div className="group-tools-invite-row">
                   <input
                     id={`invite-email-${group.id}`}
                     type="email"
@@ -1289,7 +1298,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                   />
-                  <button type="submit" className="btn btn-ghost btn-sm" disabled={inviting || !email.trim()}>{inviting ? 'Enviando...' : 'Enviar'}</button>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={inviting || !email.trim()}>{inviting ? 'Enviando...' : 'Enviar'}</button>
                 </div>
               </form>
             </div>
