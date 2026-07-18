@@ -520,3 +520,85 @@ def ranking(
         }
         for i, r in enumerate(rows)
     ]
+
+
+@router.get("/ranking/me")
+def my_ranking_position(
+    competition: str = Query(default="copa2026", description="Código da competição ou 'geral' (soma entre competições)"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Posição ATUAL do usuário logado no ranking do site (não de bolão), respeitando
+    a competição escolhida. Leve pra consumir num card de resumo (/meus-grupos) —
+    computa a ordenação inteira no banco e devolve só a posição do próprio usuário,
+    sem mandar a lista inteira pro front. Mesma lógica de ordenação de GET /ranking
+    (não-filtrado) e do agregado "geral" de GET /user-groups."""
+    from competitions import get_competition_id
+
+    is_general = competition == "geral"
+    comp_id = None
+    if not is_general:
+        comp_id = get_competition_id(db, competition)
+        if comp_id is None:
+            raise HTTPException(status_code=404, detail="Competição não encontrada")
+
+    if is_general:
+        bet_counts = (
+            db.query(Bet.user_id.label("user_id"), func.count(Bet.id).label("total_bets"))
+            .group_by(Bet.user_id)
+            .subquery()
+        )
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                func.coalesce(func.sum(Ranking.total_points), 0).label("total_points"),
+                func.coalesce(func.sum(Ranking.exact_scores), 0).label("exact_scores"),
+                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+            )
+            .outerjoin(Ranking, User.id == Ranking.user_id)
+            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+            .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
+            .group_by(User.id, bet_counts.c.total_bets)
+            .order_by(
+                desc(func.coalesce(func.sum(Ranking.total_points), 0)),
+                desc(func.coalesce(func.sum(Ranking.exact_scores), 0)),
+                desc(func.coalesce(bet_counts.c.total_bets, 0)),
+                User.name.asc(),
+            )
+            .all()
+        )
+    else:
+        bet_counts = (
+            db.query(Bet.user_id.label("user_id"), func.count(Bet.id).label("total_bets"))
+            .filter(Bet.competition_id == comp_id)
+            .group_by(Bet.user_id)
+            .subquery()
+        )
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                func.coalesce(Ranking.total_points, 0).label("total_points"),
+                func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
+                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+            )
+            .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == comp_id))
+            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+            .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
+            .order_by(
+                desc(func.coalesce(Ranking.total_points, 0)),
+                desc(func.coalesce(Ranking.exact_scores, 0)),
+                desc(func.coalesce(bet_counts.c.total_bets, 0)),
+                User.name.asc(),
+            )
+            .all()
+        )
+
+    position = next((i + 1 for i, r in enumerate(rows) if r.user_id == user.id), None)
+    my_row = next((r for r in rows if r.user_id == user.id), None)
+
+    return {
+        "competition": competition,
+        "position": position,
+        "total_points": (my_row.total_points if my_row else 0),
+        "total_participants": len(rows),
+    }

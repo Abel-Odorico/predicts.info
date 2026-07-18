@@ -70,6 +70,7 @@ export default function UserGroups() {
   })
   const [comp, setComp] = useState('geral')
   const [todayRanking, setTodayRanking] = useState([])
+  const [siteRank, setSiteRank] = useState(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [switcherQuery, setSwitcherQuery] = useState('')
   const switcherRef = useRef(null)
@@ -119,6 +120,15 @@ export default function UserGroups() {
       .then(setTodayRanking)
       .catch(() => setTodayRanking([]))
   }, [token])
+
+  // Posição ATUAL do usuário no ranking do SITE (não dos bolões) — respeita a
+  // aba de competição selecionada, refaz sempre que trocar de aba.
+  useEffect(() => {
+    if (!token) return
+    api.get(`/ranking/me?competition=${comp}`, token)
+      .then(setSiteRank)
+      .catch(() => setSiteRank(null))
+  }, [token, comp])
 
   async function createGroup(e) {
     e.preventDefault()
@@ -182,6 +192,10 @@ export default function UserGroups() {
   }, null)
   const bestRankMedal = myBestRank === 1 ? '🥇' : myBestRank === 2 ? '🥈' : myBestRank === 3 ? '🥉' : null
 
+  // Posição ATUAL no ranking do site (não dos bolões) — respeita a aba `comp`
+  const siteRankPos = siteRank?.position ?? null
+  const siteRankTop3 = siteRankPos !== null && siteRankPos <= 3
+
   return (
     <div className="page">
       <div className="page-hero groups-hero fade-in-1">
@@ -225,7 +239,14 @@ export default function UserGroups() {
               {myBestRank && myBestRank <= 3 ? <MedalIcon rank={myBestRank} size={24} /> : '🎖️'}
             </span>
             <span className="groups-stat-card__value">{myBestRank ? `${myBestRank}º` : '–'}</span>
-            <span className="groups-stat-card__label">Melhor posição</span>
+            <span className="groups-stat-card__label">Melhor posição · bolões</span>
+          </div>
+          <div className={`groups-stat-card groups-stat-card--best${siteRankTop3 ? ' groups-stat-card--rank-medal' : ' fade-in-5'}`}>
+            <span className="groups-stat-card__icon">
+              {siteRankTop3 ? <MedalIcon rank={siteRankPos} size={24} /> : '📊'}
+            </span>
+            <span className="groups-stat-card__value">{siteRankPos ? `${siteRankPos}º` : '–'}</span>
+            <span className="groups-stat-card__label">Posição · ranking {COMPETITION_LABEL[comp]}</span>
           </div>
         </div>
       </div>
@@ -770,16 +791,22 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
           ) : (
             <>
               <div className="group-manager-card__kicker">Bolão privado</div>
-              <h2 className="group-manager-card__title">{group.name}</h2>
+              <div className="group-manager-card__title-row">
+                <h2 className="group-manager-card__title">{group.name}</h2>
+                {isOwner && <span className="group-manager-card__owner-chip">Dono</span>}
+              </div>
             </>
           )}
         </div>
         <div className="group-manager-card__actions">
-          {isOwner && <span className="badge badge-win">Dono</span>}
-          <Link to={`/meus-grupos/${group.id}`} className="btn btn-primary btn-sm">🏆 Ranking</Link>
-          {isOwner && !renaming && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRenaming(true)}>✏️ Editar</button>}
+          <Link to={`/meus-grupos/${group.id}`} className="btn btn-primary btn-sm group-manager-card__rank-btn">🏆 Ranking</Link>
           {isOwner && !renaming && (
-            <button type="button" className="btn btn-ghost btn-sm group-manager-card__danger" onClick={deleteGroup} disabled={deleting} aria-label={`Excluir ${group.name}`}>
+            <button type="button" className="group-manager-card__icon-btn" onClick={() => setRenaming(true)} title="Editar nome" aria-label="Editar nome do bolão">
+              ✏️
+            </button>
+          )}
+          {isOwner && !renaming && (
+            <button type="button" className="group-manager-card__icon-btn group-manager-card__icon-btn--danger" onClick={deleteGroup} disabled={deleting} title="Excluir bolão" aria-label={`Excluir ${group.name}`}>
               {deleting ? '...' : '🗑'}
             </button>
           )}
