@@ -221,7 +221,7 @@ export default function UserGroups() {
           </div>
           <div className={`groups-stat-card groups-stat-card--best${bestRankMedal ? ' groups-stat-card--medal' : ' fade-in-4'}`}>
             <span className="groups-stat-card__icon">{bestRankMedal || '🎖️'}</span>
-            <span className="groups-stat-card__value">{myBestRank ? (bestRankMedal || `${myBestRank}º`) : '–'}</span>
+            <span className="groups-stat-card__value">{myBestRank ? `${myBestRank}º` : '–'}</span>
             <span className="groups-stat-card__label">Melhor posição</span>
           </div>
         </div>
