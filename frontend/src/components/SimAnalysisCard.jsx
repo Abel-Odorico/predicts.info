@@ -1,3 +1,5 @@
+import TeamCrestFlag from './TeamCrestFlag'
+
 export default function SimAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
   if (!analysis) return null
   const s = { fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }
@@ -35,7 +37,14 @@ export default function SimAnalysisCard({ analysis, teamA, teamB, show, onToggle
               {[{ team: teamA, data: analysis.team_a }, { team: teamB, data: analysis.team_b }].map(({ team, data }) => data ? (
                 <div key={team?.code} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)', minWidth: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    {team?.flag_url && <img src={team.flag_url} alt={team.code} style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 2 }} />}
+                    {team?.flag_url && (
+                      <TeamCrestFlag
+                        src={team.flag_url}
+                        alt={team.code}
+                        style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 2 }}
+                        crestStyle={{ width: 26, height: 26, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }}
+                      />
+                    )}
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>{team?.name || team?.code}</span>
                   </div>
                   {data.tactical && <><div style={h}>Tática</div><div style={{ ...s, marginBottom: 8 }}>{data.tactical}</div></>}

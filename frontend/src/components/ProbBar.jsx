@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CONF_HEX } from '../api'
+import TeamCrestFlag from './TeamCrestFlag'
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    DUEL BAR — signature element
@@ -28,7 +29,7 @@ export default function ProbBar({ sim, matchData }) {
       {/* Teams */}
       <div className="duel-bar__teams">
         <div className="duel-bar__team">
-          {a.flag_url && <img src={a.flag_url} alt={a.code} className="duel-bar__flag" />}
+          <TeamCrestFlag src={a.flag_url} alt={a.code} className="duel-bar__flag" crestClassName="duel-bar__flag--crest" />
           <div>
             <div className="duel-bar__name">{a.code}</div>
             <div className="duel-bar__conf">{a.confederation}</div>
@@ -38,7 +39,7 @@ export default function ProbBar({ sim, matchData }) {
         <div className="duel-bar__vs">vs</div>
 
         <div className="duel-bar__team duel-bar__team--b">
-          {b.flag_url && <img src={b.flag_url} alt={b.code} className="duel-bar__flag" />}
+          <TeamCrestFlag src={b.flag_url} alt={b.code} className="duel-bar__flag" crestClassName="duel-bar__flag--crest" />
           <div>
             <div className="duel-bar__name">{b.code}</div>
             <div className="duel-bar__conf">{b.confederation}</div>

@@ -6,6 +6,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 import TitleEvolutionChart from '../components/TitleEvolutionChart'
 import BrTitleEvolutionChart from '../components/BrTitleEvolutionChart'
 import { PT_NAMES } from '../utils/teamNames'
@@ -38,7 +39,7 @@ function TeamLabel({ code, name, flagUrl, compact = false }) {
   const label = compact ? code : (PT_NAMES[code] || name || code)
   return (
     <span className="team-label">
-      {flagUrl && <img src={flagUrl} alt={code} className="match-card__flag" />}
+      <TeamCrestFlag src={flagUrl} alt={code} className="match-card__flag" crestClassName="match-card__flag--crest" />
       <span className="team-label__text">{label}</span>
     </span>
   )
@@ -1327,7 +1328,14 @@ function MatchAnalysisCard({ analysis, teamA, teamB, show, onToggle }) {
               ].map(({ team, data }) => data ? (
                 <div key={team?.code} style={{ background: 'var(--bg-overlay)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)', minWidth: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    {team?.flag_url && <img src={team.flag_url} alt={team.code} style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 2 }} />}
+                    {team?.flag_url && (
+                      <TeamCrestFlag
+                        src={team.flag_url}
+                        alt={team.code}
+                        style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 2 }}
+                        crestStyle={{ width: 26, height: 26, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }}
+                      />
+                    )}
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>{team?.name || team?.code}</span>
                   </div>
                   {data.tactical && <><div style={h}>Tática</div><div style={{ ...s, marginBottom: 8 }}>{data.tactical}</div></>}
