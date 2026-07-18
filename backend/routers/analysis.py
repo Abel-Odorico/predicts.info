@@ -36,16 +36,22 @@ OPENROUTER_FREE_MODELS = [
     {"id": "nvidia/nemotron-3-ultra-550b-a55b:free",       "label": "🆓 Nvidia Nemotron Ultra 550B (lento)"},
 ]
 
+# Validado AO VIVO contra GET https://openrouter.ai/api/v1/models em 2026-07-18
+# (task de fallback pago): "anthropic/claude-sonnet-4-5" e "x-ai/grok-3" estavam
+# MORTOS (slugs não existem mais no catálogo — sonnet 4.5 usa PONTO, não hífen;
+# grok-3 foi descontinuado). Substituídos pelos slugs reais confirmados no JSON.
+# "google/gemini-2.5-flash-lite" adicionado (existe, mais barato que o flash normal).
 OPENROUTER_PAID_MODELS = [
     {"id": "anthropic/claude-opus-4",                      "label": "💎 Claude Opus 4 (melhor análise)"},
-    {"id": "anthropic/claude-sonnet-4-5",                  "label": "💎 Claude Sonnet 4.5 (rápido+capaz)"},
+    {"id": "anthropic/claude-sonnet-4.5",                   "label": "💎 Claude Sonnet 4.5 (rápido+capaz)"},
     {"id": "openai/gpt-4.1",                               "label": "💎 GPT-4.1 (excelente contexto)"},
     {"id": "openai/gpt-4o",                                "label": "💎 GPT-4o"},
     {"id": "google/gemini-2.5-pro",                        "label": "💎 Gemini 2.5 Pro (via OR)"},
     {"id": "google/gemini-2.5-flash",                      "label": "💎 Gemini 2.5 Flash (via OR)"},
+    {"id": "google/gemini-2.5-flash-lite",                 "label": "💡 Gemini 2.5 Flash Lite (via OR, barato)"},
     {"id": "deepseek/deepseek-r1",                         "label": "💎 DeepSeek R1 (raciocínio)"},
     {"id": "meta-llama/llama-4-maverick",                  "label": "💎 Llama 4 Maverick"},
-    {"id": "x-ai/grok-3",                                  "label": "💎 Grok 3"},
+    {"id": "x-ai/grok-4.5",                                "label": "💎 Grok 4.5"},
 ]
 
 OPENAI_DIRECT_MODELS = [
@@ -56,6 +62,8 @@ OPENAI_DIRECT_MODELS = [
     {"id": "o1-mini",         "label": "🧠 o1-mini (raciocínio)"},
 ]
 
+# Validado 2026-07-18: gemini-3.5-flash existe e responde (API direta Gemini,
+# não confundir com o catálogo OpenRouter acima). Mantido sem mudanças.
 GEMINI_MODELS = [
     {"id": "gemini-3.5-flash",                "label": "Gemini 3.5 Flash (recomendado)"},
     {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash (mais rápido)"},
@@ -70,12 +78,19 @@ DEFAULT_OR_MODEL     = "meta-llama/llama-3.3-70b-instruct:free"
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_PROVIDER     = "openrouter"
 
+# Fallback pago garantido no fim da cadeia (2026-07-18): OpenRouter tem crédito
+# real (US$7,74 em 18/07) mas a cadeia só usava modelos :free (frequentemente
+# rate-limited upstream) — crédito nunca era gasto. gemini-2.5-flash via OR já
+# testado 200 OK em produção.
+DEFAULT_PAID_FALLBACK_MODEL = "google/gemini-2.5-flash"
+
 CONFIG_KEYS = (
     "analysis_provider",
     "openrouter_api_key", "openrouter_model",
     "gemini_api_key",     "gemini_api_key_2", "gemini_model",
     "openai_api_key",     "openai_model",
     "analysis_prompt_template",
+    "llm_paid_fallback_model", "llm_paid_fallback_enabled",
 )
 
 BEST_FREE_OR_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
@@ -110,6 +125,8 @@ def _get_config(db: Session) -> dict:
         "openai_key":        c.get("openai_api_key", ""),
         "openai_model":      c.get("openai_model", "gpt-4o-mini"),
         "prompt_template":   c.get("analysis_prompt_template", "") or "",
+        "paid_fallback_model":   c.get("llm_paid_fallback_model", DEFAULT_PAID_FALLBACK_MODEL) or DEFAULT_PAID_FALLBACK_MODEL,
+        "paid_fallback_enabled": c.get("llm_paid_fallback_enabled", "true"),
     }
 
 
@@ -158,6 +175,18 @@ def _get_provider_chain(cfg: dict) -> list[dict]:
         for m in OR_FREE_FALLBACKS:
             if m != or_model:
                 chain.append({"type": "openrouter", "key": or_key, "model": m, "label": f"OpenRouter {m.split('/')[-1]}"})
+
+        # Fallback PAGO garantido no fim da cadeia (2026-07-18): depois de esgotar
+        # os :free (frequentemente rate-limited upstream), usa 1 modelo pago da
+        # OpenRouter — crédito real existe e nunca era usado sem isso. Marcado
+        # "paid": True pra _call_llm aplicar a guarda de orçamento diário antes
+        # de chamar. Desligável via site_config.llm_paid_fallback_enabled="false".
+        if str(cfg.get("paid_fallback_enabled", "true")).strip().lower() != "false":
+            paid_model = cfg.get("paid_fallback_model") or DEFAULT_PAID_FALLBACK_MODEL
+            chain.append({
+                "type": "openrouter", "key": or_key, "model": paid_model,
+                "label": f"OpenRouter PAGO {paid_model.split('/')[-1]}", "paid": True,
+            })
     return chain
 
 
@@ -378,10 +407,169 @@ def _alert_chain_dead(chain: list, last_exc: Exception | None) -> None:
         print(f"[analysis] alerta de cadeia morta falhou (ignorado): {e}", flush=True)
 
 
+# ─── Guarda de orçamento diário (provider pago) ──────────────────────────────
+# Isolado: erro aqui NUNCA bloqueia a geração (fail-open) — só evita estourar
+# o gasto real com o provider PAGO. Soma cost_usd de analysis_logs do dia UTC.
+
+LLM_DAILY_BUDGET_DEFAULT_USD = 1.50
+BUDGET_ALERT_REDIS_KEY = "llm:alert:budget"
+BUDGET_ALERT_COOLDOWN_S = 6 * 3600  # 6h, mesmo padrão do alerta de cadeia morta
+
+
+def _check_daily_budget() -> tuple[bool, float, float]:
+    """Retorna (orcamento_estourado, gasto_hoje_usd, limite_usd). Fail-open: se a
+    checagem em si falhar, NÃO bloqueia o provider pago (só loga)."""
+    limit = LLM_DAILY_BUDGET_DEFAULT_USD
+    try:
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            row = db.execute(
+                text("SELECT value FROM site_config WHERE key = 'llm_daily_budget_usd'")
+            ).fetchone()
+            if row and row[0]:
+                try:
+                    limit = float(row[0])
+                except (TypeError, ValueError):
+                    pass
+            spent_row = db.execute(
+                text("""
+                    SELECT COALESCE(SUM(cost_usd), 0) FROM analysis_logs
+                    WHERE status = 'ok'
+                      AND created_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+                """)
+            ).fetchone()
+            spent = float(spent_row[0] or 0)
+        finally:
+            db.close()
+        return spent >= limit, spent, limit
+    except Exception as e:
+        print(f"[analysis] guarda de orçamento falhou (fail-open, seguindo sem bloquear): {e}", flush=True)
+        return False, 0.0, limit
+
+
+def _alert_budget_exceeded(spent: float, limit: float) -> None:
+    try:
+        r = _redis_for_progress()
+        if r:
+            try:
+                if r.get(BUDGET_ALERT_REDIS_KEY):
+                    return  # já alertado nas últimas 6h
+            except Exception:
+                r = None
+
+        from database import SessionLocal
+        from routers.report import _telegram_config
+        import httpx as _httpx
+
+        db = SessionLocal()
+        try:
+            tg_token, tg_chat = _telegram_config(db)
+        finally:
+            db.close()
+        if not tg_token or not tg_chat:
+            return
+
+        msg = (
+            "💰 <b>Análise IA: orçamento diário do provider pago atingido</b>\n\n"
+            f"Gasto hoje (UTC): US$ {spent:.2f} / limite US$ {limit:.2f}\n"
+            "Provider pago pulado nesta chamada — cadeia segue só com modelos gratuitos "
+            "(podem estar rate-limited). Ajuste <code>llm_daily_budget_usd</code> no site_config se necessário."
+        )
+        _httpx.post(
+            f"https://api.telegram.org/bot{tg_token}/sendMessage",
+            json={"chat_id": tg_chat, "text": msg, "parse_mode": "HTML", "disable_web_page_preview": True},
+            timeout=10,
+        )
+        if r:
+            try:
+                r.setex(BUDGET_ALERT_REDIS_KEY, BUDGET_ALERT_COOLDOWN_S, _utcnow().isoformat())
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[analysis] alerta de orçamento falhou (ignorado): {e}", flush=True)
+
+
+# ─── Circuit breaker por provider (Redis) ────────────────────────────────────
+# Provider que falhou por quota some da cadeia por um tempo (evita bater na
+# mesma parede repetidamente); se TODOS estiverem em cooldown, tenta mesmo
+# assim (não pode deixar de gerar por excesso de cautela).
+
+CB_REDIS_PREFIX = "llm:cb:"
+CB_TTL_DEFAULT_S = 30 * 60      # 30min
+CB_TTL_ZERO_TIER_S = 6 * 3600   # 6h — free tier zerado ("limit: 0") não volta sozinho
+
+
+def _cb_key(label: str) -> str:
+    return f"{CB_REDIS_PREFIX}{label}"
+
+
+def _cb_is_open(r, label: str) -> bool:
+    if not r:
+        return False
+    try:
+        return bool(r.exists(_cb_key(label)))
+    except Exception:
+        return False
+
+
+def _cb_trip(r, label: str, err_str: str) -> None:
+    if not r:
+        return
+    ttl = CB_TTL_DEFAULT_S
+    if "limit: 0" in err_str:
+        ttl = CB_TTL_ZERO_TIER_S
+        print(f"[analysis] {label}: key sem free tier — trocar key ou ativar billing (cooldown 6h)", flush=True)
+    try:
+        r.setex(_cb_key(label), ttl, _utcnow().isoformat())
+    except Exception:
+        pass
+
+
+def _infer_provider_type(model_tag: str) -> str:
+    low = (model_tag or "").lower()
+    if "gemini" in low:
+        return "gemini"
+    if "openai" in low:
+        return "openai"
+    return "openrouter"
+
+
+def log_llm_usage(db: Session, *, trigger: str, model_tag: str, usage: dict,
+                   match_id: int | None = None, duration_ms: int = 0) -> None:
+    """Log genérico de uso de LLM em analysis_logs para chamadas fora do pipeline
+    de análise de partida (Oráculo em bot.py, H2H via IA em projections.py).
+    Falha aqui NUNCA pode derrubar quem chamou — sempre isolado em try/except."""
+    try:
+        db.execute(
+            text("""
+                INSERT INTO analysis_logs (match_id, model_used, provider, tokens_in, tokens_out,
+                    cost_usd, duration_ms, status, trigger, created_at)
+                VALUES (:mid, :model, :prov, :ti, :to, :cost, :dur, 'ok', :trig, :now)
+            """),
+            {
+                "mid": match_id, "model": model_tag, "prov": _infer_provider_type(model_tag),
+                "ti": usage.get("tokens_in", 0) or 0, "to": usage.get("tokens_out", 0) or 0,
+                "cost": usage.get("cost_usd", 0.0) or 0.0, "dur": duration_ms,
+                "trig": trigger, "now": _utcnow(),
+            },
+        )
+        db.commit()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        print(f"[analysis] log_llm_usage falhou (ignorado, trigger={trigger}): {e}", flush=True)
+
+
 def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain: list | None = None) -> tuple[dict, str, dict]:
     """
-    Chama LLM com fallback automático: Gemini key1 → Gemini key2 → OpenRouter.
-    Sempre percorre a cadeia completa a partir de `start`.
+    Chama LLM com fallback automático pela cadeia (_get_provider_chain), pulando
+    providers em cooldown (circuit breaker) e o fallback pago se o orçamento
+    diário estourou. Sempre percorre a cadeia completa a partir de `start`.
+    Se TODOS os providers restantes estiverem em cooldown, ignora o breaker
+    (melhor tentar do que deixar de gerar).
     Returns (result, model_tag, usage_meta).
     """
     if chain is None:
@@ -391,9 +579,29 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
 
     start = provider_state[0] if provider_state else 0
     last_exc: Exception | None = None
+    last_attempted_label: str | None = None
+    last_attempted_model: str | None = None
+
+    r = _redis_for_progress()
+    remaining = chain[start:]
+    all_in_cooldown = bool(remaining) and all(_cb_is_open(r, p["label"]) for p in remaining)
 
     for idx in range(start, len(chain)):
         p = chain[idx]
+
+        if not all_in_cooldown and _cb_is_open(r, p["label"]):
+            print(f"[analysis] {p['label']} em cooldown (circuit breaker)", flush=True)
+            continue
+
+        if p.get("paid"):
+            over_budget, spent, limit = _check_daily_budget()
+            if over_budget:
+                print(f"[analysis] budget diário atingido ({spent:.2f}/{limit:.2f} USD) — provider pago pulado", flush=True)
+                _alert_budget_exceeded(spent, limit)
+                continue
+
+        last_attempted_label = p["label"]
+        last_attempted_model = p["model"]
         try:
             if p["type"] == "gemini":
                 result, meta = _call_gemini(p["key"], p["model"], prompt)
@@ -409,6 +617,8 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
             last_exc = e
             err_str = str(e)
             is_quota = _is_quota_error(err_str)
+            if is_quota:
+                _cb_trip(r, p["label"], err_str)
             next_label = chain[idx + 1]["label"] if idx + 1 < len(chain) else None
             if is_quota and next_label:
                 print(f"[analysis] {p['label']} rate-limited → tentando {next_label}", flush=True)
@@ -421,12 +631,18 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
                 print(f"[analysis] {p['label']} output inválido → tentando {next_label}: {err_str[:80]}", flush=True)
                 continue
             else:
-                # Auth / network errors: raise immediately
+                # Auth / network errors: raise immediately (marca provider/model
+                # tentado no próprio objeto de exceção, pra quem logar erro saber quem falhou)
                 print(f"[analysis] {p['label']} erro: {err_str[:120]}", flush=True)
+                e.llm_provider = _infer_provider_type(p["label"])
+                e.llm_model = p["label"]
                 raise
 
     _alert_chain_dead(chain, last_exc)
-    raise ValueError(f"Todos os providers esgotados. Último erro: {last_exc}")
+    exc = ValueError(f"Todos os providers esgotados. Último erro: {last_exc}")
+    exc.llm_provider = _infer_provider_type(last_attempted_label) if last_attempted_label else None
+    exc.llm_model = last_attempted_label
+    raise exc
 
 
 def _compute_streaks(results: list, team_code: str) -> dict:
@@ -1077,6 +1293,10 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                 err = str(e)
                 duration_ms = int((time.time() - t0) * 1000)
                 print(f"[analysis] ✗ match_id={mid}: {err[:120]}", flush=True)
+                # _call_llm marca .llm_provider/.llm_model no último provider tentado
+                # antes de levantar (ver _call_llm) — sem isso essas linhas entravam NULL.
+                err_provider = getattr(e, "llm_provider", None)
+                err_model = getattr(e, "llm_model", None)
                 try:
                     db.execute(
                         text("""
@@ -1085,7 +1305,7 @@ def _generate_all_bg(db_url: str, cfg: dict, only_pending: bool = True, only_fut
                         """),
                         {
                             "mid": mid,
-                            "model": None, "prov": None,
+                            "model": err_model, "prov": err_provider,
                             "err": err[:500], "bid": batch_id, "now": _utcnow(),
                         },
                     )

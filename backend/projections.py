@@ -63,7 +63,12 @@ def _fetch_h2h_via_llm(db: Session, team_a_name: str, team_b_name: str) -> dict 
         "recent_results pode ter menos de 3 itens se não houver confrontos suficientes, ou lista vazia se não souber nenhum."
     )
     try:
-        content, model_tag, _usage = _call_llm(cfg, prompt, chain=chain)
+        content, model_tag, usage = _call_llm(cfg, prompt, chain=chain)
+        try:
+            from routers.analysis import log_llm_usage
+            log_llm_usage(db, trigger="h2h", model_tag=model_tag, usage=usage, match_id=None)
+        except Exception as log_exc:
+            print(f"[projections] log_llm_usage falhou (ignorado): {log_exc}", flush=True)
         recent = content.get("recent_results") or []
         recent_results = [
             {

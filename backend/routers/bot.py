@@ -614,7 +614,12 @@ def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
         gem_entries = [p for p in full_chain if p["type"] == "gemini"]
         oai_entries = [p for p in full_chain if p["type"] == "openai"]
         ordered_chain = or_entries + oai_entries + gem_entries or full_chain
-        content, model_tag, _usage = _call_llm(cfg, prompt, chain=ordered_chain)
+        content, model_tag, usage = _call_llm(cfg, prompt, chain=ordered_chain)
+        try:
+            from routers.analysis import log_llm_usage
+            log_llm_usage(db, trigger="oracle", model_tag=model_tag, usage=usage, match_id=match.id)
+        except Exception as log_exc:
+            print(f"[oracle] log_llm_usage falhou (ignorado): {log_exc}", flush=True)
         sa, sb = int(content.get("score_a")), int(content.get("score_b"))
         if not (0 <= sa <= 20 and 0 <= sb <= 20):
             raise ValueError("placar fora de faixa")
