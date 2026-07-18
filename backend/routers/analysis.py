@@ -338,11 +338,13 @@ def _call_openai(api_key: str, model: str, prompt: str) -> tuple[dict, dict]:
         json={
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-            "max_tokens": 3000,
+            # família gpt-5: rejeita max_tokens (exige max_completion_tokens) e só aceita
+            # temperature default; reasoning consome completion tokens, teto maior
+            **({"max_completion_tokens": 6000} if model.startswith("gpt-5")
+               else {"temperature": 0.7, "max_tokens": 3000}),
             "response_format": {"type": "json_object"},
         },
-        timeout=60,
+        timeout=90,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -1853,7 +1855,13 @@ def _test_call_openai(api_key: str, model: str, prompt: str, timeout: int = LLM_
     resp = http_requests.post(
         "https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 20, "temperature": 0},
+        json={
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            # gpt-5: sem max_tokens/temperature custom; reasoning gasta completion tokens
+            **({"max_completion_tokens": 256} if model.startswith("gpt-5")
+               else {"max_tokens": 20, "temperature": 0}),
+        },
         timeout=timeout,
     )
     resp.raise_for_status()

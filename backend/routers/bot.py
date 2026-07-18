@@ -777,10 +777,22 @@ def _oracle_decide(db: Session, match: Match, cfg: dict | None) -> dict:
             # não pode vazar pro Oráculo: se o toggle do Oráculo pediu fallback (chegamos no else),
             # força fallback_enabled=true só pra esta chamada, sem mexer no cfg herdado de verdade.
             full_chain = _get_provider_chain({**cfg, "fallback_enabled": "true"})
-            or_entries  = [p for p in full_chain if p["type"] == "openrouter"]
-            gem_entries = [p for p in full_chain if p["type"] == "gemini"]
-            oai_entries = [p for p in full_chain if p["type"] == "openai"]
-            ordered_chain = or_entries + oai_entries + gem_entries or full_chain
+            by_type = {
+                "openrouter": [p for p in full_chain if p["type"] == "openrouter"],
+                "openai":     [p for p in full_chain if p["type"] == "openai"],
+                "gemini":     [p for p in full_chain if p["type"] == "gemini"],
+            }
+            # oracle_provider define quem LIDERA a cadeia; o resto segue na
+            # preferência histórica OR → OpenAI → Gemini
+            primary_slot = cfg.get("provider") or "openrouter"
+            if primary_slot == "gemini2":
+                primary_slot = "gemini"
+            rest = [t for t in ("openrouter", "openai", "gemini") if t != primary_slot]
+            ordered_chain = by_type.get(primary_slot, [])
+            for t in rest:
+                ordered_chain += by_type[t]
+            if not ordered_chain:
+                ordered_chain = full_chain
         content, model_tag, usage = _call_llm(cfg, prompt, chain=ordered_chain)
         try:
             from routers.analysis import log_llm_usage
