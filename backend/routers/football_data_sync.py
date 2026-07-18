@@ -136,7 +136,7 @@ def sync_results(db: Session) -> dict:
               )
             LIMIT 1
         """), {
-            "phase": phase.value,
+            "phase": phase.name,
             "dt": match_date.date(),
             "ta": team_a.id,
             "tb": team_b.id,
@@ -284,7 +284,7 @@ def sync_knockout(db: Session) -> dict:
               ((team_a_id = :ta AND team_b_id = :tb) OR (team_a_id = :tb AND team_b_id = :ta))
               AND phase = :phase
             LIMIT 1
-        """), {"ta": team_a.id, "tb": team_b.id, "phase": phase.value}).fetchone()
+        """), {"ta": team_a.id, "tb": team_b.id, "phase": phase.name}).fetchone()
 
         if exact:
             db.execute(text("""
@@ -298,14 +298,14 @@ def sync_knockout(db: Session) -> dict:
                     WHERE phase = :phase
                       AND id != :confirmed
                       AND (team_a_id = :t OR team_b_id = :t)
-                """), {"phase": phase.value, "t": team_id, "confirmed": exact[0]}).fetchall()
+                """), {"phase": phase.name, "t": team_id, "confirmed": exact[0]}).fetchall()
                 for (dupe_id,) in dupes:
                     _try_delete(db, dupe_id)
             db.commit()
             continue
 
         # 2. Slot reutilizável → UPDATE teams in-place (preserva bets)
-        reuse_id = _find_reusable_slot(db, phase.value, match_date, team_a.id, team_b.id)
+        reuse_id = _find_reusable_slot(db, phase.name, match_date, team_a.id, team_b.id)
         if reuse_id:
             # Times mudaram → análise antiga inválida
             db.execute(text("DELETE FROM match_analyses WHERE match_id = :id"), {"id": reuse_id})
@@ -329,7 +329,7 @@ def sync_knockout(db: Session) -> dict:
                   AND (team_a_id = :t OR team_b_id = :t)
                   AND NOT (team_a_id = :ta AND team_b_id = :tb)
                   AND NOT (team_a_id = :tb AND team_b_id = :ta)
-            """), {"phase": phase.value, "t": team_id,
+            """), {"phase": phase.name, "t": team_id,
                    "ta": team_a.id, "tb": team_b.id}).fetchall()
             for (cid,) in conflicts:
                 _try_delete(db, cid)
@@ -338,7 +338,7 @@ def sync_knockout(db: Session) -> dict:
             INSERT INTO matches (team_a_id, team_b_id, phase, match_date, status, is_neutral, match_number)
             VALUES (:ta, :tb, :phase, :dt, :status, true, :mn)
         """), {"ta": team_a.id, "tb": team_b.id,
-               "phase": phase.value, "dt": match_date,
+               "phase": phase.name, "dt": match_date,
                "status": status_val, "mn": match_number})
         created += 1
         db.commit()
