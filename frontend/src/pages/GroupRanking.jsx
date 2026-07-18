@@ -9,6 +9,7 @@ import { COMPETITIONS } from '../utils/competitions'
 import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
 import { displayName } from '../utils/displayName'
 import RankingNameToggle from '../components/RankingNameToggle'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -711,7 +712,7 @@ export default function GroupRanking() {
               {filteredTeams.map(t => (
                 <button key={t.id} onClick={() => pickChampion(t.id)} disabled={savingChampion}
                   style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 20, border: '1px solid var(--border)', background: myChampionPick?.champion?.id === t.id ? 'var(--accent)' : 'var(--bg-raised)', color: myChampionPick?.champion?.id === t.id ? '#fff' : 'var(--text-1)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600 }}>
-                  {t.flag_url && <img src={t.flag_url} alt={t.code} style={{ width: 18, height: 12, objectFit: 'cover', borderRadius: 2 }} />}
+                  {t.flag_url && <TeamCrestFlag src={t.flag_url} alt={t.code} style={{ width: 18, height: 12, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                   {t.code}
                 </button>
               ))}
@@ -725,7 +726,7 @@ export default function GroupRanking() {
                 <div key={p.user_id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 10, background: p.is_me ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'var(--bg-raised)', border: p.is_me ? '1px solid var(--accent)' : '1px solid var(--border)', minWidth: 70 }}>
                   {p.champion ? (
                     <>
-                      {p.champion.flag_url && <img src={p.champion.flag_url} alt={p.champion.code} style={{ width: 32, height: 22, objectFit: 'cover', borderRadius: 3 }} />}
+                      {p.champion.flag_url && <TeamCrestFlag src={p.champion.flag_url} alt={p.champion.code} style={{ width: 32, height: 22, objectFit: 'cover', borderRadius: 3 }} crestStyle={{ width: 30, height: 30, objectFit: 'contain', borderRadius: 5, background: 'var(--bg-overlay)' }} />}
                       <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>{p.champion.code}</span>
                     </>
                   ) : (
@@ -763,7 +764,7 @@ export default function GroupRanking() {
             {/* Banner campeão real (se definido) */}
             {champion && activePhase === 'all' && (
               <div style={{ margin: 'var(--s3) var(--s4)', padding: '10px 14px', borderRadius: 10, background: 'linear-gradient(90deg, #e8a03020 0%, var(--bg-raised) 100%)', border: '1px solid #e8a03060', display: 'flex', alignItems: 'center', gap: 10 }}>
-                {champion.flag_url && <img src={champion.flag_url} alt={champion.code} style={{ width: 36, height: 25, objectFit: 'cover', borderRadius: 3 }} />}
+                {champion.flag_url && <TeamCrestFlag src={champion.flag_url} alt={champion.code} style={{ width: 36, height: 25, objectFit: 'cover', borderRadius: 3 }} crestStyle={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 6, background: 'var(--bg-overlay)' }} />}
                 <div>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#e8a030' }}>🏆 Campeão do Mundo</div>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-1)', lineHeight: 1.1 }}>{champion.name}</div>
@@ -993,7 +994,7 @@ export default function GroupRanking() {
                                         const ptColor = exact ? 'var(--win)' : correct ? 'var(--accent)' : 'var(--lose)'
                                         return (
                                           <div key={bi} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 8, background: 'var(--bg-surface)', border: `1px solid ${ptColor}30` }}>
-                                            {bet.team_a?.flag_url && <img src={bet.team_a.flag_url} alt={bet.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+                                            {bet.team_a?.flag_url && <TeamCrestFlag src={bet.team_a.flag_url} alt={bet.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                                             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-2)', fontWeight: 600, flex: 1 }}>{bet.team_a?.code} × {bet.team_b?.code}</span>
                                             <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-1)', fontWeight: 700 }}>{bet.bet_a}–{bet.bet_b}</span>
                                             {bet.result_a !== null && bet.result_b !== null && (
@@ -1097,11 +1098,11 @@ export default function GroupRanking() {
             {recentMatches.map(m => (
               <button key={m.id} onClick={() => setSelectedMatch(selectedMatch?.id === m.id ? null : m)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, border: selectedMatch?.id === m.id ? '1.5px solid var(--accent)' : '1px solid var(--border)', background: selectedMatch?.id === m.id ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-raised)', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', transition: 'all .15s' }}>
-                {m.team_a?.flag_url && <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+                {m.team_a?.flag_url && <TeamCrestFlag src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                 <span>{m.team_a?.code}</span>
                 <span style={{ color: 'var(--text-2)', fontFamily: 'var(--font-data)', fontSize: 11 }}>{m.result?.score_a}–{m.result?.score_b}</span>
                 <span>{m.team_b?.code}</span>
-                {m.team_b?.flag_url && <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} />}
+                {m.team_b?.flag_url && <TeamCrestFlag src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
               </button>
             ))}
           </div>
@@ -1592,7 +1593,7 @@ function StatPill({ icon, label, value, sub, accent }) {
 function TeamChip({ t }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      {t?.flag_url && <img src={t.flag_url} alt={t.code} style={{ width: 32, height: 22, objectFit: 'cover', borderRadius: 3 }} />}
+      {t?.flag_url && <TeamCrestFlag src={t.flag_url} alt={t.code} style={{ width: 32, height: 22, objectFit: 'cover', borderRadius: 3 }} crestStyle={{ width: 30, height: 30, objectFit: 'contain', borderRadius: 5, background: 'var(--bg-overlay)' }} />}
       <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{t?.code}</span>
     </div>
   )

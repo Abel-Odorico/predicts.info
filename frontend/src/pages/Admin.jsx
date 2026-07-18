@@ -10,6 +10,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import ImageEditorModal from '../components/ImageEditorModal'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 
 function normalizeDate(value) {
   if (!value) return null
@@ -2099,14 +2100,14 @@ export default function Admin() {
                             return (
                               <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', border: `1px solid ${done ? 'var(--win)' : 'var(--border)'}` }}>
                                 <span style={{ color: done ? 'var(--win)' : 'var(--text-4)', fontSize: 14 }}>{done ? '✓' : '○'}</span>
-                                <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                                <TeamCrestFlag src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                                 <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', minWidth: 32 }}>{m.team_a.code}</span>
                                 {done
                                   ? <span style={{ fontFamily: 'var(--font-data)', fontSize: 15, color: 'var(--win)', fontWeight: 700, padding: '0 var(--s2)' }}>{m.score.a}–{m.score.b}</span>
                                   : <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, color: 'var(--text-4)', padding: '0 var(--s2)' }}>{timeStr}</span>
                                 }
                                 <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', minWidth: 32, textAlign: 'right' }}>{m.team_b.code}</span>
-                                <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                                <TeamCrestFlag src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>#{m.match_number} · {m.phase}</span>
                               </div>
                             )
@@ -2139,9 +2140,9 @@ export default function Admin() {
                           return (
                             <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', border: `1px solid ${done ? 'var(--win)' : 'var(--border)'}`, fontSize: 12, fontFamily: 'var(--font-cond)' }}>
                               <span style={{ color: done ? 'var(--win)' : 'var(--text-4)', fontSize: 11, minWidth: 10 }}>{done ? '✓' : '○'}</span>
-                              <img src={m.team_a.flag_url} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                              <TeamCrestFlag src={m.team_a.flag_url} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />
                               <span style={{ color: 'var(--text-2)', flex: 1 }}>{m.team_a.code} × {m.team_b.code}</span>
-                              <img src={m.team_b.flag_url} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
+                              <TeamCrestFlag src={m.team_b.flag_url} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />
                               {done
                                 ? <span style={{ color: 'var(--win)', fontFamily: 'var(--font-data)', whiteSpace: 'nowrap', fontWeight: 700 }}>{m.score.a}–{m.score.b}</span>
                                 : <span style={{ color: 'var(--text-4)', fontSize: 10 }}>#{m.match_number}</span>
@@ -2900,7 +2901,7 @@ export default function Admin() {
                         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 8 }}>{label.toUpperCase()}</p>
                         {(data || []).slice(0, 8).map(s => (
                           <div key={s.team_id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                            <img src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                            <TeamCrestFlag src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', minWidth: 32 }}>{s.code}</span>
                             <div style={{ flex: 1, height: 6, background: 'var(--bg-overlay)', borderRadius: 3, overflow: 'hidden' }}>
                               <div style={{ width: `${s.pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 3 }} />
@@ -2932,7 +2933,7 @@ export default function Admin() {
                         <td style={{ padding: '9px 16px' }}>
                           {p.champion ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <img src={p.champion.flag} alt={p.champion.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                              <TeamCrestFlag src={p.champion.flag} alt={p.champion.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600 }}>{p.champion.name}</span>
                             </div>
                           ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>não escolheu</span>}
@@ -2940,7 +2941,7 @@ export default function Admin() {
                         <td style={{ padding: '9px 16px' }}>
                           {p.runner_up ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <img src={p.runner_up.flag} alt={p.runner_up.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                              <TeamCrestFlag src={p.runner_up.flag} alt={p.runner_up.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600 }}>{p.runner_up.name}</span>
                             </div>
                           ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>não escolheu</span>}
@@ -3933,13 +3934,13 @@ export default function Admin() {
                   <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                     {botStatus.champion && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent-dim)', borderRadius: 8, padding: '8px 14px', border: '1px solid var(--accent)' }}>
-                        {botStatus.champion.flag && <img src={botStatus.champion.flag} alt="" style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} />}
+                        {botStatus.champion.flag && <TeamCrestFlag src={botStatus.champion.flag} alt="" style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />}
                         <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13 }}>🏆 {botStatus.champion.name}</span>
                       </div>
                     )}
                     {botStatus.vice && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-overlay)', borderRadius: 8, padding: '8px 14px', border: '1px solid var(--border)' }}>
-                        {botStatus.vice.flag && <img src={botStatus.vice.flag} alt="" style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} />}
+                        {botStatus.vice.flag && <TeamCrestFlag src={botStatus.vice.flag} alt="" style={{ width: 24, height: 17, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />}
                         <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13 }}>🥈 {botStatus.vice.name}</span>
                       </div>
                     )}
@@ -4128,9 +4129,9 @@ export default function Admin() {
                       return (
                         <div key={l.id} style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6, borderLeft: l.ai_overrode ? '3px solid var(--amber)' : '3px solid transparent' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            {l.team_a_flag && <img src={l.team_a_flag} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} />}
+                            {l.team_a_flag && <TeamCrestFlag src={l.team_a_flag} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                             <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12 }}>{l.team_a_code} × {l.team_b_code}</span>
-                            {l.team_b_flag && <img src={l.team_b_flag} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} />}
+                            {l.team_b_flag && <TeamCrestFlag src={l.team_b_flag} alt="" style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                             <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: c }}>{actLabel}</span>
                             {l.confidence != null && <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>🎯 {l.confidence}%</span>}
                             {l.telegram_sent && <span title="Enviado no Telegram" style={{ fontSize: 11 }}>📲</span>}
@@ -4237,11 +4238,11 @@ export default function Admin() {
                       <tr key={b.id} style={{ opacity: b.outcome === null ? 0.7 : 1 }}>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {b.team_a_flag && <img src={b.team_a_flag} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1 }} />}
+                            {b.team_a_flag && <TeamCrestFlag src={b.team_a_flag} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1 }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />}
                             <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12 }}>{b.team_a_code}</span>
                             <span style={{ color: 'var(--text-4)', fontSize: 11 }}>×</span>
                             <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12 }}>{b.team_b_code}</span>
-                            {b.team_b_flag && <img src={b.team_b_flag} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1 }} />}
+                            {b.team_b_flag && <TeamCrestFlag src={b.team_b_flag} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1 }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />}
                           </div>
                         </td>
                         <td style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>

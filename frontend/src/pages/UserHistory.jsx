@@ -4,6 +4,7 @@ import { api } from '../api'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../stores/authStore'
 import MyChampionCard from '../components/MyChampionCard'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 
 
 const RESULT_META = {
@@ -993,8 +994,9 @@ function BetCard({ bet, idx }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 'var(--s3)', marginTop: 'var(--s3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
           {bet.team_a_flag && (
-            <img src={bet.team_a_flag} alt={bet.team_a_name || bet.team_a_code}
-              style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }} />
+            <TeamCrestFlag src={bet.team_a_flag} alt={bet.team_a_name || bet.team_a_code}
+              style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }}
+              crestStyle={{ width: 24, height: 24, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)', flexShrink: 0 }} />
           )}
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
             {bet.team_a_name || bet.team_a_code}
@@ -1015,8 +1017,9 @@ function BetCard({ bet, idx }) {
             {bet.team_b_name || bet.team_b_code}
           </span>
           {bet.team_b_flag && (
-            <img src={bet.team_b_flag} alt={bet.team_b_name || bet.team_b_code}
-              style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }} />
+            <TeamCrestFlag src={bet.team_b_flag} alt={bet.team_b_name || bet.team_b_code}
+              style={{ width: 26, height: 19, borderRadius: 2, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }}
+              crestStyle={{ width: 24, height: 24, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)', flexShrink: 0 }} />
           )}
         </div>
       </div>
@@ -1230,11 +1233,11 @@ function BestWorstCard({ type, bet }) {
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color, lineHeight: 1 }}>{bet.points_earned}pts</span>
       </div>
       <div className="uh-bw-card__match">
-        {bet.team_a_flag && <img src={bet.team_a_flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover' }} />}
+        {bet.team_a_flag && <TeamCrestFlag src={bet.team_a_flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover' }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />}
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>{bet.team_a_code}</span>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color, lineHeight: 1 }}>{bet.score_a}–{bet.score_b}</span>
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>{bet.team_b_code}</span>
-        {bet.team_b_flag && <img src={bet.team_b_flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover' }} />}
+        {bet.team_b_flag && <TeamCrestFlag src={bet.team_b_flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover' }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />}
       </div>
       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: meta?.color, letterSpacing: '0.08em', textAlign: 'center', marginTop: 4 }}>
         {meta?.label}{bet.official_score_a != null ? ` · Oficial ${bet.official_score_a}–${bet.official_score_b}` : ''}
@@ -1291,7 +1294,7 @@ function TeamAccuracy({ bets }) {
       <div className="uh-chart-card__head">
         <span className="uh-chart-card__label">Acerto por seleção</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {data[0].flag && <img src={data[0].flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover', border: '1px solid var(--win)' }} />}
+          {data[0].flag && <TeamCrestFlag src={data[0].flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover', border: '1px solid var(--win)' }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)', border: '1px solid var(--win)' }} />}
           <span className="uh-chart-card__total" style={{ color: 'var(--win)', fontSize: 20 }}>{data[0].accuracy}%</span>
         </div>
       </div>
@@ -1299,7 +1302,7 @@ function TeamAccuracy({ bets }) {
         {data.map(t => (
           <div key={t.code} className="uh-phase-row">
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', minWidth: 100 }}>
-              {t.flag && <img src={t.flag} alt={t.code} style={{ width: 16, height: 11, borderRadius: 1, objectFit: 'cover', flexShrink: 0 }} />}
+              {t.flag && <TeamCrestFlag src={t.flag} alt={t.code} style={{ width: 16, height: 11, borderRadius: 1, objectFit: 'cover', flexShrink: 0 }} crestStyle={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)', flexShrink: 0 }} />}
               <span className="uh-phase-row__label" style={{ fontSize: 12 }}>{t.name}</span>
             </div>
             <div className="uh-phase-row__track">
@@ -1421,11 +1424,11 @@ function UpcomingBets({ bets }) {
           return (
             <div key={b.id} className={`uh-upcoming__item${i === 0 ? ' uh-upcoming__item--next' : ''}`}>
               <div className="uh-upcoming__teams">
-                {b.team_a_flag && <img src={b.team_a_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} />}
+                {b.team_a_flag && <TeamCrestFlag src={b.team_a_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                 <span className="uh-upcoming__code">{b.team_a_code}</span>
                 <span className="uh-upcoming__score">{b.hidden ? '🔒' : `${b.score_a}–${b.score_b}`}</span>
                 <span className="uh-upcoming__code">{b.team_b_code}</span>
-                {b.team_b_flag && <img src={b.team_b_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} />}
+                {b.team_b_flag && <TeamCrestFlag src={b.team_b_flag} alt="" style={{ width: 18, height: 13, borderRadius: 1, objectFit: 'cover' }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
               </div>
               <span className="uh-upcoming__time" style={{ color: hot ? 'var(--lose)' : 'var(--text-4)' }}>
                 {_fmtCountdown(ms)}
@@ -1599,9 +1602,9 @@ function CompareTable({ data, onBack }) {
               </div>
               <div className="uh-cmp__match">
                 <div className="uh-cmp__flags">
-                  {m.team_a_flag && <img src={m.team_a_flag} alt="" style={{ width: 14, height: 10, borderRadius: 1, objectFit: 'cover' }} />}
+                  {m.team_a_flag && <TeamCrestFlag src={m.team_a_flag} alt="" style={{ width: 14, height: 10, borderRadius: 1, objectFit: 'cover' }} crestStyle={{ width: 13, height: 13, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                   <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)' }}>{m.team_a_code}×{m.team_b_code}</span>
-                  {m.team_b_flag && <img src={m.team_b_flag} alt="" style={{ width: 14, height: 10, borderRadius: 1, objectFit: 'cover' }} />}
+                  {m.team_b_flag && <TeamCrestFlag src={m.team_b_flag} alt="" style={{ width: 14, height: 10, borderRadius: 1, objectFit: 'cover' }} crestStyle={{ width: 13, height: 13, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />}
                 </div>
                 {m.official_score_a != null && (
                   <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'var(--text-4)', lineHeight: 1 }}>{m.official_score_a}–{m.official_score_b}</span>

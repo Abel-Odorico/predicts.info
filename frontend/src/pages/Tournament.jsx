@@ -4,6 +4,7 @@ import { api, CONF_HEX, heatClass } from '../api'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
 import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 
 const COMPETITIONS = ALL_COMPETITIONS.filter(c => c.id !== 'geral').map(c => ({ id: c.id, label: `${c.emoji} ${c.label}` }))
 
@@ -212,9 +213,12 @@ export default function Tournament() {
                   }}>
                     <div style={{ fontSize: size, lineHeight: 1 }}>{medal}</div>
                     {t.flag_url && (
-                      <img src={t.flag_url} alt={t.code} style={{
+                      <TeamCrestFlag src={t.flag_url} alt={t.code} style={{
                         width: rank === 1 ? 40 : 30, height: rank === 1 ? 28 : 21,
                         objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)'
+                      }} crestStyle={{
+                        width: rank === 1 ? 38 : 28, height: rank === 1 ? 38 : 28,
+                        objectFit: 'contain', borderRadius: 6, background: 'var(--bg-overlay)'
                       }} />
                     )}
                     <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: rank === 1 ? 15 : 13 }}>{PT_NAMES[t.code] || t.name}</div>
@@ -320,9 +324,12 @@ export default function Tournament() {
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
                     {t.flag_url && (
-                      <img src={t.flag_url} alt={t.code} style={{
+                      <TeamCrestFlag src={t.flag_url} alt={t.code} style={{
                         width: 20, height: 14, objectFit: 'cover',
                         borderRadius: 1, border: '1px solid var(--border)'
+                      }} crestStyle={{
+                        width: 18, height: 18, objectFit: 'contain',
+                        borderRadius: 4, background: 'var(--bg-overlay)'
                       }} />
                     )}
                     <span style={{ fontWeight: 500 }}>{PT_NAMES[t.code] || t.name}</span>
@@ -439,7 +446,7 @@ function TopFinalsView({ finals }) {
 function TeamChip({ code, name, flag, prob, side }) {
   return (
     <div className={`team-chip team-chip--${side}`}>
-      {flag && <img src={flag} alt={code} className="team-chip__flag" />}
+      {flag && <TeamCrestFlag src={flag} alt={code} className="team-chip__flag" crestClassName="team-chip__flag--crest" />}
       <div className="team-chip__info">
         <span className="team-chip__code">{code}</span>
         <span className="team-chip__name">{PT_NAMES[code] || name}</span>
@@ -466,7 +473,7 @@ function TopSFView({ sfList }) {
             <div className="proj-sf-row__teams">
               {sf.teams.map(t => (
                 <div key={t.code} className="proj-sf-team">
-                  {t.flag_url && <img src={t.flag_url} alt={t.code} className="team-chip__flag" />}
+                  {t.flag_url && <TeamCrestFlag src={t.flag_url} alt={t.code} className="team-chip__flag" crestClassName="team-chip__flag--crest" />}
                   <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>{PT_NAMES[t.code] || t.code}</span>
                 </div>
               ))}
@@ -496,7 +503,7 @@ function TopChampionsView({ teams }) {
           <span className="proj-champ-row__rank" style={{ color: i < 3 ? 'var(--accent)' : 'var(--text-4)' }}>
             {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`}
           </span>
-          {t.flag_url && <img src={t.flag_url} alt={t.code} className="team-chip__flag" />}
+          {t.flag_url && <TeamCrestFlag src={t.flag_url} alt={t.code} className="team-chip__flag" crestClassName="team-chip__flag--crest" />}
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, flex: 1 }}>{PT_NAMES[t.code] || t.name}</span>
           <div className="proj-champ-bar-track">
             <div className="proj-champ-bar-fill" style={{ width: `${(t.prob_title / maxProb) * 100}%` }} />
@@ -658,7 +665,7 @@ function GroupsView({ groups, bracket }) {
                       {isBT && <span className="comp-badge-bt">3</span>}
                     </span>
                     {t.flag_url
-                      ? <img src={t.flag_url} alt={t.code} className="comp-group-row__flag" />
+                      ? <TeamCrestFlag src={t.flag_url} alt={t.code} className="comp-group-row__flag" crestClassName="comp-group-row__flag--crest" />
                       : <span className="comp-group-row__flag-ph" />
                     }
                     <span className="comp-group-row__name">{PT_NAMES[t.code] || t.name}</span>
@@ -749,7 +756,7 @@ function KoTeamRow({ team, label, candidates, matchLookup, winProb, score, isWin
     return (
       <div className="ko-team" style={isWinner === false ? { opacity: 0.55 } : undefined}>
         {team.flag_url
-          ? <img src={team.flag_url} alt={team.code} className="ko-team__flag" />
+          ? <TeamCrestFlag src={team.flag_url} alt={team.code} className="ko-team__flag" crestClassName="ko-team__flag--crest" />
           : <span className="ko-team__flag-ph" />
         }
         <div className="ko-team__info">
@@ -942,7 +949,7 @@ function BkCard2({ matchNum, matchLookup, isFinal, isThird }) {
         {/* Team A */}
         <div className={`bk2-row${winA === true ? ' bk2-row--winner' : winA === false ? ' bk2-row--loser' : ''}`}>
           {ta?.flag_url
-            ? <img src={ta.flag_url} alt={ta.code} className="bk2-flag" />
+            ? <TeamCrestFlag src={ta.flag_url} alt={ta.code} className="bk2-flag" crestClassName="bk2-flag--crest" />
             : <span className="bk2-flag--ph" />}
           <span className={`bk2-name${!ta ? ' bk2-name--ghost' : winA ? ' bk2-name--winner' : ''}`}>
             {nameA}
@@ -960,7 +967,7 @@ function BkCard2({ matchNum, matchLookup, isFinal, isThird }) {
         {/* Team B */}
         <div className={`bk2-row${winB === true ? ' bk2-row--winner' : winB === false ? ' bk2-row--loser' : ''}`}>
           {tb?.flag_url
-            ? <img src={tb.flag_url} alt={tb.code} className="bk2-flag" />
+            ? <TeamCrestFlag src={tb.flag_url} alt={tb.code} className="bk2-flag" crestClassName="bk2-flag--crest" />
             : <span className="bk2-flag--ph" />}
           <span className={`bk2-name${!tb ? ' bk2-name--ghost' : winB ? ' bk2-name--winner' : ''}`}>
             {nameB}
@@ -1110,7 +1117,7 @@ function BkMobileCard({ matchNum, matchLookup }) {
               transition: 'opacity 200ms',
             }}>
               {team?.flag_url
-                ? <img src={team.flag_url} alt={team.code} style={{ width:26, height:18, objectFit:'cover', borderRadius:2, border:'1px solid var(--border)' }} />
+                ? <TeamCrestFlag src={team.flag_url} alt={team.code} style={{ width:26, height:18, objectFit:'cover', borderRadius:2, border:'1px solid var(--border)' }} crestStyle={{ width:24, height:24, objectFit:'contain', borderRadius:5, background:'var(--bg-overlay)' }} />
                 : <span style={{ display:'inline-block', width:26, height:18, background:'var(--bg-overlay)', border:'1px solid var(--border)', borderRadius:2 }} />
               }
               <span style={{
@@ -1678,7 +1685,7 @@ function TeamSlot({ t, align }) {
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', gap: 4,
       }}>
-        <img src={t.flag} alt={t.code} style={{ width: 36, height: 26, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border)' }} />
+        <TeamCrestFlag src={t.flag} alt={t.code} style={{ width: 36, height: 26, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border)' }} crestStyle={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 6, background: 'var(--bg-overlay)' }} />
         <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)', textAlign: right ? 'right' : 'left', lineHeight: 1.2 }}>
           {t.name}
         </div>
@@ -1695,7 +1702,7 @@ function TeamSlot({ t, align }) {
         <div style={{ display: 'flex', gap: 3, flexDirection: right ? 'row-reverse' : 'row' }}>
           {[t.srcA, t.srcB].map(team => (
             <div key={team.code} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-              <img src={team.flag_url} alt={team.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)', opacity: 0.7 }} />
+              <TeamCrestFlag src={team.flag_url} alt={team.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)', opacity: 0.7 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)', opacity: 0.7 }} />
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-4)' }}>{team.code}</span>
             </div>
           ))}
@@ -1837,14 +1844,16 @@ function AdversaryDisplay({ adversary }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', fontStyle: 'italic' }}>Vencedor de</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <img src={adversary.teams.a.flag_url} alt={adversary.teams.a.code}
-            style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)' }} />
+          <TeamCrestFlag src={adversary.teams.a.flag_url} alt={adversary.teams.a.code}
+            style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)' }}
+            crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
           <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>{na}</span>
         </div>
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>vs</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <img src={adversary.teams.b.flag_url} alt={adversary.teams.b.code}
-            style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)' }} />
+          <TeamCrestFlag src={adversary.teams.b.flag_url} alt={adversary.teams.b.code}
+            style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2, border: '1px solid var(--border)' }}
+            crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
           <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)' }}>{nb}</span>
         </div>
         {adversary.matchNumber && (

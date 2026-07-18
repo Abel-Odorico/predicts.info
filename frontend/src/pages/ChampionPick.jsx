@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { invalidateChampionCache } from '../components/MyChampionCard'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 
 function useChampionStatus() {
   const [deadline, setDeadline] = useState(null)
@@ -83,7 +84,7 @@ function TeamGrid({ teams, myTeamId, blockedSet, statMap, onPick, saving, canPic
                   {half}
                 </span>
               )}
-              <img src={team.flag_url} alt={team.code} style={{ width: 38, height: 27, objectFit: 'cover', borderRadius: 3 }} />
+              <TeamCrestFlag src={team.flag_url} alt={team.code} style={{ width: 38, height: 27, objectFit: 'cover', borderRadius: 3 }} crestStyle={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 6, background: 'var(--bg-overlay)' }} />
               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
                 {team.code}
               </span>
@@ -117,7 +118,7 @@ function CurrentPickBadge({ pick, label, color }) {
       borderRadius: 10, padding: '12px 16px', marginBottom: 'var(--s3)',
       display: 'flex', alignItems: 'center', gap: 12,
     }}>
-      <img src={pick.flag} alt={pick.code} style={{ width: 38, height: 27, objectFit: 'cover', borderRadius: 3 }} />
+      <TeamCrestFlag src={pick.flag} alt={pick.code} style={{ width: 38, height: 27, objectFit: 'cover', borderRadius: 3 }} crestStyle={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 6, background: 'var(--bg-overlay)' }} />
       <div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color, letterSpacing: '0.08em' }}>{label.toUpperCase()}</div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{pick.name || pick.code}</div>
@@ -264,7 +265,7 @@ export default function ChampionPick() {
             </div>
             {pick ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <img src={pick.flag} alt={pick.code} style={{ width: 36, height: 25, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }} />
+                <TeamCrestFlag src={pick.flag} alt={pick.code} style={{ width: 36, height: 25, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }} crestStyle={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 6, background: 'var(--bg-overlay)', flexShrink: 0 }} />
                 <div>
                   <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', lineHeight: 1.2 }}>
                     {pick.name || pick.code}
@@ -332,7 +333,7 @@ export default function ChampionPick() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {stats.champion.slice(0, 5).map(s => (
                     <div key={s.team_id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-2)', borderRadius: 8, padding: '5px 10px' }}>
-                      <img src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                      <TeamCrestFlag src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                       <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{s.code}</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>{s.pct}%</span>
                     </div>
@@ -373,7 +374,7 @@ export default function ChampionPick() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {stats.runner_up.slice(0, 5).map(s => (
                     <div key={s.team_id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-2)', borderRadius: 8, padding: '5px 10px' }}>
-                      <img src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                      <TeamCrestFlag src={s.flag} alt={s.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                       <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{s.code}</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#d4af37' }}>{s.pct}%</span>
                     </div>
@@ -453,13 +454,13 @@ export default function ChampionPick() {
                 </Link>
                 {p.champion ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <img src={p.champion.flag} alt={p.champion.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                    <TeamCrestFlag src={p.champion.flag} alt={p.champion.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                     <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{p.champion.code}</span>
                   </div>
                 ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>—</span>}
                 {p.runner_up ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <img src={p.runner_up.flag} alt={p.runner_up.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                    <TeamCrestFlag src={p.runner_up.flag} alt={p.runner_up.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                     <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{p.runner_up.code}</span>
                   </div>
                 ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>—</span>}

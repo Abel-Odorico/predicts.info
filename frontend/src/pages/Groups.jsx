@@ -5,6 +5,7 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { PT_NAMES } from '../utils/teamNames'
 import { COMPETITIONS as ALL_COMPETITIONS } from '../utils/competitions'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 
 const COMPETITIONS = ALL_COMPETITIONS.filter(c => c.id !== 'geral').map(c => ({ id: c.id, label: `${c.emoji} ${c.label}` }))
 
@@ -333,10 +334,10 @@ export default function Groups() {
                         {t.position ?? i + 1}
                       </span>
                       {t.flag_url && (
-                        <img src={t.flag_url} alt={t.code} style={{
+                        <TeamCrestFlag src={t.flag_url} alt={t.code} style={{
                           width: 22, height: 16, objectFit: 'cover',
                           borderRadius: 1, border: '1px solid var(--border)'
-                        }} />
+                        }} crestStyle={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)' }} />
                       )}
                       <span className="group-team-row__name" style={{ flex: 1 }}>
                         {PT_NAMES[t.code] || t.name}
@@ -465,7 +466,7 @@ function QualifiedGroup({ title, teams, color, navigate }) {
             }}
           >
             {t.flag_url && (
-              <img src={t.flag_url} alt={t.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} />
+              <TeamCrestFlag src={t.flag_url} alt={t.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 1 }} crestStyle={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)' }} />
             )}
             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
               {PT_NAMES[t.code] || t.code}
@@ -488,14 +489,14 @@ function BracketSlot({ team, label, right }) {
         flex: 1, justifyContent: right ? 'flex-end' : 'flex-start',
       }}>
         {!right && team.flag_url && (
-          <img src={team.flag_url} alt={team.code} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} />
+          <TeamCrestFlag src={team.flag_url} alt={team.code} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)', flexShrink: 0 }} />
         )}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start' }}>
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{PT_NAMES[team.code] || team.code}</span>
           <span style={{ fontFamily: 'var(--font-data)', fontSize: 9, color: 'var(--text-4)' }}>{team.points}pts G{team.group_name}</span>
         </div>
         {right && team.flag_url && (
-          <img src={team.flag_url} alt={team.code} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} />
+          <TeamCrestFlag src={team.flag_url} alt={team.code} style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)', flexShrink: 0 }} />
         )}
       </div>
     )
@@ -545,7 +546,7 @@ function GroupMatchLinks({ groupName, navigate }) {
           className="group-links__item"
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            {m.team_a.flag_url && <img src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} />}
+            {m.team_a.flag_url && <TeamCrestFlag src={m.team_a.flag_url} alt={m.team_a.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} crestStyle={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)', flexShrink: 0 }} />}
             {m.team_a.code}
           </span>
           <span style={{ color: 'var(--text-4)' }}>
@@ -557,7 +558,7 @@ function GroupMatchLinks({ groupName, navigate }) {
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             {m.team_b.code}
-            {m.team_b.flag_url && <img src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} />}
+            {m.team_b.flag_url && <TeamCrestFlag src={m.team_b.flag_url} alt={m.team_b.code} style={{ width: 16, height: 11, objectFit: 'cover', borderRadius: 1, border: '1px solid var(--border)', flexShrink: 0 }} crestStyle={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 3, background: 'var(--bg-overlay)', flexShrink: 0 }} />}
           </span>
           {m.status === 'finished' && <span className="badge badge-done" style={{ marginLeft: 4 }}>FIM</span>}
           {m.status === 'live' && <span className="badge badge-live" style={{ marginLeft: 4 }}>{m.status_raw || 'AO VIVO'}</span>}

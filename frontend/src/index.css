@@ -5661,6 +5661,16 @@ img {
   border-radius: 1px;
   border: 1px solid var(--border);
 }
+/* Escudo de clube (Brasileirão) detectado em runtime (TeamCrestFlag) — ver
+   .duel-bar__flag--crest acima pro mesmo tratamento. */
+.comp-group-row__flag--crest {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border: none;
+  background: var(--bg-overlay);
+  border-radius: 4px;
+}
 .comp-group-row__flag-ph {
   width: 20px;
   height: 14px;
@@ -5796,6 +5806,15 @@ img {
   object-fit: cover;
   border-radius: 2px;
   border: 1px solid var(--border);
+}
+/* Escudo de clube (Brasileirão) detectado em runtime (TeamCrestFlag). */
+.ko-team__flag--crest {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border: none;
+  background: var(--bg-overlay);
+  border-radius: 5px;
 }
 .ko-team__flag-ph {
   width: 26px;
@@ -6165,6 +6184,16 @@ img {
   object-fit: cover;
   border-radius: 1px;
   border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+/* Escudo de clube (Brasileirão) detectado em runtime (TeamCrestFlag). */
+.team-chip__flag--crest {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border: none;
+  background: var(--bg-overlay);
+  border-radius: 4px;
   flex-shrink: 0;
 }
 .team-chip__info {
@@ -10829,6 +10858,16 @@ strong.pts {
   object-fit: cover;
   border-radius: 1px;
   border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+/* Escudo de clube (Brasileirão) detectado em runtime (TeamCrestFlag). */
+.bk2-flag--crest {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border: none;
+  background: var(--bg-overlay);
+  border-radius: 3px;
   flex-shrink: 0;
 }
 .bk2-flag--ph {
