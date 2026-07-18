@@ -163,23 +163,41 @@ def _team_hits(team, norm: str) -> bool:
 
 
 def _find_candidate_matches(db: Session, text: str) -> list[Match]:
+    """Casa o texto contra jogos abertos da Copa (janela curta, 1 por dia) E do
+    Brasileirão (janela de 10 dias, jogos semanais) — mesma lógica de nome/código
+    (_team_hits), só a janela de tempo muda por competição."""
     norm = _norm(text)
-    today = _utcnow()
+    now = _utcnow()
     from competitions import get_competition_id
-    window = db.query(Match).filter(
-        Match.match_date >= today - timedelta(hours=6),
-        Match.match_date <= today + timedelta(hours=18),
-        Match.competition_id == get_competition_id(db),
-    ).all()
-    hits = []
-    for m in window:
-        if _team_hits(m.team_a, norm) and _team_hits(m.team_b, norm):
-            hits.append(m)
+    copa_id = get_competition_id(db)
+    br_id = get_competition_id(db, "brasileirao2026")
+
+    windows = [(copa_id, now - timedelta(hours=6), now + timedelta(hours=18))]
+    if br_id is not None:
+        windows.append((br_id, now - timedelta(hours=6), now + timedelta(days=10)))
+
+    hits: list[Match] = []
+    seen_ids: set[int] = set()
+    for comp_id, start, end in windows:
+        if comp_id is None:
+            continue
+        window = db.query(Match).filter(
+            Match.match_date >= start,
+            Match.match_date <= end,
+            Match.competition_id == comp_id,
+        ).all()
+        for m in window:
+            if m.id in seen_ids:
+                continue
+            if _team_hits(m.team_a, norm) and _team_hits(m.team_b, norm):
+                hits.append(m)
+                seen_ids.add(m.id)
     return hits
 
 
 def _open_matches_for_list(db: Session) -> list[Match]:
-    """Jogos que ainda aceitam aposta, ordenados por data — vira a lista numerada do comando 'jogos'."""
+    """Jogos da Copa que ainda aceitam aposta, ordenados por data — vira a 1ª seção
+    da lista numerada do comando 'jogos'."""
     from competitions import get_competition_id
     upcoming = db.query(Match).filter(
         Match.status == MatchStatus.scheduled,
@@ -189,13 +207,32 @@ def _open_matches_for_list(db: Session) -> list[Match]:
     return [m for m in upcoming if _is_open(m)][:20]
 
 
-def _match_list_message(db: Session, matches: list[Match], user: User) -> str:
+def _open_matches_for_list_br(db: Session) -> list[Match]:
+    """Jogos do Brasileirão que ainda aceitam aposta, janela de 10 dias (jogos
+    semanais, não diários como a Copa) — vira a 2ª seção da lista numerada."""
+    from competitions import get_competition_id
+    br_id = get_competition_id(db, "brasileirao2026")
+    if br_id is None:
+        return []
+    upcoming = db.query(Match).filter(
+        Match.status == MatchStatus.scheduled,
+        Match.match_date >= _utcnow() - timedelta(hours=6),
+        Match.match_date <= _utcnow() + timedelta(days=10),
+        Match.competition_id == br_id,
+    ).order_by(Match.match_date).all()
+    return [m for m in upcoming if _is_open(m)][:20]
+
+
+def _match_list_message(db: Session, copa_matches: list[Match], br_matches: list[Match], user: User) -> str:
+    """Lista numerada continua (Copa primeiro, Brasileirão depois) — numeração
+    única cobre as duas seções pra apostar por "N placar" sem ambiguidade."""
+    all_matches = copa_matches + br_matches
     bets = {
         b.match_id: b
-        for b in db.query(Bet).filter(Bet.user_id == user.id, Bet.match_id.in_([m.id for m in matches]))
+        for b in db.query(Bet).filter(Bet.user_id == user.id, Bet.match_id.in_([m.id for m in all_matches]))
     }
-    linhas = []
-    for i, m in enumerate(matches, start=1):
+
+    def _linha(i: int, m: Match) -> str:
         local = m.match_date - timedelta(hours=3)  # match_date é UTC, exibir BRT
         linha = f"{i}. {_pt(m.team_a)} x {_pt(m.team_b)} — {local.strftime('%d/%m %H:%M')}"
         bet = bets.get(m.id)
@@ -204,12 +241,35 @@ def _match_list_message(db: Session, matches: list[Match], user: User) -> str:
             if bet.et_winner_pick:
                 avanca = m.team_a if bet.et_winner_pick == "a" else m.team_b
                 linha += f" (avança {_pt(avanca)})"
-        linhas.append(linha)
-    corpo = "\n".join(linhas)
+        return linha
+
+    secoes = []
+    idx = 1
+    if copa_matches:
+        linhas = []
+        for m in copa_matches:
+            linhas.append(_linha(idx, m))
+            idx += 1
+        secoes.append("🌎 *Copa do Mundo*\n" + "\n".join(linhas))
+    if br_matches:
+        rodadas = sorted({m.match_number for m in br_matches if m.match_number})
+        if len(rodadas) == 1:
+            titulo = f"🇧🇷 *Brasileirão — Rodada {rodadas[0]}*"
+        elif rodadas:
+            titulo = f"🇧🇷 *Brasileirão — Rodadas {rodadas[0]}–{rodadas[-1]}*"
+        else:
+            titulo = "🇧🇷 *Brasileirão*"
+        linhas = []
+        for m in br_matches:
+            linhas.append(_linha(idx, m))
+            idx += 1
+        secoes.append(f"{titulo}\n" + "\n".join(linhas))
+
+    corpo = "\n\n".join(secoes)
     rodape = "Manda o número e o placar, tipo: *1 2x1*"
     if bets:
         rodape += " — vale também pra trocar um palpite já feito."
-    return f"📋 *Jogos abertos pra apostar:*\n{corpo}\n\n{rodape}"
+    return f"📋 *Jogos abertos pra apostar:*\n\n{corpo}\n\n{rodape}"
 
 
 _INVITE_COOLDOWN_DAYS = 30
@@ -375,8 +435,18 @@ def _my_bets_message(db: Session, user: User) -> str:
     ranking = db.query(Ranking).filter(
         Ranking.user_id == user.id, Ranking.competition_id == get_competition_id(db)
     ).first()
+    br_id = get_competition_id(db, "brasileirao2026")
+    br_ranking = (
+        db.query(Ranking).filter(Ranking.user_id == user.id, Ranking.competition_id == br_id).first()
+        if br_id is not None else None
+    )
+    totais = []
     if ranking:
-        partes.append(f"Total: *{ranking.total_points} pts* · predicts.info/apostas")
+        totais.append(f"Copa: *{ranking.total_points} pts*")
+    if br_ranking:
+        totais.append(f"Brasileirão: *{br_ranking.total_points} pts*")
+    if totais:
+        partes.append(" · ".join(totais) + " · predicts.info/apostas")
     else:
         partes.append("predicts.info/apostas")
     return "\n\n".join(partes)
@@ -597,18 +667,20 @@ def _handle_inbound(db: Session, phone: str, text: str, push_name: str | None = 
         return _model_prediction_message(db, resto)
 
     if norm in _LIST_WORDS or norm == "1":
-        matches = _open_matches_for_list(db)
-        if not matches:
+        copa_matches = _open_matches_for_list(db)
+        br_matches = _open_matches_for_list_br(db)
+        if not copa_matches and not br_matches:
             return "📋 Nenhum jogo aberto pra apostar agora. Volta mais tarde!"
+        all_matches = copa_matches + br_matches
         if session:
             db.delete(session)
         db.add(WhatsappBetSession(
             phone=phone, state="lista_enviada",
-            list_json=json.dumps([m.id for m in matches]),
+            list_json=json.dumps([m.id for m in all_matches]),
             expires_at=_utcnow() + timedelta(minutes=10),
         ))
         db.commit()
-        return _match_list_message(db, matches, user)
+        return _match_list_message(db, copa_matches, br_matches, user)
 
     score = _extract_score(text)
     if not score:

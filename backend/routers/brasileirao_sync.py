@@ -302,25 +302,30 @@ def recompute_stats(db: Session) -> dict:
 
 def evaluate_bets(db: Session) -> dict:
     """Pontua bets do Brasileirão (mesma régua V2 da Copa) e reconstrói o
-    ranking da competição. Idempotente. DM WhatsApp de resultado só na
-    PRIMEIRA avaliação de cada bet (evaluated_at era NULL) — re-runs não
-    reenviam, e bets pontuadas antes da feature nunca disparam retroativo."""
+    ranking da competição. Idempotente. Notificação (sino/push bet_exact/
+    bet_correct/bet_wrong) e DM WhatsApp de resultado só na PRIMEIRA avaliação
+    de cada bet (evaluated_at era NULL) — re-runs não reenviam, e bets
+    pontuadas antes da feature nunca disparam retroativo. Sem bônus de
+    prorrogação/pênaltis (BR não tem mata-mata na fase de pontos corridos)."""
     from models import Bet, Ranking
     from world_cup_sync import _score_points_v2
+    from routers.notifications import create_notification
 
     comp_id = ensure_competition(db)
-    results = {
-        m.id: r for m, r in (
-            db.query(Match, MatchResult)
-            .join(MatchResult, MatchResult.match_id == Match.id)
-            .filter(Match.competition_id == comp_id)
-            .all()
-        )
-    }
+    rows = (
+        db.query(Match, MatchResult)
+        .join(MatchResult, MatchResult.match_id == Match.id)
+        .filter(Match.competition_id == comp_id)
+        .all()
+    )
+    results = {m.id: r for m, r in rows}
+    matches_by_id = {m.id: m for m, r in rows}
+    teams_by_id = {t.id: t for t in db.query(Team).filter(Team.competition_id == comp_id).all()}
 
     db.query(Ranking).filter(Ranking.competition_id == comp_id).delete(synchronize_session=False)
     totals: dict[int, dict[str, int]] = {}
     evaluated = 0
+    notif_count = 0
     wa_events: list[dict] = []
     now = _utcnow()
     for bet in db.query(Bet).filter(Bet.competition_id == comp_id).all():
@@ -335,6 +340,29 @@ def evaluate_bets(db: Session) -> dict:
         bet.evaluated_at = now
         evaluated += 1
         if first_eval:
+            match = matches_by_id.get(bet.match_id)
+            ta = teams_by_id.get(match.team_a_id) if match else None
+            tb = teams_by_id.get(match.team_b_id) if match else None
+            label = f"{ta.name} × {tb.name}" if ta and tb else f"Jogo #{bet.match_id}"
+            score_str = f"{res.score_a}–{res.score_b}"
+            meta = {
+                "match_id": bet.match_id, "score": score_str,
+                "bet": f"{bet.score_a}–{bet.score_b}", "points": points,
+                "competition": COMP_CODE,
+            }
+            if exact:
+                create_notification(db, user_id=bet.user_id, type_="bet_exact",
+                    title=f"🎯 Placar exato! +{points} pts",
+                    body=f"{label} · {bet.score_a}–{bet.score_b}", meta=meta)
+            elif correct:
+                create_notification(db, user_id=bet.user_id, type_="bet_correct",
+                    title=f"✅ Resultado certo! +{points} pts",
+                    body=f"{label} · placar: {score_str}", meta=meta)
+            else:
+                create_notification(db, user_id=bet.user_id, type_="bet_wrong",
+                    title="❌ Resultado errado",
+                    body=f"{label} · seu palpite: {bet.score_a}–{bet.score_b}", meta=meta)
+            notif_count += 1
             wa_events.append({
                 "user_id": bet.user_id, "match_id": bet.match_id,
                 "bet_a": bet.score_a, "bet_b": bet.score_b,
@@ -353,7 +381,10 @@ def evaluate_bets(db: Session) -> dict:
     db.commit()
     # DM depois do commit: falha de envio nunca desfaz pontuação
     _notify_bet_results_whatsapp_br(db, comp_id, wa_events)
-    out = {"evaluated": evaluated, "users_ranked": len(totals), "wa_dms": len(wa_events), "at": now.isoformat()}
+    out = {
+        "evaluated": evaluated, "users_ranked": len(totals), "notifications": notif_count,
+        "wa_dms": len(wa_events), "at": now.isoformat(),
+    }
     _last_run["bets"] = out
     return out
 
