@@ -150,6 +150,132 @@ function fmtDomainRows(tables, domain) {
   return (tables || []).filter(t => t.domain === domain)
 }
 
+// ── Saúde dos Provedores LLM ──────────────────────────────────────────────────
+// Nasceu do incidente 11/07: cadeia INTEIRA (Gemini rate-limit + OpenRouter 402)
+// ficou fora por dias sem ninguém perceber. Botão "Testar agora" chama
+// POST /admin/llm/test (admin), que percorre a cadeia real (mesma ordem de
+// produção) testando cada provider individualmente — cacheado 5min no backend.
+
+function fmtUsd(v) {
+  if (v === null || v === undefined) return '—'
+  return `US$ ${Number(v).toFixed(4)}`
+}
+
+function LlmHealthCard({ health, loading, err, onTest }) {
+  const h4 = { fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6, marginTop: 14 }
+  const providers = health?.providers || []
+  const nOk = providers.filter(p => p.ok).length
+  const n = providers.length
+  const credits = health?.openrouter_credits
+  const consumption = health?.consumption_7d || []
+
+  return (
+    <div className="adm-card">
+      <div className="adm-card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <span className="adm-card__title">🧠 Saúde dos Provedores LLM</span>
+        <button className="btn btn-sm" onClick={onTest} disabled={loading}>
+          {loading ? '… testando' : '▶ Testar agora'}
+        </button>
+      </div>
+
+      <div style={{ padding: '4px 2px' }}>
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)', margin: '0 0 10px' }}>
+          Percorre a cadeia inteira (mesma ordem de produção — Gemini key1 → Gemini key2 → OpenAI → OpenRouter) com um
+          prompt mínimo, um provider de cada vez. Máx. 1 execução real a cada 5min — cliques repetidos dentro da janela
+          devolvem o resultado cacheado.
+        </p>
+
+        {err && (
+          <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 10, background: 'var(--bg-overlay)', border: '1px solid var(--lose)', fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--lose)' }}>
+            ✗ {err}
+          </div>
+        )}
+
+        {!health && !loading && !err && (
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12.5, color: 'var(--text-4)', padding: '8px 2px' }}>
+            Nenhum teste rodado ainda nesta sessão — clique em "Testar agora".
+          </div>
+        )}
+
+        {health && (
+          <>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              <span
+                className="badge"
+                style={{
+                  fontSize: 11,
+                  background: health.any_ok ? 'rgba(0,180,120,0.12)' : 'rgba(220,60,60,0.14)',
+                  color: health.any_ok ? 'var(--win)' : 'var(--lose)',
+                  border: `1px solid ${health.any_ok ? 'var(--win)' : 'var(--lose)'}`,
+                }}
+              >
+                {health.any_ok ? `✅ ${nOk}/${n} provedores ok` : `⚠️ 0/${n} — CADEIA INTEIRA FORA`}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-4)' }}>
+                testado {fmtShort(health.tested_at)}
+              </span>
+              {health.cached && (
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', fontStyle: 'italic' }}>
+                  ⏳ resultado cacheado (5min)
+                </span>
+              )}
+            </div>
+
+            <div className="adm-table-wrap" style={{ marginBottom: 16 }}>
+              <table className="adm-table">
+                <thead><tr><th>Provider</th><th>Status</th><th>Latência</th><th>Erro</th></tr></thead>
+                <tbody>
+                  {providers.map((p, i) => (
+                    <tr key={i}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{p.label}</td>
+                      <td>{p.ok ? <span style={{ color: 'var(--win)' }}>✅ ok</span> : <span style={{ color: 'var(--lose)' }}>❌ falhou</span>}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{p.latency_ms} ms</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--lose)', maxWidth: 360 }}>{p.error || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={h4}>Créditos OpenRouter</div>
+            {credits?.error ? (
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--lose)' }}>⚠️ não foi possível consultar: {credits.error}</p>
+            ) : credits ? (
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+                <div className="adm-kpi"><div className="adm-kpi__val">{fmtUsd(credits.total_credits)}</div><div className="adm-kpi__label">Total comprado</div></div>
+                <div className="adm-kpi"><div className="adm-kpi__val" style={{ color: 'var(--accent)' }}>{fmtUsd(credits.total_usage)}</div><div className="adm-kpi__label">Usado (all-time)</div></div>
+                <div className="adm-kpi"><div className="adm-kpi__val" style={{ color: credits.remaining > 1 ? 'var(--win)' : 'var(--lose)' }}>{fmtUsd(credits.remaining)}</div><div className="adm-kpi__label">Saldo restante</div></div>
+              </div>
+            ) : (
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-4)' }}>Sem chave OpenRouter configurada.</p>
+            )}
+
+            <div style={h4}>Consumo (7 dias) — analysis_logs</div>
+            <div className="adm-table-wrap">
+              <table className="adm-table" style={{ fontSize: 11 }}>
+                <thead><tr><th>Provider</th><th>Chamadas ok</th><th>Erros</th><th>Tokens</th><th>Custo (US$)</th></tr></thead>
+                <tbody>
+                  {consumption.length ? consumption.map((c, i) => (
+                    <tr key={i}>
+                      <td style={{ fontFamily: 'var(--font-mono)' }}>{c.provider}</td>
+                      <td>{c.calls_ok}</td>
+                      <td style={{ color: c.calls_error ? 'var(--lose)' : 'var(--text-4)' }}>{c.calls_error}</td>
+                      <td>{c.tokens_total.toLocaleString('pt-BR')}</td>
+                      <td>{fmtUsd(c.cost_usd)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={5} style={{ color: 'var(--text-4)' }}>sem chamadas nos últimos 7 dias</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Sistema() {
   const { token } = useAuth()
   const [sub, setSub] = useState('geral')
@@ -157,11 +283,22 @@ export default function Sistema() {
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
 
+  const [llmHealth, setLlmHealth] = useState(null)
+  const [llmLoading, setLlmLoading] = useState(false)
+  const [llmErr, setLlmErr] = useState('')
+
   async function load() {
     setLoading(true); setErr('')
     try { setStatus(await api.get('/admin/system/status', token)) }
     catch (e) { setErr(e?.message || 'Erro ao carregar status') }
     finally { setLoading(false) }
+  }
+
+  async function testLlm() {
+    setLlmLoading(true); setLlmErr('')
+    try { setLlmHealth(await api.post('/admin/llm/test', {}, token)) }
+    catch (e) { setLlmErr(e?.message || 'Erro ao testar provedores') }
+    finally { setLlmLoading(false) }
   }
 
   useEffect(() => { load() }, [])
@@ -346,19 +483,28 @@ export default function Sistema() {
 
         {/* ── MOTOR & IA ── */}
         {sub === 'motor' && (
-          <div className="adm-card">
-            <div className="adm-card__header"><span className="adm-card__title">🧠 Motor de Simulação & Oráculo</span></div>
-            <div style={{ padding: '4px 2px' }}>
-              <div style={h4}>Pipeline (engine/)</div>
-              <p style={p}><code>elo.py</code> → probabilidades · <code>poisson.py</code> (Dixon-Coles) → placares · <code>monte_carlo.py</code> (NumPy vetorizado) → distribuição · <code>weights.py</code> combina fatores em λ por time.</p>
-              <div style={h4}>Pesos calibrados (bootstrap sobre jogos finalizados)</div>
-              <p style={p}>odds de mercado <strong>56.5%</strong> · xG <strong>43.5%</strong> · H2H <strong>5%</strong> (carve-out manual, não fit estatístico — soma passa de 100% porque H2H é multiplicador 0.85–1.15, não peso linear puro). <code>market_odds</code> nunca recebe odds real (nunca populado) — sempre cai no fallback <code>elo_win_probabilities</code>.</p>
-              <div style={h4}>Oráculo LLM (bot.py)</div>
-              <p style={p}>Cadeia Gemini key1 → Gemini key2 → OpenRouter (6 modelos free). <strong>Gate de confiança 85</strong>: só diverge do baseline estatístico com alta convicção ou lesão/suspensão relevante — sem o gate, taxa de acerto de placar exato medida caiu de 11% pra 3,8% (dado real, 45 partidas).</p>
-              <div style={h4}>Análise IA (analysis.py)</div>
-              <p style={p}>Pré-gerada e cacheada por partida (nunca on-the-fly). Campo <code>hook</code> só pode citar número calculado e injetado no prompt (streaks do banco, artilheiro via cache Redis) — proibido a IA inventar estatística. Prompt dedicado pro Brasileirão (clube ≠ seleção: sem convocação, sem boletim médico).</p>
+          <>
+            <div className="adm-card" style={{ marginBottom: 16 }}>
+              <div className="adm-card__header"><span className="adm-card__title">🧠 Motor de Simulação & Oráculo</span></div>
+              <div style={{ padding: '4px 2px' }}>
+                <div style={h4}>Pipeline (engine/)</div>
+                <p style={p}><code>elo.py</code> → probabilidades · <code>poisson.py</code> (Dixon-Coles) → placares · <code>monte_carlo.py</code> (NumPy vetorizado) → distribuição · <code>weights.py</code> combina fatores em λ por time.</p>
+                <div style={h4}>Pesos calibrados (bootstrap sobre jogos finalizados)</div>
+                <p style={p}>odds de mercado <strong>56.5%</strong> · xG <strong>43.5%</strong> · H2H <strong>5%</strong> (carve-out manual, não fit estatístico — soma passa de 100% porque H2H é multiplicador 0.85–1.15, não peso linear puro). <code>market_odds</code> nunca recebe odds real (nunca populado) — sempre cai no fallback <code>elo_win_probabilities</code>.</p>
+                <div style={h4}>Oráculo LLM (bot.py)</div>
+                <p style={p}>Cadeia Gemini key1 → Gemini key2 → OpenRouter (6 modelos free). <strong>Gate de confiança 85</strong>: só diverge do baseline estatístico com alta convicção ou lesão/suspensão relevante — sem o gate, taxa de acerto de placar exato medida caiu de 11% pra 3,8% (dado real, 45 partidas).</p>
+                <div style={h4}>Análise IA (analysis.py)</div>
+                <p style={p}>Pré-gerada e cacheada por partida (nunca on-the-fly). Campo <code>hook</code> só pode citar número calculado e injetado no prompt (streaks do banco, artilheiro via cache Redis) — proibido a IA inventar estatística. Prompt dedicado pro Brasileirão (clube ≠ seleção: sem convocação, sem boletim médico).</p>
+              </div>
             </div>
-          </div>
+
+            <LlmHealthCard
+              health={llmHealth}
+              loading={llmLoading}
+              err={llmErr}
+              onTest={testLlm}
+            />
+          </>
         )}
 
         {/* ── GOTCHAS ── */}

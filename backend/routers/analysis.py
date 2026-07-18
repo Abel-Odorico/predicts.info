@@ -8,6 +8,7 @@ POST /admin/analysis/config              — salva config providers
 """
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 import requests as http_requests
@@ -113,12 +114,29 @@ def _get_config(db: Session) -> dict:
 
 
 OR_FREE_FALLBACKS = [
-    "openrouter/auto",                              # smart router
+    # ⚠️ "openrouter/auto" foi REMOVIDO daqui em 18/07 (achado no diagnóstico do
+    # incidente de 402 Payment Required de 11-12/07): apesar do nome da lista,
+    # "openrouter/auto" é o smart-router pago da OpenRouter — ele escolhe
+    # QUALQUER modelo (inclusive pagos, ex.: "openai/gpt-5.6-sol" no teste real
+    # de 18/07) e cobra crédito de verdade por chamada. Confirmado em produção:
+    # 210 chamadas via "openrouter/auto" em 11/07 (bug do _auto_generate_analyses
+    # sem filtro de competição, já corrigido) queimaram ~US$6,14 de crédito real
+    # NUM SÓ DIA (analysis_logs), e no dia seguinte o saldo zerou → 402 em toda
+    # a cadeia por horas. Mantê-lo aqui como "fallback grátis" é o oposto do que
+    # essa lista promete: sempre que Gemini/OpenAI falharem, ele silenciosamente
+    # gasta dinheiro real antes de chegar nos modelos :free de verdade abaixo.
+    # Lista revalidada ao vivo em 18/07 contra GET /api/v1/models — 3 dos 4 slugs
+    # antigos estavam MORTOS (404 "No endpoints found" / "unavailable for free,
+    # use ... instead"): google/gemini-2.0-flash-exp:free, deepseek/deepseek-chat-v3-0324:free,
+    # qwen/qwen3-235b-a22b:free, mistralai/mistral-small-3.2-24b-instruct:free —
+    # a OpenRouter descontinuou a versão :free desses 4 e só serve a paga no mesmo
+    # slug. Substituídos pelos 4 abaixo, testados 200 OK ou rate-limit temporário
+    # (upstream congestionado, não morto) no momento da checagem.
     "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemini-2.0-flash-exp:free",
-    "deepseek/deepseek-chat-v3-0324:free",
-    "qwen/qwen3-235b-a22b:free",
-    "mistralai/mistral-small-3.2-24b-instruct:free",
+    "openai/gpt-oss-20b:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-31b-it:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
 ]
 
 def _get_provider_chain(cfg: dict) -> list[dict]:
@@ -300,6 +318,66 @@ def _is_quota_error(err: str) -> bool:
     return "429" in err or "too many requests" in low or "resource_exhausted" in low or "quota" in low or "rate" in low
 
 
+# ─── Alerta de cadeia morta (Telegram, dedup 6h) ──────────────────────────────
+# Isolado em try/except: falha de Telegram NUNCA pode derrubar a geração de análise.
+
+LLM_ALERT_REDIS_KEY = "llm:alert:last"
+LLM_ALERT_COOLDOWN_S = 6 * 3600  # 6h
+_llm_alert_mem_fallback = {"ts": 0.0}  # usado só se Redis estiver indisponível
+
+
+def _alert_chain_dead(chain: list, last_exc: Exception | None) -> None:
+    import time as _time
+    try:
+        r = _redis_for_progress()
+        now = _time.time()
+
+        if r:
+            try:
+                if r.get(LLM_ALERT_REDIS_KEY):
+                    return  # já alertado nas últimas 6h
+            except Exception:
+                r = None  # Redis flaky — cai pro guard em memória
+
+        if not r:
+            if now - _llm_alert_mem_fallback["ts"] < LLM_ALERT_COOLDOWN_S:
+                return
+
+        from database import SessionLocal
+        from routers.report import _telegram_config
+        import httpx as _httpx
+
+        db = SessionLocal()
+        try:
+            tg_token, tg_chat = _telegram_config(db)
+        finally:
+            db.close()
+        if not tg_token or not tg_chat:
+            return
+
+        labels = ", ".join(p["label"] for p in chain) if chain else "nenhum provider configurado"
+        msg = (
+            "⚠️ <b>Análise IA: TODOS os provedores falharam</b>\n\n"
+            f"Cadeia testada: {labels}\n"
+            f"Último erro: {str(last_exc)[:300]}\n\n"
+            "Confirme quota/créditos no admin (Sistema → Motor &amp; IA → 🧠 Saúde dos Provedores LLM)."
+        )
+        _httpx.post(
+            f"https://api.telegram.org/bot{tg_token}/sendMessage",
+            json={"chat_id": tg_chat, "text": msg, "parse_mode": "HTML", "disable_web_page_preview": True},
+            timeout=10,
+        )
+
+        if r:
+            try:
+                r.setex(LLM_ALERT_REDIS_KEY, LLM_ALERT_COOLDOWN_S, _utcnow().isoformat())
+            except Exception:
+                pass
+        _llm_alert_mem_fallback["ts"] = now
+    except Exception as e:
+        print(f"[analysis] alerta de cadeia morta falhou (ignorado): {e}", flush=True)
+
+
 def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain: list | None = None) -> tuple[dict, str, dict]:
     """
     Chama LLM com fallback automático: Gemini key1 → Gemini key2 → OpenRouter.
@@ -347,6 +425,7 @@ def _call_llm(cfg: dict, prompt: str, provider_state: list | None = None, chain:
                 print(f"[analysis] {p['label']} erro: {err_str[:120]}", flush=True)
                 raise
 
+    _alert_chain_dead(chain, last_exc)
     raise ValueError(f"Todos os providers esgotados. Último erro: {last_exc}")
 
 
@@ -1353,3 +1432,192 @@ def analysis_logs(limit: int = 100, db: Session = Depends(get_db), _: User = Dep
             "duration_ms": int(totals[5] or 0),
         },
     }
+
+
+# ─── Saúde dos provedores LLM (teste manual + relatório diário) ──────────────
+# Incidente 11/07: cadeia INTEIRA ficou fora (Gemini rate-limit + OpenRouter 402)
+# por dias sem ninguém perceber. Este bloco testa cada provider da cadeia
+# individualmente com prompt mínimo, cacheado 5min (Redis), reusado pelo
+# endpoint admin E pelo relatório diário do Telegram (mesma função, sem duplicar).
+
+LLM_TEST_CACHE_KEY = "llm:test:last"
+LLM_TEST_CACHE_TTL = 300  # 5 min
+LLM_TEST_PROMPT = "Responda apenas: ok"
+LLM_TEST_TIMEOUT = 15  # segundos por provider
+
+
+def _test_call_gemini(api_key: str, model: str, prompt: str, timeout: int = LLM_TEST_TIMEOUT) -> str:
+    """Chamada mínima via REST (sem SDK, sem JSON mode) — só valida que o provider responde.
+    ⚠️ thinkingBudget=0 é OBRIGATÓRIO aqui (mesmo padrão do _call_gemini de produção):
+    modelos "thinking" (ex.: gemini-3.5-flash) gastam o maxOutputTokens inteiro em
+    raciocínio interno e devolvem content:{} (sem 'parts') se isso não for zerado —
+    achado real testando esta função (Gemini key2 parecia "quebrada", era só isso)."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    resp = http_requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": 20,
+                "temperature": 0,
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
+        },
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    rj = resp.json()
+    parts = rj["candidates"][0].get("content", {}).get("parts")
+    if not parts:
+        raise ValueError(f"resposta sem conteúdo (finishReason={rj['candidates'][0].get('finishReason')})")
+    return parts[0]["text"]
+
+
+def _test_call_openai(api_key: str, model: str, prompt: str, timeout: int = LLM_TEST_TIMEOUT) -> str:
+    resp = http_requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 20, "temperature": 0},
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
+def _test_call_openrouter(api_key: str, model: str, prompt: str, timeout: int = LLM_TEST_TIMEOUT) -> str:
+    resp = http_requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://predicts.info",
+            "X-Title": "Predicts Copa 2026",
+        },
+        json={"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 20, "temperature": 0},
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("error"):
+        raise ValueError(f"OpenRouter error: {data['error'].get('message', data['error'])}")
+    return data["choices"][0]["message"]["content"]
+
+
+def _get_openrouter_credits(api_key: str) -> dict | None:
+    """GET /api/v1/credits — saldo real da conta OpenRouter (não é por-modelo)."""
+    if not api_key:
+        return None
+    try:
+        resp = http_requests.get(
+            "https://openrouter.ai/api/v1/credits",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+        total = float(data.get("total_credits", 0) or 0)
+        used = float(data.get("total_usage", 0) or 0)
+        return {"total_credits": total, "total_usage": used, "remaining": round(total - used, 4)}
+    except Exception as e:
+        return {"error": str(e)[:200]}
+
+
+def _get_llm_consumption_7d(db: Session) -> list[dict]:
+    """Consumo do NOSSO lado (analysis_logs já persiste tokens/custo por chamada) —
+    agregado por provider (gemini/openai/openrouter) nos últimos 7 dias."""
+    rows = db.execute(text("""
+        SELECT
+            COALESCE(provider, '—') AS provider,
+            COUNT(*) FILTER (WHERE status = 'ok')    AS calls_ok,
+            COUNT(*) FILTER (WHERE status = 'error') AS calls_error,
+            COALESCE(SUM(tokens_in)  FILTER (WHERE status='ok'), 0)
+                + COALESCE(SUM(tokens_out) FILTER (WHERE status='ok'), 0) AS tokens_total,
+            COALESCE(SUM(cost_usd) FILTER (WHERE status='ok'), 0) AS cost_usd
+        FROM analysis_logs
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY provider
+        ORDER BY cost_usd DESC, calls_ok DESC
+    """)).fetchall()
+    return [
+        {
+            "provider": r[0],
+            "calls_ok": int(r[1] or 0),
+            "calls_error": int(r[2] or 0),
+            "tokens_total": int(r[3] or 0),
+            "cost_usd": float(r[4] or 0),
+        }
+        for r in rows
+    ]
+
+
+def _run_llm_chain_test(db: Session) -> dict:
+    """Percorre a CADEIA INTEIRA (mesma _get_provider_chain da produção) testando
+    cada provider individualmente — não usa _call_llm (que para no 1º sucesso)."""
+    cfg = _get_config(db)
+    chain = _get_provider_chain(cfg)
+
+    providers_result = []
+    any_ok = False
+    for p in chain:
+        t0 = time.time()
+        try:
+            if p["type"] == "gemini":
+                _test_call_gemini(p["key"], p["model"], LLM_TEST_PROMPT)
+            elif p["type"] == "openai":
+                _test_call_openai(p["key"], p["model"], LLM_TEST_PROMPT)
+            else:
+                _test_call_openrouter(p["key"], p["model"], LLM_TEST_PROMPT)
+            providers_result.append({
+                "label": p["label"], "ok": True,
+                "latency_ms": int((time.time() - t0) * 1000), "error": None,
+            })
+            any_ok = True
+        except Exception as e:
+            providers_result.append({
+                "label": p["label"], "ok": False,
+                "latency_ms": int((time.time() - t0) * 1000), "error": str(e)[:200],
+            })
+
+    return {
+        "tested_at": _utcnow().isoformat(),
+        "providers": providers_result,
+        "any_ok": any_ok,
+        "openrouter_credits": _get_openrouter_credits(cfg.get("openrouter_key", "")),
+        "consumption_7d": _get_llm_consumption_7d(db),
+    }
+
+
+def get_llm_health(db: Session, force: bool = False) -> dict:
+    """Wrapper cache-aware (Redis, 5min) — usado pelo endpoint admin E pelo
+    relatório diário do Telegram. `force=True` ignora o cache (não usado hoje,
+    reservado pra uso futuro)."""
+    r = _redis_for_progress()
+    if r and not force:
+        try:
+            cached = r.get(LLM_TEST_CACHE_KEY)
+            if cached:
+                data = json.loads(cached)
+                data["cached"] = True
+                return data
+        except Exception:
+            pass
+
+    result = _run_llm_chain_test(db)
+    result["cached"] = False
+
+    if r:
+        try:
+            r.setex(LLM_TEST_CACHE_KEY, LLM_TEST_CACHE_TTL, json.dumps(result))
+        except Exception:
+            pass
+
+    return result
+
+
+@router.post("/admin/llm/test")
+def test_llm_providers(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Testa a cadeia INTEIRA de providers LLM individualmente (prompt mínimo,
+    timeout curto). Cacheado 5min pra não gastar quota clicando repetido."""
+    return get_llm_health(db)

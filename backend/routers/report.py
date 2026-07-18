@@ -192,6 +192,13 @@ def _build_report(db: Session) -> dict:
         LIMIT 1
     """), {"now": now}).fetchone()
 
+    # ── Saúde dos provedores LLM (reusa lógica do admin, cache 5min) ─────
+    try:
+        from routers.analysis import get_llm_health
+        llm_health = get_llm_health(db)
+    except Exception as e:
+        llm_health = {"error": str(e)[:200]}
+
     # ── Último resultado ─────────────────────────────────
     last_result = db.execute(text("""
         SELECT ta.name AS team_a, tb.name AS team_b,
@@ -267,6 +274,7 @@ def _build_report(db: Session) -> dict:
                 for r in group_rows
             ],
         },
+        "llm": llm_health,
     }
 
 
@@ -328,6 +336,24 @@ def _format_text(data: dict) -> str:
             f"• Semana: <b>{w['in_week']}</b> recebidas · <b>{w['out_week']}</b> enviadas",
             f"• Apostas pelo bot: hoje <b>{w['bets_today']}</b> · total <b>{w['bets_total']}</b>",
         ]
+
+    # LLM — saúde dos provedores de análise IA
+    llm = data.get("llm")
+    if llm and llm.get("providers") is not None:
+        provs = llm["providers"]
+        n = len(provs)
+        n_ok = sum(1 for pr in provs if pr.get("ok"))
+        first_ok = next((pr["label"] for pr in provs if pr.get("ok")), None)
+        cached_tag = " (cache 5min)" if llm.get("cached") else ""
+        if n == 0:
+            llm_line = "• ⚠️ nenhum provider configurado"
+        elif n_ok == 0:
+            llm_line = f"• ⚠️ 0/{n} provedores ok — cadeia INTEIRA fora!"
+        else:
+            llm_line = f"• <b>{n_ok}/{n}</b> provedores ok (primeiro ativo: {_e(first_ok)}){cached_tag}"
+        lines += ["", "🧠 <b>LLM</b>", llm_line]
+    elif llm and llm.get("error"):
+        lines += ["", "🧠 <b>LLM</b>", f"• ⚠️ erro ao testar: {_e(llm['error'])}"]
 
     # Último resultado
     lr = data.get("last_result")
