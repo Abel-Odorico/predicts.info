@@ -10024,7 +10024,16 @@ strong.pts {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
-.notif-bell__icon { font-size: 16px; line-height: 1; filter: none; }
+.notif-bell__icon { width: 22px; height: 22px; display: block; transform-origin: 50% 15%; }
+@keyframes notifBellSwing {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(12deg); }
+  40%  { transform: rotate(-10deg); }
+  60%  { transform: rotate(6deg); }
+  80%  { transform: rotate(-4deg); }
+  100% { transform: rotate(0deg); }
+}
+.notif-bell__icon--swing { animation: notifBellSwing 600ms ease-in-out 1; }
 .notif-bell__badge {
   position: absolute;
   top: -4px;
@@ -10105,6 +10114,7 @@ strong.pts {
 @media (prefers-reduced-motion: reduce) {
   .notif-panel, .notif-sheet { animation: none; opacity: 1; transform: none; }
   .notif-bell__badge--pulse { animation: none; }
+  .notif-bell__icon--swing { animation: none; }
 }
 
 .notif-panel__header {

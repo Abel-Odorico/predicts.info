@@ -10,6 +10,7 @@ import { COMPETITIONS, COMPETITION_LABEL } from '../utils/competitions'
 import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
 import { displayName } from '../utils/displayName'
 import RankingNameToggle from '../components/RankingNameToggle'
+import MedalIcon from '../components/MedalIcon'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -220,7 +221,9 @@ export default function UserGroups() {
             <span className="groups-stat-card__label">{totalConvites === 1 ? 'Convite' : 'Convites'}</span>
           </div>
           <div className={`groups-stat-card groups-stat-card--best${bestRankMedal ? ' groups-stat-card--medal' : ' fade-in-4'}`}>
-            <span className="groups-stat-card__icon">{bestRankMedal || '🎖️'}</span>
+            <span className="groups-stat-card__icon">
+              {myBestRank && myBestRank <= 3 ? <MedalIcon rank={myBestRank} size={24} /> : '🎖️'}
+            </span>
             <span className="groups-stat-card__value">{myBestRank ? `${myBestRank}º` : '–'}</span>
             <span className="groups-stat-card__label">Melhor posição</span>
           </div>
@@ -811,7 +814,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
         <div style={{ padding: 'var(--s4) var(--s4) var(--s3)', display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap' }}>
           {sortedMembers.slice(0, 3).map((m, i) => (
             <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--bg-overlay)', borderRadius: 20, padding: '3px 10px 3px 6px' }}>
-              <span style={{ fontSize: 13 }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
+              <MedalIcon rank={i + 1} size={16} />
               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 600, color: 'var(--text-2)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName(m, namePref)}</span>
               <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>{m.total_points}</span>
             </div>
@@ -974,7 +977,7 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
                     </div>
                     <div className="group-member-row__pts">
                       <span className="group-member-row__pts-pos">
-                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`}
+                        {i < 3 ? <MedalIcon rank={i + 1} size={18} /> : `${i + 1}º`}
                       </span>
                       <span className="group-member-row__pts-val">{member.total_points ?? 0}pts</span>
                       {member.exact_scores > 0 && (
