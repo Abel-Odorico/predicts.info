@@ -10,10 +10,10 @@ import { api } from '../api'
 // avança rodada a rodada sozinha, pausa no fim e recomeça — é a "simulação
 // mudando automaticamente" pedida pelo Abel, não um chart estático.
 const CLUB_COLORS = {
-  PAL: '#0a5c36', FLA: '#c0392b', COR: '#4a4a4a', PAU: '#c0392b',
+  PAL: '#0a5c36', FLA: '#c0392b', COR: '#4a4a4a', SAO: '#c0392b',
   FLU: '#8b1538', CRU: '#003399', VAS: '#1a1a1a', BOT: '#1a1a1a',
-  GRE: '#0057a8', SCI: '#c0392b', CAP: '#e8752c', RBB: '#c8102e',
-  BAH: '#0b4ea2', CTB: '#5cb85c', CAM: '#000000', FBP: '#003399',
+  GRE: '#003399', INT: '#c0392b', CAP: '#e8752c', RBB: '#c8102e',
+  BAH: '#0b4ea2', CTB: '#5cb85c', CAM: '#000000',
 }
 const FALLBACK = d3.schemeTableau10
 

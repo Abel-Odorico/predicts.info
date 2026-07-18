@@ -45,7 +45,22 @@ COMP_NAME = "Brasileirão Série A 2026"
 
 # TLA da football-data colide dentro da própria BSA (Corinthians × Coritiba, ambos COR).
 # Override por external_id do clube. teams.code é UNIQUE global.
-TLA_FIX = {4241: "CTB"}  # Coritiba FBC
+TLA_FIX = {
+    4241: "CTB",  # Coritiba FBC
+    1776: "SAO",  # São Paulo (API manda "PAU" — fora da convenção BR; sem colisão verificada)
+    1767: "GRE",  # Grêmio (API manda "FBP" — fora da convenção BR; sem colisão verificada)
+    6684: "INT",  # Internacional (API manda "SCI" — fora da convenção BR; sem colisão verificada)
+    4287: "REM",  # Remo (API manda "CRE" — fora da convenção BR; sem colisão verificada)
+}
+
+# Nome cru da API (shortName) fora da convenção brasileira de imprensa (ge.globo).
+# Override por external_id do clube. RE-SOBRESCREVE o nome cru a cada sync.
+NAME_FIX = {
+    1768: "Athletico-PR",  # API manda "Paranaense"
+    1766: "Atlético-MG",   # API manda "Mineiro"
+    4287: "Remo",          # API manda "Clube do Remo"
+    1780: "Vasco",         # API manda "Vasco da Gama"
+}
 
 # Replay de Elo
 ELO_BASE     = 1500.0
@@ -101,7 +116,7 @@ def sync_teams(db: Session, api_key: str | None = None) -> dict:
     for t in data.get("teams", []):
         ext_id = t["id"]
         code = TLA_FIX.get(ext_id, (t.get("tla") or "")[:3].upper())
-        name = t.get("shortName") or t.get("name") or code
+        name = NAME_FIX.get(ext_id) or t.get("shortName") or t.get("name") or code
         if not code:
             errors.append(f"{name}: sem TLA")
             continue

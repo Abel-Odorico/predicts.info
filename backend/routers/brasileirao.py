@@ -258,10 +258,10 @@ def compute_projection(db: Session, n_sims: int = N_SIMS) -> dict:
 # Fonte: Wikipédia "Lista de campeões do Campeonato Brasileiro de Futebol"
 # (cruzado com campeoesdofutebol.com.br), verificado 2026-07-11.
 BR_TITLES: dict[str, int] = {
-    "PAL": 12, "SAN": 8, "FLA": 8, "COR": 7, "PAU": 6,
+    "PAL": 12, "SAN": 8, "FLA": 8, "COR": 7, "SAO": 6,
     "CRU": 4, "FLU": 4, "VAS": 4,
-    "CAM": 3, "SCI": 3, "BOT": 3,
-    "BAH": 2, "FBP": 2,
+    "CAM": 3, "INT": 3, "BOT": 3,
+    "BAH": 2, "GRE": 2,
     "CAP": 1, "CTB": 1,
 }
 
