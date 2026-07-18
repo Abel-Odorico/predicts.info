@@ -93,6 +93,7 @@ CONFIG_KEYS = (
     "analysis_prompt_template",
     "llm_paid_fallback_model", "llm_paid_fallback_enabled",
     "llm_provider_order", "llm_fallback_enabled",
+    "llm_disabled_slots", "llm_free_fallbacks_enabled",
 )
 
 BEST_FREE_OR_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
@@ -130,6 +131,21 @@ def _parse_provider_order(raw_value) -> list[str]:
     return cleaned or list(DEFAULT_PROVIDER_ORDER)
 
 
+def _parse_disabled_slots(raw_value) -> list[str]:
+    """Valida site_config.llm_disabled_slots (JSON array de slots desabilitados
+    pela chave liga/desliga por linha, redesign 2026-07-18 iteração 2). Valores
+    desconhecidos são ignorados; ausência/erro de parse = nenhum desabilitado."""
+    slots = None
+    if raw_value:
+        try:
+            slots = json.loads(raw_value)
+        except (TypeError, ValueError):
+            slots = None
+    if not isinstance(slots, list):
+        return []
+    return [s for s in slots if isinstance(s, str) and s in VALID_PROVIDER_SLOTS]
+
+
 def _utcnow():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -163,6 +179,8 @@ def _get_config(db: Session) -> dict:
         "paid_fallback_enabled": c.get("llm_paid_fallback_enabled", "true"),
         "provider_order":    _parse_provider_order(c.get("llm_provider_order")),
         "fallback_enabled":  c.get("llm_fallback_enabled", "true"),
+        "disabled_slots":       _parse_disabled_slots(c.get("llm_disabled_slots")),
+        "free_fallbacks_enabled": c.get("llm_free_fallbacks_enabled", "true"),
     }
 
 
@@ -214,10 +232,14 @@ def _build_slot_entries(slot: str, cfg: dict) -> list[dict]:
         or_key = cfg["openrouter_key"]
         or_model = cfg.get("openrouter_model") or BEST_FREE_OR_MODEL
         entries = [{"type": "openrouter", "key": or_key, "model": or_model, "label": f"OpenRouter {or_model.split('/')[-1]}"}]
-        # Free fallbacks (skip if same as primary)
-        for m in OR_FREE_FALLBACKS:
-            if m != or_model:
-                entries.append({"type": "openrouter", "key": or_key, "model": m, "label": f"OpenRouter {m.split('/')[-1]}"})
+        # Free fallbacks (skip if same as primary). Desligável via site_config
+        # llm_free_fallbacks_enabled="false" (redesign 2026-07-18 iteração 2) —
+        # o fallback PAGO abaixo continua regido só pela própria flag
+        # (paid_fallback_enabled), independente deste toggle.
+        if str(cfg.get("free_fallbacks_enabled", "true")).strip().lower() != "false":
+            for m in OR_FREE_FALLBACKS:
+                if m != or_model:
+                    entries.append({"type": "openrouter", "key": or_key, "model": m, "label": f"OpenRouter {m.split('/')[-1]}"})
         # Fallback PAGO garantido no fim do bloco OpenRouter (2026-07-18): depois
         # de esgotar os :free (frequentemente rate-limited upstream), usa 1
         # modelo pago da OpenRouter — crédito real existe e nunca era usado sem
@@ -240,15 +262,34 @@ def _get_provider_chain(cfg: dict) -> list[dict]:
     pulados silenciosamente; valores desconhecidos na ordem também (validado em
     _parse_provider_order).
 
+    cfg['disabled_slots'] (site_config llm_disabled_slots, redesign 2026-07-18
+    iteração 2 — chave liga/desliga por linha): slots nessa lista são pulados
+    igual a "sem chave". Rede de segurança: se TODOS os 4 slots válidos
+    estiverem desabilitados, isso deixaria o sistema sem nenhum provider
+    utilizável — tratamos como fail-open (ignora o desabilitado, loga aviso)
+    em vez de travar a geração de análises.
+
     Se cfg['fallback_enabled'] (site_config llm_fallback_enabled) for "false",
-    a cadeia inteira vira só o PRIMEIRO provider configurado da ordem — sem
-    frees, sem fallback pago (se o primeiro for openrouter, usa só o modelo
-    primário configurado, nada mais)."""
+    a cadeia inteira vira só o PRIMEIRO provider HABILITADO e configurado da
+    ordem — sem frees, sem fallback pago (se o primeiro for openrouter, usa só
+    o modelo primário configurado, nada mais)."""
     order = cfg.get("provider_order") or list(DEFAULT_PROVIDER_ORDER)
     fallback_on = str(cfg.get("fallback_enabled", "true")).strip().lower() != "false"
+    disabled = set(cfg.get("disabled_slots") or [])
+
+    if disabled and disabled >= VALID_PROVIDER_SLOTS:
+        msg = (
+            f"llm_disabled_slots desabilitou todos os {len(VALID_PROVIDER_SLOTS)} "
+            "providers — ignorando (fail-open) para não travar a cadeia de análise IA"
+        )
+        log.warning(msg)
+        print(f"[analysis] ⚠️ {msg}", flush=True)
+        disabled = set()
 
     if not fallback_on:
         for slot in order:
+            if slot in disabled:
+                continue
             entries = _build_slot_entries(slot, cfg)
             if entries:
                 return [entries[0]]
@@ -256,6 +297,8 @@ def _get_provider_chain(cfg: dict) -> list[dict]:
 
     chain = []
     for slot in order:
+        if slot in disabled:
+            continue
         chain.extend(_build_slot_entries(slot, cfg))
     return chain
 
@@ -1465,13 +1508,18 @@ def get_analysis_config(db: Session = Depends(get_db), _: User = Depends(require
         # ── Ordem / fallback (redesign 2026-07-18) ──────────────────────────
         "provider_order":         cfg["provider_order"],
         "provider_slots": [
-            {"id": slot, "label": PROVIDER_SLOT_LABELS[slot], "has_key": has_key_by_slot[slot]}
+            {
+                "id": slot, "label": PROVIDER_SLOT_LABELS[slot], "has_key": has_key_by_slot[slot],
+                "enabled": slot not in cfg["disabled_slots"],
+            }
             for slot in DEFAULT_PROVIDER_ORDER
         ],
         "fallback_enabled":       str(cfg["fallback_enabled"]).strip().lower() != "false",
         "paid_fallback_model":    cfg["paid_fallback_model"],
         "paid_fallback_enabled":  str(cfg["paid_fallback_enabled"]).strip().lower() != "false",
         "llm_daily_budget_usd":   _get_llm_daily_budget(db),
+        "disabled_slots":         cfg["disabled_slots"],
+        "free_fallbacks_enabled": str(cfg["free_fallbacks_enabled"]).strip().lower() != "false",
     }
 
 
@@ -1490,6 +1538,8 @@ class AnalysisConfigIn(BaseModel):
     paid_fallback_model:    str = DEFAULT_PAID_FALLBACK_MODEL
     paid_fallback_enabled:  bool = True
     daily_budget_usd:       float = LLM_DAILY_BUDGET_DEFAULT_USD
+    disabled_slots:         list[str] = []
+    free_fallbacks_enabled: bool = True
 
 
 def _save_config_full(db: Session, body: "AnalysisConfigIn"):
@@ -1506,6 +1556,8 @@ def _save_config_full(db: Session, body: "AnalysisConfigIn"):
         ("llm_paid_fallback_model",  body.paid_fallback_model or DEFAULT_PAID_FALLBACK_MODEL),
         ("llm_paid_fallback_enabled", "true" if body.paid_fallback_enabled else "false"),
         ("llm_daily_budget_usd",     str(body.daily_budget_usd)),
+        ("llm_disabled_slots",       json.dumps([s for s in (body.disabled_slots or []) if isinstance(s, str) and s in VALID_PROVIDER_SLOTS])),
+        ("llm_free_fallbacks_enabled", "true" if body.free_fallbacks_enabled else "false"),
     ]
     if body.openrouter_key and not body.openrouter_key.startswith("•"):
         pairs.append(("openrouter_api_key", body.openrouter_key))

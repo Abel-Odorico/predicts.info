@@ -18,12 +18,30 @@ import TeamCrestFlag from '../components/TeamCrestFlag'
 const PROVIDER_SLOT_META = {
   gemini:     { icon: '✦',  name: 'Gemini',     sub: 'chave 1' },
   gemini2:    { icon: '✦',  name: 'Gemini',     sub: 'chave 2 · fallback' },
-  openai:     { icon: '🤖', name: 'OpenAI',      sub: 'direto' },
+  openai:     { icon: '⬡',  name: 'OpenAI',      sub: 'direto' },
   openrouter: { icon: '🔀', name: 'OpenRouter', sub: 'multi-modelo' },
 }
 
 function StatusDot({ color, title }) {
   return <span title={title} style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
+}
+
+// Switch liga/desliga reutilizável (redesign LLM iteração 2, 2026-07-18) —
+// nunca chama API sozinho, só reporta a mudança pro state via onChange.
+function Switch({ checked, onChange, disabled, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      className={`llm-switch${checked ? ' llm-switch--on' : ''}`}
+      onClick={() => !disabled && onChange(!checked)}
+    >
+      <span className="llm-switch__knob" />
+    </button>
+  )
 }
 
 function normalizeDate(value) {
@@ -518,6 +536,8 @@ export default function Admin() {
     paid_fallback_model: '',
     paid_fallback_enabled: true,
     daily_budget_usd: 1.5,
+    disabled_slots: [],
+    free_fallbacks_enabled: true,
   })
   // Saúde da cadeia (POST /admin/llm/test) — compartilhada entre o card de
   // Análise e o card do Oráculo (mesmo endpoint, cache 5min no backend).
@@ -566,6 +586,8 @@ export default function Admin() {
         paid_fallback_model: cfg.paid_fallback_model || '',
         paid_fallback_enabled: cfg.paid_fallback_enabled !== false,
         daily_budget_usd: cfg.llm_daily_budget_usd ?? 1.5,
+        disabled_slots: cfg.disabled_slots || [],
+        free_fallbacks_enabled: cfg.free_fallbacks_enabled !== false,
       }))
     } catch {}
   }
@@ -611,16 +633,42 @@ export default function Admin() {
       : { color: 'var(--lose)', title: `✗ ${h.error || 'falhou'}` }
   }
 
+  // Latência do último teste de cadeia (POST /admin/llm/test) pro slot, ou
+  // null se ainda não testado / sem entrada correspondente — usada no chip
+  // de latência ao lado do StatusDot.
+  function slotLatency(slotId) {
+    const entry = findChainEntry(slotId)
+    const h = entry && llmHealth?.providers ? llmHealth.providers.find(p => p.label === entry.label) : null
+    return h?.ok ? h.latency_ms : null
+  }
+
+  // Liga/desliga um slot (aForm.disabled_slots) — só mexe no state local,
+  // não salva sozinho (só ao clicar em "💾 Salvar config").
+  function toggleSlotDisabled(slotId) {
+    setAForm(f => {
+      const cur = f.disabled_slots || []
+      const next = cur.includes(slotId) ? cur.filter(s => s !== slotId) : [...cur, slotId]
+      return { ...f, disabled_slots: next }
+    })
+  }
+
   // Posição efetiva na cadeia: pula slots sem chave (mesma regra do backend
-  // _get_provider_chain) — o 1º slot COM CHAVE na ordem é o PRINCIPAL de fato.
+  // _get_provider_chain) — o 1º slot COM CHAVE E HABILITADO na ordem é o
+  // PRINCIPAL de fato. `position` é 1-based, só conta habilitados+com-chave,
+  // e vem null quando `muted` (SEM CHAVE ou DESLIGADO) — usado no círculo ①②③.
   function slotPositionBadge(slotId) {
     const hasKey = analysisConfig?.provider_slots?.find(s => s.id === slotId)?.has_key
-    if (!hasKey) return { label: 'SEM CHAVE', muted: true }
+    const isDisabled = (aForm.disabled_slots || []).includes(slotId)
+    if (isDisabled) return { label: 'DESLIGADO', muted: true, disabledSlot: true, position: null }
+    if (!hasKey) return { label: 'SEM CHAVE', muted: true, position: null }
     const activeOrder = (aForm.provider_order || []).filter(
       id => analysisConfig?.provider_slots?.find(s => s.id === id)?.has_key
+        && !(aForm.disabled_slots || []).includes(id)
     )
     const idx = activeOrder.indexOf(slotId)
-    return idx === 0 ? { label: 'PRINCIPAL', primary: true } : { label: `FALLBACK ${idx}`, muted: false }
+    return idx === 0
+      ? { label: 'PRINCIPAL', primary: true, position: 1 }
+      : { label: `FALLBACK ${idx}`, muted: false, position: idx + 1 }
   }
 
   // ── Oráculo: mesmo padrão visual, mas primário = oracleForm.provider (fixo,
@@ -3517,34 +3565,47 @@ export default function Admin() {
                 </div>
 
                 {/* Linhas da cadeia, na ordem configurada — reordenável */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="llm-chain">
                   {(aForm.provider_order || []).map((slotId, idx) => {
                     const meta = PROVIDER_SLOT_META[slotId] || { icon: '❓', name: slotId, sub: '' }
+                    const iconClass = slotId.startsWith('gemini') ? 'gemini' : slotId
                     const badge = slotPositionBadge(slotId)
                     const dot = slotStatusDot(slotId)
-                    const dimmed = !aForm.fallback_enabled && !badge.primary
+                    const lat = slotLatency(slotId)
+                    const isDisabled = (aForm.disabled_slots || []).includes(slotId)
+                    const dimmed = (!aForm.fallback_enabled && !badge.primary) || isDisabled
                     const hasKey = analysisConfig?.provider_slots?.find(s => s.id === slotId)?.has_key
                     return (
-                      <div key={slotId} style={{
-                        border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border)'}`,
-                        borderRadius: 10, padding: '14px 16px',
-                        opacity: dimmed ? 0.45 : 1, transition: 'opacity 150ms',
-                      }}>
+                      <Fragment key={slotId}>
+                        {idx > 0 && <div className="llm-connector" />}
+                        <div className="llm-node" style={{
+                          border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border)'}`,
+                          borderRadius: 10, padding: '14px 16px',
+                          opacity: dimmed ? 0.45 : 1, transition: 'opacity 150ms',
+                        }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                          <span className={`llm-node__num${badge.primary ? ' llm-node__num--primary' : ''}`}>
+                            {badge.position ?? ''}
+                          </span>
+                          <span className={`llm-node__icon llm-node__icon--${iconClass}`}>{meta.icon}</span>
                           <span className="badge" style={{
                             background: badge.primary ? 'var(--accent)' : 'var(--bg-overlay)',
                             color: badge.primary ? 'var(--on-accent)' : 'var(--text-3)',
                             border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border-strong)'}`,
                           }}>{badge.label}</span>
                           <StatusDot color={dot.color} title={dot.title} />
+                          {lat != null && <span className="llm-latency-chip">{lat}ms</span>}
                           <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>
-                            {meta.icon} {meta.name} <span style={{ fontWeight: 400, color: 'var(--text-4)', fontSize: 11 }}>({meta.sub})</span>
+                            {meta.name} <span style={{ fontWeight: 400, color: 'var(--text-4)', fontSize: 11 }}>({meta.sub})</span>
                           </span>
-                          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                            <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}
-                              disabled={idx === 0} onClick={() => moveProviderSlot(idx, -1)} title="Mover para cima">↑</button>
-                            <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}
-                              disabled={idx === (aForm.provider_order.length - 1)} onClick={() => moveProviderSlot(idx, 1)} title="Mover para baixo">↓</button>
+                          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <Switch checked={!isDisabled} onChange={() => toggleSlotDisabled(slotId)} label={`Ligar/desligar ${meta.name} (${meta.sub})`} />
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}
+                                disabled={idx === 0} onClick={() => moveProviderSlot(idx, -1)} title="Mover para cima">↑</button>
+                              <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }}
+                                disabled={idx === (aForm.provider_order.length - 1)} onClick={() => moveProviderSlot(idx, 1)} title="Mover para baixo">↓</button>
+                            </div>
                           </div>
                         </div>
 
@@ -3638,7 +3699,8 @@ export default function Admin() {
                             Sem chave configurada — este provider é pulado automaticamente na cadeia.
                           </div>
                         )}
-                      </div>
+                        </div>
+                      </Fragment>
                     )
                   })}
                 </div>
@@ -3648,12 +3710,18 @@ export default function Admin() {
                   <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 10 }}>
                     🛟 REDE DE SEGURANÇA (OPENROUTER)
                   </div>
-                  <div style={{ opacity: aForm.fallback_enabled ? 1 : 0.45, transition: 'opacity 150ms', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginBottom: 6 }}>
-                        🆓 Fallbacks gratuitos automáticos (tentados em sequência se o principal falhar)
+                  <div style={{ opacity: aForm.fallback_enabled ? 1 : 0.45, transition: 'opacity 150ms', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="llm-node llm-node--safety">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                        <span className="llm-node__icon llm-node__icon--free">🆓</span>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', flex: '1 1 200px' }}>
+                          Fallbacks gratuitos automáticos (tentados em sequência se o principal falhar)
+                        </span>
+                        <Switch checked={aForm.free_fallbacks_enabled}
+                          onChange={v => setAForm(f => ({ ...f, free_fallbacks_enabled: v }))}
+                          label="Ligar/desligar fallbacks gratuitos" />
                       </div>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', opacity: aForm.free_fallbacks_enabled ? 1 : 0.45, transition: 'opacity 150ms' }}>
                         {analysisConfig?.openrouter_has_key ? (
                           (analysisConfig?.provider_chain || [])
                             .filter(p => p.type === 'openrouter' && !p.paid && p.model !== aForm.openrouter_model)
@@ -3668,13 +3736,16 @@ export default function Admin() {
                       </div>
                     </div>
 
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 10 }}>
-                        <input type="checkbox" checked={aForm.paid_fallback_enabled}
-                          onChange={e => setAForm(f => ({ ...f, paid_fallback_enabled: e.target.checked }))}
-                          style={{ accentColor: 'var(--accent)' }} />
-                        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-2)' }}>💎 Fallback pago (último recurso da cadeia)</span>
-                      </label>
+                    <div className="llm-node llm-node--safety">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                        <span className="llm-node__icon llm-node__icon--paid">💎</span>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text-2)', flex: '1 1 200px' }}>
+                          Fallback pago (último recurso da cadeia)
+                        </span>
+                        <Switch checked={aForm.paid_fallback_enabled}
+                          onChange={v => setAForm(f => ({ ...f, paid_fallback_enabled: v }))}
+                          label="Ligar/desligar fallback pago" />
+                      </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, opacity: aForm.paid_fallback_enabled ? 1 : 0.5 }}>
                         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)' }}>
                           Modelo pago
@@ -4241,15 +4312,13 @@ export default function Admin() {
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
                     MODO DE OPERAÇÃO
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button type="button"
-                      className={`btn btn-sm${oracleForm.fallback_enabled ? ' btn-primary' : ' btn-ghost'}`}
-                      onClick={() => setOracleForm({ ...oracleForm, fallback_enabled: true })}
-                    >🔗 Principal + fallback</button>
-                    <button type="button"
-                      className={`btn btn-sm${!oracleForm.fallback_enabled ? ' btn-primary' : ' btn-ghost'}`}
-                      onClick={() => setOracleForm({ ...oracleForm, fallback_enabled: false })}
-                    >1️⃣ Somente principal</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <Switch checked={oracleForm.fallback_enabled}
+                      onChange={v => setOracleForm({ ...oracleForm, fallback_enabled: v })}
+                      label="Ligar/desligar fallback do Oráculo" />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>
+                      {oracleForm.fallback_enabled ? '🔗 Principal + fallback' : '1️⃣ Somente principal'}
+                    </span>
                   </div>
                   {!oracleForm.fallback_enabled && (
                     <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--lose)', marginTop: 6 }}>
@@ -4259,19 +4328,24 @@ export default function Admin() {
                 </div>
 
                 {/* Linhas de provider — clique na linha define o primário (oracle_provider) */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {['gemini', 'openai', 'openrouter'].map(slotId => {
+                <div className="llm-chain">
+                  {['gemini', 'openai', 'openrouter'].map((slotId, idx) => {
                     const meta = PROVIDER_SLOT_META[slotId]
+                    const iconClass = slotId.startsWith('gemini') ? 'gemini' : slotId
                     const badge = oracleSlotBadge(slotId)
                     const dot = oracleSlotStatusDot(slotId)
+                    const lat = slotLatency(slotId)
                     const dimmed = !oracleForm.fallback_enabled && !badge.primary
                     return (
-                      <div key={slotId} style={{
-                        border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border)'}`,
-                        borderRadius: 10, padding: '14px 16px',
-                        opacity: dimmed ? 0.45 : 1, transition: 'opacity 150ms',
-                      }}>
+                      <Fragment key={slotId}>
+                        {idx > 0 && <div className="llm-connector" />}
+                        <div className="llm-node" style={{
+                          border: `1px solid ${badge.primary ? 'var(--accent)' : 'var(--border)'}`,
+                          borderRadius: 10, padding: '14px 16px',
+                          opacity: dimmed ? 0.45 : 1, transition: 'opacity 150ms',
+                        }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                          <span className={`llm-node__icon llm-node__icon--${iconClass}`}>{meta.icon}</span>
                           <button type="button" className="badge" style={{
                             background: badge.primary ? 'var(--accent)' : 'var(--bg-overlay)',
                             color: badge.primary ? 'var(--on-accent)' : 'var(--text-3)',
@@ -4282,8 +4356,9 @@ export default function Admin() {
                             {badge.primary ? 'PRINCIPAL' : 'FALLBACK · tornar principal'}
                           </button>
                           <StatusDot color={dot.color} title={dot.title} />
+                          {lat != null && <span className="llm-latency-chip">{lat}ms</span>}
                           <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>
-                            {meta.icon} {meta.name}
+                            {meta.name}
                           </span>
                         </div>
 
@@ -4332,7 +4407,8 @@ export default function Admin() {
                             </label>
                           </div>
                         )}
-                      </div>
+                        </div>
+                      </Fragment>
                     )
                   })}
                 </div>

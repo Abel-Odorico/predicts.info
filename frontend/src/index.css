@@ -11944,3 +11944,66 @@ strong.pts {
     min-width: 0;
   }
 }
+
+/* ── Switch reutilizável — redesign LLM iteração 2 (2026-07-18) ── */
+.llm-switch {
+  width: 40px; height: 22px; border-radius: 999px; padding: 0; flex-shrink: 0;
+  border: 1px solid var(--border); background: var(--bg-overlay);
+  position: relative; cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.llm-switch--on { background: var(--accent); border-color: var(--accent); }
+.llm-switch__knob {
+  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--on-accent, #fff); box-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  transition: transform 150ms ease;
+}
+.llm-switch--on .llm-switch__knob { transform: translateX(18px); }
+.llm-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Nós da cadeia de IA (ícone + numeração + conector) — mesma feature ── */
+.llm-chain {
+  display: flex;
+  flex-direction: column;
+}
+.llm-node {
+  min-width: 0;
+}
+.llm-node--safety {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.llm-node__icon {
+  width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.llm-node__icon--gemini     { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.llm-node__icon--openai     { background: color-mix(in srgb, var(--text-2) 14%, transparent); color: var(--text-2); }
+.llm-node__icon--openrouter { background: color-mix(in srgb, var(--win) 16%, transparent); color: var(--win); }
+.llm-node__icon--free       { background: color-mix(in srgb, var(--win) 16%, transparent); color: var(--win); }
+.llm-node__icon--paid       { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.llm-node__num {
+  width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-data); font-size: 12px; font-weight: 700; flex-shrink: 0;
+  background: var(--bg-overlay); border: 1px solid var(--border-strong); color: var(--text-2);
+}
+.llm-node__num--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.llm-connector {
+  width: 2px; height: 16px; background: var(--border); margin-left: 27px; position: relative;
+}
+.llm-connector::after {
+  content: '▼'; position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: var(--border-strong); line-height: 1;
+}
+.llm-latency-chip {
+  font-family: var(--font-data); font-size: 10px; color: var(--text-3);
+  background: var(--bg-overlay); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+}
+
+@media (max-width: 380px) {
+  .llm-node__icon { width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+  .llm-node__num { width: 20px; height: 20px; font-size: 11px; }
+  .llm-connector { margin-left: 23px; }
+  .llm-latency-chip { font-size: clamp(9px, 2.6vw, 10px); }
+}
