@@ -36,43 +36,44 @@ OPENROUTER_FREE_MODELS = [
     {"id": "nvidia/nemotron-3-ultra-550b-a55b:free",       "label": "🆓 Nvidia Nemotron Ultra 550B (lento)"},
 ]
 
-# Validado AO VIVO contra GET https://openrouter.ai/api/v1/models em 2026-07-18
-# (task de fallback pago): "anthropic/claude-sonnet-4-5" e "x-ai/grok-3" estavam
-# MORTOS (slugs não existem mais no catálogo — sonnet 4.5 usa PONTO, não hífen;
-# grok-3 foi descontinuado). Substituídos pelos slugs reais confirmados no JSON.
-# "google/gemini-2.5-flash-lite" adicionado (existe, mais barato que o flash normal).
+# Listas revalidadas AO VIVO em 2026-07-18 (2ª rodada, catálogos OR e OpenAI da
+# conta do Abel). Preços em (in/out por 1M tokens) da tabela OpenRouter no dia.
+# opus-4 ($15/$75) trocado pelo opus-4.8 ($5/$25 — mais novo e 3x mais barato);
+# sonnet-5 ($2/$10) é mais novo E mais barato que o 4.6 ($3/$15); gpt-4o/4-turbo/
+# o1-mini removidos (gerações de 2024, superadas em preço e qualidade).
 OPENROUTER_PAID_MODELS = [
-    {"id": "anthropic/claude-opus-4",                      "label": "💎 Claude Opus 4 (melhor análise)"},
-    {"id": "anthropic/claude-sonnet-4.6",                   "label": "💎 Claude Sonnet 4.6 (recomendado Oráculo)"},
-    {"id": "anthropic/claude-sonnet-4.5",                   "label": "💎 Claude Sonnet 4.5 (rápido+capaz)"},
-    {"id": "openai/gpt-4.1",                               "label": "💎 GPT-4.1 (excelente contexto)"},
-    {"id": "openai/gpt-4o",                                "label": "💎 GPT-4o"},
-    {"id": "google/gemini-2.5-pro",                        "label": "💎 Gemini 2.5 Pro (via OR)"},
-    {"id": "google/gemini-2.5-flash",                      "label": "💎 Gemini 2.5 Flash (via OR)"},
-    {"id": "google/gemini-2.5-flash-lite",                 "label": "💡 Gemini 2.5 Flash Lite (via OR, barato)"},
-    {"id": "deepseek/deepseek-r1",                         "label": "💎 DeepSeek R1 (raciocínio)"},
-    {"id": "meta-llama/llama-4-maverick",                  "label": "💎 Llama 4 Maverick"},
+    {"id": "anthropic/claude-opus-4.8",                    "label": "💎 Claude Opus 4.8 (melhor análise)"},
+    {"id": "anthropic/claude-sonnet-5",                    "label": "💎 Claude Sonnet 5 (novo, ótimo custo)"},
+    {"id": "anthropic/claude-sonnet-4.6",                  "label": "💎 Claude Sonnet 4.6"},
+    {"id": "openai/gpt-5.4",                               "label": "💎 GPT-5.4"},
+    {"id": "openai/gpt-5.4-mini",                          "label": "💡 GPT-5.4 Mini (barato, atual)"},
+    {"id": "google/gemini-3.5-flash",                      "label": "💎 Gemini 3.5 Flash (via OR)"},
+    {"id": "google/gemini-3.1-flash-lite",                 "label": "💡 Gemini 3.1 Flash Lite (muito barato)"},
+    {"id": "google/gemini-2.5-flash",                      "label": "💎 Gemini 2.5 Flash (fallback pago padrão)"},
+    {"id": "deepseek/deepseek-chat-v3.1",                  "label": "💡 DeepSeek V3.1 (barato)"},
     {"id": "x-ai/grok-4.5",                                "label": "💎 Grok 4.5"},
 ]
 
 OPENAI_DIRECT_MODELS = [
-    {"id": "gpt-4.1",         "label": "💎 GPT-4.1 (melhor para análises longas)"},
-    {"id": "gpt-4o",          "label": "💎 GPT-4o (rápido e capaz)"},
-    {"id": "gpt-4o-mini",     "label": "💡 GPT-4o Mini (barato e rápido)"},
-    {"id": "gpt-4-turbo",     "label": "💎 GPT-4 Turbo"},
-    {"id": "o1-mini",         "label": "🧠 o1-mini (raciocínio)"},
+    {"id": "gpt-5.4",         "label": "💎 GPT-5.4 (topo de linha atual)"},
+    {"id": "gpt-5.4-mini",    "label": "💡 GPT-5.4 Mini (recomendado Oráculo — atual e barato)"},
+    {"id": "gpt-5.4-nano",    "label": "⚡ GPT-5.4 Nano (ultrabarato)"},
+    {"id": "gpt-5.6-terra",   "label": "💎 GPT-5.6 Terra"},
+    {"id": "gpt-5.6-luna",    "label": "💡 GPT-5.6 Luna"},
+    {"id": "gpt-5-mini",      "label": "💡 GPT-5 Mini (legado ago/25, mais barato)"},
+    {"id": "gpt-4.1",         "label": "💎 GPT-4.1 (análises longas)"},
+    {"id": "gpt-4.1-mini",    "label": "💡 GPT-4.1 Mini"},
 ]
 
-# Validado 2026-07-18: gemini-3.5-flash existe e responde (API direta Gemini,
-# não confundir com o catálogo OpenRouter acima). Mantido sem mudanças.
+# ⚠️ Modelos Gemini <3.x retornam 404 "no longer available to new users" pra
+# contas Google novas (caso das keys atuais, criadas 18/07) — removidos da lista.
 GEMINI_MODELS = [
-    {"id": "gemini-3.5-flash",                "label": "Gemini 3.5 Flash (recomendado)"},
-    {"id": "gemini-2.5-flash",                "label": "Gemini 2.5 Flash (mais rápido)"},
-    {"id": "gemini-2.5-flash-preview-05-20",  "label": "Gemini 2.5 Flash Preview mai/25"},
-    {"id": "gemini-2.0-flash",                "label": "Gemini 2.0 Flash"},
-    {"id": "gemini-2.0-flash-lite",           "label": "Gemini 2.0 Flash Lite (ultrarrápido)"},
-    {"id": "gemini-2.5-pro",                  "label": "Gemini 2.5 Pro (mais capaz)"},
-    {"id": "gemini-2.5-pro-preview-06-05",    "label": "Gemini 2.5 Pro Preview jun/25"},
+    {"id": "gemini-3.5-flash",           "label": "Gemini 3.5 Flash (recomendado)"},
+    {"id": "gemini-3.1-flash-lite",      "label": "Gemini 3.1 Flash Lite (ultrarrápido)"},
+    {"id": "gemini-3-flash-preview",     "label": "Gemini 3 Flash Preview"},
+    {"id": "gemini-3.1-pro-preview",     "label": "Gemini 3.1 Pro Preview (mais capaz)"},
+    {"id": "gemini-flash-latest",        "label": "Gemini Flash (sempre o mais novo)"},
+    {"id": "gemini-flash-lite-latest",   "label": "Gemini Flash Lite (sempre o mais novo)"},
 ]
 
 DEFAULT_OR_MODEL     = "meta-llama/llama-3.3-70b-instruct:free"
