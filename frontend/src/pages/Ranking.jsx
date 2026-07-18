@@ -5,6 +5,7 @@ import Spinner from '../components/Spinner'
 import MyChampionCard from '../components/MyChampionCard'
 import LigaFlowModal from '../components/LigaFlowModal'
 import ShareCompetitionButton from '../components/ShareCompetitionButton'
+import MedalIcon from '../components/MedalIcon'
 import { useAuth } from '../stores/authStore'
 import { COMPETITIONS } from '../utils/competitions'
 import { displayName } from '../utils/displayName'
@@ -371,7 +372,7 @@ export default function Ranking() {
                         style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent' }}
                       >
                         <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`} style={{ textAlign: 'center' }}>
-                          {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                          {i < 3 ? <MedalIcon rank={i + 1} size={18} /> : i + 1}
                         </span>
 
                         <div style={{ minWidth: 0 }}>
@@ -396,9 +397,9 @@ export default function Ranking() {
                                 </span>
                               )}
                               {cp.runner_up && (
-                                <span title={`🥈 Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <span title={`Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                                   <img src={cp.runner_up.flag} alt={cp.runner_up.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
-                                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#d4af37' }}>🥈</span>
+                                  <MedalIcon rank={2} size={14} />
                                 </span>
                               )}
                             </div>
@@ -642,7 +643,7 @@ export default function Ranking() {
                     style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : '3px solid transparent', cursor: 'pointer', userSelect: 'none', background: isExpanded ? 'color-mix(in srgb, var(--accent) 5%, var(--bg-raised))' : undefined }}
                   >
                     <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`} style={{ textAlign: 'center' }}>
-                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                      {i < 3 ? <MedalIcon rank={i + 1} size={18} /> : i + 1}
                     </span>
 
                     <div style={{ minWidth: 0 }}>
@@ -668,9 +669,9 @@ export default function Ranking() {
                             </span>
                           )}
                           {cp.runner_up && (
-                            <span title={`🥈 Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <span title={`Vice: ${cp.runner_up.name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                               <img src={cp.runner_up.flag} alt={cp.runner_up.code} style={{ width: 18, height: 13, objectFit: 'cover', borderRadius: 2 }} />
-                              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: '#d4af37' }}>🥈</span>
+                              <MedalIcon rank={2} size={14} />
                             </span>
                           )}
                         </div>
@@ -943,7 +944,6 @@ function RankingPodium({ data, champPicks, namePref }) {
   if (!top3.length) return null
   // CSS order: slot--2 (left), slot--1 (center/gold), slot--3 (right)
   const SLOT = { 0: 'group-podium__slot--1', 1: 'group-podium__slot--2', 2: 'group-podium__slot--3' }
-  const MEDAL = ['🥇', '🥈', '🥉']
   return (
     <div className="card fade-in-2" style={{ marginTop: 'var(--s6)', padding: '0 0 var(--s4)', overflow: 'hidden' }}>
       <div style={{ padding: 'var(--s3) var(--s4) 0', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
@@ -955,7 +955,7 @@ function RankingPodium({ data, champPicks, namePref }) {
           return (
             <div key={r.user_id} className={`group-podium__slot ${SLOT[i]}`}>
               <div className="group-podium__avatar">{_initials(r.name)}</div>
-              <div className="group-podium__medal">{MEDAL[i]}</div>
+              <div className="group-podium__medal"><MedalIcon rank={i + 1} size={26} /></div>
               <div className="group-podium__name" title={r.name}>{displayName(r, namePref)}</div>
               <div className="group-podium__pts">{r.total_points} pts</div>
               {cp?.champion && (

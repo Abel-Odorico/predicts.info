@@ -10,6 +10,7 @@ import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
 import { displayName } from '../utils/displayName'
 import RankingNameToggle from '../components/RankingNameToggle'
 import TeamCrestFlag from '../components/TeamCrestFlag'
+import MedalIcon from '../components/MedalIcon'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -480,7 +481,7 @@ export default function GroupRanking() {
         <div className="page-hero" style={{ marginTop: 'var(--s4)' }}>
           <div className="page-hero__main">
             <div className="page-hero__icon">
-              {myEntry?.position === 1 ? '🥇' : myEntry?.position === 2 ? '🥈' : myEntry?.position === 3 ? '🥉' : '🏆'}
+              {myEntry?.position >= 1 && myEntry?.position <= 3 ? <MedalIcon rank={myEntry.position} size={28} /> : '🏆'}
             </div>
             <div className="page-hero__text">
               {renaming ? (
@@ -503,7 +504,7 @@ export default function GroupRanking() {
             {myEntry && (
               <div className="page-hero__stat">
                 <div className="page-hero__stat-value">
-                  {myEntry.position === 1 ? '🥇' : myEntry.position === 2 ? '🥈' : myEntry.position === 3 ? '🥉' : `${myEntry.position}º`}
+                  {myEntry.position >= 1 && myEntry.position <= 3 ? <MedalIcon rank={myEntry.position} size={26} /> : `${myEntry.position}º`}
                 </div>
                 <div className="page-hero__stat-label">{myEntry.effective_points ?? myEntry.total_points} pts</div>
               </div>
@@ -782,7 +783,7 @@ export default function GroupRanking() {
                 {top3.map((r, i) => (
                   <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
                     <div className="group-podium__avatar">{getInitials(r.name)}</div>
-                    <div className="group-podium__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
+                    <div className="group-podium__medal"><MedalIcon rank={i + 1} size={26} /></div>
                     <div className="group-podium__name" title={r.name}>{displayName(r, namePref)}{r.is_me ? ' ★' : ''}</div>
                     <div className="group-podium__pts">{r.effective_points ?? r.total_points} pts</div>
                     {r.exact_scores > 0 && (
@@ -867,7 +868,7 @@ export default function GroupRanking() {
                         style={{ animationDelay: `${i * 30}ms`, borderLeft: i < 3 ? undefined : r.is_me ? '3px solid var(--accent)' : '3px solid transparent', background: isExpanded ? 'color-mix(in srgb, var(--accent) 6%, var(--bg-raised))' : r.is_me && i >= 3 ? 'rgba(15,122,120,0.04)' : undefined, cursor: 'pointer', userSelect: 'none' }}>
                         <div style={{ textAlign: 'center', alignSelf: 'start', paddingTop: 4 }}>
                           <span className={`ranking-row__pos ${i < 3 ? 'ranking-row__pos--top' : ''}`}>
-                            {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                            {i < 3 ? <MedalIcon rank={i + 1} size={18} /> : i + 1}
                           </span>
                           {delta !== 0 && (
                             <div style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: delta > 0 ? 'var(--win)' : 'var(--lose)', lineHeight: 1, marginTop: 2 }}>
@@ -1194,7 +1195,7 @@ export default function GroupRanking() {
               <div className="weekly-ranking">
                 {weeklyRanking.slice(0, 8).map((r, i) => (
                   <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
-                    <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                    <span className="weekly-ranking__medal">{i < 3 ? <MedalIcon rank={i + 1} size={16} /> : `${i + 1}.`}</span>
                     <span className="weekly-ranking__name">{displayName(r, namePref)}</span>
                     <span className="weekly-ranking__pts">+{r.pts_week}</span>
                   </div>
@@ -1210,7 +1211,7 @@ export default function GroupRanking() {
               <div className="weekly-ranking">
                 {monthlyRanking.slice(0, 8).map((r, i) => (
                   <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
-                    <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                    <span className="weekly-ranking__medal">{i < 3 ? <MedalIcon rank={i + 1} size={16} /> : `${i + 1}.`}</span>
                     <span className="weekly-ranking__name">{displayName(r, namePref)}</span>
                     <span className="weekly-ranking__pts">+{r.pts_month}</span>
                   </div>
@@ -1226,7 +1227,7 @@ export default function GroupRanking() {
               <div className="weekly-ranking">
                 {mostActiveRanking.slice(0, 8).map((r, i) => (
                   <div key={r.user_id} className={`weekly-ranking__row weekly-ranking__row--${i + 1}`}>
-                    <span className="weekly-ranking__medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                    <span className="weekly-ranking__medal">{i < 3 ? <MedalIcon rank={i + 1} size={16} /> : `${i + 1}.`}</span>
                     <span className="weekly-ranking__name">{displayName(r, namePref)}</span>
                     <span className="weekly-ranking__pts">{r.total_bets}</span>
                   </div>
