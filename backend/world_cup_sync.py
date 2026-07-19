@@ -829,6 +829,26 @@ def apply_world_cup_snapshot(db_url: str, snapshot: dict, log: LogFn = None) -> 
                 bet.et_points_earned = 0
                 bet.evaluated_at = None
 
+        # Bônus de campeão/vice (routers/champion.py) soma direto em Ranking.total_points
+        # fora do fluxo de bets — precisa ser reaplicado aqui, senão o rebuild acima apaga.
+        from routers.champion import ChampionAward, ChampionPick, CHAMPION_BONUS, RUNNER_UP_BONUS
+        champion_award = db.query(ChampionAward).order_by(ChampionAward.id.desc()).first()
+        if champion_award:
+            for pick in db.query(ChampionPick).filter(
+                ChampionPick.team_id == champion_award.champion_team_id
+            ).all():
+                stats = ranking_totals.setdefault(
+                    pick.user_id, {"total_points": 0, "exact_scores": 0, "correct_results": 0}
+                )
+                stats["total_points"] += CHAMPION_BONUS
+            for pick in db.query(ChampionPick).filter(
+                ChampionPick.runner_up_team_id == champion_award.runner_up_team_id
+            ).all():
+                stats = ranking_totals.setdefault(
+                    pick.user_id, {"total_points": 0, "exact_scores": 0, "correct_results": 0}
+                )
+                stats["total_points"] += RUNNER_UP_BONUS
+
         for user_id, stats in ranking_totals.items():
             db.add(
                 Ranking(
