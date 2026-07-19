@@ -39,6 +39,7 @@ from routers import brasileirao as brasileirao_public_router
 from routers import news_admin as news_admin_router
 from routers import waitlist as waitlist_router
 from routers import client_diag as client_diag_router
+from routers import bot_squad as bot_squad_router
 from routers.knockout import run_knockout_sync
 from routers.sync import _run_sync, _sync_status
 from routers.sync import _scheduler_status
@@ -643,6 +644,28 @@ def _run_migrations():
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_group_join_request_pending ON user_group_join_requests (group_id, user_id) WHERE status = 'pending'",
             # Preferência de exibição em rankings: nome de cadastro ou @username
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS ranking_display_pref VARCHAR(10) DEFAULT 'name'",
+            # Bot Squad: usuários-persona apostadores automáticos (liga "Boteco do Placar")
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_bot BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE bets ADD COLUMN IF NOT EXISTS bot_reason TEXT",
+            """CREATE TABLE IF NOT EXISTS bot_personas (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+                archetype VARCHAR(40) NOT NULL,
+                bio TEXT,
+                favorite_team_code VARCHAR(6),
+                params JSONB NOT NULL DEFAULT '{}'::jsonb,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
+            """CREATE TABLE IF NOT EXISTS bot_squad_reviews (
+                id SERIAL PRIMARY KEY,
+                match_id INTEGER NOT NULL UNIQUE REFERENCES matches(id),
+                reviewed_at TIMESTAMP DEFAULT NOW(),
+                adjusted_count INTEGER DEFAULT 0,
+                kept_count INTEGER DEFAULT 0,
+                summary TEXT,
+                telegram_sent BOOLEAN DEFAULT FALSE
+            )""",
         ]:
             try:
                 conn.execute(text(alter))
@@ -851,6 +874,7 @@ app.include_router(brasileirao_router.router, prefix="/api")
 app.include_router(brasileirao_public_router.router, prefix="/api")
 app.include_router(news_admin_router.router,    prefix="/api")
 app.include_router(waitlist_router.router,      prefix="/api")
+app.include_router(bot_squad_router.router,     prefix="/api")
 from routers import videoupload as videoupload_router
 app.include_router(videoupload_router.router,  prefix="/api")
 from routers import whatsapp as whatsapp_router

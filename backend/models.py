@@ -238,6 +238,7 @@ class User(Base):
     whatsapp_prefs = Column(JSONB, nullable=True)  # {"bet_reminder","bet_confirmation","version_update","ranking_highlight": bool}
     is_active = Column(Boolean, default=True, nullable=False)
     deactivated_at = Column(DateTime, nullable=True)
+    is_bot = Column(Boolean, default=False, nullable=False)
 
     bets = relationship("Bet", back_populates="user")
     ranking = relationship("Ranking", back_populates="user", uselist=False)
@@ -290,9 +291,39 @@ class Bet(Base):
     locked_at = Column(DateTime)
     evaluated_at = Column(DateTime)
     created_at = Column(DateTime, default=_utcnow)
+    bot_reason = Column(Text, nullable=True)  # justificativa curta do bot (Bot Squad); usuário real sempre NULL
 
     user = relationship("User", back_populates="bets")
     match = relationship("Match", back_populates="bets")
+
+
+class BotPersona(Base):
+    """Persona de um usuário-bot do Bot Squad (liga 'Boteco do Placar').
+    FK simples pra users.id, SEM relationship recíproco em User (gotcha: 2ª FK
+    pra users.id no mesmo mapper quebra o mapper inteiro — ver skill predicts)."""
+    __tablename__ = "bot_personas"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    archetype = Column(String(40), nullable=False)
+    bio = Column(Text, nullable=True)
+    favorite_team_code = Column(String(6), nullable=True)
+    params = Column(JSONB, nullable=False, default=dict)  # risk, draw_affinity, goals_bias, fav_boost, stubbornness, jitter_hours
+    enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class BotSquadReview(Base):
+    """Resumo da revisão T-3h de um jogo: quantos bots mantiveram/ajustaram a aposta."""
+    __tablename__ = "bot_squad_reviews"
+
+    id = Column(Integer, primary_key=True)
+    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False, unique=True)
+    reviewed_at = Column(DateTime, default=_utcnow)
+    adjusted_count = Column(Integer, default=0)
+    kept_count = Column(Integer, default=0)
+    summary = Column(Text, nullable=True)
+    telegram_sent = Column(Boolean, default=False)
 
 
 class BotDecisionLog(Base):
