@@ -24,7 +24,7 @@ from database import get_db, SessionLocal
 from auth_utils import require_admin
 from models import (
     User, UserRole, Match, MatchStatus, MatchPhase, Bet, Team, WhatsappMessage, WhatsappBetSession,
-    WhatsappCampaign, WhatsappCampaignRecipient, SiteConfig, AuditLog, Ranking, MatchResult,
+    WhatsappCampaign, WhatsappCampaignRecipient, SiteConfig, AuditLog, Ranking, MatchResult, PageView,
 )
 from routers.bets import _is_open
 from routers.audit import log_action
@@ -1553,6 +1553,78 @@ def admin_campaign_status(campaign_id: int, db: Session = Depends(get_db), admin
         WhatsappCampaignRecipient.campaign_id == campaign_id, WhatsappCampaignRecipient.status == "failed"
     ).count()
     return {"id": campaign.id, "status": campaign.status, "total": total, "sent": sent, "failed": failed, "pending": total - sent - failed}
+
+
+@router.get("/admin/whatsapp/campaign/{campaign_id}/engagement")
+def admin_campaign_engagement(campaign_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Pós-engajamento por destinatário: leu (ack), apostou depois, visitou o site depois.
+    Só olha atividade APÓS o sent_at daquele destinatário — não é atividade geral do usuário."""
+    campaign = db.query(WhatsappCampaign).filter(WhatsappCampaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+
+    recipients = (
+        db.query(WhatsappCampaignRecipient)
+        .filter(WhatsappCampaignRecipient.campaign_id == campaign_id)
+        .order_by(WhatsappCampaignRecipient.id)
+        .all()
+    )
+
+    rows = []
+    read_count = bet_count = visit_count = 0
+    for r in recipients:
+        user = db.query(User).filter(User.id == r.user_id).first() if r.user_id else None
+        bet_after = None
+        visits_after = 0
+        if user and r.sent_at:
+            bet_row = (
+                db.query(Bet)
+                .filter(Bet.user_id == user.id, Bet.created_at > r.sent_at)
+                .order_by(Bet.created_at.asc())
+                .first()
+            )
+            if bet_row:
+                match = db.query(Match).filter(Match.id == bet_row.match_id).first()
+                bet_after = {
+                    "match_id": bet_row.match_id,
+                    "match_label": f"{match.team_a.name} x {match.team_b.name}" if match else None,
+                    "score": f"{bet_row.score_a}x{bet_row.score_b}",
+                    "created_at": bet_row.created_at.isoformat(),
+                }
+            visits_after = (
+                db.query(PageView)
+                .filter(PageView.user_id == user.id, PageView.created_at > r.sent_at)
+                .count()
+            )
+        if r.read_at:
+            read_count += 1
+        if bet_after:
+            bet_count += 1
+        if visits_after:
+            visit_count += 1
+        rows.append({
+            "user_id": r.user_id,
+            "name": user.name if user else None,
+            "phone": r.phone,
+            "status": r.status,
+            "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+            "delivered_at": r.delivered_at.isoformat() if r.delivered_at else None,
+            "read_at": r.read_at.isoformat() if r.read_at else None,
+            "bet_after": bet_after,
+            "visits_after": visits_after,
+        })
+
+    return {
+        "campaign_id": campaign.id,
+        "message": campaign.message,
+        "summary": {
+            "total": len(rows),
+            "read": read_count,
+            "bet_after": bet_count,
+            "visited_after": visit_count,
+        },
+        "recipients": rows,
+    }
 
 
 class GroupPayload(BaseModel):

@@ -449,6 +449,28 @@ export default function AdminWhatsapp() {
     } catch (e) { setWaMsg(`✗ ${e?.message || 'erro'}`) }
   }
 
+  async function showWaEngagement(id) {
+    try {
+      const r = await api.get(`/admin/whatsapp/campaign/${id}/engagement`, token)
+      const { summary, recipients } = r
+      const lines = recipients
+        .filter(rec => rec.read_at || rec.bet_after || rec.visits_after > 0)
+        .map(rec => {
+          const parts = []
+          if (rec.read_at) parts.push(`leu às ${fmtShort(rec.read_at)}`)
+          if (rec.bet_after) parts.push(`apostou depois (${rec.bet_after.match_label}: ${rec.bet_after.score})`)
+          if (rec.visits_after > 0) parts.push(`visitou o site ${rec.visits_after}x depois`)
+          return `✅ ${rec.name || rec.phone} — ${parts.join(' · ')}`
+        })
+      const body = lines.length ? lines.join('\n') : 'Ninguém leu, apostou ou visitou o site ainda depois do envio.'
+      setWaDetail({
+        title: `📈 Engajamento — Campanha #${id}`,
+        meta: `Lido: ${summary.read}/${summary.total} · Apostou depois: ${summary.bet_after}/${summary.total} · Visitou depois: ${summary.visited_after}/${summary.total}`,
+        body,
+      })
+    } catch (e) { setWaMsg(`✗ ${e?.message || 'erro'}`) }
+  }
+
   useEffect(() => {
     loadWaStatus()
     loadWaCampaigns()
@@ -874,6 +896,7 @@ export default function AdminWhatsapp() {
                           {c.failed > 0 && (
                             <button className="btn-ghost btn-sm" onClick={() => retryWaCampaign(c.id)}>Reenviar falhas</button>
                           )}
+                          <button className="btn-ghost btn-sm" title="Quem leu, apostou ou visitou o site depois" onClick={() => showWaEngagement(c.id)}>📈</button>
                         </td>
                       </tr>
                     ))}
