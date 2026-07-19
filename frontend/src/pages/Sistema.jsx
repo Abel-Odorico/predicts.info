@@ -487,6 +487,7 @@ export default function Sistema() {
           <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}>{loading ? '…' : '↻ Atualizar'}</button>
           <a href="/admin" className="btn btn-ghost btn-sm">🛠 Painel Admin</a>
           <a href="/admin/whatsapp" className="btn btn-ghost btn-sm">💬 WhatsApp</a>
+          <a href="/admin/bots" className="btn btn-ghost btn-sm">🤖 Bot Squad</a>
         </div>
       </div>
 

@@ -23,6 +23,7 @@ const UserHistory   = lazy(() => import('./pages/UserHistory'))
 const Results       = lazy(() => import('./pages/Results'))
 const AdminOptions  = lazy(() => import('./pages/AdminOptions'))
 const AdminWhatsapp = lazy(() => import('./pages/AdminWhatsapp'))
+const AdminBotSquad = lazy(() => import('./pages/AdminBotSquad'))
 const Sistema       = lazy(() => import('./pages/Sistema'))
 const AdminLogs     = lazy(() => import('./pages/AdminLogs'))
 const Analytics     = lazy(() => import('./pages/Analytics'))
@@ -96,6 +97,7 @@ export default function App() {
               <Route path="/admin"            element={<Admin />} />
               <Route path="/admin/options"    element={<AdminOptions />} />
               <Route path="/admin/whatsapp"   element={<AdminWhatsapp />} />
+              <Route path="/admin/bots"       element={<AdminBotSquad />} />
               <Route path="/admin/sistema"    element={<Sistema />} />
               <Route path="/admin/logs"       element={<AdminLogs />} />
               <Route path="/admin/analytics"  element={<Analytics />} />

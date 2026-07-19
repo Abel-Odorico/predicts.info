@@ -1360,6 +1360,7 @@ export default function Admin() {
           <a href="/apostas"         className="btn btn-ghost btn-sm">🎯 Apostas</a>
           <a href="/resultados"      className="btn btn-ghost btn-sm">📋 Resultados</a>
           <a href="/admin/whatsapp"  className="btn btn-ghost btn-sm"><WaIcon /> WhatsApp</a>
+          <a href="/admin/bots"      className="btn btn-ghost btn-sm">🤖 Bot Squad</a>
           <a href="/admin/analytics" className="btn btn-ghost btn-sm">📊 Analytics</a>
           <a href="/admin/analytics?tab=audit" className="btn btn-ghost btn-sm">🔐 Auditoria</a>
           <a href="/admin/options"   className="btn btn-ghost btn-sm">⚙️ Config</a>

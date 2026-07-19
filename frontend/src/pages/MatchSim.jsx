@@ -522,28 +522,34 @@ function ParticipantBets({ data, loading, myUserId, teamA, teamB }) {
             const meta = BET_STATUS_META[b.status] || BET_STATUS_META.pending
             const mine = b.user_id === myUserId
             return (
-              <div
-                key={b.user_id}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                  padding: '7px 10px', borderRadius: 8,
-                  background: mine ? 'rgba(15,122,120,0.1)' : 'var(--bg-overlay, rgba(255,255,255,0.03))',
-                  border: mine ? '1px solid var(--accent)' : '1px solid transparent',
-                }}
-              >
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                  {b.user_name}{mine ? ' (você)' : ''}
-                </span>
-                <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', flexShrink: 0 }}>
-                  {b.score_a} × {b.score_b}
-                </span>
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
-                  {meta.icon} {meta.label}
-                </span>
-                {b.points_earned != null && (
-                  <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 800, color: 'var(--accent)', flexShrink: 0, minWidth: 34, textAlign: 'right' }}>
-                    +{b.points_earned}pts
+              <div key={b.user_id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                    padding: '7px 10px', borderRadius: 8,
+                    background: mine ? 'rgba(15,122,120,0.1)' : 'var(--bg-overlay, rgba(255,255,255,0.03))',
+                    border: mine ? '1px solid var(--accent)' : '1px solid transparent',
+                  }}
+                >
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                    {b.user_name}{mine ? ' (você)' : ''}
                   </span>
+                  <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, color: 'var(--text-1)', flexShrink: 0 }}>
+                    {b.score_a} × {b.score_b}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {meta.icon} {meta.label}
+                  </span>
+                  {b.points_earned != null && (
+                    <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 800, color: 'var(--accent)', flexShrink: 0, minWidth: 34, textAlign: 'right' }}>
+                      +{b.points_earned}pts
+                    </span>
+                  )}
+                </div>
+                {b?.comment && (
+                  <div className="bet-comment" style={{ padding: '0 10px', fontStyle: 'italic', fontSize: 11, color: 'var(--text-3)' }}>
+                    "{b.comment}"
+                  </div>
                 )}
               </div>
             )

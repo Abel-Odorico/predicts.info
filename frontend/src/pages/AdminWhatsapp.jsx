@@ -467,6 +467,7 @@ export default function AdminWhatsapp() {
         </div>
         <div className="adm-header__actions">
           <a href="/admin" className="btn btn-ghost btn-sm">🛠 Painel Admin</a>
+          <a href="/admin/bots" className="btn btn-ghost btn-sm">🤖 Bot Squad</a>
           <a href="/admin/analytics" className="btn btn-ghost btn-sm">📊 Analytics</a>
           <a href="/admin/options" className="btn btn-ghost btn-sm">⚙️ Config</a>
         </div>

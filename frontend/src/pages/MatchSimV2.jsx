@@ -593,16 +593,23 @@ function ParticipantsV2({ data, loading, myUserId, teamA, teamB }) {
             const meta = BET_STATUS_META[b.status] || BET_STATUS_META.pending
             const mine = b.user_id === myUserId
             return (
-              <div key={b.user_id} className={`v2-participants-row ${mine ? 'mine' : ''}`}>
-                <span style={{ fontSize: 12.5, color: 'var(--v2-chalk-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                  {b.user_name}{mine ? ' (você)' : ''}
-                </span>
-                <span style={{ fontFamily: 'Chakra Petch, monospace', fontWeight: 700, fontSize: 12.5, color: 'var(--v2-chalk)', flexShrink: 0 }}>
-                  {b.score_a} × {b.score_b}
-                </span>
-                <span style={{ fontFamily: 'Chakra Petch, monospace', fontSize: 10.5, fontWeight: 700, color: meta.color, flexShrink: 0 }}>
-                  {meta.icon} {meta.label}
-                </span>
+              <div key={b.user_id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div className={`v2-participants-row ${mine ? 'mine' : ''}`}>
+                  <span style={{ fontSize: 12.5, color: 'var(--v2-chalk-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                    {b.user_name}{mine ? ' (você)' : ''}
+                  </span>
+                  <span style={{ fontFamily: 'Chakra Petch, monospace', fontWeight: 700, fontSize: 12.5, color: 'var(--v2-chalk)', flexShrink: 0 }}>
+                    {b.score_a} × {b.score_b}
+                  </span>
+                  <span style={{ fontFamily: 'Chakra Petch, monospace', fontSize: 10.5, fontWeight: 700, color: meta.color, flexShrink: 0 }}>
+                    {meta.icon} {meta.label}
+                  </span>
+                </div>
+                {b?.comment && (
+                  <div className="bet-comment" style={{ padding: '0 4px', fontStyle: 'italic', fontSize: 11, color: 'var(--v2-chalk-mute, var(--text-3))' }}>
+                    "{b.comment}"
+                  </div>
+                )}
               </div>
             )
           })}

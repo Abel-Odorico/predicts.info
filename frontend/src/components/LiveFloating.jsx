@@ -522,20 +522,27 @@ function MiniParticipantBets({ data, hasToken }) {
         {data.bets.map(b => {
           const meta = BET_STATUS_META[b.status] || BET_STATUS_META.pending
           return (
-            <div key={b.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 6px', borderRadius: 6 }}>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                {b.user_name}
-              </span>
-              <span style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 700, fontSize: 12, color: 'var(--text-1, #fff)', flexShrink: 0 }}>
-                {b.score_a} × {b.score_b}
-              </span>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0 }}>
-                {meta.icon}
-              </span>
-              {b.points_earned != null && (
-                <span style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 10, fontWeight: 800, color: 'var(--accent, #4f6ef7)', flexShrink: 0, minWidth: 30, textAlign: 'right' }}>
-                  +{b.points_earned}
+            <div key={b.user_id} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 6px', borderRadius: 6 }}>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                  {b.user_name}
                 </span>
+                <span style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 700, fontSize: 12, color: 'var(--text-1, #fff)', flexShrink: 0 }}>
+                  {b.score_a} × {b.score_b}
+                </span>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: meta.color, flexShrink: 0 }}>
+                  {meta.icon}
+                </span>
+                {b.points_earned != null && (
+                  <span style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 10, fontWeight: 800, color: 'var(--accent, #4f6ef7)', flexShrink: 0, minWidth: 30, textAlign: 'right' }}>
+                    +{b.points_earned}
+                  </span>
+                )}
+              </div>
+              {b?.comment && (
+                <div className="bet-comment" style={{ padding: '0 6px', fontStyle: 'italic', fontSize: 10.5, color: 'var(--text-4, #777)' }}>
+                  "{b.comment}"
+                </div>
               )}
             </div>
           )

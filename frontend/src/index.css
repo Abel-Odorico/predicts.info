@@ -12007,3 +12007,331 @@ strong.pts {
   .llm-connector { margin-left: 23px; }
   .llm-latency-chip { font-size: clamp(9px, 2.6vw, 10px); }
 }
+
+/* ── Bot Squad (/admin/bots, AdminBotSquad.jsx) ───────────────────────────── */
+.botsq-card-body {
+  padding: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.botsq-master-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+
+.botsq-master-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.botsq-master-toggle > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-cond);
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.botsq-master-toggle__hint {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.botsq-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--s3);
+}
+
+.botsq-stat {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: var(--s3) var(--s4);
+  text-align: center;
+}
+
+.botsq-stat__val {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--accent);
+  line-height: 1.1;
+}
+
+.botsq-stat__label {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-4);
+  margin-top: 2px;
+}
+
+.botsq-review-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s4);
+}
+
+.botsq-review-subtitle {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  margin-bottom: var(--s2);
+}
+
+.botsq-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.botsq-review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s2) var(--s3);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+}
+
+.botsq-review-item__teams {
+  font-family: var(--font-cond);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.botsq-review-item__meta {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.botsq-empty {
+  font-family: var(--font-cond);
+  font-size: 12px;
+  color: var(--text-4);
+  padding: var(--s4);
+  text-align: center;
+  background: var(--bg-overlay);
+  border: 1px dashed var(--border);
+  border-radius: var(--r2);
+}
+
+.botsq-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.botsq-run-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  flex-wrap: wrap;
+}
+
+.botsq-run-item__teams {
+  font-family: var(--font-cond);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.botsq-run-item__meta {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.botsq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--s3);
+}
+
+.botsq-persona {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: var(--s3) var(--s4);
+  cursor: pointer;
+  transition: border-color 150ms ease, transform 150ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.botsq-persona:hover,
+.botsq-persona:focus-visible {
+  border-color: var(--border-accent);
+  transform: translateY(-1px);
+}
+
+.botsq-persona__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.botsq-persona__name {
+  font-family: var(--font-cond);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.botsq-persona__username {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.botsq-persona__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.botsq-persona__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ── Modal de edição de persona (createPortal → document.body) ───────────── */
+.botsq-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(3, 8, 14, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s4);
+}
+
+.botsq-modal {
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r3);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.botsq-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+
+.botsq-modal__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-1);
+}
+
+.botsq-modal__sub {
+  font-family: var(--font-cond);
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.botsq-modal__body {
+  padding: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.botsq-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--border);
+}
+
+.botsq-params {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.botsq-param-row__label {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-cond);
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.botsq-param-row__val {
+  font-family: var(--font-data);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.botsq-param-row__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.botsq-param-row__controls input[type="range"] {
+  flex: 1;
+}
+
+.botsq-param-row__number {
+  width: 68px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r1);
+  padding: 4px 6px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+@media (max-width: 720px) {
+  .botsq-review-cols { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .botsq-grid { grid-template-columns: 1fr; }
+  .botsq-modal { max-width: 100%; }
+  .botsq-master-row { flex-direction: column; align-items: flex-start; }
+}
