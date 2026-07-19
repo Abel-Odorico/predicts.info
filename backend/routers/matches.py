@@ -446,6 +446,10 @@ def match_live_bets(
             "score_b": bet.score_b,
             "points_earned": bet.points_earned if bet.evaluated_at else None,
             "status": _bet_status(bet.score_a, bet.score_b, ref_a, ref_b) if ref_a is not None else "pending",
+            # Comentário do palpite — só preenchido pra apostas do Bot Squad
+            # (bet.bot_reason); usuário real sempre None, front trata ausência.
+            # NUNCA expor is_bot aqui nem em nenhum payload público.
+            "comment": bet.bot_reason or None,
         }
         for bet, user_name in bets
     ]

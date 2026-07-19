@@ -44,13 +44,13 @@ def _build_report(db: Session) -> dict:
     yesterday = today - timedelta(days=1)
     week_ago = today - timedelta(days=7)
 
-    # ── Usuários ────────────────────────────────────────
-    total_users = db.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
+    # ── Usuários (exclui is_bot — Bot Squad não deve inflar métrica real) ──
+    total_users = db.execute(text("SELECT COUNT(*) FROM users WHERE is_bot = FALSE")).scalar() or 0
     new_today = db.execute(
-        text("SELECT COUNT(*) FROM users WHERE created_at >= :d"), {"d": today}
+        text("SELECT COUNT(*) FROM users WHERE created_at >= :d AND is_bot = FALSE"), {"d": today}
     ).scalar() or 0
     new_week = db.execute(
-        text("SELECT COUNT(*) FROM users WHERE created_at >= :d"), {"d": week_ago}
+        text("SELECT COUNT(*) FROM users WHERE created_at >= :d AND is_bot = FALSE"), {"d": week_ago}
     ).scalar() or 0
 
     # ── Acessos (page_views) ────────────────────────────
@@ -94,7 +94,7 @@ def _build_report(db: Session) -> dict:
 
     # ── WhatsApp ────────────────────────────────────────
     wa_opt_in = db.execute(text(
-        "SELECT COUNT(*) FROM users WHERE whatsapp_opt_in = TRUE AND is_active = TRUE"
+        "SELECT COUNT(*) FROM users WHERE whatsapp_opt_in = TRUE AND is_active = TRUE AND is_bot = FALSE"
     )).scalar() or 0
     wa_in_today = db.execute(text(
         "SELECT COUNT(*) FROM whatsapp_messages WHERE direction = 'inbound' AND created_at >= :d"

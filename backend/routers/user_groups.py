@@ -31,6 +31,10 @@ def _mask_email(email: str) -> str:
     if not email or "@" not in email:
         return "***"
     local, domain = email.split("@", 1)
+    if domain == "squad.predicts.local":
+        # Conta interna (Bot Squad): máscara fabricada neutra — o domínio real
+        # não roteável denunciaria a conta em payloads de grupo/busca.
+        return f"{local[0]}****@g****.com"
     masked_local = local[0] + "*" * min(len(local) - 1, 4) if len(local) > 1 else local
     parts = domain.split(".")
     masked_domain = parts[0][0] + "*" * max(len(parts[0]) - 1, 1) + "." + ".".join(parts[1:]) if len(parts) > 1 else domain
