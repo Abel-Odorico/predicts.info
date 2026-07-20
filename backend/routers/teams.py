@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import asc
 from database import get_db
-from models import Player, Team
+from models import Player, Team, User, Notification
 from schemas import PlayerResponse, TeamResponse, TeamUpdate
+from auth_utils import require_admin
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -85,6 +86,35 @@ def get_team_players(code: str, db: Session = Depends(get_db)):
         .order_by(Player.position.asc().nullslast(), Player.name.asc())
         .all()
     )
+
+
+@router.post("/favorites/announce")
+def announce_favorite_team(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
+    """Aviso único (sino + push, sem WhatsApp) pra todo mundo escolher o time
+    do coração no perfil. Ação manual do admin — fire-and-forget, mesmo padrão
+    de /admin/champion/reopen-notify (sem lock de idempotência: reenviar é
+    escolha consciente de quem clica)."""
+    from routers.push import send_push_to_all
+
+    title = "❤️ Escolha seu time do coração"
+    body = "Agora dá pra escolher seu time favorito no perfil — o escudo aparece do lado do seu nome no Ranking e nos seus Grupos."
+
+    users = db.query(User).filter(User.is_bot.is_(False), User.is_active.is_(True)).all()
+    notif_count = 0
+    for u in users:
+        db.add(Notification(
+            user_id=u.id,
+            type="favorite_team_announce",
+            title=title,
+            body=body,
+            meta={"url": "/perfil"},
+        ))
+        notif_count += 1
+    db.commit()
+
+    push_sent = send_push_to_all(db, title=title, body=body, url="/perfil", tag="predicts-fav-team")
+
+    return {"notifications_sent": notif_count, "push_sent": push_sent}
 
 
 @router.patch("/{code}", response_model=TeamResponse)

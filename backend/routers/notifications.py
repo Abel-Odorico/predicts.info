@@ -28,6 +28,7 @@ _PUSH_CONFIG: dict[str, tuple[bool, str, str]] = {
     "version_update": (True,  "/changelog",  "predicts-version"),
     "champion_remind":(True,  "/campeao",    "predicts-champion"),
     "champion_bonus": (True,  "/campeao",    "predicts-champion"),
+    "favorite_team_announce": (True, "/perfil", "predicts-fav-team"),
     "group_invite":   (True,  "/meus-grupos","predicts-group"),
     "group_join_request":  (True, "/meus-grupos", "group-join"),
     "group_join_approved": (True, "/meus-grupos", "group-join"),

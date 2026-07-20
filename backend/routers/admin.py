@@ -300,6 +300,35 @@ def recalculate_all_bets_v2(
     return {"status": "ok", "bets_recalculated": updated}
 
 
+@router.get("/users/favorite-teams/stats")
+def favorite_team_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Distribuição de 'time do coração' entre usuários reais (não-bot) —
+    visão rápida de quem torce pra quem, sem precisar rolar a tabela inteira."""
+    rows = (
+        db.query(User.favorite_team_code, func.count(User.id).label("cnt"))
+        .filter(User.favorite_team_code.isnot(None), User.is_bot.is_(False))
+        .group_by(User.favorite_team_code)
+        .order_by(func.count(User.id).desc())
+        .all()
+    )
+    team_by_code = {t.code: t for t in db.query(Team).filter(Team.code.in_([r[0] for r in rows])).all()} if rows else {}
+    total_with_team = sum(r.cnt for r in rows)
+    total_users = db.query(func.count(User.id)).filter(User.is_bot.is_(False)).scalar() or 0
+    return {
+        "total_users": total_users,
+        "total_with_team": total_with_team,
+        "teams": [
+            {
+                "code": code,
+                "name": team_by_code[code].name if code in team_by_code else code,
+                "flag_url": team_by_code[code].flag_url if code in team_by_code else None,
+                "count": cnt,
+            }
+            for code, cnt in rows
+        ],
+    }
+
+
 @router.get("/users")
 def list_users(
     q: str | None = Query(default=None),
@@ -323,6 +352,13 @@ def list_users(
         query = query.filter((User.name.ilike(like)) | (User.email.ilike(like)))
 
     rows = query.limit(limit).all()
+
+    fav_codes = {user.favorite_team_code for user, _, _ in rows if user.favorite_team_code}
+    team_by_code = (
+        {t.code: t for t in db.query(Team).filter(Team.code.in_(fav_codes)).all()}
+        if fav_codes else {}
+    )
+
     return [
         {
             "id": user.id,
@@ -336,6 +372,9 @@ def list_users(
             "updated_at": user.updated_at,
             "bets_count": int(bets_count or 0),
             "bets_points": int(bets_points or 0),
+            "favorite_team_code": user.favorite_team_code,
+            "favorite_team_name": team_by_code[user.favorite_team_code].name if user.favorite_team_code in team_by_code else None,
+            "favorite_team_flag_url": team_by_code[user.favorite_team_code].flag_url if user.favorite_team_code in team_by_code else None,
         }
         for user, bets_count, bets_points in rows
     ]

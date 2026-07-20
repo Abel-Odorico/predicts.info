@@ -245,6 +245,7 @@ export default function Admin() {
   // Users
   const [users, setUsers] = useState([])
   const [usersLoading, setUsersLoading] = useState(false)
+  const [favTeamStats, setFavTeamStats] = useState(null)
   const [userQuery, setUserQuery] = useState('')
   const [userMsg, setUserMsg] = useState('')
   const [savingUserId, setSavingUserId] = useState(null)
@@ -1000,6 +1001,7 @@ export default function Admin() {
     if (tab === 'growth')      loadGrowth(growthPeriod)
     if (tab === 'engagement' && !engagement && !engagementLoading) loadEngagement()
     if (tab === 'grupos' && !groupsData && !groupsLoading) { loadGroupsAdmin(); loadSecurity() }
+    if (tab === 'users' && !favTeamStats) loadFavTeamStats()
     if (tab === 'results' && matches.length === 0 && !matchesLoading) loadMatches()
     if (tab === 'bets' && !allBets && !betsLoading) loadBets()
     if (tab === 'coverage' && !betCoverage && !coverageLoading) loadCoverage('scheduled')
@@ -1066,6 +1068,11 @@ export default function Admin() {
       setUsers(await api.get(`/admin/users${suffix}`, token))
     } catch { setUsers([]) }
     finally { setUsersLoading(false) }
+  }
+
+  async function loadFavTeamStats() {
+    try { setFavTeamStats(await api.get('/admin/users/favorite-teams/stats', token)) }
+    catch { /* silencioso — card só some se falhar */ }
   }
 
   async function loadMatches() {
@@ -1510,6 +1517,37 @@ export default function Admin() {
       {/* ── Tab: Usuários ─────────────────────────────── */}
       {tab === 'users' && (
         <div className="adm-pane fade-in-1">
+          {favTeamStats && favTeamStats.teams.length > 0 && (
+            <div className="adm-card" style={{ marginBottom: 'var(--s4)' }}>
+              <div className="adm-card__head">
+                <span className="adm-card__title">❤️ Time do coração dos usuários</span>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                  {favTeamStats.total_with_team}/{favTeamStats.total_users} escolheram
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--s2)', padding: 'var(--s4)' }}>
+                {favTeamStats.teams.map(t => (
+                  <div
+                    key={t.code}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      background: 'var(--bg-overlay)', border: '1px solid var(--border)',
+                      borderRadius: 'var(--r2)', padding: '6px 10px',
+                    }}
+                  >
+                    <TeamCrestFlag
+                      src={t.flag_url}
+                      alt={t.name}
+                      className="rank-fav-crest"
+                      crestClassName="rank-fav-crest--crest"
+                    />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-1)' }}>{t.name}</span>
+                    <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>{t.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="adm-pane__toolbar">
             <input
               type="text"
@@ -1539,6 +1577,7 @@ export default function Admin() {
                   <th>E-mail</th>
                   <th className="adm-table__num">Apostas</th>
                   <th className="adm-table__num">Pts</th>
+                  <th>Time do coração</th>
                   <th>Cargo</th>
                   <th>Cadastro / Atualização</th>
                   <th></th>
@@ -1546,10 +1585,10 @@ export default function Admin() {
               </thead>
               <tbody>
                 {usersLoading && (
-                  <tr><td colSpan={9} className="adm-table__empty">Carregando...</td></tr>
+                  <tr><td colSpan={10} className="adm-table__empty">Carregando...</td></tr>
                 )}
                 {!usersLoading && users.length === 0 && (
-                  <tr><td colSpan={9} className="adm-table__empty">Nenhum usuário encontrado.</td></tr>
+                  <tr><td colSpan={10} className="adm-table__empty">Nenhum usuário encontrado.</td></tr>
                 )}
                 {!usersLoading && users.map(u => (
                   <tr key={u.id} className={u.role === 'admin' ? 'adm-table__row--admin' : ''} style={!u.is_active ? { opacity: 0.5 } : undefined}>
@@ -1587,6 +1626,21 @@ export default function Admin() {
                     <td className="adm-table__email">{u.email}</td>
                     <td className="adm-table__num">{u.bets_count}</td>
                     <td className="adm-table__num adm-table__pts">{u.bets_points}</td>
+                    <td>
+                      {u.favorite_team_flag_url ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <TeamCrestFlag
+                            src={u.favorite_team_flag_url}
+                            alt={u.favorite_team_name}
+                            className="rank-fav-crest"
+                            crestClassName="rank-fav-crest--crest"
+                          />
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>{u.favorite_team_name}</span>
+                        </div>
+                      ) : (
+                        <span className="adm-table__nil">—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`badge ${u.role === 'admin' ? 'badge-live' : 'badge-group'}`}>
                         {u.role}
