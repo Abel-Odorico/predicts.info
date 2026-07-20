@@ -948,6 +948,29 @@ def run_pending_bet_reminders(
             }
         by_match[r.match_id]["recipients"].append({"user_id": r.user_id, "phone": r.phone, "name": r.user_name})
 
+    # Dedup persistente (banco, não em memória): protege contra reenvio tanto
+    # do loop automático (cujo `_sent` em main.py zera a cada restart do container)
+    # quanto de chamadas manuais repetidas de /admin/whatsapp/reminder/test —
+    # nenhuma das duas tinha proteção real contra mandar o MESMO lembrete de
+    # novo pro MESMO telefone na MESMA partida (causa real do flood duplicado
+    # detectado 2026-07-19, contribuiu pro ban do número).
+    if by_match:
+        already_sent = {
+            (row.phone, row.match_id)
+            for row in db.execute(text("""
+                SELECT DISTINCT phone, match_id FROM whatsapp_messages
+                WHERE match_id = ANY(:match_ids)
+                  AND meta->>'kind' = 'bet_reminder'
+                  AND status IN ('sent', 'delivered', 'read')
+            """), {"match_ids": list(by_match.keys())}).fetchall()
+        }
+        for match_id, info in by_match.items():
+            info["recipients"] = [
+                rec for rec in info["recipients"]
+                if (rec["phone"], match_id) not in already_sent
+            ]
+        by_match = {mid: info for mid, info in by_match.items() if info["recipients"]}
+
     result_matches = []
     total_sent = 0
     for match_id, info in by_match.items():
@@ -973,6 +996,7 @@ def run_pending_bet_reminders(
                 db.add(WhatsappMessage(
                     direction="outbound", phone=rec["phone"], body=corpo,
                     match_id=match_id, status="sent" if ok else "failed",
+                    meta={"kind": "bet_reminder"},
                 ))
                 db.commit()
                 total_sent += 1
