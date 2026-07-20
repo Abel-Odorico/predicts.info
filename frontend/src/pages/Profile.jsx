@@ -4,6 +4,7 @@ import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
 import { Link } from 'react-router-dom'
 import { usePushNotifications } from '../hooks/usePushNotifications'
+import FavoriteTeamPicker from '../components/FavoriteTeamPicker'
 
 function relDate(iso) {
   if (!iso) return ''
@@ -307,6 +308,10 @@ export default function Profile() {
                   ))}
                 </div>
               )}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Time do coração <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(aparece no seu ranking e nos seus grupos)</span></label>
+              <FavoriteTeamPicker />
             </div>
             <div className="form-group">
               <label className="form-label">E-mail <span style={{ color: 'var(--text-4)', fontSize: 11 }}>(não editável)</span></label>

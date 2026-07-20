@@ -537,6 +537,7 @@ def group_ranking(
                 User.id.label("user_id"),
                 User.name.label("name"),
                 User.username.label("username"),
+                User.favorite_team_code.label("favorite_team_code"),
                 func.coalesce(func.sum(Ranking.total_points), 0).label("total_points"),
                 func.coalesce(func.sum(Ranking.exact_scores), 0).label("exact_scores"),
                 func.coalesce(func.sum(Ranking.correct_results), 0).label("correct_results"),
@@ -545,7 +546,7 @@ def group_ranking(
             .outerjoin(Ranking, User.id == Ranking.user_id)
             .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
             .filter(User.id.in_(member_ids))
-            .group_by(User.id, User.name, User.username, bet_counts.c.total_bets)
+            .group_by(User.id, User.name, User.username, User.favorite_team_code, bet_counts.c.total_bets)
             .all()
         )
     else:
@@ -554,6 +555,7 @@ def group_ranking(
                 User.id.label("user_id"),
                 User.name.label("name"),
                 User.username.label("username"),
+                User.favorite_team_code.label("favorite_team_code"),
                 func.coalesce(Ranking.total_points, 0).label("total_points"),
                 func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
                 func.coalesce(Ranking.correct_results, 0).label("correct_results"),
@@ -564,6 +566,12 @@ def group_ranking(
             .filter(User.id.in_(member_ids))
             .all()
         )
+
+    fav_codes = {r.favorite_team_code for r in rows if r.favorite_team_code}
+    team_by_code = (
+        {t.code: t for t in db.query(Team).filter(Team.code.in_(fav_codes)).all()}
+        if fav_codes else {}
+    )
 
     def effective_pts(r):
         bonus = champion_bonus_pts if r.user_id in correct_pickers else 0
@@ -590,6 +598,9 @@ def group_ranking(
                 "user_id": r.user_id,
                 "name": r.name,
                 "username": r.username,
+                "favorite_team_code": r.favorite_team_code,
+                "favorite_team_name": team_by_code[r.favorite_team_code].name if r.favorite_team_code in team_by_code else None,
+                "favorite_team_flag_url": team_by_code[r.favorite_team_code].flag_url if r.favorite_team_code in team_by_code else None,
                 "total_points": int(r.total_points or 0),
                 "exact_scores": int(r.exact_scores or 0),
                 "correct_results": int(r.correct_results or 0),
@@ -1566,6 +1577,7 @@ def group_ranking_by_phase(
             Bet.user_id,
             User.name,
             User.username,
+            User.favorite_team_code,
             func.sum(Bet.points_earned).label("total_points"),
             func.sum(case((Bet.points_earned == 3, 1), else_=0)).label("exact_scores"),
             func.sum(case((Bet.points_earned == 1, 1), else_=0)).label("correct_results"),
@@ -1581,16 +1593,26 @@ def group_ranking_by_phase(
         except ValueError:
             raise HTTPException(400, f"Fase inválida: {phase}")
     rows = (
-        q.group_by(Bet.user_id, User.name, User.username)
+        q.group_by(Bet.user_id, User.name, User.username, User.favorite_team_code)
         .order_by(desc(func.sum(Bet.points_earned)), desc(func.sum(case((Bet.points_earned == 3, 1), else_=0))))
         .all()
     )
+
+    fav_codes = {r.favorite_team_code for r in rows if r.favorite_team_code}
+    team_by_code = (
+        {t.code: t for t in db.query(Team).filter(Team.code.in_(fav_codes)).all()}
+        if fav_codes else {}
+    )
+
     return [
         {
             "position": i + 1,
             "user_id": r.user_id,
             "name": r.name,
             "username": r.username,
+            "favorite_team_code": r.favorite_team_code,
+            "favorite_team_name": team_by_code[r.favorite_team_code].name if r.favorite_team_code in team_by_code else None,
+            "favorite_team_flag_url": team_by_code[r.favorite_team_code].flag_url if r.favorite_team_code in team_by_code else None,
             "total_points": int(r.total_points or 0),
             "exact_scores": int(r.exact_scores or 0),
             "correct_results": int(r.correct_results or 0),

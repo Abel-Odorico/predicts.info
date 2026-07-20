@@ -666,6 +666,9 @@ def _run_migrations():
                 summary TEXT,
                 telegram_sent BOOLEAN DEFAULT FALSE
             )""",
+            # Time do coração do usuário real (mesmo padrão do favorite_team_code
+            # do Bot Squad) — badge de escudo no Profile/Ranking/Grupos
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS favorite_team_code VARCHAR(6)",
         ]:
             try:
                 conn.execute(text(alter))

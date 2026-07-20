@@ -788,7 +788,19 @@ export default function GroupRanking() {
               <div className="group-podium">
                 {top3.map((r, i) => (
                   <div key={r.user_id} className={`group-podium__slot group-podium__slot--${i + 1}`}>
-                    <div className="group-podium__avatar">{getInitials(r.name)}</div>
+                    <div className="group-podium__avatar rank-fav-crest-wrap">
+                      {getInitials(r.name)}
+                      {r.favorite_team_flag_url && (
+                        <span className="rank-fav-crest-badge" title={r.favorite_team_name}>
+                          <TeamCrestFlag
+                            src={r.favorite_team_flag_url}
+                            alt={r.favorite_team_name}
+                            className="rank-fav-crest-badge__img"
+                            crestClassName="rank-fav-crest-badge__img--crest"
+                          />
+                        </span>
+                      )}
+                    </div>
                     <div className="group-podium__medal"><MedalIcon rank={i + 1} size={26} /></div>
                     <div className="group-podium__name" title={r.name}>{displayName(r, namePref)}{r.is_me ? ' ★' : ''}</div>
                     <div className="group-podium__pts">{r.effective_points ?? r.total_points} pts</div>
@@ -884,6 +896,14 @@ export default function GroupRanking() {
                         </div>
                         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {r.favorite_team_flag_url && (
+                              <TeamCrestFlag
+                                src={r.favorite_team_flag_url}
+                                alt={r.favorite_team_name}
+                                className="rank-fav-crest"
+                                crestClassName="rank-fav-crest--crest"
+                              />
+                            )}
                             <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 'clamp(15px, 4vw, 16px)', color: 'var(--text-1)' }}>{displayName(r, namePref)}</span>
                             {r.is_me && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>VOCÊ</span>}
                             {memberChampion && (

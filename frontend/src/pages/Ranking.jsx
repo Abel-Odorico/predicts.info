@@ -6,6 +6,7 @@ import MyChampionCard from '../components/MyChampionCard'
 import LigaFlowModal from '../components/LigaFlowModal'
 import ShareCompetitionButton from '../components/ShareCompetitionButton'
 import MedalIcon from '../components/MedalIcon'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 import { useAuth } from '../stores/authStore'
 import { COMPETITIONS } from '../utils/competitions'
 import { displayName } from '../utils/displayName'
@@ -376,8 +377,16 @@ export default function Ranking() {
                         </span>
 
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {displayName(r, namePref)}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r.favorite_team_flag_url && (
+                              <TeamCrestFlag
+                                src={r.favorite_team_flag_url}
+                                alt={r.favorite_team_name}
+                                className="rank-fav-crest"
+                                crestClassName="rank-fav-crest--crest"
+                              />
+                            )}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName(r, namePref)}</span>
                           </div>
                           {/* Barra relativa ao líder — âmbar */}
                           <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
@@ -647,8 +656,16 @@ export default function Ranking() {
                     </span>
 
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {displayName(r, namePref)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-cond)', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.favorite_team_flag_url && (
+                          <TeamCrestFlag
+                            src={r.favorite_team_flag_url}
+                            alt={r.favorite_team_name}
+                            className="rank-fav-crest"
+                            crestClassName="rank-fav-crest--crest"
+                          />
+                        )}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName(r, namePref)}</span>
                       </div>
                       {/* Barra relativa ao líder */}
                       <div style={{ height: 3, background: 'var(--bg-overlay)', borderRadius: 2, marginTop: 3, overflow: 'hidden', maxWidth: 140 }}>
@@ -954,7 +971,19 @@ function RankingPodium({ data, champPicks, namePref }) {
           const cp = champPicks?.[r.user_id]
           return (
             <div key={r.user_id} className={`group-podium__slot ${SLOT[i]}`}>
-              <div className="group-podium__avatar">{_initials(r.name)}</div>
+              <div className="group-podium__avatar rank-fav-crest-wrap">
+                {_initials(r.name)}
+                {r.favorite_team_flag_url && (
+                  <span className="rank-fav-crest-badge" title={r.favorite_team_name}>
+                    <TeamCrestFlag
+                      src={r.favorite_team_flag_url}
+                      alt={r.favorite_team_name}
+                      className="rank-fav-crest-badge__img"
+                      crestClassName="rank-fav-crest-badge__img--crest"
+                    />
+                  </span>
+                )}
+              </div>
               <div className="group-podium__medal"><MedalIcon rank={i + 1} size={26} /></div>
               <div className="group-podium__name" title={r.name}>{displayName(r, namePref)}</div>
               <div className="group-podium__pts">{r.total_points} pts</div>

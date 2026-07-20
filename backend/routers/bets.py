@@ -4,7 +4,7 @@ from sqlalchemy import case, desc, func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from auth_utils import get_current_user, get_optional_user
-from models import Bet, Match, MatchPhase, MatchStatus, Ranking, User, UserRole
+from models import Bet, Match, MatchPhase, MatchStatus, Ranking, Team, User, UserRole
 from schemas import BetCreate, RankingRow
 from routers.audit import log_action
 
@@ -459,6 +459,7 @@ def ranking(
                 User.id.label("user_id"),
                 User.name.label("name"),
                 User.username.label("username"),
+                User.favorite_team_code.label("favorite_team_code"),
                 func.coalesce(agg.c.total_points, 0).label("total_points"),
                 func.coalesce(agg.c.exact_scores, 0).label("exact_scores"),
                 func.coalesce(agg.c.correct_results, 0).label("correct_results"),
@@ -489,6 +490,7 @@ def ranking(
                 User.id.label("user_id"),
                 User.name.label("name"),
                 User.username.label("username"),
+                User.favorite_team_code.label("favorite_team_code"),
                 func.coalesce(Ranking.total_points, 0).label("total_points"),
                 func.coalesce(Ranking.exact_scores, 0).label("exact_scores"),
                 func.coalesce(Ranking.correct_results, 0).label("correct_results"),
@@ -507,12 +509,21 @@ def ranking(
             .all()
         )
 
+    fav_codes = {r.favorite_team_code for r in rows if r.favorite_team_code}
+    team_by_code = (
+        {t.code: t for t in db.query(Team).filter(Team.code.in_(fav_codes)).all()}
+        if fav_codes else {}
+    )
+
     return [
         {
             "position": i + 1,
             "user_id": r.user_id,
             "name": r.name,
             "username": r.username,
+            "favorite_team_code": r.favorite_team_code,
+            "favorite_team_name": team_by_code[r.favorite_team_code].name if r.favorite_team_code in team_by_code else None,
+            "favorite_team_flag_url": team_by_code[r.favorite_team_code].flag_url if r.favorite_team_code in team_by_code else None,
             "total_points": r.total_points,
             "exact_scores": r.exact_scores,
             "correct_results": r.correct_results,

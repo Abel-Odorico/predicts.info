@@ -228,6 +228,7 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.user)
     theme = Column(String(10), default='system', nullable=False)
     ranking_display_pref = Column(String(10), default='name', nullable=False)
+    favorite_team_code = Column(String(6), nullable=True)
     created_at  = Column(DateTime, default=_utcnow)
     updated_at  = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     referred_by = Column(Integer, ForeignKey("users.id"), nullable=True)

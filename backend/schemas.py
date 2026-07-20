@@ -150,6 +150,7 @@ class UserResponse(BaseModel):
     whatsapp_prefs: dict | None = None
     theme: str = 'system'
     ranking_display_pref: str = 'name'
+    favorite_team_code: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

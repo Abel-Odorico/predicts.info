@@ -36,6 +36,36 @@ def teams_by_elo(limit: int = Query(48, le=48), db: Session = Depends(get_db)):
     )
 
 
+@router.get("/favorites/options")
+def list_favorite_options(db: Session = Depends(get_db)):
+    """Lista pública combinada (Copa + Brasileirão) pro picker de 'time do coração'
+    do usuário (Profile.jsx) — mesmo conceito do favorite_team_code do Bot Squad,
+    só que pra gente de verdade. Rota estática ANTES de /{code} (senão o FastAPI
+    tentaria casar 'favorites' como código de time)."""
+    from competitions import get_competition_id
+    copa_id = get_competition_id(db, "copa2026")
+    br_id = get_competition_id(db, "brasileirao2026")
+
+    def _opts(comp_id, label):
+        if comp_id is None:
+            return []
+        rows = (
+            db.query(Team)
+            .filter(Team.competition_id == comp_id)
+            .order_by(Team.name.asc())
+            .all()
+        )
+        return [
+            {"code": t.code, "name": t.name, "flag_url": t.flag_url, "competition": label}
+            for t in rows
+        ]
+
+    return {
+        "copa2026": _opts(copa_id, "Copa do Mundo"),
+        "brasileirao2026": _opts(br_id, "Brasileirão"),
+    }
+
+
 @router.get("/{code}", response_model=TeamResponse)
 def get_team(code: str, db: Session = Depends(get_db)):
     team = db.query(Team).filter(Team.code == code.upper()).first()

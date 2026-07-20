@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User, UserRole, Ranking, PasswordResetToken
+from models import User, UserRole, Ranking, PasswordResetToken, Team
 from schemas import UserCreate, UserResponse, Token, ProfileUpdate, PasswordChange
 from auth_utils import hash_password, verify_password, create_token, get_current_user
 from routers.audit import log_action
@@ -351,6 +351,28 @@ def update_ranking_display_pref(
     if payload.ranking_display_pref not in ('name', 'username'):
         raise HTTPException(400, "Preferência inválida — use name ou username")
     user.ranking_display_pref = payload.ranking_display_pref
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+class FavoriteTeamUpdate(BaseModel):
+    favorite_team_code: str | None = None
+
+@router.patch("/favorite-team", response_model=UserResponse)
+def update_favorite_team(
+    payload: FavoriteTeamUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    code = payload.favorite_team_code
+    if code is not None:
+        code = code.strip().upper()
+        if not code:
+            code = None
+        elif not db.query(Team.id).filter(Team.code == code).first():
+            raise HTTPException(404, f"Time '{code}' não encontrado")
+    user.favorite_team_code = code
     db.commit()
     db.refresh(user)
     return user
