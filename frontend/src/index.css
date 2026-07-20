@@ -12051,12 +12051,31 @@ strong.pts {
   gap: var(--s3);
 }
 
+.botsq-master-card {
+  border-color: var(--border);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.botsq-master-card--on {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb, 255, 122, 26), 0.12), 0 8px 28px rgba(0,0,0,0.18);
+}
+
 .botsq-stat {
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--r2);
   padding: var(--s3) var(--s4);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  text-align: left;
+}
+
+.botsq-stat__icon {
+  font-size: 22px;
+  line-height: 1;
+  filter: grayscale(0.1);
 }
 
 .botsq-stat__val {
@@ -12166,26 +12185,32 @@ strong.pts {
 
 .botsq-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--s3);
 }
 
 .botsq-persona {
-  background: var(--bg-overlay);
+  background: linear-gradient(180deg, var(--bg-raised), var(--bg-overlay));
   border: 1px solid var(--border);
-  border-radius: var(--r2);
+  border-radius: var(--r3);
   padding: var(--s3) var(--s4);
   cursor: pointer;
-  transition: border-color 150ms ease, transform 150ms ease;
+  transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
+  gap: var(--s3);
 }
 
 .botsq-persona:hover,
 .botsq-persona:focus-visible {
   border-color: var(--border-accent);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+}
+
+.botsq-persona--off {
+  opacity: 0.55;
+  filter: grayscale(0.4);
 }
 
 .botsq-persona__head {
@@ -12195,11 +12220,82 @@ strong.pts {
   gap: var(--s2);
 }
 
+.botsq-persona__id {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+/* Avatar circular com gradiente por arquétipo (--arch-hue inline) + badge de
+   escudo/bandeira do time do coração encaixado no canto — mesmo padrão visual
+   de "profile chip" usado em jogos, sem inventar imagem quando não há time. */
+.botsq-persona__avatar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, hsl(var(--arch-hue, 20) 70% 45%), hsl(calc(var(--arch-hue, 20) + 40) 70% 32%));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+}
+
+.botsq-persona__avatar--lg {
+  width: 56px;
+  height: 56px;
+  font-size: 18px;
+}
+
+.botsq-persona__crest {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 2px solid var(--bg-surface);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.botsq-persona__crest--lg {
+  width: 26px;
+  height: 26px;
+  right: -8px;
+  bottom: -8px;
+}
+
+.botsq-persona__crest-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.botsq-persona__crest-img--crest {
+  object-fit: contain;
+  padding: 2px;
+  background: #fff;
+}
+
 .botsq-persona__name {
   font-family: var(--font-cond);
   font-size: 14px;
   font-weight: 700;
   color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .botsq-persona__username {
@@ -12214,6 +12310,12 @@ strong.pts {
   gap: 6px;
 }
 
+.botsq-persona__arch-badge {
+  border-color: hsl(var(--arch-hue, 20) 60% 45% / 0.4);
+  color: hsl(var(--arch-hue, 20) 85% 72%);
+  background: hsl(var(--arch-hue, 20) 60% 45% / 0.12);
+}
+
 .botsq-persona__stats {
   display: flex;
   flex-wrap: wrap;
@@ -12221,6 +12323,8 @@ strong.pts {
   font-family: var(--font-data);
   font-size: 11px;
   color: var(--text-3);
+  padding-top: var(--s2);
+  border-top: 1px solid var(--border);
 }
 
 /* ── Modal de edição de persona (createPortal → document.body) ───────────── */
@@ -12254,6 +12358,13 @@ strong.pts {
   gap: var(--s3);
   padding: var(--s4);
   border-bottom: 1px solid var(--border);
+}
+
+.botsq-modal__id {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
 }
 
 .botsq-modal__title {

@@ -65,6 +65,12 @@ def overview(db: Session = Depends(get_db), _admin: User = Depends(require_admin
     )
     bot_user_ids = [p.user_id for p, _, _ in persona_rows]
 
+    fav_codes = {p.favorite_team_code for p, _, _ in persona_rows if p.favorite_team_code}
+    team_by_code = (
+        {t.code: t for t in db.query(Team).filter(Team.code.in_(fav_codes)).all()}
+        if fav_codes else {}
+    )
+
     bets_total_map: dict[int, int] = {}
     last_bet_map: dict[int, datetime] = {}
     ranking_copa_map: dict[int, int] = {}
@@ -104,6 +110,8 @@ def overview(db: Session = Depends(get_db), _admin: User = Depends(require_admin
             "archetype": persona.archetype,
             "bio": persona.bio,
             "favorite_team_code": persona.favorite_team_code,
+            "favorite_team_name": team_by_code[persona.favorite_team_code].name if persona.favorite_team_code in team_by_code else None,
+            "favorite_team_flag_url": team_by_code[persona.favorite_team_code].flag_url if persona.favorite_team_code in team_by_code else None,
             "params": persona.params or {},
             "enabled": persona.enabled,
             "bets_total": bets_total_map.get(persona.user_id, 0),
@@ -277,12 +285,19 @@ def update_persona(
     db.commit()
     db.refresh(persona)
 
+    team = (
+        db.query(Team).filter(Team.code == persona.favorite_team_code).first()
+        if persona.favorite_team_code else None
+    )
+
     return {
         "id": persona.id,
         "user_id": persona.user_id,
         "archetype": persona.archetype,
         "bio": persona.bio,
         "favorite_team_code": persona.favorite_team_code,
+        "favorite_team_name": team.name if team else None,
+        "favorite_team_flag_url": team.flag_url if team else None,
         "enabled": persona.enabled,
         "params": persona.params or {},
     }

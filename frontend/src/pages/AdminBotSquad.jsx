@@ -5,6 +5,7 @@ import { api } from '../api'
 import { toast } from '../toast'
 import { useAuth } from '../stores/authStore'
 import Spinner from '../components/Spinner'
+import TeamCrestFlag from '../components/TeamCrestFlag'
 
 function normalizeDate(value) {
   if (!value) return null
@@ -34,21 +35,30 @@ function isTodayBRT(value) {
   return d.toLocaleDateString('pt-BR', opts) === new Date().toLocaleDateString('pt-BR', opts)
 }
 
-const ARCHETYPE_LABELS = {
-  'torcedor-fanatico': 'Torcedor Fanático',
-  'estatistica':       'Estatística',
-  'zebra':             'Zebra',
-  'cauteloso':         'Cauteloso',
-  'goleada':           'Goleada',
-  'empatista':         'Empatista',
-  'home-crente':       'Home-crente',
-  'contrarian':        'Contrarian',
+// label + emoji + cor por arquétipo — diferenciação visual rápida no grid
+const ARCHETYPE_META = {
+  'torcedor-fanatico': { label: 'Torcedor Fanático', icon: '🔥', hue: 4   },
+  'estatistica':       { label: 'Estatística',       icon: '📊', hue: 200 },
+  'zebra':              { label: 'Zebra',             icon: '🐴', hue: 280 },
+  'cauteloso':          { label: 'Cauteloso',         icon: '🛡️', hue: 160 },
+  'goleada':            { label: 'Goleada',           icon: '💥', hue: 30  },
+  'empatista':          { label: 'Empatista',         icon: '🤝', hue: 45  },
+  'home-crente':        { label: 'Home-crente',       icon: '🏠', hue: 210 },
+  'contrarian':         { label: 'Contrarian',        icon: '🔄', hue: 320 },
 }
 
-function archetypeLabel(a) {
-  if (!a) return '—'
-  if (ARCHETYPE_LABELS[a]) return ARCHETYPE_LABELS[a]
-  return a.split('-').map(w => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ')
+function archetypeMeta(a) {
+  if (a && ARCHETYPE_META[a]) return ARCHETYPE_META[a]
+  const label = a ? a.split('-').map(w => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ') : '—'
+  return { label, icon: '🎲', hue: 0 }
+}
+
+function archetypeLabel(a) { return archetypeMeta(a).label }
+
+function initials(name) {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/)
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || parts[0]?.[1] || '')).toUpperCase()
 }
 
 // Ordem pedida: risk, draw_affinity, fav_boost, stubbornness (0-1 step 0.05),
@@ -219,7 +229,7 @@ export default function AdminBotSquad() {
 
   return (
     <div className="adm-shell">
-      <div className="adm-header">
+      <div className="adm-header botsq-header">
         <div className="adm-header__left">
           <div className="adm-header__title">🤖 BOT SQUAD</div>
           <div className="adm-header__sub">predicts.info · 20 personas apostadoras · liga Boteco do Placar</div>
@@ -237,7 +247,7 @@ export default function AdminBotSquad() {
         ) : (
           <>
             {/* ── Controle geral: master switch + stats ────────────────── */}
-            <div className="adm-card">
+            <div className={`adm-card botsq-master-card${overview?.enabled ? ' botsq-master-card--on' : ''}`}>
               <div className="adm-card__head">
                 <span className="adm-card__title">⚙️ Controle geral</span>
                 <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}>
@@ -269,16 +279,25 @@ export default function AdminBotSquad() {
 
                 <div className="botsq-stats">
                   <div className="botsq-stat">
-                    <div className="botsq-stat__val">{stats.totalBets}</div>
-                    <div className="botsq-stat__label">Apostas dos bots</div>
+                    <span className="botsq-stat__icon">🎯</span>
+                    <div>
+                      <div className="botsq-stat__val">{stats.totalBets}</div>
+                      <div className="botsq-stat__label">Apostas dos bots</div>
+                    </div>
                   </div>
                   <div className="botsq-stat">
-                    <div className="botsq-stat__val">{stats.betsToday}</div>
-                    <div className="botsq-stat__label">Apostaram hoje</div>
+                    <span className="botsq-stat__icon">📅</span>
+                    <div>
+                      <div className="botsq-stat__val">{stats.betsToday}</div>
+                      <div className="botsq-stat__label">Apostaram hoje</div>
+                    </div>
                   </div>
                   <div className="botsq-stat">
-                    <div className="botsq-stat__val">{stats.activePersonas}/{stats.total}</div>
-                    <div className="botsq-stat__label">Personas ativas</div>
+                    <span className="botsq-stat__icon">✅</span>
+                    <div>
+                      <div className="botsq-stat__val">{stats.activePersonas}/{stats.total}</div>
+                      <div className="botsq-stat__label">Personas ativas</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -371,35 +390,59 @@ export default function AdminBotSquad() {
               </div>
               <div className="botsq-card-body">
                 <div className="botsq-grid">
-                  {overview?.personas?.map(p => (
-                    <div
-                      key={p.id}
-                      className="botsq-persona"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openEdit(p)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openEdit(p) }}
-                    >
-                      <div className="botsq-persona__head">
-                        <div>
-                          <div className="botsq-persona__name">{p.name}</div>
-                          <div className="botsq-persona__username">@{p.username || '—'}</div>
+                  {overview?.personas?.map(p => {
+                    const arch = archetypeMeta(p.archetype)
+                    return (
+                      <div
+                        key={p.id}
+                        className={`botsq-persona${p.enabled ? '' : ' botsq-persona--off'}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openEdit(p)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openEdit(p) }}
+                      >
+                        <div className="botsq-persona__head">
+                          <div className="botsq-persona__id">
+                            <div className="botsq-persona__avatar" style={{ '--arch-hue': arch.hue }}>
+                              {initials(p.name)}
+                              {p.favorite_team_flag_url && (
+                                <span className="botsq-persona__crest" title={p.favorite_team_name || p.favorite_team_code}>
+                                  <TeamCrestFlag
+                                    src={p.favorite_team_flag_url}
+                                    alt={p.favorite_team_name || p.favorite_team_code}
+                                    className="botsq-persona__crest-img"
+                                    crestClassName="botsq-persona__crest-img--crest"
+                                  />
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <div className="botsq-persona__name">{p.name}</div>
+                              <div className="botsq-persona__username">@{p.username || '—'}</div>
+                            </div>
+                          </div>
+                          <div onClick={e => e.stopPropagation()}>
+                            <Switch checked={p.enabled} onChange={() => togglePersona(p)} label={`${p.name} ativa`} />
+                          </div>
                         </div>
-                        <div onClick={e => e.stopPropagation()}>
-                          <Switch checked={p.enabled} onChange={() => togglePersona(p)} label={`${p.name} ativa`} />
+                        <div className="botsq-persona__badges">
+                          <span className="badge badge-group botsq-persona__arch-badge" style={{ '--arch-hue': arch.hue }}>
+                            {arch.icon} {arch.label}
+                          </span>
+                          {p.favorite_team_name ? (
+                            <span className="badge badge-win">❤️ {p.favorite_team_name}</span>
+                          ) : p.favorite_team_code ? (
+                            <span className="badge badge-win">❤️ {p.favorite_team_code}</span>
+                          ) : null}
+                        </div>
+                        <div className="botsq-persona__stats">
+                          <span>{p.bets_total} apostas</span>
+                          <span>{p.points_copa} pts Copa</span>
+                          <span>{p.points_br} pts BR</span>
                         </div>
                       </div>
-                      <div className="botsq-persona__badges">
-                        <span className="badge badge-group">{archetypeLabel(p.archetype)}</span>
-                        {p.favorite_team_code && <span className="badge badge-win">❤️ {p.favorite_team_code}</span>}
-                      </div>
-                      <div className="botsq-persona__stats">
-                        <span>{p.bets_total} apostas</span>
-                        <span>{p.points_copa} pts Copa</span>
-                        <span>{p.points_br} pts BR</span>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -423,6 +466,13 @@ export default function AdminBotSquad() {
 
 function EditPersonaModal({ editing, saving, onClose, onSave, onField, onParam }) {
   const { persona, draft } = editing
+  const arch = archetypeMeta(persona.archetype)
+  const draftCode = (draft.favorite_team_code || '').trim().toUpperCase()
+  // escudo acompanha o código digitado enquanto ainda bate com o time original;
+  // se o admin trocar o código, volta a mostrar sem crest até salvar (não inventa imagem)
+  const crestSrc = draftCode && draftCode === (persona.favorite_team_code || '').toUpperCase()
+    ? persona.favorite_team_flag_url
+    : null
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -433,9 +483,24 @@ function EditPersonaModal({ editing, saving, onClose, onSave, onField, onParam }
     <div className="botsq-modal-backdrop" onClick={onClose}>
       <div className="botsq-modal fade-in-1" onClick={e => e.stopPropagation()}>
         <div className="botsq-modal__header">
-          <div>
-            <div className="botsq-modal__title">{persona.name}</div>
-            <div className="botsq-modal__sub">@{persona.username || '—'} · {archetypeLabel(persona.archetype)}</div>
+          <div className="botsq-modal__id">
+            <div className="botsq-persona__avatar botsq-persona__avatar--lg" style={{ '--arch-hue': arch.hue }}>
+              {initials(persona.name)}
+              {crestSrc && (
+                <span className="botsq-persona__crest botsq-persona__crest--lg">
+                  <TeamCrestFlag
+                    src={crestSrc}
+                    alt={persona.favorite_team_name || draftCode}
+                    className="botsq-persona__crest-img"
+                    crestClassName="botsq-persona__crest-img--crest"
+                  />
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="botsq-modal__title">{persona.name}</div>
+              <div className="botsq-modal__sub">@{persona.username || '—'} · {arch.icon} {arch.label}</div>
+            </div>
           </div>
           <button className="btn-ghost btn-sm" onClick={onClose} disabled={saving}>✕</button>
         </div>
