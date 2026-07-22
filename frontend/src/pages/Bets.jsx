@@ -186,7 +186,7 @@ export default function Bets() {
   const [finished, setFinished]     = useState([])
   const [loading, setLoad]          = useState(true)
   const [tab, setTab]               = useState('open')
-  const [comp, setComp]             = useState('copa2026')
+  const [comp, setComp]             = useState('brasileirao2026')
   const [shareMsg, setShareMsg] = useState('')
   const [now, setNow]         = useState(Date.now())
   const [pendingOpenId, setPendingOpenId] = useState(null)
