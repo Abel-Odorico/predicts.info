@@ -191,12 +191,14 @@ export default function Bets() {
   const [now, setNow]         = useState(Date.now())
   const [pendingOpenId, setPendingOpenId] = useState(null)
   const [visibleCount, setVisibleCount]   = useState(30)
+  const [openFilter, setOpenFilter]       = useState('all') // all | pending | bet
+  const [justPlacedIds, setJustPlacedIds] = useState(() => new Set())
   const matchRefs = useRef({})
 
   // Brasileirão sozinho já devolve ~200 partidas agendadas — montar 200 cards
   // animados de uma vez (+ re-render de todos a cada tick do relógio) trava
   // Safari mobile (memória mais curta que desktop). Pagina + reseta ao trocar aba.
-  useEffect(() => { setVisibleCount(30) }, [comp])
+  useEffect(() => { setVisibleCount(30); setOpenFilter('all'); setJustPlacedIds(new Set()) }, [comp])
 
   const load = useCallback(() => {
     setLoad(true)
@@ -248,6 +250,7 @@ export default function Bets() {
       }
       return [...prev, betData]
     })
+    setJustPlacedIds(prev => new Set(prev).add(matchId))
   }
 
   function goToNextMatch(nextId) {
@@ -261,6 +264,16 @@ export default function Bets() {
   const openMatches = [...matches.filter(m => isMatchOpen(m, now))]
     .sort((a, b) => new Date(a.match_date) - new Date(b.match_date))
   const betsByMatchId = Object.fromEntries(bets.map(b => [b.match_id, b]))
+
+  const openBetCount = openMatches.filter(m => betsByMatchId[m.id]).length
+  const openPendingCount = openMatches.length - openBetCount
+  const filteredOpenMatches = openMatches.filter(m => {
+    if (openFilter === 'bet') return !!betsByMatchId[m.id]
+    // justPlacedIds: apostado agora nesta sessão de filtro segue visível até
+    // trocar de aba/filtro — senão o card some no meio da animação de confirmação.
+    if (openFilter === 'pending') return !betsByMatchId[m.id] || justPlacedIds.has(m.id)
+    return true
+  })
 
   function matchLocalDate(dateStr) {
     return new Date(dateStr).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -363,13 +376,35 @@ export default function Bets() {
 
       {tab === 'open' && (
         <div className="fade-in-1">
+          {openMatches.length > 0 && (
+            <div className="bet-filter-row" style={{ display: 'flex', gap: 'var(--s2)', marginBottom: 'var(--s4)', flexWrap: 'wrap' }}>
+              {[
+                { id: 'all',     label: 'Todos',      count: openMatches.length },
+                { id: 'pending', label: 'Pendentes',   count: openPendingCount },
+                { id: 'bet',     label: 'Já apostei',  count: openBetCount },
+              ].map(f => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className={`btn btn-sm ${openFilter === f.id ? 'btn-ghost--active' : 'btn-ghost'}`}
+                  onClick={() => setOpenFilter(f.id)}
+                >
+                  {f.label} <span style={{ opacity: 0.65 }}>({f.count})</span>
+                </button>
+              ))}
+            </div>
+          )}
           {openMatches.length === 0 ? (
             <div className="bet-empty mt-6" style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
               Sem partidas abertas no momento
             </div>
+          ) : filteredOpenMatches.length === 0 ? (
+            <div className="bet-empty mt-6" style={{ color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
+              Nenhuma partida encontrada com esse filtro
+            </div>
           ) : (
             <div className="bets-list mt-6">
-              {openMatches.slice(0, visibleCount).map((m, i, visible) => {
+              {filteredOpenMatches.slice(0, visibleCount).map((m, i, visible) => {
                 const curDate  = matchLocalDate(m.match_date)
                 const prevDate = i > 0 ? matchLocalDate(visible[i - 1].match_date) : null
                 const showSep  = curDate !== prevDate
@@ -405,14 +440,14 @@ export default function Bets() {
                   </Fragment>
                 )
               })}
-              {openMatches.length > visibleCount && (
+              {filteredOpenMatches.length > visibleCount && (
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm mt-4"
                   style={{ width: '100%' }}
                   onClick={() => setVisibleCount(v => v + 30)}
                 >
-                  Carregar mais ({openMatches.length - visibleCount} restantes)
+                  Carregar mais ({filteredOpenMatches.length - visibleCount} restantes)
                 </button>
               )}
             </div>
