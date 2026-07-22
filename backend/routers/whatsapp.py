@@ -317,6 +317,9 @@ def _model_prediction_message(db: Session, query_norm: str) -> str:
     from whatsapp_group_poster import _html_to_wa, _translate_team_names
 
     now = _utcnow()
+    copa_id = get_competition_id(db)
+    br_id = get_competition_id(db, "brasileirao2026")
+    comp_ids = [copa_id] + ([br_id] if br_id is not None else [])
     window = (
         db.query(Match)
         .filter(
@@ -324,7 +327,7 @@ def _model_prediction_message(db: Session, query_norm: str) -> str:
             Match.match_date.isnot(None),
             Match.match_date >= now - timedelta(hours=6),
             Match.match_date <= now + timedelta(days=10),
-            Match.competition_id == get_competition_id(db),
+            Match.competition_id.in_(comp_ids),
         )
         .order_by(Match.match_date)
         .all()
@@ -351,15 +354,13 @@ def _model_prediction_message(db: Session, query_norm: str) -> str:
     return f"{corpo}\n\nAposta aí: *{_pt(match.team_a)} 2x1 {_pt(match.team_b)}* (com teu placar) 😉"
 
 
-def _ranking_message(db: Session, user: User) -> str:
-    """Top 5 + posição do usuário — mesma ordenação do GET /ranking (bets.py):
-    pontos > placares exatos > nº de apostas > nome."""
+def _ranking_top5(db: Session, user: User, comp_id: int) -> tuple[list, int | None]:
+    """Top 5 + posição do usuário numa competição — mesma ordenação do GET /ranking
+    (bets.py): pontos > placares exatos > nº de apostas > nome."""
     from sqlalchemy import and_, desc
-    from competitions import get_competition_id
-    copa_id = get_competition_id(db)
     bet_counts = (
         db.query(Bet.user_id.label("user_id"), func.count(Bet.id).label("total_bets"))
-        .filter(Bet.competition_id == copa_id)
+        .filter(Bet.competition_id == comp_id)
         .group_by(Bet.user_id).subquery()
     )
     rows = (
@@ -368,7 +369,7 @@ def _ranking_message(db: Session, user: User) -> str:
             func.coalesce(Ranking.total_points, 0).label("pts"),
             func.coalesce(Ranking.exact_scores, 0).label("exact"),
         )
-        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == copa_id))
+        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == comp_id))
         .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
         .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
         .order_by(
@@ -379,21 +380,41 @@ def _ranking_message(db: Session, user: User) -> str:
         )
         .all()
     )
+    pos = next((i + 1 for i, r in enumerate(rows) if r.id == user.id), None)
+    return rows, pos
+
+
+def _ranking_block(label: str, rows: list, pos: int | None) -> str:
     medals = ["🥇", "🥈", "🥉", "4º", "5º"]
     linhas = [
         f"{medals[i]} {r.name} — {r.pts} pts" + (f" ({r.exact} na mosca)" if r.exact else "")
         for i, r in enumerate(rows[:5])
     ]
-    msg = "🏆 *Ranking Geral — Top 5*\n\n" + "\n".join(linhas)
-    pos = next((i + 1 for i, r in enumerate(rows) if r.id == user.id), None)
+    msg = f"{label}\n\n" + ("\n".join(linhas) if linhas else "Ninguém pontuou ainda.")
     if pos is None:
-        msg += "\n\n📍 Você ainda não pontuou — manda *jogos* e entra na disputa!"
+        msg += "\n\n📍 Você ainda não pontuou aqui."
     elif pos > 5:
         me = rows[pos - 1]
         msg += f"\n\n📍 Você: {pos}º com {me.pts} pts" + (f" ({me.exact} na mosca)" if me.exact else "")
     else:
-        msg += f"\n\n📍 Você tá no top 5! 🔥"
-    return msg + "\n\nCompleto: predicts.info/ranking"
+        msg += "\n\n📍 Você tá no top 5! 🔥"
+    return msg
+
+
+def _ranking_message(db: Session, user: User) -> str:
+    """Ranking Copa + Brasileirão (competições separadas, sem soma — igual site)."""
+    from competitions import get_competition_id
+    copa_id = get_competition_id(db)
+    br_id = get_competition_id(db, "brasileirao2026")
+
+    copa_rows, copa_pos = _ranking_top5(db, user, copa_id)
+    partes = [_ranking_block("🏆 *Ranking Copa do Mundo — Top 5*", copa_rows, copa_pos)]
+
+    if br_id is not None:
+        br_rows, br_pos = _ranking_top5(db, user, br_id)
+        partes.append(_ranking_block("🇧🇷 *Ranking Brasileirão — Top 5*", br_rows, br_pos))
+
+    return "\n\n".join(partes) + "\n\nCompleto: predicts.info/ranking"
 
 
 def _my_bets_message(db: Session, user: User) -> str:

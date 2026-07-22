@@ -193,7 +193,7 @@ class TeamHeadToHead(Base):
     total_matches = Column(Integer)
     summary = Column(Text)
     recent_results = Column(Text)  # JSON: [{"date","competition","result"}], mais recente primeiro
-    source = Column(String(20), nullable=False, default="web_search")
+    source = Column(String(40), nullable=False, default="web_search")
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 

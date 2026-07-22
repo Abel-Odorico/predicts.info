@@ -171,7 +171,10 @@ def build_analysis_body(db: Session, match: Match, cache_only: bool = False) -> 
     ta_in = _team_to_input(ta)
     tb_in = _team_to_input(tb)
     phase_str = match.phase.value if match.phase else "group"
-    if cache_only:
+    # H2H via LLM (_get_or_fetch_h2h) usa prompt de "seleções principais masculinas" —
+    # não faz sentido pra clube (Brasileirão) e o LLM ainda inventa dado igual, então
+    # clube é SEMPRE cache-only (nunca dispara o fetch, só lê o que já existir).
+    if cache_only or is_br:
         h2h = get_h2h_cached(db, ta.code, tb.code)
     else:
         h2h = _get_or_fetch_h2h(db, ta.code, tb.code, ta.name, tb.name)
@@ -229,10 +232,14 @@ def build_projection_message(db: Session, match: Match, cache_only: bool = False
     local_dt = match.match_date - timedelta(hours=3) if match.match_date else None
     date_str = local_dt.strftime("%d/%m, %Hh (Brasília)") if local_dt else "data a definir"
 
-    phase_label = {
-        "group": "Fase de Grupos", "r32": "Rodada de 32", "r16": "Oitavas de Final",
-        "qf": "Quartas de Final", "sf": "Semifinal", "3rd": "Terceiro Lugar", "final": "Final",
-    }.get(phase_str, phase_str)
+    is_br = match.competition_id == get_competition_id(db, "brasileirao2026")
+    if is_br:
+        phase_label = f"Rodada {match.match_number}" if match.match_number else "Brasileirão"
+    else:
+        phase_label = {
+            "group": "Fase de Grupos", "r32": "Rodada de 32", "r16": "Oitavas de Final",
+            "qf": "Quartas de Final", "sf": "Semifinal", "3rd": "Terceiro Lugar", "final": "Final",
+        }.get(phase_str, phase_str)
 
     body = build_analysis_body(db, match, cache_only=cache_only)
     if body is None:
@@ -262,6 +269,11 @@ def send_pending_projections(db: Session | None = None, log=print) -> dict:
         cutoff = _utcnow() + timedelta(hours=PROJECTION_WINDOW_HOURS)
         already_sent = {row[0] for row in db.query(MatchProjection.match_id).all()}
 
+        comp_ids = [get_competition_id(db)]
+        br_id = get_competition_id(db, "brasileirao2026")
+        if br_id is not None:
+            comp_ids.append(br_id)
+
         candidates = (
             db.query(Match)
             .options(joinedload(Match.team_a), joinedload(Match.team_b))
@@ -270,7 +282,7 @@ def send_pending_projections(db: Session | None = None, log=print) -> dict:
                 Match.match_date.isnot(None),
                 Match.match_date <= cutoff,
                 Match.match_date > _utcnow(),
-                Match.competition_id == get_competition_id(db),
+                Match.competition_id.in_(comp_ids),
             )
             .all()
         )

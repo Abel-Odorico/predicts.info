@@ -120,7 +120,7 @@ const ROUTER_GROUPS = [
 ]
 
 const CRON_JOBS = [
-  { freq: '*/5 min',  script: 'update_world_cup_data.sh',   func: 'Resultados Copa (Wikipedia+feed), Elo, mata-mata, projeções Telegram, aviso grupo WA',       log: 'predicts-cron.log', live: true },
+  { freq: '*/5 min',  script: 'update_world_cup_data.sh',   func: 'Resultados Copa (Wikipedia+feed), Elo, mata-mata, projeções Telegram (Copa+Brasileirão), aviso grupo WA',       log: 'predicts-cron.log', live: true },
   { freq: '1 min',    script: 'check_kickoff.py',           func: 'Detecta início de jogo — lembrete WhatsApp/push 1h antes',                                   log: 'predicts-kickoff.log' },
   { freq: '1 min',    script: 'check_goals.py',              func: 'Detecta gol ao vivo — push imediato',                                                        log: 'predicts-goals.log' },
   { freq: '1 min',    script: 'whatsapp_campaign_worker.py', func: 'Processa fila de campanhas WhatsApp pendentes (20/lote)',                                    log: 'predicts-whatsapp.log' },

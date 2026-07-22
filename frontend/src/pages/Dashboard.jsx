@@ -601,13 +601,13 @@ export default function Dashboard() {
           borderRadius: 14, padding: '20px 22px', marginBottom: 'var(--s5)',
         }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.1em', marginBottom: 6 }}>
-            📊 ESTATÍSTICAS & PALPITES · COPA 2026 + BRASILEIRÃO
+            📊 ESTATÍSTICAS & PALPITES · BRASILEIRÃO + NOVAS COMPETIÇÕES
           </div>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: '#ffffff', margin: '0 0 6px', letterSpacing: '0.03em', lineHeight: 1.2 }}>
             Faça palpites · Entre no bolão · Acompanhe o futebol
           </h2>
           <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '0 0 14px', lineHeight: 1.5 }}>
-            Palpite no placar dos jogos, escolha seu campeão e vice, e compita com amigos no bolão gratuito. Reta final da Copa 2026 e Brasileirão Série A, na mesma conta.
+            Palpite no placar de cada rodada do Brasileirão Série A, dispute o bolão com amigos e confira o retrospecto completo da Copa 2026 — tudo na mesma conta.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Link to="/login?tab=register" style={{
@@ -616,19 +616,19 @@ export default function Dashboard() {
             }}>
               Criar conta grátis →
             </Link>
-            <Link to="/torneio" style={{
-              padding: '9px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.18)', color: '#fff',
-              textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
-              border: '1px solid rgba(255,255,255,0.35)',
-            }}>
-              📅 Copa: confrontos
-            </Link>
             <Link to="/brasileirao" style={{
               padding: '9px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.18)', color: '#fff',
               textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
               border: '1px solid rgba(255,255,255,0.35)',
             }}>
               🇧🇷 Brasileirão
+            </Link>
+            <Link to="/torneio" style={{
+              padding: '9px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.18)', color: '#fff',
+              textDecoration: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600,
+              border: '1px solid rgba(255,255,255,0.35)',
+            }}>
+              🏆 Copa 2026: resultado final
             </Link>
             <Link to="/login" style={{
               padding: '9px 18px', borderRadius: 8, background: 'transparent', color: 'rgba(255,255,255,0.75)',
@@ -719,11 +719,11 @@ export default function Dashboard() {
       </div>
 
       <div className="row-wrap" style={{ gap: 'var(--s3)', marginBottom: 'var(--s6)' }}>
-        <button type="button" className="btn btn-ghost" style={{ flex: 1, minWidth: 200 }} onClick={() => setComp('copa2026')}>
-          🏆 Ver painel completo da Copa 2026 →
-        </button>
         <button type="button" className="btn btn-ghost" style={{ flex: 1, minWidth: 200 }} onClick={() => setComp('brasileirao2026')}>
           🇧🇷 Ver painel completo do Brasileirão →
+        </button>
+        <button type="button" className="btn btn-ghost" style={{ flex: 1, minWidth: 200 }} onClick={() => setComp('copa2026')}>
+          🏆 Ver histórico completo da Copa 2026 →
         </button>
       </div>
 
