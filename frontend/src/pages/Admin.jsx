@@ -2301,7 +2301,7 @@ export default function Admin() {
                           {syncReport.today_matches.map(m => {
                             const done = m.score !== null
                             const timeStr = m.match_date
-                              ? new Date(m.match_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                              ? new Date(m.match_date + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
                               : '—'
                             return (
                               <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', padding: 'var(--s2) var(--s3)', borderRadius: 6, background: 'var(--surface-2)', border: `1px solid ${done ? 'var(--win)' : 'var(--border)'}` }}>
@@ -3547,7 +3547,7 @@ export default function Admin() {
                   <div>
                     <div className="adm-coverage-row__teams">{match.team_a_code} × {match.team_b_code}</div>
                     <div className="adm-coverage-row__meta">
-                      G{match.group_name || '—'} · #{match.match_id} · {match.match_date ? new Date(match.match_date).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : 'Sem data'}
+                      G{match.group_name || '—'} · #{match.match_id} · {match.match_date ? new Date(match.match_date + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : 'Sem data'}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 'var(--s2)' }}>
@@ -4152,7 +4152,7 @@ export default function Admin() {
                         {r.team_a_code} × {r.team_b_code}
                       </td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                        {r.match_date ? new Date(r.match_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                        {r.match_date ? new Date(r.match_date + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—'}
                       </td>
                       <td>
                         <span className="badge badge-group" style={{ fontSize: 10 }}>{r.phase}</span>
