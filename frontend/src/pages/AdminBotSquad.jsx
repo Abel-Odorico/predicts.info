@@ -221,6 +221,8 @@ export default function AdminBotSquad() {
     const personas = overview?.personas || []
     return {
       totalBets: personas.reduce((s, p) => s + (p.bets_total || 0), 0),
+      totalExact: personas.reduce((s, p) => s + (p.exact_scores || 0), 0),
+      totalCorrect: personas.reduce((s, p) => s + (p.correct_results || 0), 0),
       betsToday: personas.filter(p => isTodayBRT(p.last_bet_at)).length,
       activePersonas: personas.filter(p => p.enabled).length,
       total: personas.length,
@@ -286,6 +288,20 @@ export default function AdminBotSquad() {
                     </div>
                   </div>
                   <div className="botsq-stat">
+                    <span className="botsq-stat__icon">🔥</span>
+                    <div>
+                      <div className="botsq-stat__val">{stats.totalExact}</div>
+                      <div className="botsq-stat__label">Placares cravados</div>
+                    </div>
+                  </div>
+                  <div className="botsq-stat">
+                    <span className="botsq-stat__icon">✅</span>
+                    <div>
+                      <div className="botsq-stat__val">{stats.totalCorrect}</div>
+                      <div className="botsq-stat__label">Acertos (resultado)</div>
+                    </div>
+                  </div>
+                  <div className="botsq-stat">
                     <span className="botsq-stat__icon">📅</span>
                     <div>
                       <div className="botsq-stat__val">{stats.betsToday}</div>
@@ -293,7 +309,7 @@ export default function AdminBotSquad() {
                     </div>
                   </div>
                   <div className="botsq-stat">
-                    <span className="botsq-stat__icon">✅</span>
+                    <span className="botsq-stat__icon">🟢</span>
                     <div>
                       <div className="botsq-stat__val">{stats.activePersonas}/{stats.total}</div>
                       <div className="botsq-stat__label">Personas ativas</div>
@@ -439,6 +455,8 @@ export default function AdminBotSquad() {
                           <span>{p.bets_total} apostas</span>
                           <span>{p.points_copa} pts Copa</span>
                           <span>{p.points_br} pts BR</span>
+                          <span>🔥 {p.exact_scores} cravado{p.exact_scores === 1 ? '' : 's'}</span>
+                          <span>✅ {p.correct_results} acerto{p.correct_results === 1 ? '' : 's'}</span>
                         </div>
                       </div>
                     )

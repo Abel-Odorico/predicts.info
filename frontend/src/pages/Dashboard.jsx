@@ -466,7 +466,7 @@ export default function Dashboard() {
         detectGoals(games)
         setLiveGames(games)
         setCalendar(fullCalendar?.days || [])
-        api.get('/ranking?limit=8').then(bettors => {
+        api.get('/ranking?limit=8&competition=copa2026').then(bettors => {
           if (!mounted) return
           setTopBettors(Array.isArray(bettors) ? bettors.filter(b => b.total_points > 0) : [])
         }).catch(() => {})

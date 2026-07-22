@@ -12,11 +12,117 @@ from sqlalchemy.orm import Session
 import redis as redis_lib
 from database import get_db
 from config import settings
+from competitions import get_competition_id
 from models import Match, MatchPhase, MatchStatus, Team, TournamentSimulation
 from engine.monte_carlo import simulate_tournament, simulate_knockout_bracket
 from world_cup_official import candidate_thirds, compute_group_tables, fetch_official_knockout_schedule, resolve_slot
 
 router = APIRouter(prefix="/tournament", tags=["tournament"])
+
+# Numeração oficial FIFA (Match 73-104) do chaveamento de 32 times — usada só pela
+# árvore visual (KnockoutBracket, front, arrays HALF_A/HALF_B espelhados de
+# Tournament.jsx). A Wikipedia só expõe esse número via template de jogo com
+# pênaltis (score link); pra qualquer outro jogo o campo fica vazio, e pós-torneio
+# o texto "Winner Match N" já foi substituído pelo nome real do time — o rótulo de
+# progressão desaparece da fonte pra sempre. `build_fifa_bracket_numbers` reconstrói
+# a árvore inteira por linhagem de vencedor (100% dos nossos dados, sem Wikipedia)
+# e devolve match.id -> número FIFA no slot certo.
+_HALF_A_SLOTS = {"r32": [74, 77, 73, 75, 83, 84, 81, 82], "r16": [89, 90, 93, 94], "qf": [97, 98], "sf": [101]}
+_HALF_B_SLOTS = {"r32": [76, 78, 79, 80, 86, 88, 85, 87], "r16": [91, 92, 95, 96], "qf": [99, 100], "sf": [102]}
+_THIRD_MN = 103
+_FINAL_MN = 104
+_HALF_A_R32_SET = set(_HALF_A_SLOTS["r32"])
+_HALF_B_R32_SET = set(_HALF_B_SLOTS["r32"])
+
+
+def _knockout_winner_team_id(m: Match) -> int | None:
+    if not m.result:
+        return None
+    sa, sb = m.result.score_a, m.result.score_b
+    if sa > sb:
+        return m.team_a_id
+    if sb > sa:
+        return m.team_b_id
+    if m.result.et_winner == "a":
+        return m.team_a_id
+    if m.result.et_winner == "b":
+        return m.team_b_id
+    return None
+
+
+def build_fifa_bracket_numbers(db: Session) -> dict[int, int]:
+    """match.id -> número oficial FIFA (73-104), reconstruído descendo do final
+    pela linhagem real de vencedores (quem venceu qual jogo, do nosso banco).
+    Retorna {} se o mata-mata ainda não tem os 32 jogos com resultado (torneio
+    em andamento — sem dado suficiente pra montar a árvore)."""
+    from sqlalchemy.orm import joinedload
+
+    comp_id = get_competition_id(db)
+    knockout = (
+        db.query(Match)
+        .options(joinedload(Match.result))
+        .filter(Match.phase != MatchPhase.group, Match.competition_id == comp_id)
+        .all()
+    )
+    by_phase: dict[str, list[Match]] = {}
+    for m in knockout:
+        by_phase.setdefault(m.phase.value, []).append(m)
+
+    required = ("r32", "r16", "qf", "sf", "3rd", "final")
+    if any(len(by_phase.get(p, [])) == 0 for p in required):
+        return {}
+    if any(m.result is None for p in required for m in by_phase[p]):
+        return {}
+
+    numbers: dict[int, int] = {}
+    final_match = by_phase["final"][0]
+    third_match = by_phase["3rd"][0]
+    numbers[final_match.id] = _FINAL_MN
+    numbers[third_match.id] = _THIRD_MN
+
+    sf_by_team: dict[int, Match] = {}
+    for m in by_phase["sf"]:
+        sf_by_team[m.team_a_id] = m
+        sf_by_team[m.team_b_id] = m
+
+    branch_a_sf = sf_by_team.get(final_match.team_a_id)
+    branch_b_sf = sf_by_team.get(final_match.team_b_id)
+    if not branch_a_sf or not branch_b_sf or branch_a_sf.id == branch_b_sf.id:
+        return {}
+    numbers[branch_a_sf.id] = _HALF_A_SLOTS["sf"][0]
+    numbers[branch_b_sf.id] = _HALF_B_SLOTS["sf"][0]
+
+    phase_order = ["r32", "r16", "qf", "sf"]
+
+    def _descend(match: Match, half_slots: dict, level_idx: int) -> None:
+        if level_idx == 0:
+            return  # r32 é folha
+        prev_phase = phase_order[level_idx - 1]
+        cur_phase = phase_order[level_idx]
+        winner_by_team: dict[int, Match] = {}
+        for m in by_phase[prev_phase]:
+            wt = _knockout_winner_team_id(m)
+            if wt is not None:
+                winner_by_team[wt] = m
+        child_a = winner_by_team.get(match.team_a_id)
+        child_b = winner_by_team.get(match.team_b_id)
+        if not child_a or not child_b or child_a.id == child_b.id:
+            return
+        cur_slots = half_slots[cur_phase]
+        assigned = numbers.get(match.id)
+        if assigned not in cur_slots:
+            return
+        pos = cur_slots.index(assigned)
+        slots = half_slots[prev_phase]
+        numbers[child_a.id] = slots[pos * 2]
+        numbers[child_b.id] = slots[pos * 2 + 1]
+        _descend(child_a, half_slots, level_idx - 1)
+        _descend(child_b, half_slots, level_idx - 1)
+
+    _descend(branch_a_sf, _HALF_A_SLOTS, phase_order.index("sf"))
+    _descend(branch_b_sf, _HALF_B_SLOTS, phase_order.index("sf"))
+
+    return numbers
 
 CACHE_KEY = "tournament:latest"
 CACHE_TTL = 3600 * 12  # 12h — invalidated immediately on new result
@@ -376,18 +482,20 @@ def bracket_sides(db: Session = Depends(get_db)):
     r32_db = (
         db.query(Match)
         .options(joinedload(Match.team_a), joinedload(Match.team_b))
-        .filter(Match.phase == MatchPhase.r32, Match.match_number.isnot(None))
+        .filter(Match.phase == MatchPhase.r32)
         .all()
     )
+    fifa_numbers = build_fifa_bracket_numbers(db)
     for m in r32_db:
-        half = "A" if m.match_number in HALF_A_R32 else "B" if m.match_number in HALF_B_R32 else None
+        fifa_mn = fifa_numbers.get(m.id)
+        half = "A" if fifa_mn in _HALF_A_R32_SET else "B" if fifa_mn in _HALF_B_R32_SET else None
         if not half:
             continue
         for t in [m.team_a, m.team_b]:
             if t:
                 _add({"id": t.id, "code": t.code, "name": t.name, "flag_url": t.flag_url}, half)
 
-    if not r32_db:
+    if not half_a and not half_b:
         table = compute_group_tables(db)
         schedule = fetch_official_knockout_schedule()
         for item in schedule:
@@ -464,10 +572,12 @@ def knockout_phases(db: Session = Depends(get_db)):
         .order_by(Match.match_date, Match.match_number)
         .all()
     )
+    fifa_numbers = build_fifa_bracket_numbers(db)
 
     r32 = []
     for m in r32_matches:
         next_entry = feeds_into.get(m.match_number)
+        fifa_mn = fifa_numbers.get(m.id)
         r32.append({
             "id": m.id,
             "match_number": m.match_number,
@@ -479,7 +589,7 @@ def knockout_phases(db: Session = Depends(get_db)):
             "team_b": _team(m.team_b),
             "score_a": m.result.score_a if m.result else None,
             "score_b": m.result.score_b if m.result else None,
-            "half": "A" if m.match_number in HALF_A_R32 else ("B" if m.match_number in HALF_B_R32 else None),
+            "half": "A" if fifa_mn in _HALF_A_R32_SET else ("B" if fifa_mn in _HALF_B_R32_SET else None),
             "next_match_number": next_entry["match_number"] if next_entry else None,
             "next_match_date": next_entry["match_date"] if next_entry else None,
             "next_venue": next_entry.get("venue") if next_entry else None,
@@ -525,23 +635,56 @@ def knockout_phases(db: Session = Depends(get_db)):
         final_label_a = f"Winner Match {sf_entries[0]['match_number']}"
         final_label_b = f"Winner Match {sf_entries[1]['match_number']}"
 
-    final_entry = {
-        "match_number": 104,
-        "match_date": "2026-07-19T19:00:00",
-        "venue": "MetLife Stadium",
-        "city": "East Rutherford",
-        "phase": "final",
-        "section": "FINAL",
-        "team_a_label": final_label_a or "Winner SF1",
-        "team_b_label": final_label_b or "Winner SF2",
-        "resolved_team_a": None,
-        "resolved_team_b": None,
-        "next_match_number": None,
-        "next_match_date": None,
-        "next_venue": None,
-        "next_city": None,
-        "next_phase": None,
-    }
+    # A final já foi disputada — o stub "Winner SFx" (escrito antes do jogo) fica
+    # sem time/placar pra sempre se não puxar do banco. Nosso Match/MatchResult
+    # já tem o resultado real (ver skill predicts) — usa ele em vez da Wikipedia,
+    # que não expõe mais o placar no formato esperado pelo parser pós-jogo.
+    final_match = (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+        .filter(Match.phase == MatchPhase.final)
+        .order_by(Match.match_date.desc())
+        .first()
+    )
+    if final_match:
+        final_entry = {
+            "match_number": final_match.match_number or 104,
+            "match_date": final_match.match_date.isoformat() if final_match.match_date else None,
+            "venue": final_match.venue or None,
+            "city": final_match.city or None,
+            "phase": "final",
+            "section": "FINAL",
+            "team_a_label": final_label_a or "Winner SF1",
+            "team_b_label": final_label_b or "Winner SF2",
+            "resolved_team_a": _team_min(final_match.team_a),
+            "resolved_team_b": _team_min(final_match.team_b),
+            "status": final_match.status.value if hasattr(final_match.status, "value") else str(final_match.status),
+            "score_a": final_match.result.score_a if final_match.result else None,
+            "score_b": final_match.result.score_b if final_match.result else None,
+            "next_match_number": None,
+            "next_match_date": None,
+            "next_venue": None,
+            "next_city": None,
+            "next_phase": None,
+        }
+    else:
+        final_entry = {
+            "match_number": 104,
+            "match_date": "2026-07-19T19:00:00",
+            "venue": "MetLife Stadium",
+            "city": "East Rutherford",
+            "phase": "final",
+            "section": "FINAL",
+            "team_a_label": final_label_a or "Winner SF1",
+            "team_b_label": final_label_b or "Winner SF2",
+            "resolved_team_a": None,
+            "resolved_team_b": None,
+            "next_match_number": None,
+            "next_match_date": None,
+            "next_venue": None,
+            "next_city": None,
+            "next_phase": None,
+        }
     # Wire SF into Final
     for e in sf_entries:
         e["next_match_number"] = 104
@@ -584,6 +727,8 @@ def official_bracket(db: Session = Depends(get_db)):
             .all()
     }
 
+    fifa_numbers = build_fifa_bracket_numbers(db)
+
     schedule = []
     for item in fetch_official_knockout_schedule():
         slot_a = resolve_slot(item["team_a_label"], table)
@@ -594,9 +739,13 @@ def official_bracket(db: Session = Depends(get_db)):
                 slot_a = _team_min(db_match.team_a)
             if not slot_b and db_match.team_b:
                 slot_b = _team_min(db_match.team_b)
+        # Número do Wikipedia (via score_link, só existe pra jogo com pênaltis)
+        # some sempre que temos a linhagem real — usa ela, que cobre os 32 jogos.
+        fifa_mn = fifa_numbers.get(db_match.id) if db_match else None
         schedule.append(
             {
                 **item,
+                **({"match_number": fifa_mn} if fifa_mn else {}),
                 "resolved_team_a": slot_a,
                 "resolved_team_b": slot_b,
                 "candidate_thirds_a": candidate_thirds(item["team_a_label"], table),
@@ -606,6 +755,52 @@ def official_bracket(db: Session = Depends(get_db)):
                 "score_b": db_match.result.score_b if db_match and db_match.result else None,
             }
         )
+
+    # Final e a maioria dos jogos de 16avos nunca aparecem em
+    # fetch_official_knockout_schedule() — a final porque o artigo pós-jogo troca
+    # de template (placar não bate o regex esperado), os 16avos porque a Wikipedia
+    # só documenta 1 seção "R32" na página combinada de mata-mata (os outros 15
+    # vivem numa página própria que também não é lida aqui). Completa os dois
+    # casos direto do banco, que tem os 32 jogos com resultado real (ver skill
+    # predicts) — usando a mesma numeração FIFA reconstruída por linhagem.
+    def _append_from_db(m: Match, section: str) -> None:
+        schedule.append({
+            "section": section,
+            "phase": m.phase.value,
+            "match_number": fifa_numbers.get(m.id),
+            "match_date": m.match_date.isoformat() if m.match_date else None,
+            "venue": m.venue or None,
+            "city": m.city or None,
+            "team_a_label": "",
+            "team_b_label": "",
+            "score": [m.result.score_a, m.result.score_b] if m.result else None,
+            "went_to_extra_time": bool(m.result.went_to_extra_time) if m.result else False,
+            "decided_by_penalties": bool(m.result.decided_by_penalties) if m.result else False,
+            "et_winner": m.result.et_winner if m.result else None,
+            "penalty_score_a": m.result.penalty_score_a if m.result else None,
+            "penalty_score_b": m.result.penalty_score_b if m.result else None,
+            "resolved_team_a": _team_min(m.team_a),
+            "resolved_team_b": _team_min(m.team_b),
+            "candidate_thirds_a": [],
+            "candidate_thirds_b": [],
+            "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+            "score_a": m.result.score_a if m.result else None,
+            "score_b": m.result.score_b if m.result else None,
+        })
+
+    covered_numbers = {s["match_number"] for s in schedule if s.get("match_number")}
+    missing_numbers = set(fifa_numbers.values()) - covered_numbers
+    if missing_numbers:
+        id_by_number = {v: k for k, v in fifa_numbers.items()}
+        missing_matches = (
+            db.query(Match)
+            .options(joinedload(Match.team_a), joinedload(Match.team_b), joinedload(Match.result))
+            .filter(Match.id.in_([id_by_number[n] for n in missing_numbers]))
+            .all()
+        )
+        for m in missing_matches:
+            section = "Final" if m.phase == MatchPhase.final else ("3rd" if m.phase == MatchPhase.third else f"R32-{fifa_numbers[m.id]}")
+            _append_from_db(m, section)
 
     return {
         "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),

@@ -84,7 +84,7 @@ export default function Ranking() {
   const [expandedBets, setExpandedBets] = useState({}) // user_id -> { loading, bets }
   const [shareOpen,   setShareOpen]   = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
-  const [comp,        setComp]        = useState('copa2026')
+  const [comp,        setComp]        = useState('brasileirao2026')
 
   useEffect(() => {
     api.get('/champion/picks/all')
@@ -104,7 +104,7 @@ export default function Ranking() {
     setCompLoad(true)
     const start = competition.start_date.slice(0, 10)
     const end   = competition.end_date ? competition.end_date.slice(0, 10) : ''
-    const qs    = `date_from=${start}${end ? `&date_to=${end}` : ''}&limit=100`
+    const qs    = `date_from=${start}${end ? `&date_to=${end}` : ''}&limit=100&competition=copa2026`
     api.get(`/ranking?${qs}`)
       .then(rows => setCompData(rows))
       .catch(() => setCompData([]))
@@ -241,7 +241,7 @@ export default function Ranking() {
       )}
 
       <div className="phase-nav fade-in-1" style={{ margin: 'var(--s4) 0' }}>
-        {COMPETITIONS.filter(c => c.id !== 'geral').map(c => (
+        {COMPETITIONS.map(c => (
           <button
             key={c.id}
             type="button"

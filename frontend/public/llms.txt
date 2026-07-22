@@ -1,15 +1,15 @@
 # Predicts.info
 
-> Simulador estatístico de futebol: 1 milhão de simulações Monte Carlo por partida (Poisson + Elo), palpites de placar com prorrogação e pênaltis, análise de partidas com IA e aposta pelo WhatsApp. Copa do Mundo 2026 (reta final) e Brasileirão Série A ao vivo na mesma plataforma. 100% gratuito.
+> Simulador estatístico de futebol: 1 milhão de simulações Monte Carlo por partida (Poisson + Elo), palpites de placar com prorrogação e pênaltis, análise de partidas com IA e aposta pelo WhatsApp. Brasileirão Série A ao vivo, mais o histórico completo da Copa do Mundo 2026 (Espanha campeã), na mesma plataforma. 100% gratuito.
 
 ## Páginas principais
 
 - [Início](https://predicts.info/): apresentação, FAQ e acesso ao simulador
 - [Dashboard](https://predicts.info/dashboard): painel principal do simulador
-- [Torneio — Copa do Mundo 2026](https://predicts.info/torneio): chaveamento, grupos e probabilidades de título
 - [Brasileirão](https://predicts.info/brasileirao): tabela, rodada e projeção Monte Carlo da Série A
-- [Grupos](https://predicts.info/grupos): classificação da fase de grupos da Copa
-- [Resultados](https://predicts.info/resultados): resultados ao vivo
+- [Torneio — Copa do Mundo 2026](https://predicts.info/torneio): chaveamento completo e histórico da Copa (Espanha campeã)
+- [Grupos](https://predicts.info/grupos): classificação final da fase de grupos da Copa
+- [Resultados](https://predicts.info/resultados): todos os resultados, Copa e Brasileirão
 - [Ranking](https://predicts.info/ranking): ranking geral de usuários
 - [Notícias](https://predicts.info/noticias): notícias de futebol e trending topics
 - [História](https://predicts.info/historia): confrontos e resultados históricos entre seleções
@@ -18,7 +18,7 @@
 ## Especialidades
 
 - Simulação Monte Carlo (1 milhão de iterações por partida)
-- Modelo estatístico: odds implícitas via Elo (56,5%) + xG cruzado (43,5%) + confronto direto (5%)
+- Modelo estatístico: odds implícitas via Elo (53,7%) + xG cruzado (41,3%) + confronto direto (5%)
 - Palpites de placar exato, com prorrogação e pênaltis no mata-mata
 - Análise de partidas com IA, fundamentada em dados reais (forma, artilharia, sequências)
 - Bolões privados entre amigos e ranking geral
@@ -26,8 +26,8 @@
 
 ## Perguntas que o site responde
 
-- Qual a precisão das previsões da Copa do Mundo 2026?
-- Quem tem mais chance de ganhar a Copa 2026?
+- Qual a precisão das previsões de futebol do modelo?
+- Quem foi campeão da Copa do Mundo 2026?
 - Com que frequência os dados são atualizados?
 - Dá pra apostar pelo WhatsApp?
 - Como funciona o palpite com prorrogação e pênaltis?

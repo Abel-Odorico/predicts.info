@@ -175,7 +175,7 @@ export default function ShareModal({ onClose, token }) {
         const res = await api.get(`/user-groups/${selectedGroup.id}/ranking`, token)
         ranking = res.ranking || []; title = res.group_name || selectedGroup.name
       } else {
-        ranking = await api.get('/ranking'); title = 'Ranking Geral'
+        ranking = await api.get('/ranking?competition=geral'); title = 'Ranking Geral'
       }
       if (!ranking.length) { setImgError('Sem dados de ranking ainda.'); return }
       setImgDataUrl(await drawRankingCanvas(ranking, title))

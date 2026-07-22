@@ -14,8 +14,9 @@ const TITLES = [
   { year: 2010, code: 'ESP', name: 'Espanha', color: '#fbbf24' },
   { year: 2018, code: 'FRA', name: 'França', color: '#1e3a8a' },
   { year: 2022, code: 'ARG', name: 'Argentina', color: '#60a5fa' },
+  { year: 2026, code: 'ESP', name: 'Espanha', color: '#fbbf24' },
 ]
-const TOTAL_TITLES = 7
+const TOTAL_TITLES = 8
 
 function ChampionsTimeline() {
   const stageRef = useRef(null)
@@ -40,7 +41,7 @@ function ChampionsTimeline() {
 
     const W = 1000, H = 180
     const M = { left: 40, right: 40 }
-    const x = d3.scaleLinear().domain([1964, 2024]).range([M.left, W - M.right])
+    const x = d3.scaleLinear().domain([1964, 2026]).range([M.left, W - M.right])
     const midY = 100
 
     const svg = d3.select(el)
@@ -76,7 +77,7 @@ function ChampionsTimeline() {
       .duration(500).ease(d3.easeBackOut.overshoot(1.5))
       .attr('transform', d => `translate(${x(d.year)},${midY}) scale(1)`)
 
-    // loop perpétuo: o título mais recente (2022, Argentina) pulsa pra sempre
+    // loop perpétuo: o título mais recente (2026, Espanha) pulsa pra sempre
     const lastIdx = TITLES.length - 1
     function pulseLast() {
       if (myGen !== genRef.current) return
@@ -102,18 +103,19 @@ export default function FourChampionsFeature() {
     >
       <div className="four-champions__badge">🏆 RARIDADE HISTÓRICA</div>
       <h3 className="four-champions__title">
-        Pela 1ª vez em <span>36 anos</span>, as 4 semifinalistas já foram campeãs mundiais
+        Pela 1ª vez em <span>36 anos</span>, as 4 semifinalistas já tinham sido campeãs mundiais — e a Espanha saiu com a 2ª estrela
       </h3>
       <p className="four-champions__sub">
-        França, Espanha, Inglaterra e Argentina somam <strong>{TOTAL_TITLES} títulos</strong> de Copa do Mundo.
-        A última vez que isso aconteceu foi em <strong>1990</strong> (Argentina, Itália, Alemanha Ocidental e Inglaterra) —
-        só a <strong>3ª vez na história</strong> do torneio.
+        França, Espanha, Inglaterra e Argentina somavam <strong>7 títulos</strong> de Copa do Mundo antes da final —
+        a última vez que 4 ex-campeãs chegaram juntas às semis foi em <strong>1990</strong> (Argentina, Itália, Alemanha Ocidental
+        e Inglaterra), só a <strong>3ª vez na história</strong> do torneio. Espanha venceu a Argentina por 1x0 na final —
+        as quatro somam <strong>{TOTAL_TITLES} títulos</strong> agora.
       </p>
       <ChampionsTimeline />
       <div className="four-champions__legend">
         <span style={{ color: '#60a5fa' }}>● Argentina 3×</span>
         <span style={{ color: '#1e3a8a' }}>● França 2×</span>
-        <span style={{ color: '#fbbf24' }}>● Espanha 1×</span>
+        <span style={{ color: '#fbbf24' }}>● Espanha 2×</span>
         <span style={{ color: '#ef4444' }}>● Inglaterra 1×</span>
       </div>
     </motion.div>

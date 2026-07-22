@@ -75,6 +75,8 @@ def overview(db: Session = Depends(get_db), _admin: User = Depends(require_admin
     last_bet_map: dict[int, datetime] = {}
     ranking_copa_map: dict[int, int] = {}
     ranking_br_map: dict[int, int] = {}
+    exact_map: dict[int, int] = {}
+    correct_map: dict[int, int] = {}
     if bot_user_ids:
         bets_total_map = dict(
             db.query(Bet.user_id, func.count(Bet.id))
@@ -100,6 +102,19 @@ def overview(db: Session = Depends(get_db), _admin: User = Depends(require_admin
                 .filter(Ranking.user_id.in_(bot_user_ids), Ranking.competition_id == br_id)
                 .all()
             )
+        # Cravados/acertos somados entre as 2 competições (mesma régua da Ranking, ver GET /ranking).
+        for uid, exact, correct in (
+            db.query(
+                Ranking.user_id,
+                func.coalesce(func.sum(Ranking.exact_scores), 0),
+                func.coalesce(func.sum(Ranking.correct_results), 0),
+            )
+            .filter(Ranking.user_id.in_(bot_user_ids), Ranking.competition_id.in_(comp_ids))
+            .group_by(Ranking.user_id)
+            .all()
+        ):
+            exact_map[uid] = exact
+            correct_map[uid] = correct
 
     personas = [
         {
@@ -117,6 +132,8 @@ def overview(db: Session = Depends(get_db), _admin: User = Depends(require_admin
             "bets_total": bets_total_map.get(persona.user_id, 0),
             "points_copa": ranking_copa_map.get(persona.user_id, 0),
             "points_br": ranking_br_map.get(persona.user_id, 0),
+            "exact_scores": exact_map.get(persona.user_id, 0),
+            "correct_results": correct_map.get(persona.user_id, 0),
             "last_bet_at": last_bet_map[persona.user_id].isoformat() if last_bet_map.get(persona.user_id) else None,
         }
         for persona, name, username in persona_rows

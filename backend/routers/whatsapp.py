@@ -289,8 +289,8 @@ def _maybe_invite_unknown(db: Session, phone: str, push_name: str | None = None)
     if ja_convidado:
         return None
     primeiro = (push_name or "").split()[0] if push_name else None
-    saudacao = f"👋 *Oi, {primeiro}! Aqui é o bot de palpites do Predicts — o simulador da Copa 2026.*" if primeiro \
-        else "👋 *Oi! Aqui é o bot de palpites do Predicts — o simulador da Copa 2026.*"
+    saudacao = f"👋 *Oi, {primeiro}! Aqui é o bot de palpites do Predicts — o simulador do Brasileirão.*" if primeiro \
+        else "👋 *Oi! Aqui é o bot de palpites do Predicts — o simulador do Brasileirão.*"
     msg = (
         f"{saudacao}\n\n"
         "Esse número ainda não tá vinculado a nenhuma conta. Pra apostar por aqui:\n"
@@ -402,17 +402,19 @@ def _ranking_block(label: str, rows: list, pos: int | None) -> str:
 
 
 def _ranking_message(db: Session, user: User) -> str:
-    """Ranking Copa + Brasileirão (competições separadas, sem soma — igual site)."""
+    """Ranking Brasileirão em foco (padrão do site) + Copa em seguida — competições
+    separadas, sem soma (soma só no site, aba Geral)."""
     from competitions import get_competition_id
     copa_id = get_competition_id(db)
     br_id = get_competition_id(db, "brasileirao2026")
 
-    copa_rows, copa_pos = _ranking_top5(db, user, copa_id)
-    partes = [_ranking_block("🏆 *Ranking Copa do Mundo — Top 5*", copa_rows, copa_pos)]
-
+    partes = []
     if br_id is not None:
         br_rows, br_pos = _ranking_top5(db, user, br_id)
         partes.append(_ranking_block("🇧🇷 *Ranking Brasileirão — Top 5*", br_rows, br_pos))
+
+    copa_rows, copa_pos = _ranking_top5(db, user, copa_id)
+    partes.append(_ranking_block("🏆 *Ranking Copa do Mundo — Top 5*", copa_rows, copa_pos))
 
     return "\n\n".join(partes) + "\n\nCompleto: predicts.info/ranking"
 

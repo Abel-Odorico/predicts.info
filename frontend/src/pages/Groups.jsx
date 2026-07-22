@@ -48,7 +48,7 @@ function BrasileiraoRedirect({ comp, setComp }) {
 
 export default function Groups() {
   const { token, user } = useAuth()
-  const [comp, setComp]         = useState('copa2026')
+  const [comp, setComp]         = useState('brasileirao2026')
   const [groups, setGroups]     = useState({})
   const [qualified, setQual]    = useState({ winners: [], runners_up: [], best_thirds: [] })
   const [bracket, setBracket]   = useState([])
@@ -132,6 +132,11 @@ export default function Groups() {
   const currentPhase = PHASE_ORDER.find(p =>
     bracket.some(m => m.phase === p && !Array.isArray(m.score))
   )
+  const finalMatch = bracket.find(m => m.phase === 'final')
+  const tournamentOver = !!finalMatch && Array.isArray(finalMatch.score)
+  const championCode = tournamentOver
+    ? (finalMatch.score[0] > finalMatch.score[1] ? finalMatch.resolved_team_a?.code : finalMatch.resolved_team_b?.code)
+    : null
 
   const r32Bracket = bracket.filter(m => m.phase === 'r32' && (m.resolved_team_a || m.resolved_team_b || m.team_a_label || m.team_b_label))
 
@@ -201,10 +206,14 @@ export default function Groups() {
             <span style={{ fontSize: 26 }}>🏆</span>
             <div>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                Mata-mata em andamento{currentPhase ? ` · ${PHASE_PT[currentPhase]}` : ''}
+                {tournamentOver
+                  ? `Copa encerrada${championCode ? ` · ${PT_NAMES[championCode] || championCode} campeã` : ''}`
+                  : `Mata-mata em andamento${currentPhase ? ` · ${PHASE_PT[currentPhase]}` : ''}`}
               </div>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                A fase de grupos acabou — acompanhe o chaveamento, resultados e projeções de título.
+                {tournamentOver
+                  ? 'Confira o chaveamento completo, todos os resultados e o retrospecto da Copa.'
+                  : 'A fase de grupos acabou — acompanhe o chaveamento, resultados e projeções de título.'}
               </div>
             </div>
           </div>

@@ -5,7 +5,7 @@ const TEAMS = [
     code: 'ARG',
     name: 'Argentina',
     flag: '🇦🇷',
-    chave: 'Chave 2 — enfrenta a Inglaterra em 15/07',
+    chave: '🥈 Vice-campeã — venceu a Inglaterra por 2x1 na semi, perdeu a final pra Espanha',
     stats: { titulos: 3, aparicoes: 19, jogos: 90, vitorias: 49, semifinais: '6 finais disputadas' },
     photo: {
       src: 'https://upload.wikimedia.org/wikipedia/commons/2/2c/Maradona-Mundial_86_con_la_copa.JPG',
@@ -47,7 +47,7 @@ const TEAMS = [
     code: 'ENG',
     name: 'Inglaterra',
     flag: '🏴',
-    chave: 'Chave 2 — enfrenta a Argentina em 15/07',
+    chave: '🥉 3º lugar — perdeu a semi pra Argentina (2x1), venceu a França por 6x4 na disputa de 3º',
     stats: { titulos: 1, aparicoes: 17, jogos: 78, vitorias: 35, semifinais: '4 semifinais (1966, 1990, 2018, 2026)' },
     photo: {
       src: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/England_vs_germany_hurst_heads_to_goal.jpg',
@@ -84,8 +84,8 @@ const TEAMS = [
     code: 'FRA',
     name: 'França',
     flag: '🇫🇷',
-    chave: 'Chave 1 — enfrenta a Espanha em 14/07',
-    stats: { titulos: 2, aparicoes: 17, jogos: 60, vitorias: 36, semifinais: '4 finais em 28 anos (1998–2026)' },
+    chave: '4º lugar — perdeu a semi pra Espanha (2x0) e a disputa de 3º pra Inglaterra (6x4)',
+    stats: { titulos: 2, aparicoes: 17, jogos: 60, vitorias: 36, semifinais: '4 finais em 28 anos (1998–2022)' },
     photo: {
       src: 'https://upload.wikimedia.org/wikipedia/commons/9/97/France_champion_of_the_Football_World_Cup_Russia_2018_%28cropped%29.jpg',
       alt: 'Seleção francesa celebra o título da Copa do Mundo de 2018',
@@ -121,8 +121,8 @@ const TEAMS = [
     code: 'ESP',
     name: 'Espanha',
     flag: '🇪🇸',
-    chave: 'Chave 1 — enfrenta a França em 14/07',
-    stats: { titulos: 1, aparicoes: 17, jogos: 63, vitorias: 30, semifinais: '2 semifinais (2010, 2026)' },
+    chave: '🏆 Campeã — venceu a França por 2x0 na semi e a Argentina por 1x0 na final',
+    stats: { titulos: 2, aparicoes: 17, jogos: 63, vitorias: 30, semifinais: '2 semifinais (2010, 2026)' },
     photo: {
       src: 'https://upload.wikimedia.org/wikipedia/commons/3/32/2010_FIFA_World_Cup_Spain_with_cup.JPG',
       alt: 'Seleção espanhola celebra o título da Copa do Mundo de 2010 na África do Sul',
@@ -162,11 +162,12 @@ export default function Historia() {
       <div className="info-page-hero">
         <div>
           <div className="info-page-eyebrow">História</div>
-          <h1 className="page-title">Rumo à decisão: a história das 4 semifinalistas</h1>
+          <h1 className="page-title">As 4 semifinalistas da Copa 2026 — e como a decisão terminou</h1>
           <p className="info-page-intro">
-            Argentina, Inglaterra, França e Espanha somam 7 títulos mundiais, 12 finais disputadas e mais de
-            um século de campanhas entre elas. Antes das partidas de 14 e 15 de julho, a trajetória completa
-            de cada seleção — títulos, momentos decisivos, protagonistas e curiosidades.
+            Argentina, Inglaterra, França e Espanha somavam 7 títulos mundiais antes da Copa 2026, 12 finais
+            disputadas e mais de um século de campanhas entre elas. A Espanha saiu campeã, batendo a Argentina
+            por 1x0 na final — a trajetória completa de cada seleção, títulos, momentos decisivos, protagonistas
+            e curiosidades.
           </p>
         </div>
         <div className="row-wrap">

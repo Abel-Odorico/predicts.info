@@ -139,15 +139,17 @@ export default function ChampionPick() {
   const [saving, setSaving]     = useState(false)
   const [msg, setMsg]           = useState('')
   const [halfMap, setHalfMap]   = useState({})  // teamId → 'A' | 'B'
+  const [finalResult, setFinalResult] = useState(null) // { championCode, runnerUpCode } — null se a final não saiu ainda
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [teamsData, statsData, picksData, sidesData] = await Promise.all([
+        const [teamsData, statsData, picksData, sidesData, bracketData] = await Promise.all([
           api.get('/teams'),
           api.get('/champion/picks/stats'),
           api.get('/champion/picks/all'),
           api.get('/tournament/bracket-sides').catch(() => ({ half_a: [], half_b: [] })),
+          api.get('/tournament/official-bracket').catch(() => null),
         ])
         setTeams(teamsData)
         setStats(statsData)
@@ -156,6 +158,14 @@ export default function ChampionPick() {
         for (const t of (sidesData.half_a || [])) map[t.id] = 'A'
         for (const t of (sidesData.half_b || [])) map[t.id] = 'B'
         setHalfMap(map)
+        const finalMatch = bracketData?.schedule?.find(m => m.phase === 'final')
+        if (finalMatch?.resolved_team_a && finalMatch?.resolved_team_b && Array.isArray(finalMatch.score)) {
+          const [sa, sb] = finalMatch.score
+          setFinalResult({
+            championCode: sa > sb ? finalMatch.resolved_team_a.code : finalMatch.resolved_team_b.code,
+            runnerUpCode: sa > sb ? finalMatch.resolved_team_b.code : finalMatch.resolved_team_a.code,
+          })
+        }
         if (token) {
           try { setMyPick(await api.get('/champion/pick', token)) } catch {}
         }
@@ -218,7 +228,7 @@ export default function ChampionPick() {
           🏆 CAMPEÃO DA COPA
         </h1>
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', margin: '4px 0 0' }}>
-          Escolha o campeão e o vice-campeão da Copa do Mundo 2026
+          {finalResult ? 'Espanha 🇪🇸 é a campeã da Copa do Mundo 2026 — veja se você acertou' : 'Escolha o campeão e o vice-campeão da Copa do Mundo 2026'}
         </p>
       </div>
 
@@ -247,9 +257,11 @@ export default function ChampionPick() {
       {/* Resumo dos palpites */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 'var(--s4)' }}>
         {[
-          { emoji: '🏆', label: 'Campeão',      pts: '+100 pts', color: 'var(--accent)', pick: myPick?.champion },
-          { emoji: '🥈', label: 'Vice-Campeão', pts: '+50 pts',  color: '#d4af37',       pick: myPick?.runner_up },
-        ].map(({ emoji, label, pts, color, pick }) => (
+          { emoji: '🏆', label: 'Campeão',      pts: '+100 pts', color: 'var(--accent)', pick: myPick?.champion, realCode: finalResult?.championCode },
+          { emoji: '🥈', label: 'Vice-Campeão', pts: '+50 pts',  color: '#d4af37',       pick: myPick?.runner_up, realCode: finalResult?.runnerUpCode },
+        ].map(({ emoji, label, pts, color, pick, realCode }) => {
+          const hit = pick && realCode ? pick.code === realCode : null
+          return (
           <div key={label} style={{
             background: pick ? `${color}12` : 'var(--bg-surface)',
             border: `1.5px solid ${pick ? color : 'var(--border)'}`,
@@ -270,7 +282,13 @@ export default function ChampionPick() {
                   <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text-1)', lineHeight: 1.2 }}>
                     {pick.name || pick.code}
                   </div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color, marginTop: 2 }}>✓ escolhido</div>
+                  {hit === null ? (
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color, marginTop: 2 }}>✓ escolhido</div>
+                  ) : hit ? (
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--win)', fontWeight: 700, marginTop: 2 }}>✅ você acertou!</div>
+                  ) : (
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>❌ não foi essa</div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -279,7 +297,8 @@ export default function ChampionPick() {
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Countdown */}
@@ -311,9 +330,16 @@ export default function ChampionPick() {
       )}
 
       {(!canChange && !myPick) ? (
-        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', textAlign: 'center', padding: 'var(--s6) 0' }}>
-          Prazo encerrado. Aguarde os resultados do mata-mata.
-        </p>
+        <div style={{ textAlign: 'center', padding: 'var(--s6) 0' }}>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-3)', marginBottom: 'var(--s3)' }}>
+            {finalResult
+              ? 'Prazo encerrado — você não fez seu palpite a tempo. A Copa 2026 já foi decidida.'
+              : 'Prazo encerrado. Aguarde os resultados do mata-mata.'}
+          </p>
+          {finalResult && (
+            <Link to="/torneio" className="btn btn-sm">Ver resultado final →</Link>
+          )}
+        </div>
       ) : (
         <>
           {/* ── Seção Campeão ── */}

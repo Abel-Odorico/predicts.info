@@ -67,7 +67,7 @@ const SIM_OPTIONS = [
 const CONF_ORDER = ['UEFA', 'CONMEBOL', 'CAF', 'AFC', 'CONCACAF', 'OFC']
 
 export default function Tournament() {
-  const [comp, setComp]       = useState('copa2026')
+  const [comp, setComp]       = useState('brasileirao2026')
   const [data, setData]       = useState(null)
   const [bracket, setBracket] = useState(null)
   const [loading, setLoad]    = useState(true)
@@ -111,6 +111,39 @@ export default function Tournament() {
     runSim(n)
   }
 
+  // Torneio encerrado: prob_title (e as outras colunas prob_*) virou binário
+  // 100/0 pra quase todo mundo (só quem realmente chegou lá tem valor != 0) —
+  // ordenar só por isso empata 47 das 48 seleções em 0% e a ordem some no ar.
+  // Reconstrói a colocação REAL (quem venceu qual jogo, do próprio bracket já
+  // buscado) pra usar como critério de ordenação por padrão — mesma lógica de
+  // linhagem de vencedor do backend (build_fifa_bracket_numbers).
+  const stageRank = useMemo(() => {
+    const rank = {}
+    if (!bracket) return rank
+    const qp = bracket.qualified_picture || {}
+    for (const t of [...(qp.winners || []), ...(qp.runners_up || []), ...(qp.best_thirds || [])]) {
+      rank[t.code] = 1
+    }
+    const PHASE_RANK = { r32: 2, r16: 3, qf: 4, sf: 5 }
+    for (const m of (bracket.schedule || [])) {
+      const ta = m.resolved_team_a, tb = m.resolved_team_b
+      if (!ta || !tb || !Array.isArray(m.score)) continue
+      const winnerCode = m.score[0] > m.score[1] ? ta.code : tb.code
+      const loserCode  = m.score[0] > m.score[1] ? tb.code : ta.code
+      if (m.phase === 'final') {
+        rank[winnerCode] = 7
+        rank[loserCode]  = Math.max(rank[loserCode] || 0, 6)
+      } else if (m.phase === '3rd') {
+        rank[winnerCode] = Math.max(rank[winnerCode] || 0, 5.5)
+        rank[loserCode]  = Math.max(rank[loserCode] || 0, 4.5)
+      } else if (PHASE_RANK[m.phase]) {
+        rank[winnerCode] = Math.max(rank[winnerCode] || 0, PHASE_RANK[m.phase])
+        rank[loserCode]  = Math.max(rank[loserCode] || 0, PHASE_RANK[m.phase] - 1)
+      }
+    }
+    return rank
+  }, [bracket])
+
   const teams = useMemo(() => {
     if (!data?.teams) return []
     let t = [...data.teams]
@@ -121,14 +154,27 @@ export default function Tournament() {
     )
     if (confFilter) t = t.filter(x => x.confederation === confFilter)
     // sortDir 1 = descending (b-a), -1 = ascending (a-b)
-    t.sort((a, b) => sortDir * ((b[sortKey] || 0) - (a[sortKey] || 0)))
+    // Ordenando por Título: colocação real primeiro (evita o empate 0% acima),
+    // valor da coluna e elo como desempate. Outras colunas seguem só o valor.
+    if (sortKey === 'prob_title') {
+      t.sort((a, b) => sortDir * (
+        ((stageRank[b.code] || 0) - (stageRank[a.code] || 0)) * 1000
+        + ((b.prob_title || 0) - (a.prob_title || 0))
+        + ((b.elo_rating || 0) - (a.elo_rating || 0)) / 10000
+      ))
+    } else {
+      t.sort((a, b) => sortDir * ((b[sortKey] || 0) - (a[sortKey] || 0)))
+    }
     return t
-  }, [data, sortKey, sortDir, filter, confFilter])
+  }, [data, sortKey, sortDir, filter, confFilter, stageRank])
 
   const top3 = useMemo(() => {
     if (!data?.teams) return []
-    return [...data.teams].sort((a, b) => (b.prob_title || 0) - (a.prob_title || 0)).slice(0, 3)
-  }, [data])
+    return [...data.teams].sort((a, b) =>
+      ((stageRank[b.code] || 0) - (stageRank[a.code] || 0)) * 1000
+      + ((b.prob_title || 0) - (a.prob_title || 0))
+    ).slice(0, 3)
+  }, [data, stageRank])
 
   const confCounts = useMemo(() => {
     if (!data?.teams) return {}
@@ -370,7 +416,7 @@ export default function Tournament() {
       </div>
 
       {(data?.top_finals?.length > 0 || data?.top_sf?.length > 0) && (
-        <ProjectionsSection data={data} className="mt-6 fade-in-3" />
+        <ProjectionsSection data={data} stageRank={stageRank} className="mt-6 fade-in-3" />
       )}
 
         </>
@@ -387,7 +433,7 @@ const PROJ_TABS = [
   { key: 'ranking', label: 'Top Campeões',        icon: '🏆' },
 ]
 
-function ProjectionsSection({ data, className }) {
+function ProjectionsSection({ data, stageRank, className }) {
   const [tab, setTab] = useState('finals')
 
   return (
@@ -408,7 +454,7 @@ function ProjectionsSection({ data, className }) {
       <div className="card__body">
         {tab === 'finals' && <TopFinalsView finals={data.top_finals || []} />}
         {tab === 'sf' && <TopSFView sfList={data.top_sf || []} />}
-        {tab === 'ranking' && <TopChampionsView teams={data.teams || []} />}
+        {tab === 'ranking' && <TopChampionsView teams={data.teams || []} stageRank={stageRank} />}
       </div>
     </div>
   )
@@ -493,8 +539,11 @@ function TopSFView({ sfList }) {
   )
 }
 
-function TopChampionsView({ teams }) {
-  const top20 = [...teams].sort((a, b) => (b.prob_title || 0) - (a.prob_title || 0)).slice(0, 20)
+function TopChampionsView({ teams, stageRank = {} }) {
+  const top20 = [...teams].sort((a, b) =>
+    ((stageRank[b.code] || 0) - (stageRank[a.code] || 0)) * 1000
+    + ((b.prob_title || 0) - (a.prob_title || 0))
+  ).slice(0, 20)
   const maxProb = top20[0]?.prob_title || 1
   return (
     <div className="stack gap-2">

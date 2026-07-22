@@ -1633,7 +1633,7 @@ function CompareView({ userId, onClose }) {
   const [search,      setSearch]      = useState('')
 
   useEffect(() => {
-    api.get('/ranking')
+    api.get('/ranking?competition=geral')
       .then(d => setUsers((Array.isArray(d) ? d : (d.ranking || [])).filter(u => u.user_id != userId && u.user_id != ORACLE_ID)))
       .catch(() => {})
   }, [userId])

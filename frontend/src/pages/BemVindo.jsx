@@ -33,10 +33,10 @@ const SCORING = [
 
 const DESTINOS = [
   { icon: '🎯', title: 'Palpites', desc: 'Aposte nos próximos jogos', to: '/apostas' },
-  { icon: '🔮', title: 'Simulador', desc: 'Probabilidades por partida', to: '/' },
+  { icon: '🇧🇷', title: 'Brasileirão', desc: 'Tabela, rodada e projeção', to: '/brasileirao' },
   { icon: '🏆', title: 'Ranking', desc: 'Veja quem tá na frente', to: '/ranking' },
   { icon: '👥', title: 'Bolões', desc: 'Grupos privados com amigos', to: '/meus-grupos' },
-  { icon: '⚔️', title: 'Torneio', desc: 'Chaveamento e grupos da Copa', to: '/torneio' },
+  { icon: '⚔️', title: 'Torneio', desc: 'Chaveamento e histórico da Copa 2026', to: '/torneio' },
   { icon: '📜', title: 'Regras', desc: 'Pontuação em detalhes', to: '/regras' },
 ]
 
@@ -57,7 +57,7 @@ export default function BemVindo() {
           Bem-vindo ao Predicts!
         </h1>
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 15, color: 'var(--text-2)', maxWidth: 520, margin: '0 auto' }}>
-          O simulador estatístico da Copa do Mundo 2026. Palpite, dispute com amigos e prove que entende de futebol.
+          O simulador estatístico do Brasileirão Série A — mais o histórico completo da Copa do Mundo 2026. Palpite, dispute com amigos e prove que entende de futebol.
         </p>
       </div>
 

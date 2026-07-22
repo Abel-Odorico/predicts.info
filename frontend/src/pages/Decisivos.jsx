@@ -57,7 +57,7 @@ function BrasileiraoRedirect({ comp, setComp }) {
 }
 
 export default function Decisivos() {
-  const [comp, setComp]   = useState('copa2026')
+  const [comp, setComp]   = useState('brasileirao2026')
   const [data, setData]   = useState(null)
   const [loading, setLoad] = useState(true)
   const navigate = useNavigate()

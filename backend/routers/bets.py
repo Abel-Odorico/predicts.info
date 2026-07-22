@@ -422,18 +422,21 @@ def ranking(
     group: str | None = Query(default=None, description="Grupo A-L"),
     date_from: str | None = Query(default=None, description="YYYY-MM-DD"),
     date_to: str | None = Query(default=None, description="YYYY-MM-DD"),
-    competition: str = Query(default="copa2026", description="Código da competição"),
+    competition: str = Query(default="brasileirao2026", description="Código da competição ou 'geral' (soma entre competições)"),
     db: Session = Depends(get_db),
 ):
     from competitions import get_competition_id
-    comp_id = get_competition_id(db, competition)
-    if comp_id is None:
+    is_general = competition == "geral"
+    comp_id = None if is_general else get_competition_id(db, competition)
+    if not is_general and comp_id is None:
         raise HTTPException(status_code=404, detail="Competição não encontrada")
 
     filtered = bool(group or date_from or date_to)
 
     if filtered:
-        match_q = db.query(Match.id).filter(Match.competition_id == comp_id)
+        match_q = db.query(Match.id)
+        if not is_general:
+            match_q = match_q.filter(Match.competition_id == comp_id)
         if group:
             match_q = match_q.filter(Match.group_name == group.upper())
         if date_from:
@@ -470,6 +473,41 @@ def ranking(
                 desc(func.coalesce(agg.c.total_points, 0)),
                 desc(func.coalesce(agg.c.exact_scores, 0)),
                 desc(func.coalesce(agg.c.total_bets, 0)),
+                User.name.asc(),
+            )
+            .limit(limit)
+            .all()
+        )
+    elif is_general:
+        # "Geral" soma Ranking.total_points entre TODAS as competições por usuário —
+        # mesmo padrão de list_user_groups (user_groups.py).
+        bet_counts = (
+            db.query(
+                Bet.user_id.label("user_id"),
+                func.count(Bet.id).label("total_bets"),
+            )
+            .group_by(Bet.user_id)
+            .subquery()
+        )
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                User.name.label("name"),
+                User.username.label("username"),
+                User.favorite_team_code.label("favorite_team_code"),
+                func.coalesce(func.sum(Ranking.total_points), 0).label("total_points"),
+                func.coalesce(func.sum(Ranking.exact_scores), 0).label("exact_scores"),
+                func.coalesce(func.sum(Ranking.correct_results), 0).label("correct_results"),
+                func.coalesce(bet_counts.c.total_bets, 0).label("total_bets"),
+            )
+            .outerjoin(Ranking, User.id == Ranking.user_id)
+            .outerjoin(bet_counts, User.id == bet_counts.c.user_id)
+            .filter(or_(Ranking.user_id.isnot(None), bet_counts.c.user_id.isnot(None)))
+            .group_by(User.id, User.name, User.username, User.favorite_team_code, bet_counts.c.total_bets)
+            .order_by(
+                desc(func.coalesce(func.sum(Ranking.total_points), 0)),
+                desc(func.coalesce(func.sum(Ranking.exact_scores), 0)),
+                desc(func.coalesce(bet_counts.c.total_bets, 0)),
                 User.name.asc(),
             )
             .limit(limit)
