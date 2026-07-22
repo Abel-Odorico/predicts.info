@@ -377,7 +377,7 @@ export default function Bets() {
       {tab === 'open' && (
         <div className="fade-in-1">
           {openMatches.length > 0 && (
-            <div className="bet-filter-row" style={{ display: 'flex', gap: 'var(--s2)', marginBottom: 'var(--s4)', flexWrap: 'wrap' }}>
+            <div className="bet-filter-row" style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s6)', marginBottom: 'var(--s4)', flexWrap: 'wrap' }}>
               {[
                 { id: 'all',     label: 'Todos',      count: openMatches.length },
                 { id: 'pending', label: 'Pendentes',   count: openPendingCount },
