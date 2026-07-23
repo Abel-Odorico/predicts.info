@@ -11,6 +11,7 @@ import { aproveitamento, getBadges, BADGE_CATALOG } from '../utils/groupBadges'
 import { displayName } from '../utils/displayName'
 import RankingNameToggle from '../components/RankingNameToggle'
 import MedalIcon from '../components/MedalIcon'
+import GroupFeatureConfig from '../components/GroupFeatureConfig'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -466,6 +467,35 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
   const [signupQrDataUrl, setSignupQrDataUrl] = useState('')
   const [enlargedQr, setEnlargedQr] = useState(null) // null | 'invite' | 'signup'
 
+  // ── Mecânicas extras do bolão — acesso pela home do grupo (lista), não só
+  // pela página de detalhe. Busca só sob demanda (clique na engrenagem), pra
+  // não disparar N requests à toa pra N grupos renderizados na lista.
+  const [showFeatureConfig, setShowFeatureConfig] = useState(false)
+  const [featureConfig, setFeatureConfig] = useState(null)
+  const [brTeams, setBrTeams] = useState([])
+  const [brCurrentRodada, setBrCurrentRodada] = useState(null)
+  const [loadingFeatureConfig, setLoadingFeatureConfig] = useState(false)
+
+  async function openFeatureConfig() {
+    setShowFeatureConfig(true)
+    if (featureConfig) return
+    setLoadingFeatureConfig(true)
+    try {
+      const [cfg, standings] = await Promise.all([
+        api.get(`/user-groups/${group.id}/feature-config`, token),
+        api.get('/brasileirao/standings').catch(() => null),
+      ])
+      setFeatureConfig(cfg)
+      setBrTeams(standings?.table ?? [])
+      setBrCurrentRodada(standings?.current_rodada ?? null)
+    } catch (e) {
+      toast.error(e.message || 'Erro ao carregar configuração')
+      setShowFeatureConfig(false)
+    } finally {
+      setLoadingFeatureConfig(false)
+    }
+  }
+
   // position:fixed dentro de um ancestral com scroll/transform fica preso ao offset
   // dele em vez do viewport (bug clássico mobile) — portal pro body + lock de scroll
   // garante centralização real na tela, mesmo card rolado
@@ -809,6 +839,11 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
             </button>
           )}
           {isOwner && !renaming && (
+            <button type="button" className="group-manager-card__icon-btn" onClick={openFeatureConfig} title="Mecânicas extras do bolão" aria-label="Configurar mecânicas extras do bolão">
+              ⚙️
+            </button>
+          )}
+          {isOwner && !renaming && (
             <button type="button" className="group-manager-card__icon-btn group-manager-card__icon-btn--danger" onClick={deleteGroup} disabled={deleting} title="Excluir bolão" aria-label={`Excluir ${group.name}`}>
               {deleting ? '...' : '🗑'}
             </button>
@@ -820,6 +855,29 @@ function UserGroupCard({ group, token, currentUser, onRefresh, matchStats = { fi
           )}
         </div>
       </header>
+
+      {showFeatureConfig && createPortal(
+        <div onClick={() => setShowFeatureConfig(false)} className="pop-backdrop">
+          <div onClick={e => e.stopPropagation()} className="pop-card fade-in-1" style={{ maxWidth: 640, padding: 0 }}>
+            <button onClick={() => setShowFeatureConfig(false)} aria-label="Fechar" className="pop-close">✕</button>
+            {loadingFeatureConfig && (
+              <div style={{ padding: 'var(--s6)', textAlign: 'center' }}><Spinner /></div>
+            )}
+            {!loadingFeatureConfig && featureConfig && (
+              <GroupFeatureConfig
+                groupId={group.id}
+                token={token}
+                config={featureConfig.config}
+                onSaved={cfg => setFeatureConfig(fc => ({ ...fc, config: cfg }))}
+                brTeams={brTeams}
+                currentRodada={brCurrentRodada}
+                onClose={() => setShowFeatureConfig(false)}
+              />
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* My position strip */}
       <div className="group-my-position">

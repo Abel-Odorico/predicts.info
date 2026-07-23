@@ -1,4 +1,4 @@
-const CACHE = 'predicts-v201'
+const CACHE = 'predicts-v202'
 const ICON  = '/icon-192.png'
 const BADGE = '/favicon-32x32.png'
 
