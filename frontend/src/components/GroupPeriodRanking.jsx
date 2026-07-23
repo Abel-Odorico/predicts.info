@@ -49,7 +49,7 @@ export default function GroupPeriodRanking({ groupId, token, currentRodada }) {
         {scope === 'rodada' && (
           <>
             <button type="button" className="group-manager-card__icon-btn" disabled={rodada <= 1} onClick={() => setRodada(r => r - 1)} aria-label="Rodada anterior">‹</button>
-            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)', minWidth: 90, textAlign: 'center' }}>Rodada {rodada}</span>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)', minWidth: 150, textAlign: 'center' }}>{data?.label ?? `Rodada ${rodada}`}</span>
             <button type="button" className="group-manager-card__icon-btn" disabled={rodada >= 38} onClick={() => setRodada(r => r + 1)} aria-label="Próxima rodada">›</button>
           </>
         )}

@@ -1371,8 +1371,10 @@ def group_ranking_period(
         if not rodada:
             raise HTTPException(400, "Parâmetro rodada obrigatório")
         match_filter = Match.match_number == rodada
-        label = f"Rodada {rodada}"
-        period_meta = {"rodada": rodada}
+        rodada_turno = 1 if rodada < RETURNO_START_RODADA else 2
+        turno_label = "1º Turno" if rodada_turno == 1 else "2º Turno (Returno)"
+        label = f"Rodada {rodada} · {turno_label}"
+        period_meta = {"rodada": rodada, "turno": rodada_turno}
     elif scope == "turno":
         if turno not in (1, 2):
             raise HTTPException(400, "Parâmetro turno obrigatório (1 ou 2)")
