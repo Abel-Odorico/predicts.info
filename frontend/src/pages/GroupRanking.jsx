@@ -89,7 +89,9 @@ export default function GroupRanking() {
   const [teams, setTeams] = useState([])
 
   // ── Competição: Geral (soma bruta, curiosidade) / Copa / Brasileirão (pódio real) ──
-  const [comp, setComp] = useState('geral')
+  // Default Brasileirão (não Geral) — é onde mora o ranking oficial e as mecânicas
+  // extras do bolão, mesmo padrão já usado em Ranking.jsx desde a reposição pós-Copa.
+  const [comp, setComp] = useState('brasileirao2026')
 
   // ── Invite & share ─────────────────────────────────────────
   const [inviteLink, setInviteLink] = useState('')
