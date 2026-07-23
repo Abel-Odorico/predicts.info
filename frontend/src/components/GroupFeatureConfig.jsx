@@ -138,6 +138,15 @@ export default function GroupFeatureConfig({ groupId, token, config, onSaved, br
         </button>
       </div>
 
+      {/* ── Guia de competição — hoje só o Brasileirão tem mecânica própria; deixa */}
+      {/* explícito onde essas 4 regras valem, já preparado pra outras entrarem depois. ── */}
+      <div className="phase-nav" style={{ margin: '0 var(--s4) var(--s3)' }}>
+        <button type="button" className="phase-nav__tab active" disabled>🇧🇷 Brasileirão</button>
+      </div>
+      <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)', margin: '0 var(--s4) var(--s3)' }}>
+        Essas 4 mecânicas valem só pro Brasileirão — Copa 2026 e o ranking Geral não são afetados.
+      </p>
+
       {open && (
         <div style={{ padding: '0 var(--s4) var(--s4)' }}>
 
