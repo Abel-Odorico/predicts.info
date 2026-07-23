@@ -248,19 +248,15 @@ export default function GroupRanking() {
     api.get(`/user-groups/${groupId}/champion`, token).catch(() => []).then(setChampionPicks)
     api.get(`/user-groups/${groupId}/messages`, token).catch(() => []).then(setMessages)
 
-    // Mecânicas extras (passos 13-17) — só existem pro Brasileirão (plan.md, fora de
-    // escopo pra Copa). feature-config é legível por qualquer membro (não só dono).
-    if (comp === 'brasileirao2026') {
-      api.get(`/user-groups/${groupId}/feature-config`, token).catch(() => null).then(setFeatureConfig)
-      api.get('/brasileirao/standings').catch(() => null).then(res => {
-        setBrTeams(res?.table ?? [])
-        setBrCurrentRodada(res?.current_rodada ?? null)
-      })
-    } else {
-      setFeatureConfig(null)
-      setBrTeams([])
-      setBrCurrentRodada(null)
-    }
+    // Mecânicas extras (passos 13-17) — hoje só existem pro Brasileirão (plan.md,
+    // fora de escopo pra Copa), mas o ACESSO à configuração fica na home do grupo,
+    // não preso à aba — pra quando outras competições ganharem mecânicas próprias.
+    // feature-config é legível por qualquer membro (não só dono).
+    api.get(`/user-groups/${groupId}/feature-config`, token).catch(() => null).then(setFeatureConfig)
+    api.get('/brasileirao/standings').catch(() => null).then(res => {
+      setBrTeams(res?.table ?? [])
+      setBrCurrentRodada(res?.current_rodada ?? null)
+    })
   }, [groupId, token, today, comp])
 
   useEffect(() => { load() }, [load])
@@ -528,7 +524,7 @@ export default function GroupRanking() {
                 <span>{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</span>
                 {groupXp > 0 && <span>· ⚡ Nível {groupLevel}</span>}
               </div>
-              {amOwner && comp === 'brasileirao2026' && (
+              {amOwner && (
                 <button
                   type="button"
                   className="badge"
@@ -562,7 +558,7 @@ export default function GroupRanking() {
                 ✏️
               </button>
             )}
-            {amOwner && comp === 'brasileirao2026' && (
+            {amOwner && (
               <button type="button" className="group-manager-card__icon-btn" onClick={() => setShowFeatureConfig(o => !o)} title="Mecânicas extras do bolão" aria-label="Configurar mecânicas extras do bolão">
                 ⚙️
               </button>
@@ -619,20 +615,24 @@ export default function GroupRanking() {
         </div>
       )}
 
-      {/* ── Mecânicas extras do bolão (só Brasileirão, plan.md) ── */}
+      {/* ── Config das mecânicas extras — home do grupo, não presa a nenhuma aba: */}
+      {/* hoje só o Brasileirão tem mecânica de verdade, mas o ACESSO à config não */}
+      {/* fica escondido dentro da aba, pra quando outra competição ganhar as suas. ── */}
+      {amOwner && showFeatureConfig && featureConfig && (
+        <GroupFeatureConfig
+          groupId={groupId}
+          token={token}
+          config={featureConfig.config}
+          onSaved={cfg => setFeatureConfig(fc => ({ ...fc, config: cfg }))}
+          brTeams={brTeams}
+          currentRodada={brCurrentRodada}
+          onClose={() => setShowFeatureConfig(false)}
+        />
+      )}
+
+      {/* ── Seções inline das mecânicas — só aparecem na aba Brasileirão (só ela tem hoje) ── */}
       {comp === 'brasileirao2026' && featureConfig && (
         <>
-          {amOwner && showFeatureConfig && (
-            <GroupFeatureConfig
-              groupId={groupId}
-              token={token}
-              config={featureConfig.config}
-              onSaved={cfg => setFeatureConfig(fc => ({ ...fc, config: cfg }))}
-              brTeams={brTeams}
-              currentRodada={brCurrentRodada}
-              onClose={() => setShowFeatureConfig(false)}
-            />
-          )}
           {featureConfig.config.classification_bonus?.enabled && (
             <GroupClassificationBonus groupId={groupId} token={token} brTeams={brTeams} myEntry={myEntry} />
           )}
