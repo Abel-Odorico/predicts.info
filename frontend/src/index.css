@@ -5432,6 +5432,10 @@ img {
   .login-shell {
     flex-direction: row;
     min-height: 100vh;
+    /* Layout não renderiza sidebar em /login — .main ainda reserva margin-left
+       pro sidebar real; recupera essa faixa pra não sobrar vão morto à esquerda. */
+    margin-left: calc(-1 * var(--sidebar));
+    width: calc(100% + var(--sidebar));
   }
 
   .login-left {

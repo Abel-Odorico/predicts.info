@@ -16,6 +16,7 @@ import GroupClassificationBonus from '../components/GroupClassificationBonus'
 import GroupDoubleMatchBadge from '../components/GroupDoubleMatchBadge'
 import GroupLanterna from '../components/GroupLanterna'
 import GroupPeriodRanking from '../components/GroupPeriodRanking'
+import GroupRulesModal from '../components/GroupRulesModal'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -165,6 +166,7 @@ export default function GroupRanking() {
   const [brTeams, setBrTeams] = useState([])
   const [brCurrentRodada, setBrCurrentRodada] = useState(null)
   const [showFeatureConfig, setShowFeatureConfig] = useState(false)
+  const [showRules, setShowRules] = useState(false)
 
   // ── Chat ────────────────────────────────────────────────────
   const [messages, setMessages] = useState([])
@@ -527,20 +529,36 @@ export default function GroupRanking() {
                 <span>{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</span>
                 {groupXp > 0 && <span>· ⚡ Nível {groupLevel}</span>}
               </div>
-              {amOwner && (
-                <button
-                  type="button"
-                  className="badge"
-                  onClick={() => setShowFeatureConfig(true)}
-                  style={{
-                    marginTop: 8, cursor: 'pointer', border: '1px solid var(--accent)',
-                    background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)',
-                    fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5,
-                  }}
-                >
-                  ⚙️ Como habilitar bônus, dobro, lanterna e mensal →
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                {amOwner && (
+                  <button
+                    type="button"
+                    className="badge"
+                    onClick={() => setShowFeatureConfig(true)}
+                    style={{
+                      cursor: 'pointer', border: '1px solid var(--accent)',
+                      background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)',
+                      fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    ⚙️ Como habilitar bônus, dobro, lanterna e mensal →
+                  </button>
+                )}
+                {featureConfig && (
+                  <button
+                    type="button"
+                    className="badge"
+                    onClick={() => setShowRules(true)}
+                    style={{
+                      cursor: 'pointer', border: '1px solid var(--border-strong)',
+                      background: 'var(--bg-overlay)', color: 'var(--text-2)',
+                      fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    📖 Regras deste grupo
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           <div className="page-hero__actions group-detail-hero__actions">
@@ -631,6 +649,11 @@ export default function GroupRanking() {
           currentRodada={brCurrentRodada}
           onClose={() => setShowFeatureConfig(false)}
         />
+      )}
+
+      {/* ── Regras — leitura pra QUALQUER membro (não só dono), valores reais do grupo ── */}
+      {showRules && featureConfig && (
+        <GroupRulesModal config={featureConfig.config} brTeams={brTeams} onClose={() => setShowRules(false)} />
       )}
 
       {/* ── Ranking por período (rodada/turno/mês) — visão à parte do ranking do */}

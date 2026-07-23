@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../stores/authStore'
 import { useTrack } from '../hooks/useTrack'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
@@ -70,6 +70,7 @@ function resolveTheme(mode) {
 export default function Layout() {
   const { user, logout, setUser, token } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [developerCredit, setDeveloperCredit] = useState('PeepConnect - By Abel Odorico')
   const [drawerOpen, setDrawerOpen]   = useState(false)
   const [shareOpen,  setShareOpen]    = useState(false)
@@ -153,6 +154,10 @@ export default function Layout() {
   const initials = user?.name
     ? (user.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : '?'
+
+  // Login tem layout próprio de 2 colunas (login-left + login-right) — sidebar/topbar
+  // reais competindo por espaço no desktop espremiam o form pra fora da tela.
+  if (location.pathname === '/login' || location.pathname === '/entrar') return null
 
   return (
     <>
