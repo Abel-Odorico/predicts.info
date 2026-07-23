@@ -36,12 +36,17 @@ function PhaseBadge({ phase, groupName, matchNumber }) {
   )
 }
 
-function TeamLabel({ code, name, flagUrl, compact = false }) {
+function TeamLabel({ code, name, flagUrl, compact = false, position = null }) {
   const label = compact ? code : (PT_NAMES[code] || name || code)
   return (
     <span className="team-label">
       <TeamCrestFlag src={flagUrl} alt={code} className="match-card__flag" crestClassName="match-card__flag--crest" />
       <span className="team-label__text">{label}</span>
+      {position != null && (
+        <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 700, color: 'var(--text-4)', marginLeft: 4 }}>
+          {position}º
+        </span>
+      )}
     </span>
   )
 }
@@ -193,6 +198,7 @@ export default function Bets() {
   const [visibleCount, setVisibleCount]   = useState(30)
   const [openFilter, setOpenFilter]       = useState('all') // all | pending | bet
   const [justPlacedIds, setJustPlacedIds] = useState(() => new Set())
+  const [standings, setStandings]         = useState({})
   const matchRefs = useRef({})
 
   // Brasileirão sozinho já devolve ~200 partidas agendadas — montar 200 cards
@@ -216,6 +222,14 @@ export default function Bets() {
       })
       .finally(() => setLoad(false))
   }, [token, comp])
+
+  // Posição atual na tabela — só existe conceito de tabela corrida no Brasileirão
+  useEffect(() => {
+    if (comp !== 'brasileirao2026') { setStandings({}); return }
+    api.get('/brasileirao/standings')
+      .then(d => setStandings(Object.fromEntries((d?.table ?? []).map(r => [r.code, r.pos]))))
+      .catch(() => setStandings({}))
+  }, [comp])
 
 
   useEffect(() => { load() }, [load])
@@ -251,6 +265,11 @@ export default function Bets() {
       return [...prev, betData]
     })
     setJustPlacedIds(prev => new Set(prev).add(matchId))
+    // Grace period só pra não sumir o card no meio da animação de confirmação —
+    // sem isso, ficava preso em "Pendentes" pro resto da sessão (só limpava ao trocar competição).
+    setTimeout(() => {
+      setJustPlacedIds(prev => { const next = new Set(prev); next.delete(matchId); return next })
+    }, 4000)
   }
 
   function goToNextMatch(nextId) {
@@ -269,8 +288,8 @@ export default function Bets() {
   const openPendingCount = openMatches.length - openBetCount
   const filteredOpenMatches = openMatches.filter(m => {
     if (openFilter === 'bet') return !!betsByMatchId[m.id]
-    // justPlacedIds: apostado agora nesta sessão de filtro segue visível até
-    // trocar de aba/filtro — senão o card some no meio da animação de confirmação.
+    // justPlacedIds: recém-apostado segue visível por 4s (grace period em onBetPlaced)
+    // pra não sumir no meio da animação de confirmação — expira sozinho, não gruda na sessão inteira.
     if (openFilter === 'pending') return !betsByMatchId[m.id] || justPlacedIds.has(m.id)
     return true
   })
@@ -435,6 +454,7 @@ export default function Bets() {
                         autoOpen={pendingOpenId === m.id}
                         onAutoOpenDone={() => setPendingOpenId(null)}
                         recentMatches={finished}
+                        standings={standings}
                       />
                     </div>
                   </Fragment>
@@ -508,7 +528,7 @@ export default function Bets() {
 }
 
 // ── Inline bettable match card ────────────────────────────────────────────────
-function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation, nextMatch, onGoToNextMatch, autoOpen, onAutoOpenDone, recentMatches }) {
+function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, onOpenSimulation, nextMatch, onGoToNextMatch, autoOpen, onAutoOpenDone, recentMatches, standings }) {
   const initStillOpen = existingBet ? false : (match.is_open !== undefined
     ? match.is_open
     : (() => {
@@ -675,14 +695,14 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
         title="Ver probabilidades e dar palpite"
       >
         <div className="bet-card__team">
-          <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} />
+          <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} position={standings?.[match.team_a?.code]} />
         </div>
         {hasBet
           ? <div className="bet-current-score">{existingBet.score_a} – {existingBet.score_b}</div>
           : <div className="bet-card__versus">vs</div>
         }
         <div className="bet-card__team bet-card__team--right">
-          <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} />
+          <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} position={standings?.[match.team_b?.code]} />
         </div>
         <span className="odds-toggle-icon">{showOdds ? '▲' : '▼'}</span>
       </button>
@@ -838,14 +858,14 @@ function BettableMatchRow({ match, existingBet, token, now, index, onBetPlaced, 
       {open && stillOpen && (
         <div className="bet-inline-form fade-in-1">
           <div className="bet-inline-teams">
-            <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} compact />
+            <TeamLabel code={match.team_a?.code} name={match.team_a?.name} flagUrl={match.team_a?.flag_url} compact position={standings?.[match.team_a?.code]} />
             <div className="bet-inline-inputs">
               <ScoreInput value={sa} onChange={setSa} autoFocus={focusScore} />
               <span className="score-sep">×</span>
               <ScoreInput value={sb} onChange={setSb} />
             </div>
             <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} compact />
+              <TeamLabel code={match.team_b?.code} name={match.team_b?.name} flagUrl={match.team_b?.flag_url} compact position={standings?.[match.team_b?.code]} />
             </span>
           </div>
 

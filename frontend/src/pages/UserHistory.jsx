@@ -1094,9 +1094,9 @@ function PosBadge({ label, pos, total, accent }) {
 }
 
 // ── Feature: Estratégia & Recomendações ────────────────────────────────────
-function analyzeStrategy(bets) {
+function analyzeStrategy(bets, minRows = 8) {
   const rows = bets.filter(b => b.result != null && b.official_score_a != null && b.official_score_b != null)
-  if (rows.length < 8) return null
+  if (rows.length < minRows) return null
   const sorted = [...rows].sort((a, b) => new Date(a.match_date || a.created_at) - new Date(b.match_date || b.created_at))
   const n = sorted.length
   const hit = b => b.result === 'exact' || b.result === 'correct'
@@ -1151,8 +1151,8 @@ const PROFILE_CFG = {
   Equilibrado: { icon: '⚖️', color: 'var(--accent)' },
 }
 
-function StrategyInsights({ bets }) {
-  const s = useMemo(() => analyzeStrategy(bets), [bets])
+function StrategyInsights({ bets, minRows = 8 }) {
+  const s = useMemo(() => analyzeStrategy(bets, minRows), [bets, minRows])
   if (!s) return null
 
   const pct = v => v == null ? '—' : Math.round(v * 100)
@@ -2041,7 +2041,7 @@ export default function UserHistory() {
       {scopedEvaluated.length >= 3 && <BestWorstHighlight bets={scopedBets} />}
 
       {/* ── Estratégia & Recomendações ──────────────── */}
-      <StrategyInsights bets={scopedBets} />
+      <StrategyInsights bets={scopedBets} minRows={teamMinSample === 1 ? 5 : 8} />
 
       {/* ── Anéis de desempenho ─────────────────────── */}
       {scopedEvaluated.length > 0 && (
