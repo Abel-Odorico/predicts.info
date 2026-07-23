@@ -46,8 +46,8 @@ function NumField({ label, value, onChange, min = 0, step = 1, prefix, width = 9
   )
 }
 
-export default function GroupFeatureConfig({ groupId, token, config, onSaved, brTeams, currentRodada }) {
-  const [open, setOpen] = useState(false)
+export default function GroupFeatureConfig({ groupId, token, config, onSaved, brTeams, currentRodada, onClose }) {
+  const open = true // visibilidade agora é controlada pelo botão ⚙️ no cabeçalho do grupo (GroupRanking.jsx)
 
   // ── Cópias locais editáveis por bloco (seed do config do pai a cada troca) ──
   const [cls, setCls] = useState(config.classification_bonus)
@@ -128,20 +128,15 @@ export default function GroupFeatureConfig({ groupId, token, config, onSaved, br
 
   return (
     <div className="card mt-4 fade-in-1" style={{ padding: 0, borderLeft: '3px solid var(--accent)' }}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: 'var(--s4)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-        }}
-      >
+      <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--s4)' }}>
         <div>
           <div className="group-manager-card__kicker" style={{ marginBottom: 2 }}>Área do dono</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, color: 'var(--text-1)' }}>⚙️ Mecânicas extras do bolão</div>
         </div>
-        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>{open ? '▲ encolher' : '▼ configurar'}</span>
-      </button>
+        <button type="button" className="group-manager-card__icon-btn" onClick={onClose} title="Fechar" aria-label="Fechar configuração">
+          ✕
+        </button>
+      </div>
 
       {open && (
         <div style={{ padding: '0 var(--s4) var(--s4)' }}>

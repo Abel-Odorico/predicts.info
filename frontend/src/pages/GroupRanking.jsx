@@ -161,6 +161,7 @@ export default function GroupRanking() {
   const [featureConfig, setFeatureConfig] = useState(null)
   const [brTeams, setBrTeams] = useState([])
   const [brCurrentRodada, setBrCurrentRodada] = useState(null)
+  const [showFeatureConfig, setShowFeatureConfig] = useState(false)
 
   // ── Chat ────────────────────────────────────────────────────
   const [messages, setMessages] = useState([])
@@ -527,6 +528,20 @@ export default function GroupRanking() {
                 <span>{ranking.length} participante{ranking.length !== 1 ? 's' : ''}</span>
                 {groupXp > 0 && <span>· ⚡ Nível {groupLevel}</span>}
               </div>
+              {amOwner && comp === 'brasileirao2026' && (
+                <button
+                  type="button"
+                  className="badge"
+                  onClick={() => setShowFeatureConfig(true)}
+                  style={{
+                    marginTop: 8, cursor: 'pointer', border: '1px solid var(--accent)',
+                    background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)',
+                    fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  ⚙️ Como habilitar bônus, dobro, lanterna e mensal →
+                </button>
+              )}
             </div>
           </div>
           <div className="page-hero__actions group-detail-hero__actions">
@@ -545,6 +560,11 @@ export default function GroupRanking() {
             {amOwner && !renaming && (
               <button type="button" className="group-manager-card__icon-btn" onClick={() => { setNewName(data?.group_name ?? ''); setRenaming(true) }} title="Editar nome" aria-label="Editar nome do bolão">
                 ✏️
+              </button>
+            )}
+            {amOwner && comp === 'brasileirao2026' && (
+              <button type="button" className="group-manager-card__icon-btn" onClick={() => setShowFeatureConfig(o => !o)} title="Mecânicas extras do bolão" aria-label="Configurar mecânicas extras do bolão">
+                ⚙️
               </button>
             )}
           </div>
@@ -602,7 +622,7 @@ export default function GroupRanking() {
       {/* ── Mecânicas extras do bolão (só Brasileirão, plan.md) ── */}
       {comp === 'brasileirao2026' && featureConfig && (
         <>
-          {amOwner && (
+          {amOwner && showFeatureConfig && (
             <GroupFeatureConfig
               groupId={groupId}
               token={token}
@@ -610,6 +630,7 @@ export default function GroupRanking() {
               onSaved={cfg => setFeatureConfig(fc => ({ ...fc, config: cfg }))}
               brTeams={brTeams}
               currentRodada={brCurrentRodada}
+              onClose={() => setShowFeatureConfig(false)}
             />
           )}
           {featureConfig.config.classification_bonus?.enabled && (
