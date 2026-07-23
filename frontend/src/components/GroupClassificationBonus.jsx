@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api'
 import { toast } from '../toast'
 import TeamCrestFlag from './TeamCrestFlag'
+import CollapsibleSection from './CollapsibleSection'
 
 function parseUtcMatchDate(value) {
   if (!value) return null
@@ -91,11 +92,16 @@ export default function GroupClassificationBonus({ groupId, token, brTeams, myEn
 
   if (loading) return null
 
-  return (
-    <div className="card mt-4 fade-in-1" style={{ padding: 'var(--s4)', borderLeft: '3px solid #e8a030' }}>
-      <div className="group-manager-card__kicker" style={{ marginBottom: 2 }}>Mecânica 1</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-1)', marginBottom: 'var(--s2)' }}>🏆 Bônus de Classificação</div>
+  const teaser = finished
+    ? `Encerrado — ${myEntry.classification_hits} posiç${myEntry.classification_hits === 1 ? 'ão' : 'ões'} exata${myEntry.classification_hits === 1 ? '' : 's'}`
+    : locked
+      ? (hasBet ? '🔒 Prazo encerrado — palpite salvo' : '🔒 Prazo encerrado — sem palpite')
+      : hasBet
+        ? `✅ Palpite salvo${countdown ? ` · faltam ${countdown}` : ''}`
+        : `Ainda não palpitou${countdown ? ` · faltam ${countdown}` : ''}`
 
+  return (
+    <CollapsibleSection kicker="Mecânica 1" title="🏆 Bônus de Classificação" teaser={teaser} accent="#e8a030">
       {finished ? (
         <>
           <p style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-2)', marginBottom: 'var(--s3)' }}>
@@ -156,6 +162,6 @@ export default function GroupClassificationBonus({ groupId, token, brTeams, myEn
           )}
         </>
       )}
-    </div>
+    </CollapsibleSection>
   )
 }

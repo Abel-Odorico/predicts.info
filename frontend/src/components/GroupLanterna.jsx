@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api'
 import { toast } from '../toast'
+import CollapsibleSection from './CollapsibleSection'
 
 // Seção "🔴 Lanterna" (passo 16) — histórico por rodada + fundo acumulado + split.
 export default function GroupLanterna({ groupId, token, amOwner }) {
@@ -55,12 +56,10 @@ export default function GroupLanterna({ groupId, token, amOwner }) {
   if (loading || !data) return null
 
   const history = [...(data.history ?? [])].sort((a, b) => b.match_number - a.match_number)
+  const teaser = `R$ ${(data.fund_total ?? 0).toFixed(2)} no fundo · ${history.length} rodada${history.length === 1 ? '' : 's'}`
 
   return (
-    <div className="card mt-4 fade-in-1" style={{ padding: 'var(--s4)', borderLeft: '3px solid var(--lose)' }}>
-      <div className="group-manager-card__kicker" style={{ marginBottom: 2 }}>Mecânica 3</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-1)', marginBottom: 'var(--s3)' }}>🔴 Lanterna da Rodada</div>
-
+    <CollapsibleSection kicker="Mecânica 3" title="🔴 Lanterna da Rodada" teaser={teaser} accent="var(--lose)">
       {/* ── Fundo acumulado + split ── */}
       <div style={{ display: 'flex', gap: 'var(--s3)', flexWrap: 'wrap', marginBottom: 'var(--s4)' }}>
         <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--bg-overlay)', minWidth: 120 }}>
@@ -123,6 +122,6 @@ export default function GroupLanterna({ groupId, token, amOwner }) {
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)' }}>Nenhuma rodada fechada ainda.</span>
         )}
       </div>
-    </div>
+    </CollapsibleSection>
   )
 }
