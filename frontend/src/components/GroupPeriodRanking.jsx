@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api'
 import CollapsibleSection from './CollapsibleSection'
+import MedalIcon from './MedalIcon'
 
 // Ranking recortado por período — Rodada / Turno / Mês. O ranking do
 // CAMPEONATO inteiro já é a lista principal da página, não duplicado aqui.
@@ -70,16 +71,26 @@ export default function GroupPeriodRanking({ groupId, token, currentRodada }) {
       {loading && <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>Carregando…</p>}
 
       {!loading && data && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {data.ranking.map(r => (
             <div key={r.user_id} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 8,
+              padding: '8px 10px', borderRadius: 8,
               background: r.is_me ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-overlay)',
+              border: r.position <= 3 ? '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' : '1px solid transparent',
             }}>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', width: 22 }}>{r.position}º</span>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: r.is_me ? 700 : 400, color: 'var(--text-1)', flex: 1 }}>{r.name}</span>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>{r.bets} palpite{r.bets === 1 ? '' : 's'}</span>
-              <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>{r.pts} pts</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {r.position <= 3
+                  ? <MedalIcon rank={r.position} size={18} />
+                  : <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-3)', width: 18, textAlign: 'center' }}>{r.position}º</span>}
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: r.is_me ? 700 : 400, color: 'var(--text-1)', flex: 1 }}>{r.name}</span>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>{r.pts} pts</span>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4, paddingLeft: 28, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-3)' }}>
+                <span>🎯 {r.exact} exato{r.exact === 1 ? '' : 's'}</span>
+                <span>✅ {r.correct} certo{r.correct === 1 ? '' : 's'}</span>
+                <span>📈 {r.aproveitamento}% aproveit.</span>
+                <span>📝 {r.bets}/{data.possible} palpite{data.possible === 1 ? '' : 's'}</span>
+              </div>
             </div>
           ))}
           {data.ranking.every(r => r.bets === 0) && (

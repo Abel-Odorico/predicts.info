@@ -1390,38 +1390,52 @@ def group_ranking_period(
         label = f"{m:02d}/{y}"
         period_meta = {"year": y, "month": m}
 
+    # Exato/certo pela mesma régua de world_cup_sync.py::_score_points_v2: exato
+    # sempre pontua exatamente 25; direção certa (sem cravar) pontua 10/12/15/18;
+    # errado pontua 0. Mesma classificação usada pra alimentar Ranking.exact_scores/
+    # correct_results globalmente — só reaplicada aqui por período, não duplica regra.
     rows = (
         db.query(
             Bet.user_id,
             func.coalesce(func.sum(func.coalesce(Bet.points_earned, 0) + func.coalesce(Bet.et_points_earned, 0)), 0).label("pts"),
             func.count(Bet.id).label("bets"),
+            func.sum(case((Bet.points_earned == 25, 1), else_=0)).label("exact"),
+            func.sum(case((and_(Bet.points_earned > 0, Bet.points_earned != 25), 1), else_=0)).label("correct"),
         )
         .join(Match, Match.id == Bet.match_id)
         .filter(Bet.user_id.in_(member_ids), Match.competition_id == comp_id, match_filter)
         .group_by(Bet.user_id)
         .all()
     )
-    pts_by_user = {r.user_id: (int(r.pts or 0), int(r.bets or 0)) for r in rows}
+    stats_by_user = {
+        r.user_id: {"pts": int(r.pts or 0), "bets": int(r.bets or 0), "exact": int(r.exact or 0), "correct": int(r.correct or 0)}
+        for r in rows
+    }
     users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(member_ids)).all()}
 
-    ranking = sorted(
-        (
-            {
-                "user_id": uid,
-                "name": users_by_id[uid].name if uid in users_by_id else None,
-                "username": users_by_id[uid].username if uid in users_by_id else None,
-                "pts": pts_by_user.get(uid, (0, 0))[0],
-                "bets": pts_by_user.get(uid, (0, 0))[1],
-                "is_me": uid == user.id,
-            }
-            for uid in member_ids
-        ),
-        key=lambda r: r["pts"], reverse=True,
-    )
+    # Total de jogos possíveis nesse período (denominador de "palpites feitos de X") —
+    # mesmo pra todo mundo do grupo, é contagem de partidas, não de apostas de ninguém.
+    possible = db.query(func.count(Match.id)).filter(Match.competition_id == comp_id, match_filter).scalar() or 0
+
+    def _row(uid):
+        s = stats_by_user.get(uid, {"pts": 0, "bets": 0, "exact": 0, "correct": 0})
+        return {
+            "user_id": uid,
+            "name": users_by_id[uid].name if uid in users_by_id else None,
+            "username": users_by_id[uid].username if uid in users_by_id else None,
+            "pts": s["pts"],
+            "bets": s["bets"],
+            "exact": s["exact"],
+            "correct": s["correct"],
+            "aproveitamento": round(s["pts"] / (s["bets"] * 25) * 100) if s["bets"] else 0,
+            "is_me": uid == user.id,
+        }
+
+    ranking = sorted((_row(uid) for uid in member_ids), key=lambda r: r["pts"], reverse=True)
     for i, r in enumerate(ranking):
         r["position"] = i + 1
 
-    return {"group_id": group_id, "scope": scope, "label": label, **period_meta, "ranking": ranking}
+    return {"group_id": group_id, "scope": scope, "label": label, "possible": int(possible), **period_meta, "ranking": ranking}
 
 
 # ── Link de convite compartilhável ───────────────────────────────────────────
