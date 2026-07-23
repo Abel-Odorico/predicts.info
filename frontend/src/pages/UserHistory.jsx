@@ -5,6 +5,7 @@ import Spinner from '../components/Spinner'
 import { useAuth } from '../stores/authStore'
 import MyChampionCard from '../components/MyChampionCard'
 import TeamCrestFlag from '../components/TeamCrestFlag'
+import { COMPETITIONS } from '../utils/competitions'
 
 
 const RESULT_META = {
@@ -731,7 +732,8 @@ function ResultQuantityChart({ bets }) {
 const PHASE_ORDER = ['r32', 'r16', 'qf', 'sf', '3rd', 'final']
 
 function PhaseChart({ bets }) {
-  const evaluated = useMemo(() => bets.filter(b => b.result != null), [bets])
+  // Fase mata-mata é conceito só-Copa (r32/r16/qf/sf/3rd/final) — Brasileirão não tem fase, é rodada.
+  const evaluated = useMemo(() => bets.filter(b => b.result != null && !isBrBet(b)), [bets])
 
   const phases = useMemo(() => {
     const map = new Map()
@@ -766,7 +768,7 @@ function PhaseChart({ bets }) {
   return (
     <div className="uh-chart-card" style={{ margin: 0 }}>
       <div className="uh-chart-card__head">
-        <span className="uh-chart-card__label">Acerto por fase</span>
+        <span className="uh-chart-card__label">Acerto por fase · Copa</span>
         <span className="uh-chart-card__total" style={{ color: best.accuracy >= 50 ? 'var(--win)' : 'var(--lose)', fontSize: 20 }}>
           {best.accuracy}%
         </span>
@@ -878,6 +880,14 @@ function ScoreHeatmap({ bets }) {
 // ── BetGroups ─────────────────────────────────────────────────────────────
 const PHASE_LABELS_UH = { r32: '16avos', r16: 'Oitavas', qf: 'Quartas', sf: 'Semi', '3rd': '3º Lugar', final: 'Final' }
 
+function isBrBet(b) { return b.competition_code === 'brasileirao2026' }
+
+function phaseLabel(bet) {
+  if (bet.group_name) return `Grupo ${bet.group_name}`
+  if (isBrBet(bet) && bet.match_number) return `Rodada ${bet.match_number}`
+  return PHASE_LABELS_UH[bet.match_phase] || bet.match_phase || '—'
+}
+
 function _betDk(md) {
   if (!md) return '?'
   const s = typeof md === 'string' ? md : md.toISOString()
@@ -981,7 +991,7 @@ function BetCard({ bet, idx }) {
     <div className={`bet-card fade-in ${resultClass}`} style={{ animationDelay: `${idx * 20}ms` }}>
       <div className="bet-card__top">
         <span className="badge badge-group">
-          {bet.group_name ? `Grupo ${bet.group_name}` : (PHASE_LABELS_UH[bet.match_phase] || bet.match_phase || '—')}
+          {phaseLabel(bet)}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', flexWrap: 'wrap' }}>
           <span className="bet-card__time">{fmtDate(bet.match_date)}</span>
@@ -1262,7 +1272,7 @@ function BestWorstHighlight({ bets }) {
 }
 
 // ── Feature 2: Acerto por seleção ─────────────────────────────────────────
-function TeamAccuracy({ bets }) {
+function TeamAccuracy({ bets, minSample = 2 }) {
   const data = useMemo(() => {
     const evaluated = bets.filter(b => b.result != null)
     if (evaluated.length < 5) return null
@@ -1282,17 +1292,17 @@ function TeamAccuracy({ bets }) {
       }
     }
     const rows = [...map.values()]
-      .filter(t => t.total >= 2)
+      .filter(t => t.total >= minSample)
       .map(t => ({ ...t, accuracy: Math.round(((t.exact + t.correct) / t.total) * 100) }))
       .sort((a, b) => b.accuracy - a.accuracy || b.total - a.total)
     return rows.length >= 3 ? rows : null
-  }, [bets])
+  }, [bets, minSample])
 
   if (!data) return null
   return (
     <div className="uh-chart-card fade-in-3" style={{ margin: 0 }}>
       <div className="uh-chart-card__head">
-        <span className="uh-chart-card__label">Acerto por seleção</span>
+        <span className="uh-chart-card__label">Acerto por time</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {data[0].flag && <TeamCrestFlag src={data[0].flag} alt="" style={{ width: 20, height: 14, borderRadius: 2, objectFit: 'cover', border: '1px solid var(--win)' }} crestStyle={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-overlay)', border: '1px solid var(--win)' }} />}
           <span className="uh-chart-card__total" style={{ color: 'var(--win)', fontSize: 20 }}>{data[0].accuracy}%</span>
@@ -1324,7 +1334,8 @@ function TeamAccuracy({ bets }) {
 // ── Feature 3: Pontos por fase ────────────────────────────────────────────
 function PointsByPhase({ bets }) {
   const data = useMemo(() => {
-    const evaluated = bets.filter(b => b.result != null && b.points_earned != null)
+    // Mesma restrição do PhaseChart: fase mata-mata é conceito só-Copa.
+    const evaluated = bets.filter(b => b.result != null && b.points_earned != null && !isBrBet(b))
     if (evaluated.length < 3) return null
     const map = new Map()
     for (const b of evaluated) {
@@ -1353,7 +1364,124 @@ function PointsByPhase({ bets }) {
   return (
     <div className="uh-chart-card fade-in-3" style={{ margin: 0 }}>
       <div className="uh-chart-card__head">
-        <span className="uh-chart-card__label">Pontos por fase</span>
+        <span className="uh-chart-card__label">Pontos por fase · Copa</span>
+        <span className="uh-chart-card__total" style={{ fontSize: 20 }}>{total}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
+        {data.map(p => (
+          <div key={p.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-2)' }}>{p.label}</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-4)' }}>{p.count}j</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: p.label === bestLbl ? 'var(--accent)' : 'var(--text-2)', lineHeight: 1 }}>{p.points}</span>
+              </div>
+            </div>
+            <div style={{ height: 5, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 3,
+                width: `${(p.points / maxPts) * 100}%`,
+                background: p.label === bestLbl ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 50%, var(--border))',
+                transition: 'width 700ms cubic-bezier(.4,0,.2,1)',
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Equivalente Brasileirão de "por fase": agrupa por TURNO (rodada 1-19 / 20-38) ──
+const RETURNO_START_RODADA = 20
+function turnoLabel(matchNumber) {
+  return (matchNumber && matchNumber >= RETURNO_START_RODADA) ? '2º Turno' : '1º Turno'
+}
+
+function TurnoAccuracyChart({ bets }) {
+  const evaluated = useMemo(() => bets.filter(b => b.result != null && isBrBet(b)), [bets])
+
+  const turnos = useMemo(() => {
+    const map = new Map()
+    for (const b of evaluated) {
+      const lbl = turnoLabel(b.match_number)
+      if (!map.has(lbl)) map.set(lbl, { exact: 0, correct: 0, wrong: 0, total: 0 })
+      const s = map.get(lbl)
+      s.total++
+      if (b.result === 'exact') s.exact++
+      else if (b.result === 'correct') s.correct++
+      else s.wrong++
+    }
+    return [...map.entries()]
+      .map(([label, s]) => ({ label, ...s, accuracy: Math.round(((s.exact + s.correct) / s.total) * 100) }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [evaluated])
+
+  if (evaluated.length < 2 || turnos.length < 1) return null
+  const best = [...turnos].sort((a, b) => b.accuracy - a.accuracy)[0]
+
+  return (
+    <div className="uh-chart-card" style={{ margin: 0 }}>
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Acerto por turno · Brasileirão</span>
+        <span className="uh-chart-card__total" style={{ color: best.accuracy >= 50 ? 'var(--win)' : 'var(--lose)', fontSize: 20 }}>
+          {best.accuracy}%
+        </span>
+      </div>
+      <div className="uh-phase-list">
+        {turnos.map(p => (
+          <div key={p.label} className="uh-phase-row">
+            <div className="uh-phase-row__label">{p.label}</div>
+            <div className="uh-phase-row__track">
+              <div className="uh-phase-row__seg" style={{ width: `${(p.exact   / p.total) * 100}%`, background: '#0f7a78' }} />
+              <div className="uh-phase-row__seg" style={{ width: `${(p.correct / p.total) * 100}%`, background: '#2ec980' }} />
+              <div className="uh-phase-row__seg" style={{ width: `${(p.wrong   / p.total) * 100}%`, background: '#e8525230' }} />
+            </div>
+            <div className="uh-phase-row__right">
+              <span className="uh-phase-row__pct" style={{ color: p.accuracy >= 50 ? 'var(--win)' : 'var(--text-3)' }}>
+                {p.accuracy}%
+              </span>
+              <span className="uh-phase-row__count">{p.total} jogo{p.total !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="uh-chart-legend" style={{ marginTop: 'var(--s4)', justifyContent: 'flex-start' }}>
+        {[['#0f7a78', 'Exato'], ['#2ec980', 'Certo'], ['#e85252', 'Erro']].map(([c, l]) => (
+          <span key={l} className="uh-chart-legend__item">
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: c, display: 'inline-block' }} />
+            {l}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PointsByTurno({ bets }) {
+  const data = useMemo(() => {
+    const evaluated = bets.filter(b => b.result != null && b.points_earned != null && isBrBet(b))
+    if (evaluated.length < 2) return null
+    const map = new Map()
+    for (const b of evaluated) {
+      const lbl = turnoLabel(b.match_number)
+      if (!map.has(lbl)) map.set(lbl, { label: lbl, points: 0, count: 0 })
+      const s = map.get(lbl)
+      s.points += b.points_earned ?? 0
+      s.count++
+    }
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
+  }, [bets])
+
+  if (!data) return null
+  const maxPts  = Math.max(...data.map(p => p.points), 1)
+  const total   = data.reduce((s, p) => s + p.points, 0)
+  const bestLbl = [...data].sort((a, b) => b.points - a.points)[0].label
+
+  return (
+    <div className="uh-chart-card" style={{ margin: 0 }}>
+      <div className="uh-chart-card__head">
+        <span className="uh-chart-card__label">Pontos por turno · Brasileirão</span>
         <span className="uh-chart-card__total" style={{ fontSize: 20 }}>{total}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
@@ -1705,6 +1833,7 @@ export default function UserHistory() {
   const [searchOpen,  setSearchOpen]  = useState(false)
   const [acFocus,     setAcFocus]     = useState(-1)
   const [compareOpen, setCompareOpen] = useState(false)
+  const [comp,        setComp]        = useState('brasileirao2026')
 
   useEffect(() => {
     setLoading(true); setError('')
@@ -1737,13 +1866,14 @@ export default function UserHistory() {
     const q = search.trim().toLowerCase()
     if (!q) return []
     const allBets = data?.bets ?? []
+    const scoped = comp === 'geral' ? allBets : allBets.filter(b => b.competition_code === comp)
     const set = new Set()
-    allBets.forEach(b => {
+    scoped.forEach(b => {
       if (b.team_a_name) set.add(b.team_a_name)
       if (b.team_b_name) set.add(b.team_b_name)
     })
     return [...set].filter(n => n.toLowerCase().includes(q)).slice(0, 6)
-  }, [search, data])
+  }, [search, data, comp])
 
   if (loading) return <Spinner text="Carregando histórico..." />
   if (error) return (
@@ -1763,6 +1893,7 @@ export default function UserHistory() {
   const rankingPosition = data?.ranking_position ?? null
   const totalUsers      = data?.total_users ?? null
 
+  // Full = perfil geral (header/identidade, nunca muda com a aba)
   const evaluated = bets.filter(b => b.result != null)
   const pending   = bets.filter(b => b.result == null)
   const exact     = evaluated.filter(b => b.result === 'exact')
@@ -1770,19 +1901,32 @@ export default function UserHistory() {
   const wrong     = evaluated.filter(b => b.result === 'wrong')
   const accuracy  = evaluated.length > 0 ? Math.round(((exact.length + correct.length) / evaluated.length) * 100) : 0
 
+  // Scoped = respeita a aba de competição selecionada (KPIs, gráficos, lista de apostas)
+  const scopedBets      = comp === 'geral' ? bets : bets.filter(b => b.competition_code === comp)
+  const scopedEvaluated = scopedBets.filter(b => b.result != null)
+  const scopedPending   = scopedBets.filter(b => b.result == null)
+  const scopedExact     = scopedEvaluated.filter(b => b.result === 'exact')
+  const scopedCorrect   = scopedEvaluated.filter(b => b.result === 'correct')
+  const scopedWrong     = scopedEvaluated.filter(b => b.result === 'wrong')
+  const scopedAccuracy  = scopedEvaluated.length > 0 ? Math.round(((scopedExact.length + scopedCorrect.length) / scopedEvaluated.length) * 100) : 0
+  const teamMinSample   = comp === 'geral' ? 2 : 1
+  // "Geral" usa o total oficial (Ranking, inclui bônus de campeão); por competição soma direto dos bets
+  // (sem bônus de campeão pra Copa — mostrado à parte no card de palpite de campeão).
+  const scopedPoints    = comp === 'geral' ? (stats.total_points ?? 0) : scopedEvaluated.reduce((s, b) => s + (b.points_earned ?? 0), 0)
+
   const FILTERS = [
-    { id: 'all',     label: 'Todas',     count: bets.length    },
-    { id: 'exact',   label: 'Exatos',    count: exact.length   },
-    { id: 'correct', label: 'Certos',    count: correct.length },
-    { id: 'wrong',   label: 'Erros',     count: wrong.length   },
-    { id: 'pending', label: 'Pendentes', count: pending.length },
+    { id: 'all',     label: 'Todas',     count: scopedBets.length    },
+    { id: 'exact',   label: 'Exatos',    count: scopedExact.length   },
+    { id: 'correct', label: 'Certos',    count: scopedCorrect.length },
+    { id: 'wrong',   label: 'Erros',     count: scopedWrong.length   },
+    { id: 'pending', label: 'Pendentes', count: scopedPending.length },
   ]
 
-  const filterBase = filter === 'all'     ? bets
-                   : filter === 'exact'   ? exact
-                   : filter === 'correct' ? correct
-                   : filter === 'wrong'   ? wrong
-                   : pending
+  const filterBase = filter === 'all'     ? scopedBets
+                   : filter === 'exact'   ? scopedExact
+                   : filter === 'correct' ? scopedCorrect
+                   : filter === 'wrong'   ? scopedWrong
+                   : scopedPending
 
   const searchQ = search.trim().toLowerCase()
   const visible = searchQ
@@ -1835,15 +1979,32 @@ export default function UserHistory() {
         </div>
       </div>
 
+      {/* ── Abas de competição ──────────────────────── */}
+      <div className="phase-nav fade-in-2" style={{ margin: 'var(--s4) 0' }}>
+        {COMPETITIONS.map(c => (
+          <button key={c.id} type="button"
+            className={`phase-nav__tab ${comp === c.id ? 'active' : ''}`}
+            onClick={() => setComp(c.id)}>
+            {c.emoji} {c.label}
+          </button>
+        ))}
+      </div>
+
+      {scopedBets.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 'var(--s10)', color: 'var(--text-3)', fontFamily: 'var(--font-cond)' }}>
+          Nenhuma aposta em {COMPETITIONS.find(c => c.id === comp)?.label} ainda.
+        </div>
+      ) : (
+      <>
       {/* ── KPI strip ───────────────────────────────── */}
       <div className="uh-kpi-grid fade-in-2">
         {[
-          { label: 'Pontos',       value: stats.total_points ?? 0,                                                          color: 'var(--accent)' },
-          { label: '% Acerto',     value: `${accuracy}%`,                                                                   color: 'var(--win)'    },
-          { label: 'Exatos',       value: exact.length,                                                                     color: '#e8c44a'       },
-          { label: 'Certos',       value: correct.length,                                                                   color: '#2ec980'       },
-          { label: 'Erros',        value: wrong.length,                                                                     color: 'var(--lose)'   },
-          { label: 'Pts / Jogo',   value: evaluated.length > 0 ? ((stats.total_points ?? 0) / evaluated.length).toFixed(1) : '—', color: '#9b5de8' },
+          { label: 'Pontos',       value: scopedPoints,                                                                     color: 'var(--accent)' },
+          { label: '% Acerto',     value: `${scopedAccuracy}%`,                                                             color: 'var(--win)'    },
+          { label: 'Exatos',       value: scopedExact.length,                                                              color: '#e8c44a'       },
+          { label: 'Certos',       value: scopedCorrect.length,                                                            color: '#2ec980'       },
+          { label: 'Erros',        value: scopedWrong.length,                                                              color: 'var(--lose)'   },
+          { label: 'Pts / Jogo',   value: scopedEvaluated.length > 0 ? (scopedPoints / scopedEvaluated.length).toFixed(1) : '—', color: '#9b5de8' },
         ].map(k => (
           <div key={k.label} className="uh-kpi-card" style={{ '--kpi-color': k.color }}>
             <div className="uh-kpi-card__accent" />
@@ -1854,83 +2015,91 @@ export default function UserHistory() {
       </div>
 
       {/* ── Próximos jogos ──────────────────────────── */}
-      {pending.length > 0 && <UpcomingBets bets={bets} />}
+      {scopedPending.length > 0 && <UpcomingBets bets={scopedBets} />}
 
-      {/* ── Palpite de campeão (só perfil próprio) ── */}
-      {isOwn && <MyChampionCard />}
+      {/* ── Palpite de campeão (só perfil próprio, só aba Copa) ── */}
+      {isOwn && comp === 'copa2026' && <MyChampionCard />}
 
       {/* ── Barra distribuição ──────────────────────── */}
-      {evaluated.length > 0 && (
+      {scopedEvaluated.length > 0 && (
         <div className="fade-in-2">
           <ResultBar
-            exact={exact.length} correct={correct.length}
-            wrong={wrong.length} pending={pending.length}
+            exact={scopedExact.length} correct={scopedCorrect.length}
+            wrong={scopedWrong.length} pending={scopedPending.length}
           />
         </div>
       )}
 
       {/* ── Sequências ──────────────────────────────── */}
-      {evaluated.length >= 2 && (
+      {scopedEvaluated.length >= 2 && (
         <div className="fade-in-2">
-          <StreaksSection evaluated={evaluated} />
+          <StreaksSection evaluated={scopedEvaluated} />
         </div>
       )}
 
       {/* ── Melhor / Pior aposta ────────────────────── */}
-      {evaluated.length >= 3 && <BestWorstHighlight bets={bets} />}
+      {scopedEvaluated.length >= 3 && <BestWorstHighlight bets={scopedBets} />}
 
       {/* ── Estratégia & Recomendações ──────────────── */}
-      <StrategyInsights bets={bets} />
+      <StrategyInsights bets={scopedBets} />
 
       {/* ── Anéis de desempenho ─────────────────────── */}
-      {evaluated.length > 0 && (
+      {scopedEvaluated.length > 0 && (
         <div className="uh-section fade-in-2">
           <div className="uh-section__head">
             <span className="uh-section__icon">📈</span>
             <span className="uh-section__title">Análise Estatística</span>
           </div>
           <ActivityRings
-            exact={exact.length} correct={correct.length}
-            evaluated={evaluated.length} totalBets={bets.length}
+            exact={scopedExact.length} correct={scopedCorrect.length}
+            evaluated={scopedEvaluated.length} totalBets={scopedBets.length}
             rankingPosition={rankingPosition} totalUsers={totalUsers}
           />
         </div>
       )}
 
       {/* ── Gráfico de pontos ───────────────────────── */}
-      {evaluated.length > 0 && (
+      {scopedEvaluated.length > 0 && (
         <div className="fade-in-3">
-          <PointsChart bets={bets} />
+          <PointsChart bets={scopedBets} />
         </div>
       )}
 
       {/* ── Quantidade de resultados (totais + por período) ── */}
-      {bets.length > 0 && (
+      {scopedBets.length > 0 && (
         <div className="fade-in-3">
-          <ResultQuantityChart bets={bets} />
+          <ResultQuantityChart bets={scopedBets} />
         </div>
       )}
 
-      {/* ── Fase + Heatmap ──────────────────────────── */}
-      {evaluated.length >= 5 && (
+      {/* ── Fase + Heatmap (fase mata-mata só existe na Copa — auto-esconde fora dela) ── */}
+      {scopedEvaluated.length >= 5 && (
         <div className="uh-charts-row fade-in-3">
-          <PhaseChart bets={bets} />
-          <ScoreHeatmap bets={bets} />
+          <PhaseChart bets={scopedBets} />
+          <ScoreHeatmap bets={scopedBets} />
         </div>
       )}
 
       {/* ── Pontos por fase + Placares frequentes ──────── */}
-      {evaluated.length >= 5 && (
+      {scopedEvaluated.length >= 5 && (
         <div className="uh-charts-row fade-in-3">
-          <PointsByPhase bets={bets} />
-          <ScorePatternBar bets={bets} />
+          <PointsByPhase bets={scopedBets} />
+          <ScorePatternBar bets={scopedBets} />
         </div>
       )}
 
-      {/* ── Acerto por seleção ──────────────────────── */}
-      {evaluated.length >= 5 && (
+      {/* ── Acerto/Pontos por turno (Brasileirão) — auto-esconde fora dela ── */}
+      {scopedEvaluated.filter(isBrBet).length >= 2 && (
+        <div className="uh-charts-row fade-in-3">
+          <TurnoAccuracyChart bets={scopedBets} />
+          <PointsByTurno bets={scopedBets} />
+        </div>
+      )}
+
+      {/* ── Acerto por time ──────────────────────────── */}
+      {scopedEvaluated.length >= 5 && (
         <div className="fade-in-3">
-          <TeamAccuracy bets={bets} />
+          <TeamAccuracy bets={scopedBets} minSample={teamMinSample} />
         </div>
       )}
 
@@ -1966,7 +2135,7 @@ export default function UserHistory() {
                 if (e.key === 'Enter' && acFocus >= 0) { setSearch(acSuggestions[acFocus]); setSearchOpen(false); setAcFocus(-1) }
                 if (e.key === 'Escape') { setSearch(''); setSearchOpen(false) }
               }}
-              placeholder="Buscar por seleção..."
+              placeholder="Buscar por time..."
               style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-1)', minWidth: 0 }}
             />
             {search && (
@@ -1996,6 +2165,8 @@ export default function UserHistory() {
           </div>
         ) : <BetGroups bets={visible} filter={filter} />}
       </div>
+      </>
+      )}
 
       {compareOpen && <CompareView userId={userId} onClose={() => setCompareOpen(false)} />}
     </div>

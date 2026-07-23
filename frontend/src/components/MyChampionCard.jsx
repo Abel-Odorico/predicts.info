@@ -9,12 +9,15 @@ let _pickCacheToken = null
 let _statusCache = null  // { can_change, deadline } — shared entre instâncias
 export function invalidateChampionCache() { _pickCache = null; _pickCacheToken = null }
 
+let _finalResultCache = null  // { championCode, runnerUpCode } — só existe depois da final, cacheia por sessão
+
 export default function MyChampionCard({ compact = false }) {
   const { token } = useAuth()
   const cached = (token && token === _pickCacheToken) ? _pickCache : null
   const [pick, setPick]   = useState(cached)
   const [ready, setReady] = useState(cached !== null)
   const [open, setOpen]   = useState(_statusCache?.can_change ?? false)
+  const [finalResult, setFinalResult] = useState(_finalResultCache)
 
   useEffect(() => {
     // Busca status de abertura (sem auth)
@@ -24,6 +27,23 @@ export default function MyChampionCard({ compact = false }) {
         setOpen(d.can_change)
       }).catch(() => {})
     }
+  }, [])
+
+  useEffect(() => {
+    // Resultado oficial da final — Copa 2026 já decidida (Espanha campeã), sem necessidade de auth
+    if (_finalResultCache) return
+    api.get('/tournament/official-bracket').then(d => {
+      const finalMatch = d?.schedule?.find(m => m.phase === 'final')
+      if (finalMatch?.resolved_team_a && finalMatch?.resolved_team_b && Array.isArray(finalMatch.score)) {
+        const [sa, sb] = finalMatch.score
+        const result = {
+          championCode: sa > sb ? finalMatch.resolved_team_a.code : finalMatch.resolved_team_b.code,
+          runnerUpCode: sa > sb ? finalMatch.resolved_team_b.code : finalMatch.resolved_team_a.code,
+        }
+        _finalResultCache = result
+        setFinalResult(result)
+      }
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -64,13 +84,15 @@ export default function MyChampionCard({ compact = false }) {
         borderRadius: 10, padding: '10px 14px', marginBottom: 'var(--s4)',
       }}>
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: open ? 'var(--accent)' : 'var(--text-4)', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
-          {open ? '🔓 ABERTO PARA TROCAR' : 'MEUS PALPITES DE CAMPEÃO'}
+          {open ? '🔓 ABERTO PARA TROCAR' : '🏆 CAMPEÃO DA COPA 2026'}
         </span>
         <div style={{ display: 'flex', gap: 10, flex: 1, flexWrap: 'wrap' }}>
           {[
-            { label: '🏆', pick: pick?.champion,  pts: '+100', color: 'var(--accent)' },
-            { label: '🥈', pick: pick?.runner_up, pts: '+50',  color: '#b8860b' },
-          ].map(({ label, pick: p, pts, color }) => (
+            { label: '🏆', pick: pick?.champion,  pts: '+100', color: 'var(--accent)', realCode: finalResult?.championCode },
+            { label: '🥈', pick: pick?.runner_up, pts: '+50',  color: '#b8860b',       realCode: finalResult?.runnerUpCode },
+          ].map(({ label, pick: p, pts, color, realCode }) => {
+            const hit = finalResult && p && p.code === realCode
+            return (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 14 }}>{label}</span>
               {p ? (
@@ -78,6 +100,7 @@ export default function MyChampionCard({ compact = false }) {
                   <img src={p.flag} alt={p.code} style={{ width: 22, height: 16, objectFit: 'cover', borderRadius: 2 }} />
                   <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{p.name || p.code}</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color }}>{pts}</span>
+                  {finalResult && <span style={{ fontSize: 12 }}>{hit ? '✅' : '❌'}</span>}
                 </>
               ) : (
                 <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: open ? 'var(--lose)' : 'var(--text-4)', fontStyle: 'italic' }}>
@@ -85,7 +108,8 @@ export default function MyChampionCard({ compact = false }) {
                 </span>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
         <Link to="/campeao" style={{
           fontFamily: 'var(--font-cond)', fontSize: 12,
@@ -113,7 +137,7 @@ export default function MyChampionCard({ compact = false }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: open ? 'var(--accent)' : 'var(--text-4)', letterSpacing: '0.08em' }}>
-            {open ? '🔓 PALPITES REABERTOS' : 'MEUS PALPITES DE CAMPEÃO'}
+            {open ? '🔓 PALPITES REABERTOS' : '🏆 CAMPEÃO DA COPA 2026'}
           </span>
           {open && (
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
@@ -133,9 +157,11 @@ export default function MyChampionCard({ compact = false }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {[
-          { emoji: '🏆', label: 'Campeão',      pts: '+100 pts', color: 'var(--accent)', p: pick?.champion  },
-          { emoji: '🥈', label: 'Vice-Campeão', pts: '+50 pts',  color: '#b8860b',       p: pick?.runner_up },
-        ].map(({ emoji, label, pts, color, p }) => (
+          { emoji: '🏆', label: 'Campeão',      pts: '+100 pts', color: 'var(--accent)', p: pick?.champion,  realCode: finalResult?.championCode },
+          { emoji: '🥈', label: 'Vice-Campeão', pts: '+50 pts',  color: '#b8860b',       p: pick?.runner_up, realCode: finalResult?.runnerUpCode },
+        ].map(({ emoji, label, pts, color, p, realCode }) => {
+          const hit = finalResult && p && p.code === realCode
+          return (
           <div key={label} style={{
             background: p ? `${color}10` : 'var(--bg-overlay)',
             border: `1px solid ${p ? color : 'var(--border)'}`,
@@ -152,7 +178,9 @@ export default function MyChampionCard({ compact = false }) {
                 <img src={p.flag} alt={p.code} style={{ width: 30, height: 21, objectFit: 'cover', borderRadius: 3 }} />
                 <div>
                   <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>{p.name || p.code}</div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color, marginTop: 1 }}>✓ escolhido</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: finalResult ? (hit ? 'var(--win)' : 'var(--lose)') : color, marginTop: 1 }}>
+                    {finalResult ? (hit ? '✅ acertou!' : '❌ não foi essa') : '✓ escolhido'}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -161,7 +189,8 @@ export default function MyChampionCard({ compact = false }) {
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

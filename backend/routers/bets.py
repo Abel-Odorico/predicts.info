@@ -4,7 +4,7 @@ from sqlalchemy import case, desc, func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from auth_utils import get_current_user, get_optional_user
-from models import Bet, Match, MatchPhase, MatchStatus, Ranking, Team, User, UserRole
+from models import Bet, Competition, Match, MatchPhase, MatchStatus, Ranking, Team, User, UserRole
 from schemas import BetCreate, RankingRow
 from routers.audit import log_action
 
@@ -48,7 +48,7 @@ def _bet_result(b: Bet) -> str | None:
     return "wrong"
 
 
-def _bet_dict(b: Bet) -> dict:
+def _bet_dict(b: Bet, comp_code_map: dict | None = None) -> dict:
     match = b.match
     result = match.result if match else None
     return {
@@ -68,6 +68,7 @@ def _bet_dict(b: Bet) -> dict:
         "match_status": match.status.value if match and match.status else None,
         "match_date": match.match_date if match else None,
         "competition_id": match.competition_id if match else None,
+        "competition_code": (comp_code_map or {}).get(match.competition_id) if match else None,
         "team_a_code": match.team_a.code if match and match.team_a else None,
         "team_b_code": match.team_b.code if match and match.team_b else None,
         "team_a_name": match.team_a.name if match and match.team_a else None,
@@ -89,7 +90,7 @@ def _mask_bet_dict(d: dict) -> dict:
     return {**d, "score_a": None, "score_b": None, "et_winner_pick": None, "hidden": True}
 
 
-def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranking_position: int | None = None, total_users: int | None = None, hidden_ids: set[int] | None = None) -> dict:
+def _history_payload(user: User, bets: list[Bet], stats: dict, ranking_position: int | None = None, total_users: int | None = None, hidden_ids: set[int] | None = None, comp_code_map: dict | None = None) -> dict:
     hidden_ids = hidden_ids or set()
     return {
         "user": {
@@ -97,15 +98,15 @@ def _history_payload(user: User, bets: list[Bet], ranking: Ranking | None, ranki
             "name": user.name,
         },
         "stats": {
-            "total_points": ranking.total_points if ranking else 0,
-            "exact_scores": ranking.exact_scores if ranking else 0,
-            "correct_results": ranking.correct_results if ranking else 0,
+            "total_points": stats.get("total_points", 0),
+            "exact_scores": stats.get("exact_scores", 0),
+            "correct_results": stats.get("correct_results", 0),
             "total_bets": len(bets),
         },
         "ranking_position": ranking_position,
         "total_users": total_users,
         "bets": [
-            _mask_bet_dict(_bet_dict(b)) if b.id in hidden_ids else _bet_dict(b)
+            _mask_bet_dict(_bet_dict(b, comp_code_map)) if b.id in hidden_ids else _bet_dict(b, comp_code_map)
             for b in bets
         ],
     }
@@ -291,30 +292,39 @@ def user_bets_history(
         .all()
     )
     hidden_ids = {b.id for b in bets if not _bet_visible_to(b, viewer)}
-    from competitions import get_competition_id
-    copa_id = get_competition_id(db)
-    ranking = db.query(Ranking).filter(
-        Ranking.user_id == user.id, Ranking.competition_id == copa_id
-    ).first()
+    comp_code_map = {c.id: c.code for c in db.query(Competition).all()}
 
-    # compute ranking position
-    ranked_users = (
-        db.query(User.id)
-        .outerjoin(Ranking, and_(User.id == Ranking.user_id, Ranking.competition_id == copa_id))
+    # "Geral" = soma Ranking.total_points entre TODAS as competições — mesmo padrão
+    # de GET /ranking?competition=geral (antes só olhava copa2026, ficava com "cara de Copa").
+    own_rankings = db.query(Ranking).filter(Ranking.user_id == user.id).all()
+    stats = {
+        "total_points":    sum(r.total_points or 0 for r in own_rankings),
+        "exact_scores":    sum(r.exact_scores or 0 for r in own_rankings),
+        "correct_results": sum(r.correct_results or 0 for r in own_rankings),
+    }
+
+    ranked_totals = (
+        db.query(
+            User.id.label("user_id"),
+            func.coalesce(func.sum(Ranking.total_points), 0).label("total_points"),
+            func.coalesce(func.sum(Ranking.exact_scores), 0).label("exact_scores"),
+        )
+        .outerjoin(Ranking, User.id == Ranking.user_id)
         .filter(or_(Ranking.user_id.isnot(None), User.id.in_(
             db.query(Bet.user_id).distinct()
         )))
+        .group_by(User.id)
         .order_by(
-            desc(func.coalesce(Ranking.total_points, 0)),
-            desc(func.coalesce(Ranking.exact_scores, 0)),
+            desc("total_points"),
+            desc("exact_scores"),
             User.name.asc(),
         )
         .all()
     )
-    total_users = len(ranked_users)
-    ranking_position = next((i + 1 for i, r in enumerate(ranked_users) if r[0] == user_id), None)
+    total_users = len(ranked_totals)
+    ranking_position = next((i + 1 for i, r in enumerate(ranked_totals) if r.user_id == user_id), None)
 
-    return _history_payload(user, bets, ranking, ranking_position, total_users, hidden_ids)
+    return _history_payload(user, bets, stats, ranking_position, total_users, hidden_ids, comp_code_map)
 
 
 @router.get("/bets/users/{user_id}/ranking-history")
