@@ -381,9 +381,30 @@ def evaluate_bets(db: Session) -> dict:
     db.commit()
     # DM depois do commit: falha de envio nunca desfaz pontuação
     _notify_bet_results_whatsapp_br(db, comp_id, wa_events)
+
+    # Mecânicas extras de bolão (lanterna da rodada + detecção do jogo em
+    # dobro automático) — overlay, pendurado no FIM do evaluate_bets (depois
+    # do Ranking já reconstruído). Isolado em try/except: nunca pode derrubar
+    # o sync principal (mesmo padrão de projections.py). Ver group_mechanics.py
+    # e plan.md predicts-grupos-bonus.
+    lanterna_result = None
+    double_match_result = None
+    try:
+        from group_mechanics import compute_group_lanterna_for_finished_rounds
+        lanterna_result = compute_group_lanterna_for_finished_rounds(db)
+    except Exception as e:
+        print(f"[group-lanterna] erro (não derruba o sync): {e}", flush=True)
+    try:
+        from group_mechanics import compute_group_double_match_auto_detect
+        double_match_result = compute_group_double_match_auto_detect(db)
+    except Exception as e:
+        print(f"[group-double-match] erro (não derruba o sync): {e}", flush=True)
+
     out = {
         "evaluated": evaluated, "users_ranked": len(totals), "notifications": notif_count,
         "wa_dms": len(wa_events), "at": now.isoformat(),
+        "group_lanterna": lanterna_result,
+        "group_double_match": double_match_result,
     }
     _last_run["bets"] = out
     return out

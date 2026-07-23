@@ -33,6 +33,9 @@ _PUSH_CONFIG: dict[str, tuple[bool, str, str]] = {
     "group_join_request":  (True, "/meus-grupos", "group-join"),
     "group_join_approved": (True, "/meus-grupos", "group-join"),
     "group_join_rejected": (True, "/meus-grupos", "group-join"),
+    "group_lanterna":      (True, "/meus-grupos", "group-lanterna"),
+    "group_double_match":  (True, "/meus-grupos", "group-double-match"),
+    "group_monthly_bonus": (True, "/meus-grupos", "group-monthly-bonus"),
     "goal":           (True,  "/apostas",    "predicts-goal"),
     "match_live":     (True,  "/",           "predicts-live"),
 }

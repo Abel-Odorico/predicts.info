@@ -11,6 +11,10 @@ import { displayName } from '../utils/displayName'
 import RankingNameToggle from '../components/RankingNameToggle'
 import TeamCrestFlag from '../components/TeamCrestFlag'
 import MedalIcon from '../components/MedalIcon'
+import GroupFeatureConfig from '../components/GroupFeatureConfig'
+import GroupClassificationBonus from '../components/GroupClassificationBonus'
+import GroupDoubleMatchBadge from '../components/GroupDoubleMatchBadge'
+import GroupLanterna from '../components/GroupLanterna'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -153,6 +157,11 @@ export default function GroupRanking() {
   // ── Expanded row ────────────────────────────────────────────
   const [expandedUserId, setExpandedUserId] = useState(null)
 
+  // ── Mecânicas extras de bolão (passos 13-17, só Brasileirão) ───
+  const [featureConfig, setFeatureConfig] = useState(null)
+  const [brTeams, setBrTeams] = useState([])
+  const [brCurrentRodada, setBrCurrentRodada] = useState(null)
+
   // ── Chat ────────────────────────────────────────────────────
   const [messages, setMessages] = useState([])
   const [msgText, setMsgText] = useState('')
@@ -237,6 +246,20 @@ export default function GroupRanking() {
     }
     api.get(`/user-groups/${groupId}/champion`, token).catch(() => []).then(setChampionPicks)
     api.get(`/user-groups/${groupId}/messages`, token).catch(() => []).then(setMessages)
+
+    // Mecânicas extras (passos 13-17) — só existem pro Brasileirão (plan.md, fora de
+    // escopo pra Copa). feature-config é legível por qualquer membro (não só dono).
+    if (comp === 'brasileirao2026') {
+      api.get(`/user-groups/${groupId}/feature-config`, token).catch(() => null).then(setFeatureConfig)
+      api.get('/brasileirao/standings').catch(() => null).then(res => {
+        setBrTeams(res?.table ?? [])
+        setBrCurrentRodada(res?.current_rodada ?? null)
+      })
+    } else {
+      setFeatureConfig(null)
+      setBrTeams([])
+      setBrCurrentRodada(null)
+    }
   }, [groupId, token, today, comp])
 
   useEffect(() => { load() }, [load])
@@ -574,6 +597,31 @@ export default function GroupRanking() {
           <button type="button" className={`phase-nav__tab ${!showStats ? 'active' : ''}`} onClick={() => setShowStats(false)}>🏆 Ranking</button>
           <button type="button" className={`phase-nav__tab ${showStats ? 'active' : ''}`} onClick={() => setShowStats(true)}>📊 Estatísticas</button>
         </div>
+      )}
+
+      {/* ── Mecânicas extras do bolão (só Brasileirão, plan.md) ── */}
+      {comp === 'brasileirao2026' && featureConfig && (
+        <>
+          {amOwner && (
+            <GroupFeatureConfig
+              groupId={groupId}
+              token={token}
+              config={featureConfig.config}
+              onSaved={cfg => setFeatureConfig(fc => ({ ...fc, config: cfg }))}
+              brTeams={brTeams}
+              currentRodada={brCurrentRodada}
+            />
+          )}
+          {featureConfig.config.classification_bonus?.enabled && (
+            <GroupClassificationBonus groupId={groupId} token={token} brTeams={brTeams} myEntry={myEntry} />
+          )}
+          {featureConfig.config.double_match?.enabled && (
+            <GroupDoubleMatchBadge groupId={groupId} token={token} currentRodada={brCurrentRodada} brTeams={brTeams} />
+          )}
+          {featureConfig.config.lanterna?.enabled && (
+            <GroupLanterna groupId={groupId} token={token} amOwner={amOwner} />
+          )}
+        </>
       )}
 
       {!showStats && (
@@ -996,6 +1044,34 @@ export default function GroupRanking() {
                               </div>
                             ))}
                           </div>
+
+                          {/* ── Breakdown do desempate (passo 17) — só Brasileirão, só se */}
+                          {/* alguma mecânica estiver ligada no grupo (senão os campos vêm 0 sem sentido). */}
+                          {comp === 'brasileirao2026' && r.double_bonus !== undefined && featureConfig && (
+                            Object.values(featureConfig.config).some(v => v && typeof v === 'object' && v.enabled)
+                          ) && (
+                            <div>
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>
+                                Composição do desempate
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))', gap: 4 }}>
+                                {[
+                                  { icon: '📌', label: 'Base', val: r.total_points, color: 'var(--text-2)' },
+                                  { icon: '🔥', label: 'Dobro', val: r.double_bonus > 0 ? `+${r.double_bonus}` : '0', color: r.double_bonus > 0 ? 'var(--win)' : 'var(--text-3)' },
+                                  { icon: '📅', label: 'Mensal', val: r.monthly_bonus_pts > 0 ? `+${r.monthly_bonus_pts}` : '0', color: r.monthly_bonus_pts > 0 ? 'var(--win)' : 'var(--text-3)' },
+                                  { icon: '🏆', label: 'Class.', val: r.classification_hits ?? 0, color: (r.classification_hits ?? 0) > 0 ? 'var(--win)' : 'var(--text-3)' },
+                                  { icon: '🎯', label: 'PE efet.', val: r.pe_efetivo ?? 0, color: 'var(--text-2)' },
+                                  { icon: '✅', label: 'VE efet.', val: r.ve_efetivo ?? 0, color: 'var(--text-2)' },
+                                  { icon: '🏁', label: 'Total', val: r.effective_points ?? r.total_points, color: 'var(--accent)' },
+                                ].map(s => (
+                                  <div key={s.label} style={{ textAlign: 'center', padding: '6px 4px', borderRadius: 8, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                                    <div style={{ fontFamily: 'var(--font-data)', fontSize: 14, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 9, color: 'var(--text-3)', marginTop: 2, letterSpacing: '0.05em' }}>{s.icon} {s.label}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Recent bets grouped by date */}
                           {recentBets.length > 0 && (() => {

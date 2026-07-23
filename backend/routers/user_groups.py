@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session, joinedload
 from auth_utils import get_current_user
 from competitions import get_competition_id
 from database import get_db
-from models import Bet, GroupInviteStatus, GroupMessage, Match, MatchPhase, MatchResult, MatchStatus, Notification, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupJoinRequest, UserGroupMember
+from models import (
+    Bet, Competition, GroupClassificationBet, GroupDoubleMatch, GroupFeatureConfig, GroupInviteStatus,
+    GroupLanterna, GroupMessage, GroupMonthlyBonus, Match, MatchPhase, MatchResult, MatchStatus,
+    Notification, Ranking, Team, User, UserGroup, UserGroupInvite, UserGroupJoinRequest, UserGroupMember,
+)
 from routers.audit import log_action
 from routers.report import notify_new_group_telegram
 
@@ -135,6 +139,658 @@ def _load_group(group_id: int, db: Session) -> UserGroup | None:
 def _ensure_group_owner(group: UserGroup, user: User) -> None:
     if group.owner_user_id != user.id:
         raise HTTPException(403, "Somente o dono do grupo pode gerenciar convites")
+
+
+# ── Mecânicas extras de bolão (config + bônus classificação + dobro + lanterna + mensal) ──
+# Overlay aditivo por cima do Ranking/Bet globais — nunca escreve neles. Escopo
+# de EFEITO é só Brasileirão (aplicado em group_ranking() só quando
+# competition == 'brasileirao2026', passo 12); a config em si não é presa a
+# competição (grupo não tem competição fixa) — decisão técnica de
+# implementação (documentada, não travada por endpoint) pra não reintroduzir
+# o conceito de "competição do grupo" que não existe hoje. Ver plan.md em
+# /root/.dev-plans/predicts-grupos-bonus/.
+
+def _default_feature_config() -> dict:
+    return {
+        "classification_bonus": {
+            "enabled": False,
+            "pts_per_hit": 3,
+        },
+        "double_match": {
+            "enabled": False,
+            # seed default = par pedido originalmente (Cruzeiro x Atlético-MG),
+            # lista CONFIGURÁVEL pelo dono — não é regra fixa (ver plan.md decisão 3)
+            "auto_double_derbies": [["CRU", "CAM"]],
+        },
+        "lanterna": {
+            "enabled": False,
+            "pix_value": 10.0,
+            "fund_split": [50, 30, 20],
+        },
+        "monthly_bonus": {
+            "enabled": False,
+            "pts_by_rank": {"1": 6, "2": 3, "3": 1},
+            "credits_by_rank": {"1": {"pe": 2}, "2": {"pe": 1}, "3": {"ve": 1}},
+        },
+        "notifications_enabled": True,
+    }
+
+
+def _merge_feature_config(base: dict, patch: dict) -> dict:
+    """Merge raso recursivo — só mescla chaves que já existem no default
+    (proteção extra além do `extra=forbid` do Pydantic)."""
+    result = dict(base)
+    for k, v in patch.items():
+        if k not in result:
+            continue
+        if isinstance(v, dict) and isinstance(result.get(k), dict):
+            result[k] = _merge_feature_config(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+
+def _get_feature_config(db: Session, group_id: int) -> dict:
+    row = db.query(GroupFeatureConfig).filter(GroupFeatureConfig.group_id == group_id).first()
+    config = _default_feature_config()
+    if row and row.config:
+        config = _merge_feature_config(config, row.config)
+    return config
+
+
+class _ClassificationBonusConfigPatch(BaseModel):
+    model_config = {"extra": "forbid"}
+    enabled: bool | None = None
+    pts_per_hit: int | None = None
+
+
+class _DoubleMatchConfigPatch(BaseModel):
+    model_config = {"extra": "forbid"}
+    enabled: bool | None = None
+    auto_double_derbies: list[list[str]] | None = None
+
+
+class _LanternaConfigPatch(BaseModel):
+    model_config = {"extra": "forbid"}
+    enabled: bool | None = None
+    pix_value: float | None = None
+    fund_split: list[int] | None = None
+
+
+class _MonthlyBonusConfigPatch(BaseModel):
+    model_config = {"extra": "forbid"}
+    enabled: bool | None = None
+    pts_by_rank: dict[str, int] | None = None
+    credits_by_rank: dict[str, dict[str, int]] | None = None
+
+
+class GroupFeatureConfigPatch(BaseModel):
+    model_config = {"extra": "forbid"}
+    classification_bonus: _ClassificationBonusConfigPatch | None = None
+    double_match: _DoubleMatchConfigPatch | None = None
+    lanterna: _LanternaConfigPatch | None = None
+    monthly_bonus: _MonthlyBonusConfigPatch | None = None
+    notifications_enabled: bool | None = None
+
+
+@router.get("/{group_id}/feature-config")
+def get_group_feature_config(
+    group_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    is_member = (
+        db.query(UserGroupMember)
+        .filter(UserGroupMember.group_id == group_id, UserGroupMember.user_id == user.id)
+        .first()
+    )
+    if not is_member:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+
+    return {
+        "group_id": group_id,
+        "config": _get_feature_config(db, group_id),
+        "is_owner": group.owner_user_id == user.id,
+    }
+
+
+@router.patch("/{group_id}/feature-config")
+def patch_group_feature_config(
+    group_id: int,
+    payload: GroupFeatureConfigPatch,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    _ensure_group_owner(group, user)
+
+    current = _get_feature_config(db, group_id)
+    patch_dict = payload.model_dump(exclude_unset=True)
+
+    if "double_match" in patch_dict and patch_dict["double_match"] and patch_dict["double_match"].get("auto_double_derbies") is not None:
+        derbies = patch_dict["double_match"]["auto_double_derbies"]
+        valid_codes = {t.code for t in db.query(Team.code).filter(Team.competition_id == get_competition_id(db, "brasileirao2026")).all()}
+        for pair in derbies:
+            if len(pair) != 2 or pair[0] == pair[1]:
+                raise HTTPException(400, f"Par de clássico inválido: {pair}")
+            for code in pair:
+                if code.upper() not in valid_codes:
+                    raise HTTPException(400, f"Código de clube inválido (não é clube do Brasileirão): {code}")
+
+    merged = _merge_feature_config(current, patch_dict)
+
+    row = db.query(GroupFeatureConfig).filter(GroupFeatureConfig.group_id == group_id).first()
+    if not row:
+        row = GroupFeatureConfig(group_id=group_id, config=merged)
+        db.add(row)
+    else:
+        row.config = merged
+    db.commit()
+    db.refresh(row)
+    log_action(db, user.id, "group_feature_config.update", {"group_id": group_id, "patch": patch_dict})
+
+    return {"group_id": group_id, "config": row.config}
+
+
+# ── Bônus de classificação do returno ────────────────────────────────────────
+
+def _returno_deadline(db: Session) -> datetime | None:
+    """MIN(match_date) da rodada 20 (1º jogo do returno) do Brasileirão — deadline
+    do bônus de classificação. Calculado em runtime (não hardcoda "rodada 20" como
+    data fixa), naive-UTC igual todo o resto do banco (ver `_match_now` em bets.py)."""
+    comp_id = get_competition_id(db, "brasileirao2026")
+    return (
+        db.query(func.min(Match.match_date))
+        .filter(Match.competition_id == comp_id, Match.match_number == 20)
+        .scalar()
+    )
+
+
+def _now_naive_utc() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _require_group_member(db: Session, group_id: int, user: User) -> UserGroup:
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    is_member = (
+        db.query(UserGroupMember)
+        .filter(UserGroupMember.group_id == group_id, UserGroupMember.user_id == user.id)
+        .first()
+    )
+    if not is_member:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+    return group
+
+
+class ClassificationBetCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+    team_ids: list[int]  # ordem = posição final palpitada, 1º ao último
+
+
+@router.post("/{group_id}/classification-bet")
+def save_classification_bet(
+    group_id: int,
+    payload: ClassificationBetCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _require_group_member(db, group_id, user)
+
+    deadline = _returno_deadline(db)
+    if deadline and _now_naive_utc() > deadline:
+        raise HTTPException(403, "Prazo do bônus de classificação encerrado (rodada 20 do returno já começou)")
+
+    comp_id = get_competition_id(db, "brasileirao2026")
+    # Não hardcoda "20" — usa a contagem real de clubes da competição (defensivo
+    # contra mudança de formato em temporada futura, mesmo espírito do resto do projeto).
+    valid_team_ids = {row[0] for row in db.query(Team.id).filter(Team.competition_id == comp_id).all()}
+    total_teams = len(valid_team_ids)
+
+    if len(payload.team_ids) != total_teams:
+        raise HTTPException(400, f"Envie exatamente {total_teams} clubes ordenados (recebido {len(payload.team_ids)})")
+    if len(set(payload.team_ids)) != len(payload.team_ids):
+        raise HTTPException(400, "Palpite tem clube repetido")
+    invalid = [tid for tid in payload.team_ids if tid not in valid_team_ids]
+    if invalid:
+        raise HTTPException(400, f"Clube(s) inválido(s) pro Brasileirão: {invalid}")
+
+    db.query(GroupClassificationBet).filter(
+        GroupClassificationBet.group_id == group_id,
+        GroupClassificationBet.user_id == user.id,
+    ).delete()
+    for position, team_id in enumerate(payload.team_ids, start=1):
+        db.add(GroupClassificationBet(
+            group_id=group_id, user_id=user.id, team_id=team_id, predicted_position=position,
+        ))
+    db.commit()
+    log_action(db, user.id, "group_classification_bet.save", {"group_id": group_id})
+
+    return {"saved": True, "count": len(payload.team_ids)}
+
+
+@router.get("/{group_id}/classification-bet")
+def get_classification_bet(
+    group_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _require_group_member(db, group_id, user)
+
+    deadline = _returno_deadline(db)
+    locked = bool(deadline and _now_naive_utc() > deadline)
+
+    rows = (
+        db.query(GroupClassificationBet)
+        .filter(GroupClassificationBet.group_id == group_id, GroupClassificationBet.user_id == user.id)
+        .order_by(GroupClassificationBet.predicted_position)
+        .all()
+    )
+
+    return {
+        "group_id": group_id,
+        "deadline": deadline,
+        "locked": locked,
+        "has_bet": len(rows) > 0,
+        "team_ids": [r.team_id for r in rows],
+    }
+
+
+def _final_standings_team_ids(db: Session, comp_id: int) -> list[int]:
+    """Tabela final ordenada por posição (mesmo critério CBF/desempate de
+    `routers/brasileirao.py::_build_table`/`_sort_key`, reusado aqui pra não
+    duplicar a lógica de apuração)."""
+    from routers.brasileirao import _build_table, _load_matches, _sort_key
+
+    clubs = db.query(Team).filter(Team.competition_id == comp_id).all()
+    matches = _load_matches(db, comp_id)
+    table = _build_table(clubs, matches)
+    club_by_id = {c.id: c for c in clubs}
+    rows = [{"team_id": cid, "name": club_by_id[cid].name, **r} for cid, r in table.items()]
+    rows.sort(key=_sort_key)
+    return [r["team_id"] for r in rows]
+
+
+def _classification_hits(db: Session, group_id: int, user_id: int) -> int:
+    """Conta quantos clubes o usuário acertou a posição EXATA no bônus de
+    classificação. Só apura com `competitions.status == 'finished'` pro
+    Brasileirão (plan.md decisão 7) — antes disso não há posição final real pra
+    comparar, retorna 0 (não é 'ninguém acertou ainda', é 'não apurável ainda')."""
+    comp_id = get_competition_id(db, "brasileirao2026")
+    comp = db.query(Competition).filter(Competition.id == comp_id).first()
+    if not comp or comp.status != "finished":
+        return 0
+
+    final_order = _final_standings_team_ids(db, comp_id)
+    final_position_by_team = {team_id: i + 1 for i, team_id in enumerate(final_order)}
+
+    bets = (
+        db.query(GroupClassificationBet)
+        .filter(GroupClassificationBet.group_id == group_id, GroupClassificationBet.user_id == user_id)
+        .all()
+    )
+    return sum(1 for b in bets if final_position_by_team.get(b.team_id) == b.predicted_position)
+
+
+# ── Jogo em dobro ─────────────────────────────────────────────────────────────
+
+def _find_auto_double_match(matches_da_rodada: list[Match], derby_pairs: list[list[str]]) -> tuple[Match | None, list[str] | None]:
+    """Função pura: percorre a lista CONFIGURADA de clássicos (`config.
+    auto_double_derbies`, não hardcoded) na ordem cadastrada = prioridade se
+    mais de um clássico da lista cair na mesma rodada. `matches_da_rodada`
+    precisa ter `team_a`/`team_b` carregados (joinedload). Retorna
+    `(match, par_que_bateu)` ou `(None, None)`."""
+    matches_by_pair: dict[frozenset, Match] = {}
+    for m in matches_da_rodada:
+        if not m.team_a or not m.team_b:
+            continue
+        matches_by_pair[frozenset((m.team_a.code, m.team_b.code))] = m
+    for pair in derby_pairs:
+        if len(pair) != 2:
+            continue
+        key = frozenset(code.upper() for code in pair)
+        if key in matches_by_pair:
+            return matches_by_pair[key], pair
+    return None, None
+
+
+def _load_rodada_matches(db: Session, comp_id: int, match_number: int) -> list[Match]:
+    return (
+        db.query(Match)
+        .options(joinedload(Match.team_a), joinedload(Match.team_b))
+        .filter(Match.competition_id == comp_id, Match.match_number == match_number)
+        .all()
+    )
+
+
+def _match_summary(match: Match | None) -> dict:
+    if not match:
+        return {"team_a": None, "team_b": None}
+    return {
+        "team_a": match.team_a.name if match.team_a else None,
+        "team_b": match.team_b.name if match.team_b else None,
+        "team_a_code": match.team_a.code if match.team_a else None,
+        "team_b_code": match.team_b.code if match.team_b else None,
+    }
+
+
+@router.get("/{group_id}/double-match")
+def get_double_match(
+    group_id: int,
+    rodada: int = Query(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _require_group_member(db, group_id, user)
+    comp_id = get_competition_id(db, "brasileirao2026")
+    config = _get_feature_config(db, group_id)
+    derby_pairs = config["double_match"]["auto_double_derbies"]
+
+    matches = _load_rodada_matches(db, comp_id, rodada)
+    auto_match, auto_pair = _find_auto_double_match(matches, derby_pairs)
+
+    if auto_match:
+        return {
+            "group_id": group_id, "match_number": rodada, "is_auto": True,
+            "match_id": auto_match.id, "matched_pair": auto_pair,
+            **_match_summary(auto_match),
+        }
+
+    row = (
+        db.query(GroupDoubleMatch)
+        .filter(GroupDoubleMatch.group_id == group_id, GroupDoubleMatch.match_number == rodada)
+        .first()
+    )
+    if not row:
+        return {"group_id": group_id, "match_number": rodada, "is_auto": False, "match_id": None, **_match_summary(None)}
+
+    match = db.query(Match).options(joinedload(Match.team_a), joinedload(Match.team_b)).filter(Match.id == row.match_id).first()
+    return {
+        "group_id": group_id, "match_number": rodada, "is_auto": row.is_auto,
+        "match_id": row.match_id, "set_by_user_id": row.set_by_user_id,
+        **_match_summary(match),
+    }
+
+
+class DoubleMatchCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+    match_number: int
+    match_id: int
+
+
+@router.post("/{group_id}/double-match")
+def set_double_match(
+    group_id: int,
+    payload: DoubleMatchCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    _ensure_group_owner(group, user)
+
+    comp_id = get_competition_id(db, "brasileirao2026")
+    config = _get_feature_config(db, group_id)
+    derby_pairs = config["double_match"]["auto_double_derbies"]
+
+    matches = _load_rodada_matches(db, comp_id, payload.match_number)
+    auto_match, auto_pair = _find_auto_double_match(matches, derby_pairs)
+    if auto_match:
+        raise HTTPException(
+            409,
+            f"Rodada {payload.match_number} já tem clássico automático "
+            f"({auto_pair[0]} x {auto_pair[1]}) definindo o dobro — escolha manual bloqueada",
+        )
+
+    match = (
+        db.query(Match)
+        .filter(Match.id == payload.match_id, Match.competition_id == comp_id, Match.match_number == payload.match_number)
+        .first()
+    )
+    if not match:
+        raise HTTPException(400, "Partida inválida pra essa rodada do Brasileirão")
+
+    row = (
+        db.query(GroupDoubleMatch)
+        .filter(GroupDoubleMatch.group_id == group_id, GroupDoubleMatch.match_number == payload.match_number)
+        .first()
+    )
+    if row:
+        row.match_id = payload.match_id
+        row.is_auto = False
+        row.set_by_user_id = user.id
+    else:
+        row = GroupDoubleMatch(
+            group_id=group_id, match_number=payload.match_number, match_id=payload.match_id,
+            is_auto=False, set_by_user_id=user.id,
+        )
+        db.add(row)
+    db.commit()
+    log_action(db, user.id, "group_double_match.set", {"group_id": group_id, "match_number": payload.match_number, "match_id": payload.match_id})
+
+    return {"saved": True, "match_number": payload.match_number, "match_id": payload.match_id, "is_auto": False}
+
+
+def _resolve_double_match_ids(db: Session, group_id: int, comp_id: int) -> list[int]:
+    """1x por grupo: resolve quais `match_id` valem dobro, olhando só rodadas
+    que já têm `MatchResult` (jogo aconteceu) — automático (config) tem
+    prioridade sobre manual, mesma regra do GET/POST double-match."""
+    config = _get_feature_config(db, group_id)
+    derby_pairs = config["double_match"]["auto_double_derbies"]
+
+    finished_match_numbers = {
+        row[0] for row in (
+            db.query(Match.match_number)
+            .join(MatchResult, MatchResult.match_id == Match.id)
+            .filter(Match.competition_id == comp_id, Match.match_number.isnot(None))
+            .distinct()
+            .all()
+        )
+    }
+    if not finished_match_numbers:
+        return []
+
+    manual_by_rodada = {
+        row.match_number: row.match_id
+        for row in (
+            db.query(GroupDoubleMatch)
+            .filter(GroupDoubleMatch.group_id == group_id, GroupDoubleMatch.match_number.in_(finished_match_numbers))
+            .all()
+        )
+    }
+
+    double_match_ids: list[int] = []
+    for rodada in finished_match_numbers:
+        matches = _load_rodada_matches(db, comp_id, rodada)
+        auto_match, _ = _find_auto_double_match(matches, derby_pairs)
+        if auto_match:
+            double_match_ids.append(auto_match.id)
+        elif rodada in manual_by_rodada:
+            double_match_ids.append(manual_by_rodada[rodada])
+    return double_match_ids
+
+
+def _double_match_bonus(db: Session, group_id: int, comp_id: int, user_id: int, double_match_ids: list[int] | None = None) -> int:
+    """Bônus de pontos do jogo em dobro pro usuário: soma DE NOVO (efeito
+    'dobrar') os pontos que ele já ganhou nas partidas marcadas como dobro
+    naquele grupo, só nas rodadas já com `MatchResult`. `double_match_ids` pode
+    vir pré-calculado (`_resolve_double_match_ids`, 1x por grupo) pra não
+    refazer a resolução por membro num loop de ranking (passo 12)."""
+    if double_match_ids is None:
+        double_match_ids = _resolve_double_match_ids(db, group_id, comp_id)
+    if not double_match_ids:
+        return 0
+    total = (
+        db.query(func.coalesce(func.sum(func.coalesce(Bet.points_earned, 0) + func.coalesce(Bet.et_points_earned, 0)), 0))
+        .filter(Bet.user_id == user_id, Bet.match_id.in_(double_match_ids))
+        .scalar()
+    )
+    return int(total or 0)
+
+
+# ── Lanterna da rodada: gestão (fundo, pix, vídeo) ──────────────────────────
+
+def _group_top3_user_ids(db: Session, group_id: int, comp_id: int, config: dict | None = None) -> list[int]:
+    """Top 3 do ranking GERAL do grupo, usado pra projeção do split do fundo
+    do lanterna (decisão 6 do plan.md). Usa PONTOS EFETIVOS — mesma fórmula
+    de `group_ranking()`/`effective_pts` (passo 12): `total_points +
+    double_bonus + monthly_bonus_pts` — pra bater com o pódio real exibido
+    em `/user-groups/{id}/ranking?competition=brasileirao2026`. Lanterna só
+    existe pro Brasileirão (sem `champion_bonus`, que é só Copa) e
+    `classification_hits` não soma pontos em `effective_pts` (só entra no
+    critério de desempate), por isso fica de fora daqui também. Reaproveita
+    `_resolve_double_match_ids`/`_double_match_bonus` e a query de
+    `GroupMonthlyBonus`, sem duplicar lógica nova."""
+    member_ids = [row[0] for row in db.query(UserGroupMember.user_id).filter(UserGroupMember.group_id == group_id).all()]
+    if not member_ids:
+        return []
+    pts_by_user = dict.fromkeys(member_ids, 0)
+    for uid, pts in (
+        db.query(Ranking.user_id, Ranking.total_points)
+        .filter(Ranking.user_id.in_(member_ids), Ranking.competition_id == comp_id)
+        .all()
+    ):
+        pts_by_user[uid] = int(pts or 0)
+
+    if config is None:
+        config = _get_feature_config(db, group_id)
+
+    if config["double_match"]["enabled"]:
+        double_match_ids = _resolve_double_match_ids(db, group_id, comp_id)
+        for uid in member_ids:
+            pts_by_user[uid] += _double_match_bonus(db, group_id, comp_id, uid, double_match_ids)
+
+    if config["monthly_bonus"]["enabled"]:
+        for uid, pts in (
+            db.query(GroupMonthlyBonus.user_id, func.sum(GroupMonthlyBonus.pts_awarded))
+            .filter(GroupMonthlyBonus.group_id == group_id, GroupMonthlyBonus.user_id.in_(member_ids))
+            .group_by(GroupMonthlyBonus.user_id)
+            .all()
+        ):
+            pts_by_user[uid] += int(pts or 0)
+
+    ordered = sorted(pts_by_user.items(), key=lambda kv: kv[1], reverse=True)
+    return [uid for uid, _ in ordered[:3]]
+
+
+@router.get("/{group_id}/lanterna")
+def get_group_lanterna(
+    group_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _require_group_member(db, group_id, user)
+    comp_id = get_competition_id(db, "brasileirao2026")
+    config = _get_feature_config(db, group_id)
+
+    rows = (
+        db.query(GroupLanterna)
+        .filter(GroupLanterna.group_id == group_id)
+        .order_by(GroupLanterna.match_number)
+        .all()
+    )
+    all_user_ids = {uid for r in rows for uid in (r.user_ids or [])}
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(all_user_ids)).all()} if all_user_ids else {}
+
+    history = []
+    paid_count = 0
+    pix_value = float(config["lanterna"]["pix_value"])
+    for r in rows:
+        entries = []
+        for uid in (r.user_ids or []):
+            paid = bool((r.pix_paid or {}).get(str(uid)))
+            video = bool((r.video_confirmed or {}).get(str(uid)))
+            if paid:
+                paid_count += 1
+            entries.append({
+                "user_id": uid,
+                "name": users_by_id[uid].name if uid in users_by_id else None,
+                "pix_paid": paid,
+                "video_confirmed": video,
+            })
+        history.append({"id": r.id, "match_number": r.match_number, "users": entries})
+
+    fund_total = round(paid_count * pix_value, 2)
+    split = config["lanterna"]["fund_split"]
+    top3 = _group_top3_user_ids(db, group_id, comp_id, config)
+    top3_users = {u.id: u for u in db.query(User).filter(User.id.in_(top3)).all()} if top3 else {}
+
+    comp = db.query(Competition).filter(Competition.id == comp_id).first()
+    is_final = bool(comp and comp.status == "finished")
+
+    projection = [
+        {
+            "position": i + 1,
+            "user_id": uid,
+            "name": top3_users[uid].name if uid in top3_users else None,
+            "pct": split[i] if i < len(split) else 0,
+            "amount": round(fund_total * (split[i] if i < len(split) else 0) / 100, 2),
+        }
+        for i, uid in enumerate(top3)
+    ]
+
+    return {
+        "group_id": group_id,
+        "pix_value": pix_value,
+        "fund_split": split,
+        "fund_total": fund_total,
+        "paid_count": paid_count,
+        "is_final": is_final,
+        "projection": projection,
+        "history": history,
+    }
+
+
+class LanternaPatch(BaseModel):
+    model_config = {"extra": "forbid"}
+    user_id: int
+    pix_paid: bool | None = None
+    video_confirmed: bool | None = None
+
+
+@router.patch("/{group_id}/lanterna/{lanterna_id}")
+def patch_group_lanterna(
+    group_id: int,
+    lanterna_id: int,
+    payload: LanternaPatch,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    _ensure_group_owner(group, user)
+
+    row = db.query(GroupLanterna).filter(GroupLanterna.id == lanterna_id, GroupLanterna.group_id == group_id).first()
+    if not row:
+        raise HTTPException(404, "Linha de lanterna não encontrada")
+    if payload.user_id not in (row.user_ids or []):
+        raise HTTPException(400, "Esse usuário não é lanterna dessa rodada")
+
+    pix_paid = dict(row.pix_paid or {})
+    video_confirmed = dict(row.video_confirmed or {})
+    key = str(payload.user_id)
+    if payload.pix_paid is not None:
+        pix_paid[key] = payload.pix_paid
+    if payload.video_confirmed is not None:
+        video_confirmed[key] = payload.video_confirmed
+    row.pix_paid = pix_paid
+    row.video_confirmed = video_confirmed
+    db.commit()
+    db.refresh(row)
+    log_action(db, user.id, "group_lanterna.patch", {"group_id": group_id, "lanterna_id": lanterna_id, "user_id": payload.user_id})
+
+    return {
+        "id": row.id, "match_number": row.match_number, "user_ids": row.user_ids,
+        "pix_paid": row.pix_paid, "video_confirmed": row.video_confirmed,
+    }
 
 
 @router.get("")
@@ -573,11 +1229,79 @@ def group_ranking(
         if fav_codes else {}
     )
 
+    # ── Mecânicas extras de bolão (passo 12) — overlay aditivo, SÓ Brasileirão.
+    # Nunca escreve em Ranking/Bet globais — só lê GroupDoubleMatch/
+    # GroupMonthlyBonus/GroupClassificationBet e soma por cima aqui, igual o
+    # champion_bonus_pts acima (precedente que o plano pediu pra seguir).
+    br_double_bonus: dict[int, int] = {}
+    br_monthly_pts: dict[int, int] = {}
+    br_monthly_pe: dict[int, int] = {}
+    br_monthly_ve: dict[int, int] = {}
+    br_classification_hits: dict[int, int] = {}
+    is_brasileirao = competition == "brasileirao2026"
+
+    if is_brasileirao:
+        comp_id_br = get_competition_id(db, "brasileirao2026")
+        br_config = _get_feature_config(db, group_id)
+
+        if br_config["double_match"]["enabled"]:
+            double_match_ids = _resolve_double_match_ids(db, group_id, comp_id_br)
+            for uid in member_ids:
+                br_double_bonus[uid] = _double_match_bonus(db, group_id, comp_id_br, uid, double_match_ids)
+
+        if br_config["monthly_bonus"]["enabled"]:
+            for uid, pts, pe, ve in (
+                db.query(
+                    GroupMonthlyBonus.user_id,
+                    func.sum(GroupMonthlyBonus.pts_awarded),
+                    func.sum(GroupMonthlyBonus.pe_credit),
+                    func.sum(GroupMonthlyBonus.ve_credit),
+                )
+                .filter(GroupMonthlyBonus.group_id == group_id, GroupMonthlyBonus.user_id.in_(member_ids))
+                .group_by(GroupMonthlyBonus.user_id)
+                .all()
+            ):
+                br_monthly_pts[uid] = int(pts or 0)
+                br_monthly_pe[uid] = int(pe or 0)
+                br_monthly_ve[uid] = int(ve or 0)
+
+        if br_config["classification_bonus"]["enabled"]:
+            for uid in member_ids:
+                br_classification_hits[uid] = _classification_hits(db, group_id, uid)
+
     def effective_pts(r):
-        bonus = champion_bonus_pts if r.user_id in correct_pickers else 0
-        return (int(r.total_points or 0) + bonus, int(r.exact_scores or 0), int(r.total_bets or 0))
+        champ_bonus = champion_bonus_pts if r.user_id in correct_pickers else 0
+        double_bonus = br_double_bonus.get(r.user_id, 0)
+        monthly_pts = br_monthly_pts.get(r.user_id, 0)
+        total_eff = int(r.total_points or 0) + champ_bonus + double_bonus + monthly_pts
+        if is_brasileirao:
+            hits = br_classification_hits.get(r.user_id, 0)
+            pe_eff = int(r.exact_scores or 0) + br_monthly_pe.get(r.user_id, 0)
+            ve_eff = int(r.correct_results or 0) + br_monthly_ve.get(r.user_id, 0)
+            # Critério de desempate em cascata (plan.md): pontos efetivos →
+            # acertos do bônus de classificação → PE efetivo → VE efetivo.
+            return (total_eff, hits, pe_eff, ve_eff)
+        return (total_eff, int(r.exact_scores or 0), int(r.total_bets or 0))
 
     rows_sorted = sorted(rows, key=lambda r: effective_pts(r), reverse=True)
+
+    def _row_extra(r) -> dict:
+        champ_bonus = champion_bonus_pts if r.user_id in correct_pickers else 0
+        double_bonus = br_double_bonus.get(r.user_id, 0)
+        monthly_pts = br_monthly_pts.get(r.user_id, 0)
+        extra = {
+            "champion_bonus": champ_bonus,
+            "effective_points": int(r.total_points or 0) + champ_bonus + double_bonus + monthly_pts,
+        }
+        if is_brasileirao:
+            extra.update({
+                "double_bonus": double_bonus,
+                "monthly_bonus_pts": monthly_pts,
+                "classification_hits": br_classification_hits.get(r.user_id, 0),
+                "pe_efetivo": int(r.exact_scores or 0) + br_monthly_pe.get(r.user_id, 0),
+                "ve_efetivo": int(r.correct_results or 0) + br_monthly_ve.get(r.user_id, 0),
+            })
+        return extra
 
     return {
         "group_id": group.id,
@@ -605,8 +1329,7 @@ def group_ranking(
                 "exact_scores": int(r.exact_scores or 0),
                 "correct_results": int(r.correct_results or 0),
                 "total_bets": int(r.total_bets or 0),
-                "champion_bonus": champion_bonus_pts if r.user_id in correct_pickers else 0,
-                "effective_points": int(r.total_points or 0) + (champion_bonus_pts if r.user_id in correct_pickers else 0),
+                **_row_extra(r),
                 "is_me": r.user_id == user.id,
                 "is_owner": r.user_id == group.owner_user_id,
             }

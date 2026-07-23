@@ -669,6 +669,60 @@ def _run_migrations():
             # Time do coração do usuário real (mesmo padrão do favorite_team_code
             # do Bot Squad) — badge de escudo no Profile/Ranking/Grupos
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS favorite_team_code VARCHAR(6)",
+            # Mecânicas extras de bolão: bônus classificação, dobro, lanterna, mensal
+            # (overlay aditivo por cima de Ranking/Bet — plan predicts-grupos-bonus)
+            """CREATE TABLE IF NOT EXISTS group_feature_config (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL UNIQUE REFERENCES user_groups(id),
+                config JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )""",
+            """CREATE TABLE IF NOT EXISTS group_classification_bets (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL REFERENCES user_groups(id),
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                team_id INTEGER NOT NULL REFERENCES teams(id),
+                predicted_position INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_group_class_bet_team ON group_classification_bets (group_id, user_id, team_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_group_class_bet_pos ON group_classification_bets (group_id, user_id, predicted_position)",
+            """CREATE TABLE IF NOT EXISTS group_double_matches (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL REFERENCES user_groups(id),
+                match_number INTEGER NOT NULL,
+                match_id INTEGER NOT NULL REFERENCES matches(id),
+                is_auto BOOLEAN NOT NULL DEFAULT FALSE,
+                set_by_user_id INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_group_double_match_rodada ON group_double_matches (group_id, match_number)",
+            """CREATE TABLE IF NOT EXISTS group_lanterna (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL REFERENCES user_groups(id),
+                match_number INTEGER NOT NULL,
+                user_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                pix_paid JSONB NOT NULL DEFAULT '{}'::jsonb,
+                video_confirmed JSONB NOT NULL DEFAULT '{}'::jsonb,
+                notified_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_group_lanterna_rodada ON group_lanterna (group_id, match_number)",
+            """CREATE TABLE IF NOT EXISTS group_monthly_bonus (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL REFERENCES user_groups(id),
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                rank INTEGER NOT NULL,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                pts_awarded INTEGER NOT NULL DEFAULT 0,
+                pe_credit INTEGER NOT NULL DEFAULT 0,
+                ve_credit INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_group_monthly_bonus ON group_monthly_bonus (group_id, year, month, rank)",
         ]:
             try:
                 conn.execute(text(alter))

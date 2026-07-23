@@ -661,3 +661,100 @@ class PhaseCompetition(Base):
     active      = Column(Boolean, default=True)
     promo_text  = Column(String(300), nullable=True) # texto para compartilhar
     created_at  = Column(DateTime, default=_utcnow)
+
+
+# ── Mecânicas extras de bolão (bônus classificação, dobro, lanterna, mensal) ────
+# Overlay aditivo por cima do Ranking/Bet globais (nunca escreve neles) — ver
+# plan.md em /root/.dev-plans/predicts-grupos-bonus/. Escopo: só Brasileirão.
+# Nenhuma dessas tabelas cria relationship recíproco em User (gotcha do mapper
+# quebrado com FK dupla pra users.id — ver BotPersona acima).
+
+class GroupFeatureConfig(Base):
+    """1 linha por grupo: toggles + valores das 4 mecânicas extras + notificação."""
+    __tablename__ = "group_feature_config"
+
+    id       = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey("user_groups.id"), nullable=False, unique=True)
+    config   = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    group = relationship("UserGroup", foreign_keys=[group_id])
+
+
+class GroupClassificationBet(Base):
+    """Palpite 1x de um membro: posição final (1-20) de 1 clube no returno.
+    20 linhas por (grupo, usuário) — 1 por clube palpitado."""
+    __tablename__ = "group_classification_bets"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", "team_id", name="uq_group_class_bet_team"),
+        UniqueConstraint("group_id", "user_id", "predicted_position", name="uq_group_class_bet_pos"),
+    )
+
+    id                 = Column(Integer, primary_key=True)
+    group_id           = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    user_id            = Column(Integer, ForeignKey("users.id"), nullable=False)
+    team_id            = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    predicted_position = Column(Integer, nullable=False)  # 1-20
+    created_at         = Column(DateTime, default=_utcnow)
+    updated_at         = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    group = relationship("UserGroup", foreign_keys=[group_id])
+    user  = relationship("User", foreign_keys=[user_id])
+    team  = relationship("Team", foreign_keys=[team_id])
+
+
+class GroupDoubleMatch(Base):
+    """Jogo em dobro da rodada, por grupo — automático (clássico configurado) ou manual (dono)."""
+    __tablename__ = "group_double_matches"
+    __table_args__ = (UniqueConstraint("group_id", "match_number", name="uq_group_double_match_rodada"),)
+
+    id             = Column(Integer, primary_key=True)
+    group_id       = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    match_number   = Column(Integer, nullable=False)
+    match_id       = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    is_auto        = Column(Boolean, default=False, nullable=False)
+    set_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # null se automático
+    created_at     = Column(DateTime, default=_utcnow)
+
+    group       = relationship("UserGroup", foreign_keys=[group_id])
+    match       = relationship("Match", foreign_keys=[match_id])
+    set_by_user = relationship("User", foreign_keys=[set_by_user_id])
+
+
+class GroupLanterna(Base):
+    """Lanterna(s) da rodada dentro do grupo — todos empatados no mínimo de pontos
+    da rodada. user_ids/pix_paid/video_confirmed em JSONB, chave = str(user_id)."""
+    __tablename__ = "group_lanterna"
+    __table_args__ = (UniqueConstraint("group_id", "match_number", name="uq_group_lanterna_rodada"),)
+
+    id               = Column(Integer, primary_key=True)
+    group_id         = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    match_number     = Column(Integer, nullable=False)
+    user_ids         = Column(JSONB, nullable=False, default=list)
+    pix_paid         = Column(JSONB, nullable=False, default=dict)
+    video_confirmed  = Column(JSONB, nullable=False, default=dict)
+    notified_at      = Column(DateTime, nullable=True)
+    created_at       = Column(DateTime, default=_utcnow)
+
+    group = relationship("UserGroup", foreign_keys=[group_id])
+
+
+class GroupMonthlyBonus(Base):
+    """Ledger do fechamento mensal — top 3 do mês calendário (BRT) fechado, por grupo."""
+    __tablename__ = "group_monthly_bonus"
+    __table_args__ = (UniqueConstraint("group_id", "year", "month", "rank", name="uq_group_monthly_bonus"),)
+
+    id          = Column(Integer, primary_key=True)
+    group_id    = Column(Integer, ForeignKey("user_groups.id"), nullable=False)
+    year        = Column(Integer, nullable=False)
+    month       = Column(Integer, nullable=False)  # 1-12, mês FECHADO (já passou)
+    rank        = Column(Integer, nullable=False)  # 1, 2, 3
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
+    pts_awarded = Column(Integer, default=0, nullable=False)
+    pe_credit   = Column(Integer, default=0, nullable=False)
+    ve_credit   = Column(Integer, default=0, nullable=False)
+    created_at  = Column(DateTime, default=_utcnow)
+
+    group = relationship("UserGroup", foreign_keys=[group_id])
+    user  = relationship("User", foreign_keys=[user_id])
