@@ -1338,6 +1338,92 @@ def group_ranking(
     }
 
 
+# ── Ranking recortado por período (rodada/turno/mês) — pedido do Abel, além do ──
+# ── ranking do campeonato inteiro que já existe acima. Só Brasileirão (rodada/  ──
+# ── turno não fazem sentido pra mata-mata da Copa). Leitura pura: soma Bet.     ──
+# ── points_earned filtrado por janela, nunca escreve em Ranking/Bet globais.    ──
+
+RETURNO_START_RODADA = 20  # confirmado no plano predicts-grupos-bonus: rodada 20 = 1º jogo do returno 2026
+
+
+@router.get("/{group_id}/ranking-period")
+def group_ranking_period(
+    group_id: int,
+    scope: str = Query(..., pattern="^(rodada|turno|mes)$"),
+    rodada: int | None = Query(None, ge=1, le=38),
+    turno: int | None = Query(None, ge=1, le=2),
+    year: int | None = Query(None),
+    month: int | None = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "Grupo não encontrado")
+    members = db.query(UserGroupMember).filter(UserGroupMember.group_id == group_id).all()
+    member_ids = [m.user_id for m in members]
+    if user.id not in member_ids:
+        raise HTTPException(403, "Você não faz parte deste grupo")
+
+    comp_id = get_competition_id(db, "brasileirao2026")
+
+    if scope == "rodada":
+        if not rodada:
+            raise HTTPException(400, "Parâmetro rodada obrigatório")
+        match_filter = Match.match_number == rodada
+        label = f"Rodada {rodada}"
+        period_meta = {"rodada": rodada}
+    elif scope == "turno":
+        if turno not in (1, 2):
+            raise HTTPException(400, "Parâmetro turno obrigatório (1 ou 2)")
+        match_filter = (Match.match_number < RETURNO_START_RODADA) if turno == 1 else (Match.match_number >= RETURNO_START_RODADA)
+        label = "1º Turno" if turno == 1 else "2º Turno (Returno)"
+        period_meta = {"turno": turno}
+    else:  # mes — janela BRT (naive UTC no banco, mesma convenção do resto do projeto)
+        now_brt = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
+        y = year or now_brt.year
+        m = month or now_brt.month
+        month_start_utc = datetime(y, m, 1) + timedelta(hours=3)
+        ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
+        month_end_utc = datetime(ny, nm, 1) + timedelta(hours=3)
+        match_filter = and_(Match.match_date >= month_start_utc, Match.match_date < month_end_utc)
+        label = f"{m:02d}/{y}"
+        period_meta = {"year": y, "month": m}
+
+    rows = (
+        db.query(
+            Bet.user_id,
+            func.coalesce(func.sum(func.coalesce(Bet.points_earned, 0) + func.coalesce(Bet.et_points_earned, 0)), 0).label("pts"),
+            func.count(Bet.id).label("bets"),
+        )
+        .join(Match, Match.id == Bet.match_id)
+        .filter(Bet.user_id.in_(member_ids), Match.competition_id == comp_id, match_filter)
+        .group_by(Bet.user_id)
+        .all()
+    )
+    pts_by_user = {r.user_id: (int(r.pts or 0), int(r.bets or 0)) for r in rows}
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(member_ids)).all()}
+
+    ranking = sorted(
+        (
+            {
+                "user_id": uid,
+                "name": users_by_id[uid].name if uid in users_by_id else None,
+                "username": users_by_id[uid].username if uid in users_by_id else None,
+                "pts": pts_by_user.get(uid, (0, 0))[0],
+                "bets": pts_by_user.get(uid, (0, 0))[1],
+                "is_me": uid == user.id,
+            }
+            for uid in member_ids
+        ),
+        key=lambda r: r["pts"], reverse=True,
+    )
+    for i, r in enumerate(ranking):
+        r["position"] = i + 1
+
+    return {"group_id": group_id, "scope": scope, "label": label, **period_meta, "ranking": ranking}
+
+
 # ── Link de convite compartilhável ───────────────────────────────────────────
 
 @router.post("/{group_id}/invite-link")

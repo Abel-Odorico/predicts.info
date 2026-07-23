@@ -15,6 +15,7 @@ import GroupFeatureConfig from '../components/GroupFeatureConfig'
 import GroupClassificationBonus from '../components/GroupClassificationBonus'
 import GroupDoubleMatchBadge from '../components/GroupDoubleMatchBadge'
 import GroupLanterna from '../components/GroupLanterna'
+import GroupPeriodRanking from '../components/GroupPeriodRanking'
 
 // Partição por competição também — sem isso, trocar de aba (Geral/Copa/Brasileirão)
 // lê/grava o snapshot errado, já que cada aba tem um ranking e ordem diferentes.
@@ -630,6 +631,13 @@ export default function GroupRanking() {
           currentRodada={brCurrentRodada}
           onClose={() => setShowFeatureConfig(false)}
         />
+      )}
+
+      {/* ── Ranking por período (rodada/turno/mês) — visão à parte do ranking do */}
+      {/* campeonato inteiro (esse já é a lista principal logo abaixo). Não depende */}
+      {/* de nenhuma mecânica ligada, é só outro recorte de leitura. ── */}
+      {comp === 'brasileirao2026' && (
+        <GroupPeriodRanking groupId={groupId} token={token} currentRodada={brCurrentRodada} />
       )}
 
       {/* ── Seções inline das mecânicas — só aparecem na aba Brasileirão (só ela tem hoje) ── */}
